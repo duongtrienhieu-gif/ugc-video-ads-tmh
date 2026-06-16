@@ -17,6 +17,7 @@ import type { StudioModelTier } from './brollStudioModels'
 export type StudioAngleId =
   | 'hook' | 'problem' | 'reveal' | 'demo' | 'closeup' | 'mechanism3d'
   | 'before_after' | 'reaction' | 'ingredient' | 'lifestyle' | 'comparison'
+  | 'freeform'
 
 /** Toggle availability per angle: 'on'|'off'|'lock-on'|'lock-off' (locked = user can't
  *  change it; the brain enforces it so the scene stays coherent). */
@@ -76,6 +77,14 @@ export const STUDIO_ANGLES: StudioAngle[] = [
     howToVi: 'Đặt sản phẩm cạnh cách cũ / hàng thường để bật ưu thế. Sản phẩm luôn có mặt.',
     toggles: { avatar: 'on', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
 ]
+
+// Free-form scene — NOT in the 11-grid. The user types a Vietnamese description; all toggles
+// are free (no locks). Rendered through the SAME pipeline as the angle cards.
+export const FREEFORM_ANGLE: StudioAngle = {
+  id: 'freeform', labelVi: 'Cảnh tự do', descVi: 'Mô tả bằng lời',
+  howToVi: 'Gõ mô tả cảnh bằng tiếng Việt — AI hiểu và tự dựng prompt bám sản phẩm. Bật avatar/giọng/sản phẩm tuỳ ý.',
+  toggles: { avatar: 'on', voice: 'on', product: 'on' }, model: 'seedance', faithfulFrame: true,
+}
 
 export interface StudioIdea {
   angle: StudioAngleId
@@ -225,6 +234,8 @@ const LOCALE_HINT: Record<ScriptLang, string> = {
 export async function engineerScenePrompt(args: {
   angle: StudioAngle; idea?: StudioIdea; toggles: SceneToggles; line?: string
   durationSec: number; product: Product; lang: ScriptLang; geminiKey: string; variant?: number
+  /** Free-form scene: a Vietnamese description the AI must understand + build the scene from. */
+  briefVi?: string
 }): Promise<{ conceptPromptEn: string; noteVi: string; spec: SceneSpec }> {
   const spec = resolveSceneSpec(args.angle, args.toggles)
   const langName = SCRIPT_LANG_GEMINI_NAME[args.lang]
@@ -249,7 +260,9 @@ export async function engineerScenePrompt(args: {
       `You are a UGC ad B-ROLL prompt engineer. Write ONE vivid ENGLISH image-to-video prompt — ` +
       `SHOT TYPE + concrete ACTION + real SETTING — grounded in the product, for the scene below.${productContext}\n${ANTI_DRIFT}\n` +
       `Output STRICT JSON {"conceptPromptEn":"…","noteVi":"<1 short ${langName} line: what the clip shows>"}.`,
-    prompt: `${cfg}\nIdea seed: ${args.idea?.conceptPromptEn ?? args.idea?.ideaVi ?? args.angle.descVi}${variantNudge}\nWrite the prompt.`,
+    prompt: `${cfg}\n${args.briefVi
+      ? `User scene description (written in VIETNAMESE — understand it and build THIS exact scene, grounded in the product): "${args.briefVi}"`
+      : `Idea seed: ${args.idea?.conceptPromptEn ?? args.idea?.ideaVi ?? args.angle.descVi}`}${variantNudge}\nWrite the prompt.`,
     maxOutputTokens: 700, temperature: args.variant ? 0.95 : 0.6, thinkingBudget: 0, responseMimeType: 'application/json', responseSchema: ENGINEER_SCHEMA,
   })
   let draft = safeParseEngineer(draftRaw)
@@ -282,4 +295,28 @@ function safeParseEngineer(raw: string): { conceptPromptEn: string; noteVi: stri
     const p = JSON.parse(s) as { conceptPromptEn?: string; noteVi?: string }
     return { conceptPromptEn: (p.conceptPromptEn ?? '').trim(), noteVi: (p.noteVi ?? '').trim() }
   } catch { return { conceptPromptEn: '', noteVi: '' } }
+}
+
+/** The user always writes/thinks in Vietnamese. Right before TTS, normalise the spoken line
+ *  into the chosen MARKET language (natural native spoken style, NOT a literal translation).
+ *  No-op when the market is Vietnamese or the line is empty. ~1 tiny Gemini call. */
+export async function translateLineForMarket(line: string, lang: ScriptLang, geminiKey: string): Promise<string> {
+  const text = line.trim()
+  if (!text || lang === 'vi' || !geminiKey) return text
+  const langName = SCRIPT_LANG_GEMINI_NAME[lang]
+  try {
+    const raw = await directGeminiText({
+      apiKey: geminiKey,
+      systemInstruction:
+        `Rewrite the user's line into ${langName} as a NATIVE, natural spoken line for a short UGC ad ` +
+        `(localise the meaning + tone, do NOT translate word-for-word, keep it punchy and the same length feel). ` +
+        `Keep brand names and numbers as-is. Output ONLY the final line — no quotes, no notes, no alternatives.`,
+      prompt: text,
+      maxOutputTokens: 200, temperature: 0.4, thinkingBudget: 0,
+    })
+    const out = raw.trim().replace(/^["'“”]|["'“”]$/g, '').trim()
+    return out || text
+  } catch {
+    return text   // on failure, fall back to the original line (better than blocking the render)
+  }
 }

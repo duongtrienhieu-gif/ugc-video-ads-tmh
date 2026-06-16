@@ -10,7 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef } from 'react'
-import { Loader2, ArrowLeft, Sparkles, Wand2, Package, Mic, Upload, X, Check, Play, RotateCcw, Download } from 'lucide-react'
+import { Loader2, ArrowLeft, Sparkles, Package, Mic, Upload, X, Check, Play, RotateCcw, Download } from 'lucide-react'
 import { useBrollStudioStore } from '../stores/brollStudioStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAppStore } from '../../../../stores/appStore'
@@ -19,7 +19,7 @@ import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { saveAsset, getUrl } from '../../../../utils/assetStore'
 import { listVoices, listSharedVoices, textToSpeech } from '../../../../utils/elevenlabs'
 import {
-  STUDIO_ANGLES, generateStudioIdeas, engineerScenePrompt, resolveSceneSpec,
+  STUDIO_ANGLES, FREEFORM_ANGLE, generateStudioIdeas, engineerScenePrompt, resolveSceneSpec, translateLineForMarket,
   type StudioIdea, type StudioAngle, type SceneToggles,
 } from '../services/brollStudioBrain'
 import { renderStudioScene } from '../services/brollStudioRenderer'
@@ -124,10 +124,11 @@ function VoicePickerModal({ apiKey, lang, onSelect, onClose }: {
   )
 }
 
-function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onVoicePicked }: {
+function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onVoicePicked, freeform }: {
   angle: StudioAngle; idea?: StudioIdea; product: Product | null; lang: ScriptLang; geminiKey: string
   lastVoice: { id: string; name: string } | null
   onVoicePicked: (v: { id: string; name: string }) => void
+  freeform?: boolean
 }) {
   const addToast = useAppStore((s) => s.addToast)
   const elevenKey = useSettingsStore((s) => s.elevenLabsApiKey)
@@ -143,6 +144,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
   const [res, setRes] = useState<StudioResolution>('720p')
   const [dur, setDur] = useState(6)
   const [line, setLine] = useState(idea?.suggestedLine ?? '')
+  const [brief, setBrief] = useState('')   // free-form: Vietnamese scene description
   const [prompt, setPrompt] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -169,6 +171,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
   const c720 = sceneCredit(angle, toggles, '720p', dur)
   const credit = res === '480p' ? c480 : c720
   const voiceNeedsLine = !!voiceId && !line.trim()
+  const briefMissing = !!freeform && !brief.trim()
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; e.target.value = ''
@@ -182,9 +185,10 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
   const makePrompt = async (nextVariant = 0) => {
     if (!product) { addToast('Chưa chọn sản phẩm', 'error'); return }
     if (voiceNeedsLine) { addToast('Đã chọn giọng thì phải điền Câu thoại', 'error'); return }
+    if (briefMissing) { addToast('Nhập mô tả cảnh tự do trước', 'error'); return }
     setBusy(true)
     try {
-      const r = await engineerScenePrompt({ angle, idea, toggles, line, durationSec: dur, product, lang, geminiKey, variant: nextVariant })
+      const r = await engineerScenePrompt({ angle, idea, toggles, line, durationSec: dur, product, lang, geminiKey, variant: nextVariant, briefVi: freeform ? brief.trim() : undefined })
       // Note mô tả ĐÚNG cấu hình thẻ này (đổi theo avatar/giọng/giây → không còn ra y chang).
       const who = spec.role === 'lips' ? `Avatar "${avatarName || 'đã chọn'}" nói trực tiếp`
         : avatarRef ? `Avatar "${avatarName || 'đã chọn'}" xuất hiện + dùng sản phẩm`
@@ -203,6 +207,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
   const doRender = async () => {
     if (!product) { addToast('Chưa chọn sản phẩm', 'error'); return }
     if (voiceNeedsLine) { addToast('Đã chọn giọng thì phải điền Câu thoại', 'error'); return }
+    if (briefMissing) { addToast('Nhập mô tả cảnh tự do trước', 'error'); return }
     if (!kieKey) { addToast('Thiếu KIE API key trong Cài đặt', 'error'); return }
     if (spec.role === 'lips' && !elevenKey) { addToast('Cảnh lipsync cần ElevenLabs key', 'error'); return }
     setRendering(true); setStage('Chuẩn bị…')
@@ -211,18 +216,19 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
       let promptEn = prompt
       if (!promptEn) {
         setStage('Viết prompt…')
-        const r = await engineerScenePrompt({ angle, idea, toggles, line, durationSec: dur, product, lang, geminiKey })
+        const r = await engineerScenePrompt({ angle, idea, toggles, line, durationSec: dur, product, lang, geminiKey, briefVi: freeform ? brief.trim() : undefined })
         promptEn = r.conceptPromptEn; setPrompt(r.conceptPromptEn); setNote(r.noteVi)
       }
       // 2. Resolve refs sang URL công khai (KIE fetch từ xa)
       const productUrls: string[] = []
       if (product.productImage) { const u = await getUrl(product.productImage); if (u) productUrls.push(u) }
       const avatarUrl = avatarRef ? ((await getUrl(avatarRef)) ?? undefined) : undefined
-      // 3. TTS cho cảnh lipsync
+      // 3. TTS cho cảnh lipsync — câu thoại gõ tiếng Việt được DỊCH sang ngôn ngữ thị trường trước
       let audioUrl: string | undefined
       if (spec.role === 'lips') {
-        setStage('Tạo giọng đọc (TTS)…')
-        const buf = await textToSpeech({ apiKey: elevenKey, voiceId, text: line.trim() })
+        setStage('Dịch + tạo giọng đọc…')
+        const spokenText = await translateLineForMarket(line.trim(), lang, geminiKey)
+        const buf = await textToSpeech({ apiKey: elevenKey, voiceId, text: spokenText })
         const aId = await saveAsset(new Blob([buf], { type: 'audio/mpeg' }), 'audio/mpeg')
         audioUrl = (await getUrl(aId)) ?? undefined
       }
@@ -265,6 +271,12 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
       {idea && <p className="mt-1 rounded-lg bg-violet-50 p-2 text-[12px] text-violet-900">{idea.ideaVi}</p>}
       {/* Hướng dẫn rõ: cảnh này để làm gì + nên cấu hình sao */}
       <p className="mt-1 text-[10.5px] leading-snug text-gray-400">{angle.howToVi}</p>
+      {/* Free-form: ô mô tả cảnh bằng tiếng Việt (AI hiểu, tự ra prompt + thoại theo thị trường) */}
+      {freeform && (
+        <textarea value={brief} onChange={(e) => setBrief(e.target.value)} rows={2}
+          placeholder="VD: phụ nữ 50 tuổi đang đau đầu gối, chưa lộ sản phẩm, nền bếp…"
+          className={`mt-2 w-full rounded-lg border px-2 py-1.5 text-[12px] focus:outline-none ${briefMissing ? 'border-rose-300' : 'border-gray-300 focus:border-violet-400'}`} />
+      )}
 
       {/* ── Selections: chỉ hiện cái dùng được (khoá-tắt ẩn hẳn) ─────────────── */}
       <div className="mt-2 flex flex-col gap-1.5">
@@ -325,7 +337,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
       </div>
 
       <div className="mt-2 flex flex-col gap-1.5">
-        <button onClick={doRender} disabled={rendering || !product || voiceNeedsLine}
+        <button onClick={doRender} disabled={rendering || !product || voiceNeedsLine || briefMissing}
           className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 px-2.5 py-1.5 text-[12px] font-bold text-white hover:from-violet-700 hover:to-fuchsia-700 disabled:opacity-50">
           {rendering && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           {rendering ? (stage || 'Đang render…') : videoUrl ? `Render lại ~${credit}cr` : `Render ~${credit}cr`}
@@ -348,7 +360,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
         <summary className="cursor-pointer select-none px-2 py-1.5 text-[11px] font-semibold text-gray-600">⚙️ Xem/sửa prompt</summary>
         <div className="border-t border-gray-200 p-2">
           {!prompt ? (
-            <button onClick={() => makePrompt(0)} disabled={busy || !product || voiceNeedsLine}
+            <button onClick={() => makePrompt(0)} disabled={busy || !product || voiceNeedsLine || briefMissing}
               className="inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-violet-50 px-2.5 py-1.5 text-[11px] font-bold text-violet-700 hover:bg-violet-100 disabled:opacity-50">
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Tạo prompt nháp
             </button>
@@ -395,7 +407,6 @@ export default function BrollStudioPhase({ onBack }: { onBack: () => void }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [ideas, setIdeas] = useState<Record<string, StudioIdea>>({})
   const [loading, setLoading] = useState(false)
-  const [freeText, setFreeText] = useState('')
   const [lastVoice, setLastVoice] = useState<{ id: string; name: string } | null>(null)
 
   const buildStudio = async () => {
@@ -446,15 +457,9 @@ export default function BrollStudioPhase({ onBack }: { onBack: () => void }) {
         </button>
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          {/* Ô tự do — vị trí 1 */}
-          <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50/40 p-3">
-            <p className="text-sm font-bold text-gray-900"><Wand2 className="mr-1 inline h-4 w-4 text-violet-600" /> Cảnh tự do</p>
-            <p className="mt-1 text-[10.5px] leading-snug text-gray-400">Gõ mô tả bằng lời — AI tự dựng prompt chuẩn bám sản phẩm. Dùng khi muốn 1 cảnh ngoài 11 góc có sẵn.</p>
-            <textarea value={freeText} onChange={(e) => setFreeText(e.target.value)} rows={2}
-              placeholder="VD: phụ nữ 50 tuổi đang đau đầu gối, chưa lộ sản phẩm, nền bếp…"
-              className="mt-2 w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-[13px] focus:border-violet-400 focus:outline-none" />
-            <p className="mt-1 text-[10px] text-gray-400">⚙️ Tạo prompt + render — sắp có ở Phase tiếp.</p>
-          </div>
+          {/* Ô tự do — vị trí 1 (render qua đúng pipeline như các thẻ) */}
+          <StudioSceneCard freeform angle={FREEFORM_ANGLE} product={product} lang={lang} geminiKey={geminiKey}
+            lastVoice={lastVoice} onVoicePicked={setLastVoice} />
 
           {STUDIO_ANGLES.map((a) => (
             <StudioSceneCard key={a.id} angle={a} idea={ideas[a.id]} product={product} lang={lang} geminiKey={geminiKey}
