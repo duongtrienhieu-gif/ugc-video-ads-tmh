@@ -15,6 +15,8 @@ import { FINAL_RES } from '../services/hybridConstants'
 import { generateThumbnailHooks, generateAiThumbnail, THUMBNAIL_ARCHETYPES, THUMBNAIL_ARCHETYPE_ORDER } from '../services/thumbnailEngine'
 import { CAPTION_PRESETS, CAPTION_PRESET_ORDER, DEFAULT_CAPTION_PRESET, type CaptionPresetId } from '../services/captionPresets'
 import { renderCaptionBlob } from '../services/captionRenderer'
+import { BANNER_PRESETS, BANNER_PRESET_ORDER, DEFAULT_BANNER_PRESET, type BannerPresetId } from '../services/bannerPresets'
+import { renderBannerBlob, deriveBannerSlogan } from '../services/bannerRenderer'
 import { SCRIPT_LANG_GEMINI_NAME, type AiThumbnail } from '../types'
 
 const now = () => Date.now()
@@ -37,6 +39,10 @@ export default function HybridExportPhase() {
   const script = state.scriptBrain.script
   const captionsOn = hybrid.captionsOn !== false           // default ON
   const captionPreset = hybrid.captionPreset ?? DEFAULT_CAPTION_PRESET
+  const bannerOn = hybrid.bannerOn !== false               // default ON
+  const bannerPreset = hybrid.bannerPreset ?? DEFAULT_BANNER_PRESET
+  // The exact slogan the banner will carry (script's KEY = anchor → hook fallback).
+  const bannerSlogan = deriveBannerSlogan(script?.anchor, script?.blocks?.[0]?.text) || 'Ăn vặt mà vẫn khỏe re'
   const scenes = hybrid.scenes ?? []
   const doneCount = scenes.filter((_, i) => hybrid.clips[i]).length
   const allDone = scenes.length > 0 && doneCount === scenes.length
@@ -142,6 +148,35 @@ export default function HybridExportPhase() {
           )}
         </div>
 
+        {/* ── Banner hook (dải trên cùng) — applied at assemble, 0 credit ──────── */}
+        <div className="mb-4 rounded-xl border border-black/10 bg-white p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-bold text-gray-900">🏷️ Banner hook (dải trên)</p>
+              <p className="text-[11px] text-gray-500">Slogan ngắn lấy từ kịch bản: <strong>"{bannerSlogan}"</strong> — 0 credit. Đổi xong bấm <strong>Ghép lại / Tạo video</strong>.</p>
+            </div>
+            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[12px] font-semibold text-gray-700">
+              <input type="checkbox" checked={bannerOn} onChange={(e) => setHybridCaption({ bannerOn: e.target.checked })} />
+              Bật banner
+            </label>
+          </div>
+          {bannerOn && (
+            <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              {BANNER_PRESET_ORDER.map((id) => (
+                <button key={id} onClick={() => setHybridCaption({ bannerPreset: id })}
+                  className={`flex flex-col items-stretch gap-1 rounded-lg border p-1.5 text-[11px] font-bold transition-all ${
+                    bannerPreset === id
+                      ? 'border-violet-400 bg-violet-100 text-violet-800'
+                      : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                  }`}>
+                  <BannerPresetPreview presetId={id} slogan={bannerSlogan} />
+                  <span className="text-center">{BANNER_PRESETS[id].labelVi}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* ── Final video ───────────────────────────────────────────────────── */}
         {hybrid.finalVideoRef && finalUrl ? (
           <div className="rounded-xl border border-emerald-300 bg-white p-3">
@@ -239,6 +274,24 @@ function CaptionPresetPreview({ presetId }: { presetId: CaptionPresetId }) {
   }, [presetId])
   return (
     <div className="flex h-9 items-center justify-center overflow-hidden rounded bg-gray-900">
+      {url && <img src={url} alt="" className="max-h-8 w-auto object-contain px-1" />}
+    </div>
+  )
+}
+
+// Live banner preview chip — renders the real slogan in the preset's style, FREE.
+function BannerPresetPreview({ presetId, slogan }: { presetId: BannerPresetId; slogan: string }) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    let made: string | null = null
+    renderBannerBlob(slogan, presetId)
+      .then((b) => { if (!alive) return; made = URL.createObjectURL(b); setUrl(made) })
+      .catch(() => {})
+    return () => { alive = false; if (made) URL.revokeObjectURL(made) }
+  }, [presetId, slogan])
+  return (
+    <div className="flex h-9 items-center justify-center overflow-hidden rounded bg-gray-200">
       {url && <img src={url} alt="" className="max-h-8 w-auto object-contain px-1" />}
     </div>
   )

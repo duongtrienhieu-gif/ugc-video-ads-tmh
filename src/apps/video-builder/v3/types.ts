@@ -745,6 +745,10 @@ export interface HybridState {
    *  default preset, so existing projects get captions automatically. */
   captionsOn?: boolean
   captionPreset?: import('./services/captionPresets').CaptionPresetId
+  /** P5x — top hook banner (a short slogan from the script's anchor, applied at
+   *  assemble, 0 credit). Absent = ON + default preset. Skipped on social-proof cards. */
+  bannerOn?: boolean
+  bannerPreset?: import('./services/bannerPresets').BannerPresetId
 }
 
 export function createEmptyHybridState(): HybridState {

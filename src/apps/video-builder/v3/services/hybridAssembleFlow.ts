@@ -8,6 +8,8 @@
 import { assembleHybridVideo, type HybridSceneClip, type HybridStickerPlacement, type HybridCaptionPlacement } from './hybridAssembler'
 import { renderStickerBlob, type StickerStyle } from './stickerRenderer'
 import { renderCaptionBlob } from './captionRenderer'
+import { renderBannerBlob, deriveBannerSlogan } from './bannerRenderer'
+import { BANNER_PRESETS, DEFAULT_BANNER_PRESET } from './bannerPresets'
 import { buildCaptionChunks } from './captionChunker'
 import './socialProofRenderer'   // P5v — registers __testSocialProof + bundles the card renderer (wired in a later step)
 import { DEFAULT_CAPTION_PRESET, type CaptionPresetId } from './captionPresets'
@@ -130,9 +132,23 @@ export async function assembleFromHybridState(
   const captions = captionsOn
     ? await buildCaptionPlacements(hybrid.voiceAlignment, script, realDur, presetId, cardWindows)
     : []
+  // P5x — top hook banner: a short slogan from the script's KEY (anchor → hook fallback),
+  // rendered as ONE PNG and held over every non-card segment. Default ON; 0 credit.
+  const bannerOn = hybrid.bannerOn !== false
+  let banner: { pngRef: string; fullWidth: boolean } | undefined
+  if (bannerOn) {
+    const slogan = deriveBannerSlogan(script.anchor, script.blocks[0]?.text)
+    if (slogan) {
+      const bpid = hybrid.bannerPreset ?? DEFAULT_BANNER_PRESET
+      try {
+        const blob = await renderBannerBlob(slogan, bpid)
+        banner = { pngRef: await saveAsset(blob, 'image/png'), fullWidth: BANNER_PRESETS[bpid].shape === 'ribbon' }
+      } catch { /* a bad banner never breaks the assemble */ }
+    }
+  }
   const r = await assembleHybridVideo({
     clips, voiceRef: hybrid.voiceRef, voiceDurationSec: realDur, resolution,
-    stickers: placements, captions,
+    stickers: placements, captions, banner,
     onProgress: opts?.onProgress,
     onStage: opts?.onStage,
   })

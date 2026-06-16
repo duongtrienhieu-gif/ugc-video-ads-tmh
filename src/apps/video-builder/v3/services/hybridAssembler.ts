@@ -60,6 +60,9 @@ export interface HybridAssembleParams {
   stickers?: HybridStickerPlacement[]
   /** 0-credit burned captions (bottom-centre), composited like stickers. */
   captions?: HybridCaptionPlacement[]
+  /** P5x — one persistent top hook banner PNG, held over EVERY non-card segment.
+   *  `fullWidth` = a ribbon flush to the top edge; false = a centred pill. */
+  banner?: { pngRef: string; fullWidth: boolean }
   /** Output height; width is derived 9:16 vertical. Default 480p. */
   resolution?: '480p' | '720p' | '1080p'
   onStage?: (msg: string) => void
@@ -117,6 +120,10 @@ export async function assembleHybridVideo(
   const CAP_MAXW = Math.round((evenW * 0.92) / 2) * 2
   const CAP_MAXH = Math.round((evenH * 0.30) / 2) * 2
   const CAP_BOT_MARGIN = Math.round(evenH * 0.12)
+  // P5x — top hook banner: a centred pill ~86% width sat ~3.5% below the top, OR a
+  // full-width ribbon flush to y=0. Held the whole segment (no enable window).
+  const BANNER_PILL_W = Math.round((evenW * 0.86) / 2) * 2
+  const BANNER_TOP = Math.round((evenH * 0.035) / 2) * 2
   const normFiles: string[] = []
   const failedIdx: number[] = []
 
@@ -186,7 +193,10 @@ export async function assembleHybridVideo(
     const overlayFiles: string[] = []
     const normFile = `hnorm_${i}.ts`
 
-    if (segStickers.length === 0 && segCaptions.length === 0) {
+    // P5x — the top banner rides EVERY non-card segment (cards already `continue`d
+    // above). It has no time window — it's held the whole segment.
+    const segBanner = params.banner ?? null
+    if (segStickers.length === 0 && segCaptions.length === 0 && !segBanner) {
       await ffmpeg.exec([
         '-i', inFile,
         '-vf', baseChain,
@@ -196,13 +206,16 @@ export async function assembleHybridVideo(
         '-f', 'mpegts', '-y', normFile,
       ])
     } else {
-      // Build a filter_complex: base + one looped PNG input per overlay. Stickers
-      // (corner, height-scaled — UNCHANGED behaviour) come first, then captions
-      // (bottom-centre, box-fit). Both use the same OUTPUT-local enable window.
+      // Build a filter_complex: base + one looped PNG input per overlay. Banner (top,
+      // whole segment) first, then stickers (corner, height-scaled — UNCHANGED), then
+      // captions (bottom-centre, box-fit). Sticker/caption use an OUTPUT-local enable
+      // window; the banner is always-on for the segment.
       type Overlay =
+        | { mode: 'banner'; pngRef: string; fullWidth: boolean }
         | { mode: 'sticker'; pngRef: string; atSec: number; durationSec: number; heightFraction?: number }
         | { mode: 'caption'; pngRef: string; atSec: number; durationSec: number }
       const overlays: Overlay[] = [
+        ...(segBanner ? [{ mode: 'banner' as const, pngRef: segBanner.pngRef, fullWidth: segBanner.fullWidth }] : []),
         ...segStickers.map((s) => ({ mode: 'sticker' as const, ...s })),
         ...segCaptions.map((s) => ({ mode: 'caption' as const, pngRef: s.pngRef, atSec: s.atSec, durationSec: s.durationSec })),
       ]
@@ -219,11 +232,21 @@ export async function assembleHybridVideo(
         overlayFiles.push(pngFile)
         inputs.push('-loop', '1', '-t', dur.toFixed(3), '-i', pngFile)
         const inIdx = j + 1
+        const next = `m${j}`
+        if (s.mode === 'banner') {
+          // Top hook banner: pill ~86% width near the top, OR full-width ribbon at y=0.
+          // Scaled by WIDTH only (uniform → no text distortion). Held the whole segment.
+          const bw = s.fullWidth ? evenW : BANNER_PILL_W
+          const by = s.fullWidth ? 0 : BANNER_TOP
+          parts.push(`[${inIdx}:v]format=rgba,scale=${bw}:-2,setsar=1[ov${j}]`)
+          parts.push(`[${last}][ov${j}]overlay=x=(W-w)/2:y=${by}[${next}]`)
+          last = next
+          continue
+        }
         // P4d — enable window in OUTPUT-local time; a carried overlay shows only its
         // remaining time here (clamped to the segment), not a fresh full duration.
         const off = Math.max(0, s.atSec - c.scene.startSec)
         const endW = Math.min(dur, (s.atSec + s.durationSec) - c.scene.startSec)
-        const next = `m${j}`
         if (s.mode === 'caption') {
           // Bottom-centre, fit inside the caption box (font auto-fits, never overflows).
           parts.push(`[${inIdx}:v]format=rgba,scale=${CAP_MAXW}:${CAP_MAXH}:force_original_aspect_ratio=decrease,setsar=1[ov${j}]`)
