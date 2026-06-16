@@ -16,7 +16,7 @@ import type { StudioModelTier } from './brollStudioModels'
 
 export type StudioAngleId =
   | 'hook' | 'problem' | 'reveal' | 'demo' | 'closeup' | 'mechanism3d'
-  | 'before_after' | 'social_proof' | 'ingredient' | 'lifestyle' | 'comparison'
+  | 'before_after' | 'reaction' | 'ingredient' | 'lifestyle' | 'comparison'
 
 /** Toggle availability per angle: 'on'|'off'|'lock-on'|'lock-off' (locked = user can't
  *  change it; the brain enforces it so the scene stays coherent). */
@@ -26,6 +26,8 @@ export interface StudioAngle {
   id: StudioAngleId
   labelVi: string
   descVi: string
+  /** 1-2 câu hướng dẫn user: cảnh này để LÀM GÌ + nên cấu hình ra sao (hiện trên thẻ). */
+  howToVi: string
   /** Conditional toggles (the lock table) — Phase-2 UI shows/locks accordingly.
    *  (No `line` here: a spoken line is purely a consequence of `voice` being on —
    *  the UI reveals a "Câu thoại" box when the user picks a voice.) */
@@ -40,17 +42,39 @@ export interface StudioAngle {
 
 // The 11 angles (offer/CTA dropped per user). Lock rules = the discussion we agreed.
 export const STUDIO_ANGLES: StudioAngle[] = [
-  { id: 'hook',         labelVi: 'Hook chặn lướt',   descVi: 'Mở màn bắt mắt 1-2s', toggles: { avatar: 'on', voice: 'on', product: 'on' }, model: 'seedance', faithfulFrame: true },
-  { id: 'problem',      labelVi: 'Vấn đề / nỗi đau',  descVi: 'Tình huống trước khi có sản phẩm', toggles: { avatar: 'on', voice: 'on', product: 'lock-off' }, model: 'seedance', faithfulFrame: false },
-  { id: 'reveal',       labelVi: 'Reveal sản phẩm',  descVi: 'Mở hộp / lần đầu thấy', toggles: { avatar: 'on', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
-  { id: 'demo',         labelVi: 'Dùng sản phẩm',    descVi: 'Tay/avatar thao tác sản phẩm', toggles: { avatar: 'on', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
-  { id: 'closeup',      labelVi: 'Cận cảnh / chất liệu', descVi: 'Macro chi tiết hero', toggles: { avatar: 'lock-off', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
-  { id: 'mechanism3d',  labelVi: '3D cơ chế',         descVi: 'Animation bên trong hoạt động', toggles: { avatar: 'lock-off', voice: 'on', product: 'lock-off' }, model: 'seedance', faithfulFrame: false },
-  { id: 'before_after', labelVi: 'Before → After',    descVi: 'Kết quả / chuyển biến', toggles: { avatar: 'on', voice: 'on', product: 'on' }, model: 'seedance', faithfulFrame: false },
-  { id: 'social_proof', labelVi: 'Social proof',      descVi: 'Thẻ review / đám đông (ảnh)', toggles: { avatar: 'lock-off', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: false, isCard: true },
-  { id: 'ingredient',   labelVi: 'Thành phần / spec', descVi: 'Sản phẩm + callout chữ', toggles: { avatar: 'lock-off', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
-  { id: 'lifestyle',    labelVi: 'Bối cảnh đời thường', descVi: 'Sản phẩm trong setting thật', toggles: { avatar: 'on', voice: 'on', product: 'on' }, model: 'seedance', faithfulFrame: true },
-  { id: 'comparison',   labelVi: 'So sánh',           descVi: 'Đối chiếu cách cũ / hàng thường', toggles: { avatar: 'on', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
+  { id: 'hook',         labelVi: 'Hook chặn lướt',   descVi: 'Mở màn bắt mắt 1-2s',
+    howToVi: 'Cảnh 1-2s đầu để chặn người lướt: chuyển động mạnh hoặc khoảnh khắc gây tò mò. Bật avatar nếu muốn người thật xuất hiện ngay.',
+    toggles: { avatar: 'on', voice: 'on', product: 'on' }, model: 'seedance', faithfulFrame: true },
+  { id: 'problem',      labelVi: 'Vấn đề / nỗi đau',  descVi: 'Tình huống trước khi có sản phẩm',
+    howToVi: 'Diễn lại nỗi đau/tình huống bực bội TRƯỚC khi có sản phẩm để người xem thấy mình trong đó. Chưa lộ sản phẩm.',
+    toggles: { avatar: 'on', voice: 'on', product: 'lock-off' }, model: 'seedance', faithfulFrame: false },
+  { id: 'reveal',       labelVi: 'Reveal sản phẩm',  descVi: 'Mở hộp / lần đầu thấy',
+    howToVi: 'Khoảnh khắc lần đầu thấy / mở hộp sản phẩm, tạo cảm giác "đây rồi". Sản phẩm luôn xuất hiện.',
+    toggles: { avatar: 'on', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
+  { id: 'demo',         labelVi: 'Dùng sản phẩm',    descVi: 'Avatar thao tác sản phẩm',
+    howToVi: 'Avatar trực tiếp dùng/thao tác sản phẩm thật — bằng chứng "xài được". Nên bật avatar + giọng để vừa làm vừa nói.',
+    toggles: { avatar: 'on', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
+  { id: 'closeup',      labelVi: 'Cận cảnh / chất liệu', descVi: 'Macro chi tiết hero',
+    howToVi: 'Macro cận chất liệu/kết cấu sản phẩm (gel, hạt, vân...) để tôn độ "xịn". Không có người, chỉ sản phẩm.',
+    toggles: { avatar: 'lock-off', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
+  { id: 'mechanism3d',  labelVi: '3D cơ chế',         descVi: 'Animation bên trong hoạt động',
+    howToVi: 'Animation 3D cắt lớp mô tả cơ chế hoạt động bên trong. Không người, không bao bì, không chữ.',
+    toggles: { avatar: 'lock-off', voice: 'on', product: 'lock-off' }, model: 'seedance', faithfulFrame: false },
+  { id: 'before_after', labelVi: 'Before → After',    descVi: 'Kết quả / chuyển biến',
+    howToVi: 'Đối chiếu trạng thái trước ↔ sau khi dùng để nhấn chuyển biến. Có thể tắt sản phẩm, tập trung vào kết quả.',
+    toggles: { avatar: 'on', voice: 'on', product: 'on' }, model: 'seedance', faithfulFrame: false },
+  { id: 'reaction',     labelVi: 'Khoảnh khắc "wow"', descVi: 'Phản ứng hài lòng sau khi dùng',
+    howToVi: 'Cận biểu cảm hài lòng/bất ngờ ngay sau khi dùng — social proof dạng cảm xúc thật. Nên bật avatar + giọng để thốt lên 1 câu.',
+    toggles: { avatar: 'on', voice: 'on', product: 'on' }, model: 'seedance', faithfulFrame: true },
+  { id: 'ingredient',   labelVi: 'Thành phần / spec', descVi: 'Sản phẩm + callout chữ',
+    howToVi: 'Khoe thành phần/điểm mạnh kỹ thuật quanh sản phẩm (chữ callout thêm ở bước overlay sau). Không người.',
+    toggles: { avatar: 'lock-off', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
+  { id: 'lifestyle',    labelVi: 'Bối cảnh đời thường', descVi: 'Sản phẩm trong setting thật',
+    howToVi: 'Sản phẩm đặt trong bối cảnh đời thật (bàn bếp, túi xách...) tạo cảm giác quen thuộc, dễ mua.',
+    toggles: { avatar: 'on', voice: 'on', product: 'on' }, model: 'seedance', faithfulFrame: true },
+  { id: 'comparison',   labelVi: 'So sánh',           descVi: 'Đối chiếu cách cũ / hàng thường',
+    howToVi: 'Đặt sản phẩm cạnh cách cũ / hàng thường để bật ưu thế. Sản phẩm luôn có mặt.',
+    toggles: { avatar: 'on', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
 ]
 
 export interface StudioIdea {
@@ -109,8 +133,9 @@ For EACH angle output:
 - ideaVi: ONE short line in ${langName} describing the scene (what the viewer sees).
 - conceptPromptEn: ONE vivid ENGLISH i2v prompt — SHOT TYPE (macro / POV-hands / wide /
   over-the-shoulder) + a concrete ACTION + the real SETTING, grounded in the product. For
-  '3d' = a clean 3D cross-section animation, NO people/packaging/text. For 'social_proof' =
-  describe a realistic Facebook review screenshot. NEVER ask the video model to render text.
+  'mechanism3d' = a clean 3D cross-section animation, NO people/packaging/text. For 'reaction' =
+  a tight shot of a genuine delighted/surprised facial reaction right after using the product.
+  NEVER ask the video model to render text.
 - suggestedLine: ONE short spoken line in ${langName} that fits this scene (used only if
   voice is on). Native, punchy.
 
@@ -185,24 +210,37 @@ DRIFT-PROOF RULES (keep the render clean WITHOUT dodging the point of the scene)
 - 3D = clean cross-section animation, NO people / NO packaging / NO text.
 - Copy the correct ORIENTATION (how it's worn/placed/applied) so nothing is shown backwards.`
 
+// When NO avatar is chosen, the global market toggle is allowed to shape the SETTING + the
+// look of any incidental people (the avatar pick handles identity when one IS chosen).
+const LOCALE_HINT: Record<ScriptLang, string> = {
+  vi: 'a Vietnamese real-life setting; any incidental people look Vietnamese / Southeast-Asian',
+  ms: 'a Malaysian / Southeast-Asian real-life setting; any incidental people look Malay / Southeast-Asian',
+  en: 'a clean, neutral modern setting',
+}
+
 /** QUALITY-FIRST per-scene prompt: AI writes a drift-resistant i2v prompt for THIS exact
  *  config, then a SECOND self-critique pass fixes any drift risk. Returns the final prompt
- *  + a short VN NOTE (what the rendered clip will be). ~2 Gemini calls (paid key — fine). */
+ *  + a short VN NOTE (what the rendered clip will be). ~2 Gemini calls (paid key — fine).
+ *  `variant` > 0 → push for a DIFFERENT creative take (so "tạo lại" never returns the same). */
 export async function engineerScenePrompt(args: {
   angle: StudioAngle; idea?: StudioIdea; toggles: SceneToggles; line?: string
-  durationSec: number; product: Product; lang: ScriptLang; geminiKey: string
+  durationSec: number; product: Product; lang: ScriptLang; geminiKey: string; variant?: number
 }): Promise<{ conceptPromptEn: string; noteVi: string; spec: SceneSpec }> {
   const spec = resolveSceneSpec(args.angle, args.toggles)
   const langName = SCRIPT_LANG_GEMINI_NAME[args.lang]
   const productContext = buildProductContextBlock(args.product)
+  const localeHint = (!args.toggles.avatar && spec.role !== 'mechanism3d')
+    ? ` Setting / casting locale: ${LOCALE_HINT[args.lang]}.` : ''
   const cfg =
     `Scene angle: ${args.angle.labelVi} (${args.angle.id}). Render role: ${spec.role}. ` +
     `Person: ${spec.framing === 'creator'
       ? 'the chosen avatar/creator — FACE CLEARLY VISIBLE, actively using the product with their own hands'
       : spec.framing === 'hands_noface' ? 'hands only, NO face (no avatar was chosen)' : 'no person'}. ` +
     `Product in frame: ${args.toggles.product ? 'YES (must match the reference exactly)' : 'NO'}. ` +
-    `Duration: ${args.durationSec}s.` +
+    `Duration: ${args.durationSec}s.` + localeHint +
     (args.toggles.voice && args.line ? ` Spoken line (for mood/context only, NOT rendered as on-screen text): "${args.line}".` : '')
+
+  const variantNudge = args.variant ? `\nThis is RE-GENERATION #${args.variant} — give a DISTINCTLY DIFFERENT creative take (new shot/angle/action) from a typical version, same intent.` : ''
 
   // Pass 1 — draft.
   const draftRaw = await directGeminiText({
@@ -211,8 +249,8 @@ export async function engineerScenePrompt(args: {
       `You are a UGC ad B-ROLL prompt engineer. Write ONE vivid ENGLISH image-to-video prompt — ` +
       `SHOT TYPE + concrete ACTION + real SETTING — grounded in the product, for the scene below.${productContext}\n${ANTI_DRIFT}\n` +
       `Output STRICT JSON {"conceptPromptEn":"…","noteVi":"<1 short ${langName} line: what the clip shows>"}.`,
-    prompt: `${cfg}\nIdea seed: ${args.idea?.conceptPromptEn ?? args.idea?.ideaVi ?? args.angle.descVi}\nWrite the prompt.`,
-    maxOutputTokens: 700, temperature: 0.6, thinkingBudget: 0, responseMimeType: 'application/json', responseSchema: ENGINEER_SCHEMA,
+    prompt: `${cfg}\nIdea seed: ${args.idea?.conceptPromptEn ?? args.idea?.ideaVi ?? args.angle.descVi}${variantNudge}\nWrite the prompt.`,
+    maxOutputTokens: 700, temperature: args.variant ? 0.95 : 0.6, thinkingBudget: 0, responseMimeType: 'application/json', responseSchema: ENGINEER_SCHEMA,
   })
   let draft = safeParseEngineer(draftRaw)
 
