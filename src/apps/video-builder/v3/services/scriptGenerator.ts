@@ -452,16 +452,19 @@ ${pronounRule(args.lang)}
     • STAKES: dramatize the pain's CONSEQUENCE hard ("kẹt giữa đường tối, con nhỏ
       trên xe, gọi cứu hộ cả tiếng") — push the fear, that's fine.
     • OBJECTION: smash ONE real doubt in a clause ("không lo nóng máy / không nặng").
-    • SOCIAL PROOF (NEAR-MANDATORY — herd effect beats a lone reviewer): weave AT LEAST
-      ONE crowd/social beat so it's not just "I tried it" — a popularity vibe the viewer
-      can't check at the door: "mấy nghìn người sắm rồi", "bán cháy hàng", "ai dùng cũng
-      quay lại mua", "review toàn 5 sao". A SECOND, different beat = a THIRD-PARTY angle
-      ("nhỏ bạn mình dùng cũng mê", "cả nhà giờ ai cũng ăn", "đồng nghiệp hỏi mua ở đâu")
-      — others using it with good results, not only the speaker. Use a REAL figure ONLY
-      if the brief has one; otherwise a plausible vibe. NEVER invent a specific number
-      ("740k hộp") and NEVER claim a certification (Halal/FDA/clinically proven). Don't
-      go cartoonish ("cả thế giới dùng") — plausible sells, fake-specific breaks trust.
   Keep them woven + punchy (energy!), NOT a flat checklist.
+- SOCIAL PROOF — MANDATORY, and it must be its OWN clear, punchy CROWD beat — NOT folded
+  into a soft personal aside ("nhỏ bạn mình cũng mê" is too weak and does NOT count).
+  EVERY script MUST contain ONE explicit HERD/CROWD line the viewer instantly reads as
+  PROOF — popularity, sold-out, repeat buyers, or reviews — because the video turns this
+  exact line into a believable social-proof CARD (a Facebook-post / review screenshot) on
+  screen. State it as a STANDALONE sentence the viewer can't check at the door, e.g.
+  "mấy nghìn người mua rồi", "bán cháy hàng mấy đợt liền", "ai mua cũng quay lại", "review
+  toàn 5 sao", "cả nhà giờ ai cũng ăn". Put it in the BENEFIT/PROOF stretch of the body
+  (never the hook, never the very last CTA line). GUARD (a MONEY rule, not morality): a
+  plausible crowd VIBE is encouraged, but NEVER invent a fake SPECIFIC exact number
+  ("740,128 hộp đã bán") and NEVER claim a certification (Halal/KKM/GMP/FDA/clinically
+  proven) — those trip ad-review / break trust. Don't go cartoonish ("cả thế giới dùng").
 - BELIEVABLE PROOF — SHOW, don't just TELL (this is what makes a viewer BELIEVE, and a
   believed promise = an order that STAYS, not one refused at the door). A flat "xịn lắm,
   ai cũng khen" persuades nobody. Weave in ONE concrete proof beat — pick the move that
@@ -574,11 +577,14 @@ PRIORITY UNDER LENGTH PRESSURE (the script MUST fit ~${args.targetDurationSec}s 
 ECONOMICAL, write tight from the start, every line earns its place):
 - NON-NEGOTIABLE (always keep, even when short): the hook; the ONE memory ANCHOR
   (the single most concrete reason/expectation); the ONE believable PROOF beat
-  (skeptic→convert / demonstrable moment / before-after / bystander); the offer + CTA.
+  (skeptic→convert / demonstrable moment / before-after / bystander); the ONE explicit
+  SOCIAL-PROOF crowd line (popularity / sold-out / repeat buyers / reviews — it becomes
+  the on-screen proof card); the offer + CTA.
 - COMPRESSIBLE (cut HERE first when space is tight): the NUMBER of benefits — keep only
   the 2-3 STRONGEST as punchy hits, drop the rest; adjectives; any repetition or
   throat-clearing. Better 3 benefits + a real proof beat than 6 benefits and no proof.
-Do NOT sacrifice the anchor, the proof beat, or the CTA to cram in more benefits.
+Do NOT sacrifice the anchor, the proof beat, the social-proof crowd line, or the CTA to
+cram in more benefits.
 
 Generate the JSON now.`
 }

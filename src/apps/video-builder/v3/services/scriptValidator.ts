@@ -318,8 +318,38 @@ export function validateBody(
     }
   }
 
+  // 8. SOCIAL-PROOF CROWD BEAT (P5w) — the script must carry ONE explicit herd/crowd
+  //    proof line (popularity / sold-out / repeat buyers / reviews) so the video can
+  //    render the on-screen social-proof CARD the user asked for. LENIENT: a broad
+  //    cross-language cue list, checked on the PROOF stretch (discovery+benefit+cta,
+  //    NOT the hook), so it only fails when a crowd beat is genuinely absent — a soft
+  //    personal aside ("nhỏ bạn mình cũng mê") deliberately does NOT satisfy it. One
+  //    retry max (wired via scriptGenerator's existing validateBody retry).
+  {
+    const proofBody = `${blocks.discovery ?? ''} ${blocks.benefit ?? ''} ${blocks.cta ?? ''}`.toLowerCase()
+    const hasCrowdBeat = SOCIAL_PROOF_CUE_RE.test(proofBody)
+    if (!hasCrowdBeat) {
+      const ex = lang === 'ms' || lang === 'Bahasa Malaysia'
+        ? '"ramai dah beli", "laku keras", "ulasan 5 bintang", "ramai repeat order"'
+        : '"mấy nghìn người mua rồi", "bán cháy hàng mấy đợt", "ai mua cũng quay lại", "review toàn 5 sao"'
+      failures.push(
+        `No explicit SOCIAL-PROOF crowd beat in the body — the video needs ONE clear herd ` +
+        `line (popularity / sold-out / repeat buyers / reviews) to render the proof card. ` +
+        `A soft personal aside ("nhỏ bạn mình cũng mê") does NOT count. Add ONE standalone ` +
+        `crowd line in the benefit/proof stretch — e.g. ${ex}. Keep it a plausible vibe; ` +
+        `do NOT invent a fake exact number or a certification.`,
+      )
+    }
+  }
+
   return { ok: failures.length === 0, failures }
 }
+
+// Cross-language crowd / social-proof cues (VN + MS + EN). Broad on purpose — rule 8
+// is a presence check, so a wide net keeps false-fails rare (it fires only when NO
+// crowd beat at all is present). Mirrors brollDirector's SOCIAL_PROOF_CUE_RE.
+const SOCIAL_PROOF_CUE_RE =
+  /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|m[oọ]i ng[ưu][ờo]i|ai (?:c[ũu]ng|d[ùu]ng|mua)|nhi[eề]u ng[ưu][ờo]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|mua l[aạ]i|đ[áa]nh gi[áa]|l[ưu][ợo]t (?:mua|b[áa]n)|ng[ưu][ờo]i (?:mua|đ[ặa]t)|5 sao|n[ăa]m sao|c[oộ]ng đ[ồo]ng|\b(?:review|reviews|sold|sold[- ]?out|repeat|verified|viral)\b|ramai|orang beli|terjual|ulasan|bintang|laku keras|semua orang/i
 
 // ── P4j — shape-execution validator ──────────────────────────────────────────
 // validateBody checks symptom / CTA / banned-openings but NOT whether the body
