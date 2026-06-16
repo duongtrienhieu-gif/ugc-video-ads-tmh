@@ -76,17 +76,21 @@ export interface HybridAssembleResult {
   encodeMs: number
 }
 
-// Grok i2v renders motion at ~0.77× of natural speed (a 4s-requested clip lands as
-// a ~6s file that looks slow-mo). Speed b-roll/3d cuts up 1.3× so they fill their
-// timeline slot at natural speed. Lips clips are already correct (Kling + TTS).
-const INSERT_SPEED = 1.3
+// i2v models render motion slower than natural; we speed b-roll/3d cuts up so they look
+// energetic (TikTok pacing), not slow-mo. Grok was ~0.77× → 1.3× fixed it; Seedance 1.5
+// Pro renders even slower in practice (user: "vẫn cứ chậm chậm" at 1.3×), so 1.5×.
+// ⚠️ Keep this in sync with pickSeedanceDuration's factor in types.ts (it sizes the source
+// clip to slot×SPEED) — otherwise the source is too short and the re-fit below SLOWS it
+// back down. Tunable: bump higher if still slow, lower if it looks rushed.
+const INSERT_SPEED = 1.5
 // i2v clips OPEN on the still keyframe (~0.3-0.5s frozen before motion ramps). Skip
 // that lead-in so each cut opens ON MOTION, not on a freeze (the "ảnh tĩnh ở chuyển
-// cảnh"). Grok clips are ~6s; if a slot needs more source than exists we re-fit the
-// speed so the segment still fills the slot EXACTLY (never a held last frame / a short
-// segment that drifts the back-half sync).
+// cảnh"). If a slot needs more source than the clip holds we re-fit the speed so the
+// segment still fills the slot EXACTLY (never a held last frame / a short segment that
+// drifts the back-half sync). Budget raised 6→8 to match Seedance's 8/12s clips so the
+// 1.5× isn't re-fit down for normal (≤~5s) slots.
 const INSERT_LEAD_IN_SEC = 0.35
-const INSERT_SOURCE_BUDGET_SEC = 6.0
+const INSERT_SOURCE_BUDGET_SEC = 8.0
 
 export async function assembleHybridVideo(
   params: HybridAssembleParams,

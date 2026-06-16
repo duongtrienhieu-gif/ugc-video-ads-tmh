@@ -260,13 +260,13 @@ const I2V_CR_PER_SEC: Record<'480p' | '720p' | '1080p', number> = {
 }
 
 /** Seedance 1.5 Pro renders ONLY 4 / 8 / 12s. Pick the SMALLEST that gives the assembler
- *  enough source to fill the director's slot: inserts are sped up by ~INSERT_SPEED (1.3×)
- *  after a ~0.35s lead-in skip, so a slot of S seconds needs ≈ S×1.3 + 0.85s of footage.
+ *  enough source to fill the director's slot: inserts are sped up by ~INSERT_SPEED (1.5×)
+ *  after a ~0.35s lead-in skip, so a slot of S seconds needs ≈ S×1.5 + 0.85s of footage.
  *  The renderer AND the credit estimate both call this, so the shown cost always matches the
  *  rendered length (no hard 8s fit; short cuts get the cheap 4s, long ones 12s).
- *  ⚠️ Keep the 1.3 in sync with INSERT_SPEED in hybridAssembler/finalVideoAssembler. */
+ *  ⚠️ Keep the 1.5 in sync with INSERT_SPEED in hybridAssembler. */
 export function pickSeedanceDuration(slotDurSec: number): 4 | 8 | 12 {
-  const needed = Math.max(1, slotDurSec) * 1.3 + 0.85
+  const needed = Math.max(1, slotDurSec) * 1.5 + 0.85
   return needed <= 4 ? 4 : needed <= 8 ? 8 : 12
 }
 
