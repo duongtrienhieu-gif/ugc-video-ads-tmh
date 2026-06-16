@@ -180,7 +180,9 @@ export default function HybridExportPhase() {
                       : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
                   }`}>
                   <CaptionPresetPreview presetId={id} />
-                  <span className="text-center">{CAPTION_PRESETS[id].labelVi}</span>
+                  <span className="text-center leading-tight">{CAPTION_PRESETS[id].labelVi}
+                    <span className="block text-[9px] font-normal text-gray-400">{CAPTION_PRESETS[id].fontLabel}</span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -342,14 +344,14 @@ function CaptionPresetPreview({ presetId }: { presetId: CaptionPresetId }) {
   useEffect(() => {
     let alive = true
     let made: string | null = null
-    renderCaptionBlob('Đỉnh thật · RM79', presetId)
+    renderCaptionBlob('Đỉnh · RM79', presetId)   // short sample → renders LARGER in the chip so the font is visible
       .then((b) => { if (!alive) return; made = URL.createObjectURL(b); setUrl(made) })
       .catch(() => {})
     return () => { alive = false; if (made) URL.revokeObjectURL(made) }
   }, [presetId])
   return (
-    <div className="flex h-9 items-center justify-center overflow-hidden rounded bg-gray-900">
-      {url && <img src={url} alt="" className="max-h-8 w-auto object-contain px-1" />}
+    <div className="flex h-14 items-center justify-center overflow-hidden rounded bg-gray-900">
+      {url && <img src={url} alt="" className="max-h-12 w-auto object-contain px-1" />}
     </div>
   )
 }

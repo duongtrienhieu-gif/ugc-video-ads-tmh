@@ -15,6 +15,8 @@ export type CaptionPresetId = 'clean_white' | 'bold_punch' | 'soft_premium' | 'n
 export interface CaptionPreset {
   id: CaptionPresetId
   labelVi: string
+  /** Human font name shown on the picker chip so the user sees WHICH font it is. */
+  fontLabel: string
   /** CSS font-family stack (canvas `ctx.font`). First family must cover VN+MS+EN;
    *  Be Vietnam Pro is the universal fallback so any missing glyph still renders. */
   family: string
@@ -45,26 +47,26 @@ export interface CaptionPreset {
 export const CAPTION_PRESETS: Record<CaptionPresetId, CaptionPreset> = {
   // Neutral clean sans (Be Vietnam Pro — VN-native, the safe one), plain YELLOW keyword.
   clean_white: {
-    id: 'clean_white', labelVi: 'Clean White',
+    id: 'clean_white', labelVi: 'Clean White', fontLabel: 'Be Vietnam Pro',
     family: `'Be Vietnam Pro', system-ui, sans-serif`, weight: '700',
     fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.15, shadow: false, accent: '#FFD400', accentMode: 'color',
   },
   // Geometric heavy, UPPERCASE, thick stroke, plain HOT-PINK keyword — the loud one.
   bold_punch: {
-    id: 'bold_punch', labelVi: 'Bold Punch',
+    id: 'bold_punch', labelVi: 'Bold Punch', fontLabel: 'Montserrat',
     family: `'Montserrat', 'Be Vietnam Pro', sans-serif`, weight: '800',
     fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.22, shadow: false, accent: '#FF2D7E', upper: true, accentMode: 'color',
   },
   // Rounded friendly, lower-case, ORANGE keyword with an UNDERLINE (+ stroke now).
   soft_premium: {
-    id: 'soft_premium', labelVi: 'Tròn mềm',
+    id: 'soft_premium', labelVi: 'Tròn mềm', fontLabel: 'Baloo 2',
     family: `'Baloo 2', 'Be Vietnam Pro', sans-serif`, weight: '800',
     fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.13, shadow: false, accent: '#FF7A00', accentMode: 'underline',
   },
   // Oswald — TALL CONDENSED (a dramatically different silhouette from the other 3),
   // NEON-green keyword with a glow. VN-capable.
   neon_pop: {
-    id: 'neon_pop', labelVi: 'Neon Pop',
+    id: 'neon_pop', labelVi: 'Neon Pop', fontLabel: 'Oswald',
     family: `'Oswald', 'Be Vietnam Pro', sans-serif`, weight: '700',
     fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.18, shadow: false, accent: '#19FF6A', accentMode: 'glow',
   },
