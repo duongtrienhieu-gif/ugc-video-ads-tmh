@@ -38,6 +38,7 @@ import {
   type SavedProject,
 } from './types'
 import { getAllProjects, hydrateProjectAsState } from './services/projectLibrary'
+import './services/brollStudioRenderer'   // P6 Phase 0 — registers dev helper __testStudioScene (mode-2 Xưởng B-roll)
 
 interface Props {
   /** Switch to legacy v2 (cinematic coverage pipeline). */

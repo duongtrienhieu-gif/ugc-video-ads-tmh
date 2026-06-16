@@ -934,6 +934,8 @@ export async function generateVideoJob(params: {
   startFrameUrl?: string
   endFrameUrl?: string
   referenceImageUrls?: string[]
+  /** P6 — InfiniteTalk lipsync: the TTS audio the avatar mouths. */
+  audioUrl?: string
 }): Promise<{ taskId: string }> {
   const input: Record<string, unknown> = { prompt: params.prompt }
 
@@ -995,6 +997,14 @@ export async function generateVideoJob(params: {
     let dur = Math.max(6, Math.min(30, Math.round(params.duration ?? 6)))
     if (dur > 6 && dur < 8) dur = 8
     input.duration = String(dur)
+  } else if (params.jobModelId.startsWith('infinitalk')) {
+    // P6 — MeiGen InfiniteTalk lipsync (model `infinitalk/from-audio`): avatar IMAGE +
+    // TTS AUDIO → talking head. KIE input schema: image_url + audio_url + prompt +
+    // resolution (480p / 720p only). Duration is driven by the audio length.
+    if (params.startFrameUrl) input.image_url = params.startFrameUrl
+    else if (params.referenceImageUrls?.length) input.image_url = params.referenceImageUrls[0]
+    if (params.audioUrl) input.audio_url = params.audioUrl
+    input.resolution = params.resolution === '720p' || params.resolution === '1080p' ? '720p' : '480p'
   }
 
   const res = await fetch(`${KIE_BASE}/jobs/createTask`, {
