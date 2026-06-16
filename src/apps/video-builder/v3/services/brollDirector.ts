@@ -1146,6 +1146,10 @@ function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
   }
   for (const s of timed) {
     const L = s.endSec - s.startSec
+    // P5w — a social-proof CARD is ONE static FB-post image; never split it (a split
+    // would render the SAME quote as TWO identical cards = double credit + ugly repeat).
+    // Hold the single card for its whole span even if that exceeds MAX_BROLL_SEC.
+    if (s.role === 'social_proof') { out.push(s); continue }
     if (s.role === 'lips') {
       if (L <= MAX_LIPS_SEC + 0.4) { out.push(s); continue }
       // Hard-cap the lips ABSOLUTELY: cut it at MAX_LIPS_SEC, but pull the cut a
@@ -1246,6 +1250,7 @@ function enforceDensityFloor(scenes: TimedBrollScene[], minScenes: number): Time
     let li = -1
     let lLen = 2 * MIN_CUT_SEC   // only split cuts that yield two ≥ MIN_CUT halves
     for (let i = 0; i < out.length; i++) {
+      if (out[i].role === 'social_proof') continue   // P5w — never split a static FB-post card
       const L = out[i].endSec - out[i].startSec
       if (L > lLen) { lLen = L; li = i }
     }
