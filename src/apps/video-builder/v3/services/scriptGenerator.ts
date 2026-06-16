@@ -740,6 +740,40 @@ OUTPUT: strict JSON only, no markdown fences:
   return { blocks, hookVariants: [] }
 }
 
+// P5z3 (B) — semantic continuity gate. A tiny LLM judge that decides whether the body's
+// OPENING actually pays off the hook (answers it / reveals the teased reason / continues
+// the same subject) vs a generic pivot the deterministic check (A) can't catch. Runs only
+// for the drift-prone shapes; returns a feedback string when it does NOT follow (→ the
+// existing 1-retry fixes it), else null. Language-agnostic (judges VN/MS/EN). Graceful:
+// any error / parse miss → null (never blocks the generation).
+async function judgeHookContinuity(hook: string, opening: string, apiKey: string): Promise<string | null> {
+  const h = (hook ?? '').trim(); const o = (opening ?? '').trim()
+  if (!h || !o || !apiKey) return null
+  try {
+    const raw = await directGeminiText({
+      apiKey,
+      systemInstruction:
+        `You judge TikTok ad-script continuity. Given a HOOK and the body's OPENING (the line right ` +
+        `after the hook), decide if the opening DIRECTLY continues / pays off the hook's promise — ` +
+        `answers its question, reveals the reason it teased, or continues the SAME subject/story. A ` +
+        `generic pivot to an unrelated personal intro ("mình hay đói vặt…", "aku selalu…") that ignores ` +
+        `the hook does NOT follow. Reply STRICT JSON: {"follows":true|false,"reason":"<short>"}.`,
+      prompt: `HOOK: "${h}"\nOPENING: "${o}"`,
+      maxOutputTokens: 120, temperature: 0, thinkingBudget: 0, responseMimeType: 'application/json',
+    })
+    const m = raw.match(/\{[\s\S]*\}/)
+    if (!m) return null
+    const parsed = JSON.parse(m[0]) as { follows?: boolean; reason?: string }
+    if (parsed.follows === false) {
+      return (
+        `The body's first line does NOT continue the hook (${parsed.reason ?? 'it pivots to an unrelated opener'}). ` +
+        `Rewrite sentence 1 to pay off the hook "${h.slice(0, 50)}…" — pick up its exact promise / subject, NOT a generic intro.`
+      )
+    }
+    return null
+  } catch { return null }
+}
+
 // ── #6 hook-first body generation ──────────────────────────────────────────
 // The user has already picked the hook (from generateHooks). Gemini writes only
 // the remaining 4 blocks so they flow from that exact hook; the hook block is
@@ -876,7 +910,16 @@ THE FIXED HOOK (continue the script DIRECTLY from this line; reproduce it verbat
     const shapeCheck = validateShapeExecution(bodyBlocks, args.shape, args.lang)
     // P5 — anchor present + concrete + repeated (early↔cta) + honest (no absolute cure).
     const anchorCheck = validateAnchor(bodyBlocks, anchor, args.lang)
-    const check = { ok: bodyCheck.ok && shapeCheck.ok && anchorCheck.ok, failures: [...bodyCheck.failures, ...shapeCheck.failures, ...anchorCheck.failures] }
+    // P5z3 (B) — LLM continuity gate: only for the drift-prone shapes (the 4 strict shapes
+    // already have deterministic openers). Judges the line right after the hook.
+    const DRIFT_PRONE = new Set(['general', 'confession', 'claim_bold', 'imperative'])
+    const continuityFail = DRIFT_PRONE.has(resolvedHookShape)
+      ? await judgeHookContinuity(blocks.hook, bodyBlocks.pain, args.apiKey)
+      : null
+    const check = {
+      ok: bodyCheck.ok && shapeCheck.ok && anchorCheck.ok && !continuityFail,
+      failures: [...bodyCheck.failures, ...shapeCheck.failures, ...anchorCheck.failures, ...(continuityFail ? [continuityFail] : [])],
+    }
     if (!check.ok) {
       // eslint-disable-next-line no-console
       console.log(`[generateBodyAroundHook] body check failed (${check.failures.length} issues), 1 retry…`)

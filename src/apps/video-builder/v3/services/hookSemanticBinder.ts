@@ -152,6 +152,19 @@ const VN_COMPARISON_OPENERS = ['bên trái', 'bên phải', 'cái mắc', 'cái 
 const MS_COMPARISON_OPENERS = ['yang kiri', 'yang kanan', 'rm', 'side by side', 'satu side', 'aku compare', 'aku test']
 const VN_TEST_OPENERS = ['ngày đầu', 'mình bắt đầu', 'ngày 1', 'mình thử', 'mình test', 'hôm đầu', 'tuần đầu']
 const MS_TEST_OPENERS = ['day 1', 'hari pertama', 'aku mula', 'aku start', 'aku test', 'hari ke-1', 'minggu pertama']
+// P5z3 (A) — the framework's GENERIC pain-template openers. When the hook sets a
+// theme/claim/command (general/claim_bold/imperative) and the body bails to one of these,
+// it has DRIFTED (ignored the hook) — the exact "lúc được lúc drift" the user audited.
+// VN + MS. Matched against the punctuation-stripped, lowercased first sentence.
+const GENERIC_PIVOT_OPENERS = [
+  // VN
+  'mình hay', 'mình thường', 'mình vốn', 'mình cứ', 'mình hay bị', 'mình là kiểu',
+  'cứ mỗi lần', 'mỗi lần', 'mỗi khi', 'dạo này', 'dạo gần đây', 'gần đây',
+  'bạn biết đấy', 'bạn biết đó', 'có những lúc', 'có những hôm', 'chả hiểu sao', 'không hiểu sao',
+  // MS
+  'aku selalu', 'aku slalu', 'selalu rasa', 'setiap kali', 'korang tau', 'korang pernah',
+  'kebelakangan ni', 'akhir akhir ni', 'aku memang', 'aku jenis',
+]
 
 function lower(s: string): string { return s.toLowerCase().trim() }
 function firstSentence(text: string): string {
@@ -205,10 +218,20 @@ export function validateSemanticAnswer(
       `does NOT start the test. Open with "${testOpeners.slice(0, 3).join('" / "')}…" — the first day / first attempt.`
     )
   }
-  // confession / claim_bold / imperative / general — softer check. We don't have
-  // a clean substring rule, so we fall back to a token-overlap check (the same
-  // gentle "thematic continuity" the literal-reuse rule was trying to enforce,
-  // but only as the safety net for shapes where a strict opener wouldn't fit).
+  // P5z3 (A) — general / claim_bold / imperative: the body owes the hook's theme/claim/
+  // command. The one CLEAR, high-precision failure we can catch deterministically is the
+  // body bailing to a GENERIC pain-template opener ("mình hay…", "mình vốn…", MS "aku
+  // selalu…") that ignores the hook. Ban that. (confession is left to the LLM gate — a
+  // first-person continuation legitimately varies and a strict opener doesn't fit.)
+  if ((shape === 'general' || shape === 'claim_bold' || shape === 'imperative')
+      && startsWithAny(opening, GENERIC_PIVOT_OPENERS)) {
+    return (
+      `The hook ("${hookText}") sets up a specific theme/claim, but the body's first sentence ` +
+      `("${painFirstSentence.slice(0, 70)}…") bails to a GENERIC opener that ignores it. ` +
+      `Sentence 1 MUST pay off the hook — pick up its EXACT subject / claim / curiosity ` +
+      `(continue "${hookText.slice(0, 45)}…"), NOT a generic "${isMs ? 'aku selalu rasa…' : 'mình hay / mình vốn…'}".`
+    )
+  }
   return null
 }
 
