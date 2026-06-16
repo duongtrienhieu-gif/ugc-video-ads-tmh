@@ -17,21 +17,26 @@ const PADY = Math.round(FONT_PX * 0.40)   // pill vertical padding
 const MARG = Math.round(FONT_PX * 0.18)   // transparent margin (room for highlight/underline)
 const RIBBON_MIN_W = FONT_PX * 15         // ribbon strip min width → reads as a full-width bar
 
-/** Pull the banner slogan from the script's KEY: prefer the anchor (the one concrete
- *  memorable reason the whole script is built on), fall back to the hook. Trimmed to a
- *  punchy ≤6 words / ≤32 chars. Universal — no niche, language-agnostic (uses whatever
- *  language the script is in). */
-export function deriveBannerSlogan(anchor?: string, hook?: string): string {
-  const clean = (s: string) => s.replace(/\s+/g, ' ').trim().replace(/^["'“”\-•\s]+|["'“”.!?\s]+$/g, '')
-  const cap = (s: string) => {
-    let out = s.split(' ').filter(Boolean).slice(0, 6).join(' ')
-    if (out.length > 32) out = out.slice(0, 32).replace(/\s+\S*$/, '').trim()
+/** Build the banner slogan as PRODUCT NAME · short benefit (the user's choice "B").
+ *  The benefit is a punchy ≤4-word phrase from the script's KEY (its anchor — the one
+ *  concrete promise). We NEVER chop the narrative hook into a fragment (that produced
+ *  the broken "Mình đã thử muối tỏi mùi"). If there's no product name we fall back to
+ *  the anchor alone; if neither exists we return '' (the banner is simply skipped).
+ *  Universal — language-agnostic. (Note: productName comes from the VN-source product
+ *  bank, so on an MS video the name stays VN until the product translation layer lands.) */
+export function deriveBannerSlogan(productName?: string, anchor?: string, _hook?: string): string {
+  const clean = (s?: string) => (s ?? '').replace(/\s+/g, ' ').trim().replace(/^["'“”\-•·\s]+|["'“”.!?\-•·\s]+$/g, '')
+  const cap = (s: string, words: number, chars: number) => {
+    let out = s.split(' ').filter(Boolean).slice(0, words).join(' ')
+    if (out.length > chars) out = out.slice(0, chars).replace(/\s+\S*$/, '').trim()
     return out
   }
-  const a = clean(anchor ?? '')
-  if (a.length >= 4) return cap(a)
-  const h = clean(hook ?? '')
-  if (h.length >= 4) return cap(h)
+  const name = clean(productName) ? cap(clean(productName), 5, 26) : ''
+  const anc = clean(anchor)
+  const benefit = anc.length >= 3 ? cap(anc, 4, 22) : ''
+  if (name && benefit) return `${name} · ${benefit}`
+  if (name) return name
+  if (benefit) return benefit
   return ''
 }
 

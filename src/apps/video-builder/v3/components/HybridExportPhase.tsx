@@ -41,8 +41,9 @@ export default function HybridExportPhase() {
   const captionPreset = hybrid.captionPreset ?? DEFAULT_CAPTION_PRESET
   const bannerOn = hybrid.bannerOn !== false               // default ON
   const bannerPreset = hybrid.bannerPreset ?? DEFAULT_BANNER_PRESET
-  // The exact slogan the banner will carry (script's KEY = anchor → hook fallback).
-  const bannerSlogan = deriveBannerSlogan(script?.anchor, script?.blocks?.[0]?.text) || 'Ăn vặt mà vẫn khỏe re'
+  // The exact slogan the banner will carry: PRODUCT NAME · short benefit (choice "B").
+  const bannerSlogan = deriveBannerSlogan(state.inputs.product?.productName, script?.anchor, script?.blocks?.[0]?.text)
+  const bannerPreviewText = bannerSlogan || 'Tên sản phẩm · lợi ích ngắn'
   const scenes = hybrid.scenes ?? []
   const doneCount = scenes.filter((_, i) => hybrid.clips[i]).length
   const allDone = scenes.length > 0 && doneCount === scenes.length
@@ -65,6 +66,7 @@ export default function HybridExportPhase() {
       const videoRef = await assembleFromHybridState(h, script, resolution, {
         onProgress: (r) => setAssembleRatio(r),
         onStage: (label) => setAssembleStage(label),
+        bannerSlogan,
       })
       setHybridFinal(videoRef)
       addToast('✓ Đã tạo video', 'success')
@@ -153,7 +155,7 @@ export default function HybridExportPhase() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-bold text-gray-900">🏷️ Banner hook (dải trên)</p>
-              <p className="text-[11px] text-gray-500">Slogan ngắn lấy từ kịch bản: <strong>"{bannerSlogan}"</strong> — 0 credit. Đổi xong bấm <strong>Ghép lại / Tạo video</strong>.</p>
+              <p className="text-[11px] text-gray-500">Banner: <strong>"{bannerPreviewText}"</strong> (tên sản phẩm · lợi ích) — 0 credit. Đổi xong bấm <strong>Ghép lại / Tạo video</strong>.</p>
             </div>
             <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[12px] font-semibold text-gray-700">
               <input type="checkbox" checked={bannerOn} onChange={(e) => setHybridCaption({ bannerOn: e.target.checked })} />
@@ -169,7 +171,7 @@ export default function HybridExportPhase() {
                       ? 'border-violet-400 bg-violet-100 text-violet-800'
                       : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
                   }`}>
-                  <BannerPresetPreview presetId={id} slogan={bannerSlogan} />
+                  <BannerPresetPreview presetId={id} slogan={bannerPreviewText} />
                   <span className="text-center">{BANNER_PRESETS[id].labelVi}</span>
                 </button>
               ))}
@@ -192,6 +194,20 @@ export default function HybridExportPhase() {
                 {assembling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Ghép lại (0cr)
               </button>
             </div>
+            {/* P5x — show the SAME % bar while re-assembling an existing final (was only
+                in the "no final yet" state → "Ghép lại" looked frozen with no progress). */}
+            {assembling && (
+              <div className="mx-auto mt-3 max-w-md">
+                <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-gray-500">
+                  <span className="truncate">{assembleStage || 'Đang ghép…'}</span>
+                  <span className="tabular-nums">{Math.round(assembleRatio * 100)}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-300"
+                    style={{ width: `${Math.max(2, Math.round(assembleRatio * 100))}%` }} />
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center">

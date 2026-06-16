@@ -113,7 +113,9 @@ export async function assembleFromHybridState(
   // is the per-clip normalize loop = genuinely accurate), `onStage` is the
   // human-readable phase ("Chuẩn hoá cảnh 3/14…", "Ghép timeline", "Xuất 720p").
   // The UI shows a real % bar + the stage label instead of a blind spinner.
-  opts?: { onProgress?: (ratio: number) => void; onStage?: (label: string) => void },
+  // P5x — `bannerSlogan` is the top-banner text computed by the caller (product name ·
+  // benefit) so the export preview chip and the rendered banner are identical.
+  opts?: { onProgress?: (ratio: number) => void; onStage?: (label: string) => void; bannerSlogan?: string },
 ): Promise<string> {
   const sc = hybrid.scenes ?? []
   if (!hybrid.voiceRef) throw new Error('Chưa có giọng (Tạo giọng + mặt trước)')
@@ -137,7 +139,9 @@ export async function assembleFromHybridState(
   const bannerOn = hybrid.bannerOn !== false
   let banner: { pngRef: string; fullWidth: boolean } | undefined
   if (bannerOn) {
-    const slogan = deriveBannerSlogan(script.anchor, script.blocks[0]?.text)
+    // Prefer the caller-computed slogan (product name · benefit); fall back to the
+    // anchor alone when none was passed (the service has no product context).
+    const slogan = (opts?.bannerSlogan ?? '').trim() || deriveBannerSlogan(undefined, script.anchor, script.blocks[0]?.text)
     if (slogan) {
       const bpid = hybrid.bannerPreset ?? DEFAULT_BANNER_PRESET
       try {
