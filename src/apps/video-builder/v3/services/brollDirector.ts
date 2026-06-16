@@ -32,7 +32,7 @@ import { buildShapeDirectorHint } from './scriptShapes'
 
 // ── Output types ────────────────────────────────────────────────────────────
 
-export type BrollSceneRole = 'lips' | 'broll' | 'mechanism3d'
+export type BrollSceneRole = 'lips' | 'broll' | 'mechanism3d' | 'social_proof'
 export type BrollSceneKind = 'product_action' | 'product_closeup' | 'concept'
 
 export interface BrollScene {
@@ -122,7 +122,7 @@ const BROLL_RESPONSE_SCHEMA = {
       items: {
         type: 'object',
         properties: {
-          role:          { type: 'string', enum: ['lips', 'broll', 'mechanism3d'] },
+          role:          { type: 'string', enum: ['lips', 'broll', 'mechanism3d', 'social_proof'] },
           quote:         { type: 'string', maxLength: 200 },
           durationSec:   { type: 'number' },
           conceptPrompt: { type: 'string', maxLength: 240 },
@@ -916,7 +916,7 @@ function tryParse(raw: string): { scenes?: RawScene[]; stickers?: RawSticker[] }
   return null
 }
 
-const SCENE_ROLES: BrollSceneRole[] = ['lips', 'broll', 'mechanism3d']
+const SCENE_ROLES: BrollSceneRole[] = ['lips', 'broll', 'mechanism3d', 'social_proof']
 const SCENE_KINDS: BrollSceneKind[] = ['product_action', 'product_closeup', 'concept']
 
 // Guarantee the lips ladder: if fewer "lips" than `target`, convert the broll cuts
@@ -974,7 +974,9 @@ function sanitizeScenes(raw: RawScene[] | undefined): BrollScene[] {
     if (!quote) continue
     const durationSec = Math.max(2, Math.min(6, Number(r.durationSec) || 4))
     const scene: BrollScene = { role, quote, durationSec }
-    if (role !== 'lips') {
+    // social_proof = a static FB-post card (rendered locally/AI later), no i2v kind/
+    // framing/conceptPrompt. lips = talking head, also no product-cut setup.
+    if (role !== 'lips' && role !== 'social_proof') {
       // No-face only makes sense for a real product-action cut; otherwise creator.
       scene.kind = SCENE_KINDS.includes(r.kind as BrollSceneKind) ? (r.kind as BrollSceneKind) : 'product_action'
       const wantsNoFace = r.cameraFraming === 'hands_noface'

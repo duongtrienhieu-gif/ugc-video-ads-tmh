@@ -78,6 +78,9 @@ async function buildStickerPlacements(
 async function buildCaptionPlacements(
   alignment: VoiceAlignment | undefined, script: GeneratedScript, realDur: number,
   presetId: CaptionPresetId,
+  // P5w — time windows of social-proof CARD scenes: skip captions there (the card is a
+  // full-frame FB-post with its own text; a burned caption on top would clutter it).
+  skipWindows: { startSec: number; endSec: number }[] = [],
 ): Promise<HybridCaptionPlacement[]> {
   const fallback = script.blocks.map((b) => b.text).join(' ')
   const chunks = buildCaptionChunks(alignment, fallback, realDur)
@@ -85,6 +88,9 @@ async function buildCaptionPlacements(
   for (const ch of chunks) {
     const text = ch.text.trim()
     if (!text) continue
+    // drop a chunk whose midpoint falls inside a social-proof card window
+    const mid = (ch.startSec + ch.endSec) / 2
+    if (skipWindows.some((w) => mid >= w.startSec && mid < w.endSec)) continue
     try {
       const blob = await renderCaptionBlob(text, presetId)
       out.push({
@@ -118,8 +124,11 @@ export async function assembleFromHybridState(
   const captionsOn = hybrid.captionsOn !== false
   const presetId = hybrid.captionPreset ?? DEFAULT_CAPTION_PRESET
   opts?.onStage?.(captionsOn ? 'Tạo phụ đề…' : 'Bỏ qua phụ đề…')
+  const cardWindows = sc
+    .filter((s) => s.role === 'social_proof')
+    .map((s) => ({ startSec: s.startSec, endSec: s.endSec }))
   const captions = captionsOn
-    ? await buildCaptionPlacements(hybrid.voiceAlignment, script, realDur, presetId)
+    ? await buildCaptionPlacements(hybrid.voiceAlignment, script, realDur, presetId, cardWindows)
     : []
   const r = await assembleHybridVideo({
     clips, voiceRef: hybrid.voiceRef, voiceDurationSec: realDur, resolution,

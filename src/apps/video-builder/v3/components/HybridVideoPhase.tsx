@@ -233,6 +233,7 @@ export default function HybridVideoPhase(_props: Props) {
   const ctx = (): HybridRenderContext => ({
     kieApiKey, keyframeRef: hybrid.keyframeRef, voiceRef: hybrid.voiceRef,
     product: state.inputs.product, avatar: state.inputs.avatar, creatorVideoConfig: state.creatorVideoConfig, resolution,
+    lang: state.scriptBrain.outputLang,   // P5w — social-proof card text language
   })
 
   // P3s — directly render a scene WITHOUT queue logic. Used internally by the

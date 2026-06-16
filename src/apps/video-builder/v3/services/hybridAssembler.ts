@@ -128,7 +128,8 @@ export async function assembleHybridVideo(
     const url = isAssetRef(c.videoRef) ? await getUrl(c.videoRef) : c.videoRef
     if (!url) { console.warn(`[HYBRID_ASM] cảnh ${i} thiếu videoRef — bỏ qua`); failedIdx.push(i); continue }
 
-    const inFile = `hin_${i}.mp4`
+    const isCard = c.scene.role === 'social_proof'   // P5w — a static FB-post IMAGE, not a video
+    const inFile = isCard ? `hin_${i}.png` : `hin_${i}.mp4`
     try {
       await ffmpeg.writeFile(inFile, await fetchFile(url))
     } catch (err) {
@@ -138,6 +139,24 @@ export async function assembleHybridVideo(
     }
 
     const dur = Math.max(0.3, c.scene.endSec - c.scene.startSec)
+
+    // P5w — social-proof card: hold the FB-post image for the line's duration, fitted
+    // INSIDE the 9:16 frame on a soft pad (never crop the post → keep all comments
+    // readable). No speed-up / lead-in / overlay (it's a full-frame card; captions are
+    // skipped for this window in buildCaptionPlacements).
+    if (isCard) {
+      const normFile = `hnorm_${i}.ts`
+      await ffmpeg.exec([
+        '-loop', '1', '-t', dur.toFixed(3), '-i', inFile,
+        '-vf', `scale=${evenW}:${evenH}:force_original_aspect_ratio=decrease,pad=${evenW}:${evenH}:(ow-iw)/2:(oh-ih)/2:color=0xEEF1F7,setsar=1`,
+        '-an', '-c:v', 'libx264', '-preset', preset_x264, '-crf', crf,
+        '-pix_fmt', 'yuv420p', '-r', '30', '-f', 'mpegts', '-y', normFile,
+      ])
+      normFiles.push(normFile)
+      await ffmpeg.deleteFile(inFile).catch(() => {})
+      continue
+    }
+
     const isInsert = c.scene.role !== 'lips'   // broll + mechanism3d need the speed-up
     // lips: take the clip as-is (start 0, speed 1). insert: skip the static lead-in,
     // speed 1.3×; but if the slot needs more source than the ~6s clip holds, re-fit

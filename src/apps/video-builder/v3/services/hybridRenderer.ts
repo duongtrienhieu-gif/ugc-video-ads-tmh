@@ -16,9 +16,10 @@ import { renderLipsyncSegment } from './creatorVideoEngine'
 import { renderInsert } from './insertRenderer'
 import type { TimedBrollScene } from './brollDirector'
 import { isWeakConceptPrompt, deriveConceptPrompt } from './brollDirector'
+import { generateSocialProofImage } from './socialProofRenderer'
 import type { HybridSceneClip } from './hybridAssembler'
 import type { Product, Model } from '../../../../stores/types'
-import type { CreatorVideoConfig, ActionPresetId } from '../types'
+import type { CreatorVideoConfig, ActionPresetId, ScriptLang } from '../types'
 
 export interface HybridRenderContext {
   kieApiKey: string
@@ -30,6 +31,8 @@ export interface HybridRenderContext {
   avatar?: Model | null
   creatorVideoConfig: CreatorVideoConfig
   resolution: '480p' | '720p' | '1080p'
+  /** P5w — output language (for the social-proof card text). */
+  lang?: ScriptLang
 }
 
 // Render ONE scene → a clip videoRef.
@@ -62,6 +65,18 @@ export async function renderOneHybridScene(
       endSec: scene.endSec,
     })
     return r.videoRef
+  }
+
+  // P5w — social-proof card: a realistic FB-post IMAGE (GPT-4o), NOT i2v. The
+  // assembler holds + slow-pans it as a 2-4s clip. 0 i2v drift; ~6cr for the image.
+  if (scene.role === 'social_proof') {
+    onStage?.('Tạo thẻ bằng chứng…')
+    return await generateSocialProofImage({
+      kieApiKey: ctx.kieApiKey,
+      lang: ctx.lang ?? 'vi',
+      productName: ctx.product?.productName ?? 'Sản phẩm',
+      productImageRef: ctx.product?.productImage ?? undefined,
+    })
   }
 
   // broll / mechanism3d → Grok insert.
