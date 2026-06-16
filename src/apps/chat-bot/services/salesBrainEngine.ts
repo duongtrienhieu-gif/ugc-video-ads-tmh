@@ -128,6 +128,8 @@ export interface SalesBrainInput {
   history: ChatTurn[]
   customerText: string
   apiKey: string
+  /** Thông tin đã moi tích luỹ xuyên phiên (sđt/địa chỉ/tên/số lượng…). */
+  knownInfo?: Record<string, string>
 }
 
 /** Chạy engine 1 lượt: tin khách → ActionPacket. ĐÚNG 1 call Gemini (re-call tối đa 1

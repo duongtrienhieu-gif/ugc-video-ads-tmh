@@ -58,7 +58,12 @@ export default function Simulator({ productId }: { productId: string }) {
 
     try {
       const customerText = silence ? SILENCE_PROMPT : text
-      const packet = await runSalesBrain({ config, product, history, customerText, apiKey: geminiKey })
+      // Gom mọi info bot đã moi xuyên phiên (sđt/địa chỉ/…) để không hỏi lại
+      const knownInfo: Record<string, string> = Object.assign(
+        {},
+        ...history.filter((t) => t.role === 'bot' && t.packet?.captured).map((t) => t.packet!.captured),
+      )
+      const packet = await runSalesBrain({ config, product, history, customerText, apiKey: geminiKey, knownInfo })
       setTurns((t) => [...t, { id: nextId(), role: 'bot', packet, at: Date.now() }])
     } catch (err) {
       addToast(`Bot lỗi: ${err instanceof Error ? err.message : String(err)}`, 'error')

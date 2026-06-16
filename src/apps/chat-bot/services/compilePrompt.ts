@@ -11,7 +11,7 @@ import type { ChatTurn, MediaRole, MediaSlot, SalesConfig } from '../types'
 import { ROLE_LABELS, STAGE_LABELS } from '../labels'
 import { buildSystemPrompt } from './playbook'
 
-export const MAX_HISTORY_TURNS = 8
+export const MAX_HISTORY_TURNS = 14
 
 export interface CompiledPrompt {
   system: string
@@ -30,8 +30,11 @@ export function compilePrompt(args: {
   product: Product | undefined
   history: ChatTurn[]
   customerText: string
+  /** Thông tin đã moi được tích luỹ XUYÊN PHIÊN (sđt/địa chỉ/tên/số lượng…) —
+   *  để bot KHÔNG hỏi lại cái khách đã cung cấp. */
+  knownInfo?: Record<string, string>
 }): CompiledPrompt {
-  const { config, product, history, customerText } = args
+  const { config, product, history, customerText, knownInfo } = args
 
   // ── Media: gán id ngắn + GOM THEO LOẠI (để bot biết cụm cùng loại có thể gửi chung) ──
   const mediaIndex = new Map<string, MediaSlot>()
@@ -98,6 +101,12 @@ export function compilePrompt(args: {
     })
     .join('\n')
 
+  // ── Thông tin đã thu thập (tích luỹ xuyên phiên) ──
+  const knownLines = Object.entries(knownInfo ?? {})
+    .filter(([, v]) => (v ?? '').trim())
+    .map(([k, v]) => `- ${k}: ${v}`)
+    .join('\n')
+
   const prompt = [
     '=== KHO THÔNG TIN SẢN PHẨM (nguyên liệu để CHỌN LỌC + diễn lại, ĐỪNG đọc nguyên văn) ===',
     facts || '(không có dữ liệu sản phẩm)',
@@ -107,6 +116,7 @@ export function compilePrompt(args: {
     objections ? `\n=== XỬ LÝ TỪ CHỐI ĐẶC THÙ ===\n${objections}` : '',
     examples ? `\n=== HỘI THOẠI MẪU (bắt chước giọng này) ===\n${examples}` : '',
     mediaLines.length ? `\n=== DANH SÁCH MEDIA (gửi bằng id, vd assetRef="m1") ===\n${mediaLines.join('\n')}` : '\n(Chưa gắn media — chỉ trả lời text)',
+    knownLines ? `\n=== ĐÃ THU THẬP TỪ KHÁCH (đã có sẵn — TUYỆT ĐỐI KHÔNG hỏi lại) ===\n${knownLines}` : '',
     historyText ? `\n=== LỊCH SỬ CHAT ===\n${historyText}` : '',
     `\n=== TIN MỚI CỦA KHÁCH ===\n${customerText}`,
     '\nHãy trả về JSON gói hành động cho lượt này.',
