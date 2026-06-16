@@ -504,6 +504,12 @@ function capSocialProof(scenes: BrollScene[]): void {
   const demote = (s: BrollScene) => {
     s.role = 'broll'; s.kind = 'product_action'; s.cameraFraming = 'hands_noface'; s.conceptPrompt = ''
   }
+  // A native social_proof scene carries NO kind/framing/conceptPrompt (the FB-card image
+  // is generated from the product) — match that shape when promoting.
+  const promote = (s: BrollScene) => {
+    s.role = 'social_proof'; s.kind = undefined; s.cameraFraming = undefined; s.conceptPrompt = undefined
+  }
+  // Pass 1 — validate scenes Gemini already tagged social_proof (demote mis-tags / over-cap).
   for (let i = 0; i < scenes.length; i++) {
     const s = scenes[i]
     if (s.role !== 'social_proof') continue
@@ -511,6 +517,15 @@ function capSocialProof(scenes: BrollScene[]): void {
     if (!SOCIAL_PROOF_CUE_RE.test(s.quote ?? '')) { demote(s); continue }  // mis-tagged
     kept++
     if (kept > 3) demote(s)                                 // cap 3
+  }
+  // Pass 2 — PROMOTE: a plain broll scene whose LINE is clearly social proof (review /
+  // crowd / 5-sao) should be the cheap ~6cr FB-card image, not the 17-20cr product video
+  // the director mis-routed it to. Same cap (3) + never the CTA cut + never a lips beat.
+  for (let i = 0; i < scenes.length && kept < 3; i++) {
+    const s = scenes[i]
+    if (i === lastIdx || s.role !== 'broll') continue
+    if (!SOCIAL_PROOF_CUE_RE.test(s.quote ?? '')) continue
+    promote(s); kept++
   }
 }
 
