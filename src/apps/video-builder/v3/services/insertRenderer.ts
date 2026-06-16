@@ -547,19 +547,19 @@ export async function renderInsert(
   // persisted BEFORE polling so a timeout can RESUME the already-paid job
   // (resumeInsertVideo) instead of re-submitting and charging again.
   params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
-  console.log(`[INSERT ${params.presetId}] Stage 2 video_full start (${params.resolution}, grok-imagine/image-to-video)`)
+  console.log(`[INSERT ${params.presetId}] Stage 2 video_full start (${params.resolution}, bytedance/seedance-1.5-pro)`)
 
   const keyframePublicUrl = await getUrl(keyframeRef)
   if (!keyframePublicUrl) throw new Error('Không lấy được URL keyframe (asset store)')
 
   // Z76 — i2v model history: Kling 3.0 (422) → Veo 3.1 Fast (audio fails, ~60c)
-  // → Wan 2.7 (16cr/s) → grok-imagine-video-1-5-preview (PREMIUM 14.5cr/s — the
-  // big credit burn) → NOW `grok-imagine/image-to-video`, the cheap Grok tier at
-  // 1.6 cr/s @480p (~9× cheaper). VIDEO-ONLY (no audio-gen failures). Animates
-  // the keyframe via image_urls so the GPT-4o face+product lock is kept.
-  // The model has a 6s FLOOR (its duration min), so a clip is always 6s and the
-  // assembler trims it down to the timeline segment. ~10cr/clip at 480p.
-  // Static-image auto-fallback (Z63/Z76) still covers any failure.
+  // → Wan 2.7 (16cr/s) → grok-imagine-video-1-5-preview (PREMIUM 14.5cr/s) →
+  // grok-imagine/image-to-video (1.6cr/s @480p) → NOW `bytedance/seedance-1.5-pro`
+  // i2v @480p (1.75 cr/s — ~same price as Grok but stronger prompt-adherence /
+  // less logic-drift). Keyframe goes in as first_frame_image_url so the GPT-4o
+  // face+product lock is preserved; prompt + director (brain) UNCHANGED — only the
+  // animate model swapped. VIDEO-ONLY. ~11cr/clip at 480p. Static-image auto-fallback
+  // (Z63/Z76) still covers any failure. (Duration kept 6-8s; assembler trims.)
   const videoDuration = Math.max(6, Math.min(8, Math.ceil(params.durationSec ?? 6)))
 
   // Z77 — keep b-roll people SILENT. Grok i2v otherwise animates the person
@@ -576,16 +576,18 @@ export async function renderInsert(
   try {
     const fullSubmission = await generateVideoJob({
       apiKey: params.kieApiKey,
-      jobModelId: 'grok-imagine/image-to-video',
+      jobModelId: 'bytedance/seedance-1.5-pro',
       prompt: (isConcept
         ? `${motionScene} ${cameraMotion} No product packaging in frame.`
         : `${motionScene} ${cameraMotion} ${preset.handBehavior}`) + noSpeech,
       aspectRatio: '9:16',
       resolution: params.resolution,
       duration: videoDuration,
-      referenceImageUrls: [keyframePublicUrl],
+      // Seedance i2v: the keyframe is the FIRST FRAME (first_frame_image_url) so the
+      // GPT-4o face+product lock carries into the clip (Grok used referenceImageUrls).
+      startFrameUrl: keyframePublicUrl,
     })
-    console.log(`[INSERT ${params.presetId}] Grok submitted taskId=${fullSubmission.taskId.slice(0, 12)} dur=${videoDuration}s`)
+    console.log(`[INSERT ${params.presetId}] Seedance submitted taskId=${fullSubmission.taskId.slice(0, 12)} dur=${videoDuration}s`)
     params.onStageUpdate({
       stage: 'video_full', keyframeRef, keyframePromptUsed,
       fullTaskId: fullSubmission.taskId,

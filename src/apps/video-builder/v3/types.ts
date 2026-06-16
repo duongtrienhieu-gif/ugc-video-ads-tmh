@@ -249,14 +249,14 @@ export type InsertRenderMode = 'video' | 'ken_burns' | 'sticker'
 //                      so the viewer never loses the creator's face.
 export type InsertLayout = 'cut' | 'overlay_corner'
 
-// Z98 — Grok i2v actual cost per second by resolution. The old constant
-// (INSERT_VIDEO_CREDITS = 10) was hard-coded to "480p × 6s ≈ 9.6 → 10cr" and
-// silently lied at 720p (~24cr for an 8s clip) and 1080p. UI cost chip now
-// scales correctly so the user sees what they will actually be billed.
-const GROK_I2V_CR_PER_SEC: Record<'480p' | '720p' | '1080p', number> = {
-  '480p': 1.6,
-  '720p': 3,
-  '1080p': 5,
+// i2v actual cost per second by resolution. Model swapped Grok → Seedance 1.5 Pro
+// (bytedance/seedance-1.5-pro): 480p 1.75 cr/s, 720p 3.5 cr/s (real KIE pricing).
+// ~same as Grok at 480p, stronger prompt-adherence. (1080p isn't a Seedance tier;
+// mode-1 renders 480p — kept only so the type stays exhaustive.)
+const I2V_CR_PER_SEC: Record<'480p' | '720p' | '1080p', number> = {
+  '480p': 1.75,
+  '720p': 3.5,
+  '1080p': 7,
 }
 
 export function estimateInsertCredits(
@@ -266,11 +266,11 @@ export function estimateInsertCredits(
 ): number {
   if (mode === 'sticker') return 0           // Z98 #5 — local canvas PNG, no AI call
   if (mode === 'ken_burns') return V3_CREDIT_COST.keyframe
-  // Mirror the renderer's clamp: Grok always renders 6-8s regardless of the
-  // director's durationSec, so we bill the user for what Grok will actually
-  // charge — never less than the clamp floor.
+  // Mirror the renderer's clamp: the insert renderer always renders 6-8s regardless
+  // of the director's durationSec, so we bill for what will actually be charged —
+  // never less than the clamp floor.
   const billedSec = Math.max(6, Math.min(8, Math.ceil(durationSec)))
-  const videoCr = Math.round(GROK_I2V_CR_PER_SEC[resolution] * billedSec)
+  const videoCr = Math.round(I2V_CR_PER_SEC[resolution] * billedSec)
   return V3_CREDIT_COST.keyframe + videoCr
 }
 
