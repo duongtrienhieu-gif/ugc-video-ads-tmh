@@ -496,7 +496,7 @@ function enforceProductHero(scenes: BrollScene[], product: Product | null | unde
 // P5w — social-proof card guard (anti-abuse). A 'social_proof' scene is only valid on a
 // genuine crowd/sold/review line; cap at 3, never the final CTA cut. Anything else →
 // demote to a product broll (weak concept → backfilled). Universal cues (VN/EN/MS).
-const SOCIAL_PROOF_CUE_RE = /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|m[oọ]i ng[ưu][ờo]i|ai (?:c[ũu]ng|d[ùu]ng|mua)|nhi[eề]u ng[ưu][ờo]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|mua l[aạ]i|đ[áa]nh gi[áa]|l[ưu][ợo]t (?:mua|b[áa]n)|ng[ưu][ờo]i (?:mua|đ[ặa]t)|5 sao|n[ăa]m sao|c[oộ]ng đ[ồo]ng|\b(?:review|reviews|sold|sold[- ]?out|repeat|verified|viral|popular|recommend)\b|ramai|terjual|ulasan|bintang|\blaku\b|puas hati|semua orang|orang (?:beli|guna|pakai|cuba|recommend)/i
+const SOCIAL_PROOF_CUE_RE = /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|m[oọ]i ng[ưu][ờo]i|ai (?:d[ùu]ng|mua)|nhi[eề]u ng[ưu][ờo]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|mua l[aạ]i|đ[áa]nh gi[áa]|l[ưu][ợo]t (?:mua|b[áa]n)|ng[ưu][ờo]i (?:mua|đ[ặa]t)|5 sao|n[ăa]m sao|c[oộ]ng đ[ồo]ng|\b(?:review|reviews|sold|sold[- ]?out|repeat|verified|viral|popular|recommend)\b|ramai|terjual|ulasan|bintang|\blaku\b|puas hati|semua orang|orang (?:beli|guna|pakai|cuba|recommend)/i
 function capSocialProof(scenes: BrollScene[]): void {
   const lastIdx = scenes.length - 1
   let kept = 0

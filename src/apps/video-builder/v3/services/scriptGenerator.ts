@@ -453,19 +453,22 @@ ${pronounRule(args.lang)}
       trên xe, gọi cứu hộ cả tiếng") — push the fear, that's fine.
     • OBJECTION: smash ONE real doubt in a clause ("không lo nóng máy / không nặng").
   Keep them woven + punchy (energy!), NOT a flat checklist.
-- SOCIAL PROOF — MANDATORY, and it must be its OWN clear, punchy CROWD beat — NOT folded
-  into a soft personal aside ("nhỏ bạn mình cũng mê" is too weak and does NOT count).
-  EVERY script MUST contain ONE explicit HERD/CROWD line the viewer instantly reads as
-  PROOF — popularity, sold-out, repeat buyers, or reviews — because the video turns this
-  exact line into a believable social-proof CARD (a Facebook-post / review screenshot) on
-  screen. State it as a STANDALONE sentence the viewer can't check at the door, e.g.
-  "mấy nghìn người mua rồi", "bán cháy hàng mấy đợt liền", "ai mua cũng quay lại", "review
-  toàn 5 sao", "cả nhà giờ ai cũng ăn". (These examples are ILLUSTRATIVE Vietnamese — write
-  the line in ${args.lang} per the LANGUAGE rule below.) VARY the wording every time — do
-  NOT reuse the same crowd sentence across regenerations. NEVER name a country / market /
-  place that is not in the product brief (e.g. do not write "bán chạy bên Malaysia" in a
-  Vietnamese script) — that is drift. Put it in the BENEFIT/PROOF stretch of the body
-  (never the hook, never the very last CTA line). GUARD (a MONEY rule, not morality): a
+- SOCIAL PROOF — MANDATORY, and it must be its OWN clear, punchy WIDER-PUBLIC CROWD beat.
+  A soft personal aside or a FAMILY-only line ("nhỏ bạn mình cũng mê", "cả nhà mình ai
+  cũng khen") is too weak and does NOT count — the proof must be the OUTSIDE crowd:
+  STRANGERS / buyers / a number / reviews / sold-out. EVERY script MUST contain ONE such
+  explicit HERD line the viewer instantly reads as PROOF — popularity, sold-out, repeat
+  buyers, or reviews — because the video turns this exact line into a believable social-
+  proof CARD (a Facebook-post / review screenshot) on screen. State it as a STANDALONE
+  sentence the viewer can't check at the door, e.g. "mấy nghìn người mua rồi", "bán cháy
+  hàng mấy đợt liền", "ai mua cũng quay lại đặt thêm", "review toàn 5 sao". (These examples
+  are ILLUSTRATIVE Vietnamese — write the line in ${args.lang} per the LANGUAGE rule below.)
+  VARY the wording every time — do NOT reuse the same crowd sentence across regenerations.
+  NEVER name a country / market / place that is not in the product brief (e.g. do not write
+  "bán chạy bên Malaysia" in a Vietnamese script) — that is drift. PLACEMENT (matters — the
+  video CARDS this exact line): put it in the DISCOVERY/BENEFIT proof stretch, BEFORE the
+  CTA. Do NOT leave it as the final CTA line — a card can't be the closing buy-shot, so a
+  crowd beat stuck at the very end is wasted. GUARD (a MONEY rule, not morality): a
   plausible crowd VIBE is encouraged, but NEVER invent a fake SPECIFIC exact number
   ("740,128 hộp đã bán") and NEVER claim a certification (Halal/KKM/GMP/FDA/clinically
   proven) — those trip ad-review / break trust. Don't go cartoonish ("cả thế giới dùng").

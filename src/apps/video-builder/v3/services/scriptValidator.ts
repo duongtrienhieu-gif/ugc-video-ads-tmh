@@ -326,18 +326,32 @@ export function validateBody(
   //    personal aside ("nhỏ bạn mình cũng mê") deliberately does NOT satisfy it. One
   //    retry max (wired via scriptGenerator's existing validateBody retry).
   {
-    const proofBody = `${blocks.discovery ?? ''} ${blocks.benefit ?? ''} ${blocks.cta ?? ''}`.toLowerCase()
-    const hasCrowdBeat = SOCIAL_PROOF_CUE_RE.test(proofBody)
-    if (!hasCrowdBeat) {
-      const ex = lang === 'ms' || lang === 'Bahasa Malaysia'
-        ? '"ramai dah beli", "laku keras", "ulasan 5 bintang", "ramai repeat order"'
-        : '"mấy nghìn người mua rồi", "bán cháy hàng mấy đợt", "ai mua cũng quay lại", "review toàn 5 sao"'
+    // PLACEMENT-AWARE: the crowd beat must live in the DISCOVERY/BENEFIT proof stretch
+    // (so the director cards it). A crowd line stranded in the CTA is wasted — a card
+    // can't be the closing buy-shot (brollDirector demotes a social_proof on the last
+    // cut). So we check the proof stretch and the cta SEPARATELY.
+    const proofStretch = `${blocks.discovery ?? ''} ${blocks.benefit ?? ''}`.toLowerCase()
+    const ctaOnly = (blocks.cta ?? '').toLowerCase()
+    const inProof = SOCIAL_PROOF_CUE_RE.test(proofStretch)
+    const inCta = SOCIAL_PROOF_CUE_RE.test(ctaOnly)
+    const ex = lang === 'ms' || lang === 'Bahasa Malaysia'
+      ? '"ramai dah beli", "laku keras", "ulasan 5 bintang", "ramai repeat order"'
+      : '"mấy nghìn người mua rồi", "bán cháy hàng mấy đợt", "ai mua cũng quay lại đặt thêm", "review toàn 5 sao"'
+    if (!inProof && !inCta) {
       failures.push(
-        `No explicit SOCIAL-PROOF crowd beat in the body — the video needs ONE clear herd ` +
-        `line (popularity / sold-out / repeat buyers / reviews) to render the proof card. ` +
-        `A soft personal aside ("nhỏ bạn mình cũng mê") does NOT count. Add ONE standalone ` +
-        `crowd line in the benefit/proof stretch — e.g. ${ex}. Keep it a plausible vibe; ` +
-        `do NOT invent a fake exact number or a certification.`,
+        `No explicit SOCIAL-PROOF crowd beat in the body — the video needs ONE clear ` +
+        `WIDER-PUBLIC herd line (popularity / sold-out / repeat buyers / reviews) to render ` +
+        `the proof card. A soft personal aside or a family-only line ("nhỏ bạn mình cũng mê", ` +
+        `"cả nhà ai cũng khen") does NOT count. Add ONE standalone crowd line in the ` +
+        `discovery/benefit proof stretch — e.g. ${ex}. Plausible vibe is fine; do NOT invent ` +
+        `a fake exact number or a certification.`,
+      )
+    } else if (!inProof && inCta) {
+      // present but mis-placed — move it earlier so it can become the on-screen card.
+      failures.push(
+        `The SOCIAL-PROOF crowd beat is stuck in the CTA (the closing buy line) — it can't ` +
+        `become the on-screen proof card there. Move ONE crowd line (e.g. ${ex}) UP into the ` +
+        `discovery/benefit proof stretch, BEFORE the CTA; keep the CTA for the offer + buy push.`,
       )
     }
   }
@@ -349,7 +363,7 @@ export function validateBody(
 // is a presence check, so a wide net keeps false-fails rare (it fires only when NO
 // crowd beat at all is present). Mirrors brollDirector's SOCIAL_PROOF_CUE_RE.
 const SOCIAL_PROOF_CUE_RE =
-  /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|m[oọ]i ng[ưu][ờo]i|ai (?:c[ũu]ng|d[ùu]ng|mua)|nhi[eề]u ng[ưu][ờo]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|mua l[aạ]i|đ[áa]nh gi[áa]|l[ưu][ợo]t (?:mua|b[áa]n)|ng[ưu][ờo]i (?:mua|đ[ặa]t)|5 sao|n[ăa]m sao|c[oộ]ng đ[ồo]ng|\b(?:review|reviews|sold|sold[- ]?out|repeat|verified|viral|popular|recommend)\b|ramai|terjual|ulasan|bintang|\blaku\b|puas hati|semua orang|orang (?:beli|guna|pakai|cuba|recommend)/i
+  /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|m[oọ]i ng[ưu][ờo]i|ai (?:d[ùu]ng|mua)|nhi[eề]u ng[ưu][ờo]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|mua l[aạ]i|đ[áa]nh gi[áa]|l[ưu][ợo]t (?:mua|b[áa]n)|ng[ưu][ờo]i (?:mua|đ[ặa]t)|5 sao|n[ăa]m sao|c[oộ]ng đ[ồo]ng|\b(?:review|reviews|sold|sold[- ]?out|repeat|verified|viral|popular|recommend)\b|ramai|terjual|ulasan|bintang|\blaku\b|puas hati|semua orang|orang (?:beli|guna|pakai|cuba|recommend)/i
 
 // ── P4j — shape-execution validator ──────────────────────────────────────────
 // validateBody checks symptom / CTA / banned-openings but NOT whether the body
