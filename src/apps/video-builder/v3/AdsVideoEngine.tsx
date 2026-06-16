@@ -38,8 +38,6 @@ import {
   type SavedProject,
 } from './types'
 import { getAllProjects, hydrateProjectAsState } from './services/projectLibrary'
-import './services/brollStudioRenderer'   // P6 Phase 0 — registers dev helper __testStudioScene (mode-2 Xưởng B-roll)
-import BrollStudioPhase from './components/BrollStudioPhase'   // P6 Phase 1 — mode-2 Xưởng B-roll
 
 interface Props {
   /** Switch to legacy v2 (cinematic coverage pipeline). */
@@ -129,7 +127,6 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
   const addToast    = useAppStore((s) => s.addToast)
 
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
-  const [studioOpen, setStudioOpen] = useState(false)   // P6 — mode-2 Xưởng B-roll
   const [showLegacy, setShowLegacy] = useState(false)
   const [restoreOpen, setRestoreOpen] = useState(false)
 
@@ -212,15 +209,6 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
               </>
             )}
             <button
-              onClick={() => setStudioOpen((v) => !v)}
-              title="Xưởng B-roll — tạo cảnh rời xoay quanh sản phẩm để tự cắt ghép"
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold backdrop-blur-sm ${
-                studioOpen ? 'bg-white text-violet-700' : 'bg-white/15 hover:bg-white/25'
-              }`}
-            >
-              🎬 {studioOpen ? 'Đang ở Xưởng B-roll' : 'Xưởng B-roll'}
-            </button>
-            <button
               onClick={() => setRestoreOpen(true)}
               title="Khôi phục một dự án đã lưu (dùng được kể cả khi các bước đang khoá)"
               className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
@@ -238,37 +226,27 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
         </div>
       </div>
 
-      {/* P6 — Mode 2: B-roll Studio takes over the body (stepper hidden) when open;
-          else the normal mode-1 script→video stepper flow. */}
-      {studioOpen ? (
-        <div className="flex-1 overflow-hidden">
-          <BrollStudioPhase onBack={() => setStudioOpen(false)} />
-        </div>
-      ) : (
-        <>
-          {/* ── Phase stepper ────────────────────────────────────────────────── */}
-          <div className="shrink-0 border-b border-black/8 bg-white px-6 py-2.5">
-            <PhaseStepper
-              phase={state.phase}
-              reachable={reachable}
-              onPhaseClick={setPhase}
-            />
-          </div>
+      {/* ── Phase stepper ────────────────────────────────────────────────── */}
+      <div className="shrink-0 border-b border-black/8 bg-white px-6 py-2.5">
+        <PhaseStepper
+          phase={state.phase}
+          reachable={reachable}
+          onPhaseClick={setPhase}
+        />
+      </div>
 
-          {/* ── Body — switches by phase ────────────────────────────────────── */}
-          <div className="flex-1 overflow-hidden">
-            {(state.phase === 'input' || state.phase === 'script-voice') && (
-              <ScriptVoicePhase onContinue={() => setPhase('action-inserts')} />
-            )}
-            {(state.phase === 'action-inserts' || state.phase === 'creator-video' || state.phase === 'auto-edit') && (
-              <HybridVideoPhase />
-            )}
-            {state.phase === 'export' && (
-              <HybridExportPhase />
-            )}
-          </div>
-        </>
-      )}
+      {/* ── Body — switches by phase ────────────────────────────────────── */}
+      <div className="flex-1 overflow-hidden">
+        {(state.phase === 'input' || state.phase === 'script-voice') && (
+          <ScriptVoicePhase onContinue={() => setPhase('action-inserts')} />
+        )}
+        {(state.phase === 'action-inserts' || state.phase === 'creator-video' || state.phase === 'auto-edit') && (
+          <HybridVideoPhase />
+        )}
+        {state.phase === 'export' && (
+          <HybridExportPhase />
+        )}
+      </div>
 
       {/* Z98 — Restore picker — always-accessible Library load (works even when
           the wizard tabs are gated after a lost render). */}

@@ -705,7 +705,7 @@ function ReviewCard({
 // Z30 PHASE 1 — v3 is the new default. v2 stays available as legacy
 // escape hatch. v1 stays available as the original stable pipeline.
 import VideoBuilderV2 from './v2/VideoBuilderV2'
-import AdsVideoEngine from './v3/AdsVideoEngine'
+import VideoBuilderModeSwitch from './v3/VideoBuilderModeSwitch'
 
 export default function VideoBuilder() {
   const pipelineVersion = useSettingsStore((s) => s.pipelineVersion)
@@ -713,7 +713,7 @@ export default function VideoBuilder() {
 
   if (pipelineVersion === 'v3') {
     return (
-      <AdsVideoEngine
+      <VideoBuilderModeSwitch
         onSwitchToV2={() => setPipelineVersion('v2')}
         onSwitchToV1={() => setPipelineVersion('v1')}
       />
