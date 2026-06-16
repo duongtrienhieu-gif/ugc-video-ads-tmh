@@ -16,7 +16,7 @@ import { generateThumbnailHooks, generateAiThumbnail, THUMBNAIL_ARCHETYPES, THUM
 import { CAPTION_PRESETS, CAPTION_PRESET_ORDER, DEFAULT_CAPTION_PRESET, type CaptionPresetId } from '../services/captionPresets'
 import { renderCaptionBlob } from '../services/captionRenderer'
 import { BANNER_PRESETS, BANNER_PRESET_ORDER, DEFAULT_BANNER_PRESET, type BannerPresetId } from '../services/bannerPresets'
-import { renderBannerBlob, deriveBannerSlogan } from '../services/bannerRenderer'
+import { renderBannerBlob, deriveBannerSlogan, localizeProductName } from '../services/bannerRenderer'
 import { SCRIPT_LANG_GEMINI_NAME, type AiThumbnail } from '../types'
 
 const now = () => Date.now()
@@ -42,7 +42,18 @@ export default function HybridExportPhase() {
   const bannerOn = hybrid.bannerOn !== false               // default ON
   const bannerPreset = hybrid.bannerPreset ?? DEFAULT_BANNER_PRESET
   // The exact slogan the banner will carry: PRODUCT NAME · short benefit (choice "B").
-  const bannerSlogan = deriveBannerSlogan(state.inputs.product?.productName, script?.anchor, script?.blocks?.[0]?.text)
+  // P5x(B) — localize the product name to the output language (the bank name can be the
+  // English packaging label). 1 cached Gemini call; raw name shows until it resolves.
+  const rawProductName = state.inputs.product?.productName ?? ''
+  const [bannerName, setBannerName] = useState(rawProductName)
+  useEffect(() => {
+    if (!rawProductName) { setBannerName(''); return }
+    let alive = true
+    const langName = SCRIPT_LANG_GEMINI_NAME[state.scriptBrain.outputLang]
+    localizeProductName(rawProductName, langName, geminiKey).then((n) => { if (alive) setBannerName(n) }).catch(() => {})
+    return () => { alive = false }
+  }, [rawProductName, state.scriptBrain.outputLang, geminiKey])
+  const bannerSlogan = deriveBannerSlogan(bannerName || rawProductName, script?.anchor, script?.blocks?.[0]?.text)
   const bannerPreviewText = bannerSlogan || 'Tên sản phẩm · lợi ích ngắn'
   const scenes = hybrid.scenes ?? []
   const doneCount = scenes.filter((_, i) => hybrid.clips[i]).length

@@ -28,30 +28,41 @@ export interface CaptionPreset {
   strokeFrac: number
   /** Soft drop-shadow instead of a hard stroke (premium look). */
   shadow: boolean
-  /** Colour for emphasised tokens (price / number / %). '' = same as fill. */
+  /** Colour for emphasised KEY tokens (script keywords + price / number). '' = same as fill. */
   accent: string
+  /** Render the caption in UPPERCASE (extra visual distinctiveness for one preset). */
+  upper?: boolean
 }
 
+// P5y — the 4 presets were too similar (Clean White & Neon Pop shared the SAME font;
+// 3/4 were white+stroke; Soft/Premium's accent was WHITE = no visible highlight). Now
+// each preset has a DISTINCT font + a DISTINCT accent colour (so the keyword pops in a
+// different hue), and one is UPPERCASE — visibly different at a glance. All 4 stay clean
+// + readable (white fill + dark stroke / soft shadow). Fonts all cover VN+MS+EN.
 export const CAPTION_PRESETS: Record<CaptionPresetId, CaptionPreset> = {
+  // Neutral clean sans, yellow keyword.
   clean_white: {
     id: 'clean_white', labelVi: 'Clean White',
-    family: `'Be Vietnam Pro', system-ui, sans-serif`, weight: '700',
-    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.16, shadow: false, accent: '#FFD400',
+    family: `'Inter', 'Be Vietnam Pro', sans-serif`, weight: '700',
+    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.15, shadow: false, accent: '#FFD400',
   },
+  // Geometric heavy + UPPERCASE, hot-pink keyword — the loud one.
   bold_punch: {
     id: 'bold_punch', labelVi: 'Bold Punch',
     family: `'Montserrat', 'Be Vietnam Pro', sans-serif`, weight: '800',
-    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.22, shadow: false, accent: '#FFD400',
+    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.2, shadow: false, accent: '#FF2D7E', upper: true,
   },
+  // Rounded friendly + soft shadow, orange keyword (was the "no-accent" premium → now pops).
   soft_premium: {
-    id: 'soft_premium', labelVi: 'Soft / Premium',
-    family: `'Inter', 'Be Vietnam Pro', sans-serif`, weight: '600',
-    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0, shadow: true, accent: '#FFFFFF',
+    id: 'soft_premium', labelVi: 'Tròn mềm',
+    family: `'Baloo 2', 'Be Vietnam Pro', sans-serif`, weight: '800',
+    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0, shadow: true, accent: '#FF7A00',
   },
+  // Be Vietnam Pro, neon-green keyword — the TikTok-native one.
   neon_pop: {
     id: 'neon_pop', labelVi: 'Neon Pop',
     family: `'Be Vietnam Pro', sans-serif`, weight: '700',
-    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.18, shadow: false, accent: '#39FF14',
+    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.18, shadow: false, accent: '#19FF6A',
   },
 }
 

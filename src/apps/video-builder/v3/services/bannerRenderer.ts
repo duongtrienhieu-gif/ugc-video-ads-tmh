@@ -10,6 +10,38 @@
 
 import { BANNER_PRESETS, type BannerPreset, type BannerPresetId } from './bannerPresets'
 import { ensureCaptionFonts } from './captionRenderer'
+import { directGeminiText } from '../../../../utils/gemini'
+
+// P5x(B) — the product-bank name can be in ANY language the user typed (e.g. the English
+// packaging label "PARSLEY GARLIC SALT"); on a VN/MS video that mismatches the script +
+// voice. Translate the name into the output language for the banner. ONE tiny Gemini call,
+// cached by (lang, name); graceful fallback to the raw name on any failure.
+const nameCache = new Map<string, string>()
+const VN_DIACRITIC_RE = /[ăâđêôơưĂÂĐÊÔƠƯàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]/
+export async function localizeProductName(rawName: string, langName: string, apiKey: string): Promise<string> {
+  const name = (rawName ?? '').trim()
+  if (!name || !apiKey) return name
+  // Skip the call when it's already in the target language: Vietnamese output + the name
+  // already carries VN diacritics → it's Vietnamese already, no translation needed.
+  if (langName === 'Vietnamese' && VN_DIACRITIC_RE.test(name)) return name
+  const key = `${langName}::${name}`
+  const hit = nameCache.get(key)
+  if (hit) return hit
+  try {
+    const out = await directGeminiText({
+      apiKey,
+      systemInstruction:
+        `Translate the PRODUCT NAME into ${langName}. Keep it SHORT (≤5 words), natural, Title Case, ` +
+        `keep real brand tokens as-is. Output ONLY the translated name — no quotes, no extra text.`,
+      prompt: name,
+      maxOutputTokens: 40, temperature: 0.2, thinkingBudget: 0,
+    })
+    const cleaned = (out ?? '').split('\n')[0].replace(/^["'“”]+|["'“”]+$/g, '').trim().slice(0, 40)
+    const result = cleaned || name
+    nameCache.set(key, result)
+    return result
+  } catch { return name }
+}
 
 const FONT_PX = 64
 const PADX = Math.round(FONT_PX * 0.62)   // pill horizontal padding

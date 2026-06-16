@@ -114,12 +114,14 @@ export async function assembleHybridVideo(
   const MARGIN = 24                       // px from the frame edge (sticker)
   const allStickers = params.stickers ?? []
   const allCaptions = params.captions ?? []
-  // Caption box (CapCut-style): fit each chunk PNG inside 92% width × 30% height
-  // (preserve aspect → font auto-fits, never overflows), sat 12% above the bottom
-  // so it clears the TikTok action bar. Consistent placement every chunk.
+  // Caption: max width 92% (the rare over-long line shrinks to this), sat 12% above the
+  // bottom so it clears the TikTok action bar. Consistent placement every chunk.
   const CAP_MAXW = Math.round((evenW * 0.92) / 2) * 2
-  const CAP_MAXH = Math.round((evenH * 0.30) / 2) * 2
   const CAP_BOT_MARGIN = Math.round(evenH * 0.12)
+  // P5y — fixed caption scale: renderer draws each chunk at FONT_PX(80)×dpr(2)=160px
+  // glyphs; this maps them to ~5.5% of frame height, the SAME for every chunk (no more
+  // box-fit ballooning of short chunks). Width is clamped to CAP_MAXW at use site.
+  const CAP_SCALE_K = (evenH * 0.055) / 160
   // P5x — top hook banner: a centred pill ~86% width sat ~3.5% below the top, OR a
   // full-width ribbon flush to y=0. Held the whole segment (no enable window).
   const BANNER_PILL_W = Math.round((evenW * 0.86) / 2) * 2
@@ -248,8 +250,12 @@ export async function assembleHybridVideo(
         const off = Math.max(0, s.atSec - c.scene.startSec)
         const endW = Math.min(dur, (s.atSec + s.durationSec) - c.scene.startSec)
         if (s.mode === 'caption') {
-          // Bottom-centre, fit inside the caption box (font auto-fits, never overflows).
-          parts.push(`[${inIdx}:v]format=rgba,scale=${CAP_MAXW}:${CAP_MAXH}:force_original_aspect_ratio=decrease,setsar=1[ov${j}]`)
+          // P5y — CONSISTENT caption size: scale by a FIXED factor (not box-fit), so a
+          // SHORT chunk no longer balloons to fill the width. CAP_SCALE_K maps the
+          // renderer's glyph (FONT_PX 80 × dpr 2 = 160px) to ~5.5% of frame height; the
+          // width is clamped to CAP_MAXW for the rare over-long line (single-quoted so the
+          // min() comma is literal, same as the enable filter below). Bottom-centre.
+          parts.push(`[${inIdx}:v]format=rgba,scale='min(iw*${CAP_SCALE_K.toFixed(4)},${CAP_MAXW})':-2,setsar=1[ov${j}]`)
           parts.push(
             `[${last}][ov${j}]overlay=x=(W-w)/2:y=H-h-${CAP_BOT_MARGIN}:` +
             `enable='between(t,${off.toFixed(2)},${endW.toFixed(2)})'[${next}]`,

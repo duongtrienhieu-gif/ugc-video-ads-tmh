@@ -14,11 +14,36 @@ import { CAPTION_PRESETS, type CaptionPreset, type CaptionPresetId } from './cap
 
 const FONT_PX = 80            // fixed render size for crispness; assembler scales the PNG
 const LINE_GAP = 0.18         // gap between the 2 lines, as a fraction of FONT_PX
-const MAX_LINE_W = FONT_PX * 13   // wrap width (~13 em) → keeps a line readable on 9:16
+// P5y — narrower wrap (~9 em, was 13). The assembler now scales captions by a FIXED
+// factor (consistent on-screen size, no more "short chunk ballooned"), so a line must
+// be short enough to fit the frame width at that factor; 9 em keeps wrapped lines inside
+// the 92% caption box across 480/720/1080p.
+const MAX_LINE_W = FONT_PX * 9
 const PAD = Math.round(FONT_PX * 0.5)   // breathing room so stroke/shadow isn't clipped
 
-// Emphasise price / number / percent tokens (the "giá / con số" the eye should catch).
+// Always-emphasise price / number / percent tokens (the "giá / con số" the eye catches).
 const ACCENT_TOKEN_RE = /^(rm\s?\d[\d.,]*k?|\$?\d[\d.,]*%?|\d+k|\d+%)$/i
+
+// VN/MS/EN function words to drop when picking script keywords to highlight.
+const HL_STOPWORDS = new Set([
+  'và','là','của','cho','với','mà','thì','được','các','những','một','khi','đã','rồi','nha','nhé','đó','này','ấy','rất','quá','cũng','vẫn','còn','nó','mình','bạn',
+  'dan','yang','untuk','dengan','ni','tu','je','dah','tak','ada','ini','itu',
+  'the','a','an','and','to','of','with','for','is','are','it','this','that','you','your',
+])
+
+/** P5y (ii) — highlight terms from the script's KEY (its anchor — what the brain
+ *  identified as THE reason). Tokenise the anchor, drop stopwords, prefer numeric +
+ *  longest, cap 3 → those words get the accent colour in any caption chunk they appear
+ *  in. Universal, deterministic, 0 cost. */
+export function deriveCaptionHighlights(anchor?: string): string[] {
+  const toks = (anchor ?? '').toLowerCase()
+    .replace(/[.,!?;:"'“”…()\-–—]/g, ' ')
+    .split(/\s+/).map((w) => w.trim()).filter(Boolean)
+    .filter((w) => w.length >= 2 && !HL_STOPWORDS.has(w))
+  const uniq = [...new Set(toks)]
+  uniq.sort((a, b) => (/\d/.test(b) ? 1 : 0) - (/\d/.test(a) ? 1 : 0) || b.length - a.length)
+  return uniq.slice(0, 3)
+}
 
 let fontsInjected = false
 /** Load the preset fonts the browser doesn't already have (Be Vietnam Pro ships with
@@ -30,14 +55,15 @@ export async function ensureCaptionFonts(): Promise<void> {
       fontsInjected = true
       const link = document.createElement('link')
       link.rel = 'stylesheet'
-      link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@600;700&family=Montserrat:wght@700;800&display=swap'
+      link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@600;700&family=Montserrat:wght@700;800&family=Baloo+2:wght@700;800&display=swap'
       document.head.appendChild(link)
     }
     const fonts = (document as Document & { fonts?: FontFaceSet }).fonts
     if (fonts) {
       await Promise.all([
         fonts.load(`800 ${FONT_PX}px 'Montserrat'`).catch(() => {}),
-        fonts.load(`600 ${FONT_PX}px 'Inter'`).catch(() => {}),
+        fonts.load(`700 ${FONT_PX}px 'Inter'`).catch(() => {}),
+        fonts.load(`800 ${FONT_PX}px 'Baloo 2'`).catch(() => {}),
         fonts.load(`700 ${FONT_PX}px 'Be Vietnam Pro'`).catch(() => {}),
       ])
       await fonts.ready
@@ -73,13 +99,23 @@ function wrapTwoLines(ctx: CanvasRenderingContext2D, text: string): string[] {
   return [lines[0], lines.slice(1).join(' ')]
 }
 
-/** Render a caption chunk to a transparent canvas (text only, no background). */
-export async function renderCaptionCanvas(text: string, presetId: CaptionPresetId): Promise<HTMLCanvasElement> {
+/** Strip punctuation + lowercase a word for keyword matching. */
+function normWord(w: string): string {
+  return w.toLowerCase().replace(/[.,!?;:"'“”…()\-–—]/g, '')
+}
+
+/** Render a caption chunk to a transparent canvas (text only, no background).
+ *  `highlightTerms` = script keywords (from the anchor) to colour with the accent. */
+export async function renderCaptionCanvas(
+  text: string, presetId: CaptionPresetId, highlightTerms: string[] = [],
+): Promise<HTMLCanvasElement> {
   await ensureCaptionFonts()
   const p = CAPTION_PRESETS[presetId] ?? CAPTION_PRESETS.clean_white
+  const hlSet = new Set(highlightTerms.map((t) => t.toLowerCase()))
 
   const scratch = document.createElement('canvas').getContext('2d')!
   scratch.font = fontStr(p)
+  if (p.upper) text = text.toUpperCase()
   const lines = wrapTwoLines(scratch, text)
   const spaceW = scratch.measureText(' ').width
   const lineWidths = lines.map((l) => scratch.measureText(l).width)
@@ -110,7 +146,8 @@ export async function renderCaptionCanvas(text: string, presetId: CaptionPresetI
     for (let wi = 0; wi < words.length; wi++) {
       const word = words[wi]
       const ww = ctx.measureText(word).width
-      const isAccent = !!p.accent && p.accent !== p.fill && ACCENT_TOKEN_RE.test(word)
+      const canAccent = !!p.accent && p.accent !== p.fill
+      const isAccent = canAccent && (ACCENT_TOKEN_RE.test(word) || hlSet.has(normWord(word)))
       // soft shadow (premium) — set once, applies to the fill below
       ctx.save()
       if (p.shadow) {
@@ -134,8 +171,8 @@ export async function renderCaptionCanvas(text: string, presetId: CaptionPresetI
 }
 
 /** Render + export a transparent PNG blob (what the assembler / asset store want). */
-export async function renderCaptionBlob(text: string, presetId: CaptionPresetId): Promise<Blob> {
-  const canvas = await renderCaptionCanvas(text, presetId)
+export async function renderCaptionBlob(text: string, presetId: CaptionPresetId, highlightTerms: string[] = []): Promise<Blob> {
+  const canvas = await renderCaptionCanvas(text, presetId, highlightTerms)
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('caption toBlob failed'))), 'image/png')
   })

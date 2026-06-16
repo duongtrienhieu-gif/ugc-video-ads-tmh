@@ -7,7 +7,7 @@
 
 import { assembleHybridVideo, type HybridSceneClip, type HybridStickerPlacement, type HybridCaptionPlacement } from './hybridAssembler'
 import { renderStickerBlob, type StickerStyle } from './stickerRenderer'
-import { renderCaptionBlob } from './captionRenderer'
+import { renderCaptionBlob, deriveCaptionHighlights } from './captionRenderer'
 import { renderBannerBlob, deriveBannerSlogan } from './bannerRenderer'
 import { BANNER_PRESETS, DEFAULT_BANNER_PRESET } from './bannerPresets'
 import { buildCaptionChunks } from './captionChunker'
@@ -83,6 +83,8 @@ async function buildCaptionPlacements(
   // P5w — time windows of social-proof CARD scenes: skip captions there (the card is a
   // full-frame FB-post with its own text; a burned caption on top would clutter it).
   skipWindows: { startSec: number; endSec: number }[] = [],
+  // P5y (ii) — script keywords (from the anchor) to colour-highlight inside any chunk.
+  highlightTerms: string[] = [],
 ): Promise<HybridCaptionPlacement[]> {
   const fallback = script.blocks.map((b) => b.text).join(' ')
   const chunks = buildCaptionChunks(alignment, fallback, realDur)
@@ -94,7 +96,7 @@ async function buildCaptionPlacements(
     const mid = (ch.startSec + ch.endSec) / 2
     if (skipWindows.some((w) => mid >= w.startSec && mid < w.endSec)) continue
     try {
-      const blob = await renderCaptionBlob(text, presetId)
+      const blob = await renderCaptionBlob(text, presetId, highlightTerms)
       out.push({
         pngRef: await saveAsset(blob, 'image/png'),
         atSec: ch.startSec,
@@ -131,8 +133,10 @@ export async function assembleFromHybridState(
   const cardWindows = sc
     .filter((s) => s.role === 'social_proof')
     .map((s) => ({ startSec: s.startSec, endSec: s.endSec }))
+  // P5y (ii) — caption keyword highlight: colour the script's KEY terms (from the anchor).
+  const highlightTerms = deriveCaptionHighlights(script.anchor)
   const captions = captionsOn
-    ? await buildCaptionPlacements(hybrid.voiceAlignment, script, realDur, presetId, cardWindows)
+    ? await buildCaptionPlacements(hybrid.voiceAlignment, script, realDur, presetId, cardWindows, highlightTerms)
     : []
   // P5x — top hook banner: a short slogan from the script's KEY (anchor → hook fallback),
   // rendered as ONE PNG and held over every non-card segment. Default ON; 0 credit.
