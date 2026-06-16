@@ -452,10 +452,15 @@ ${pronounRule(args.lang)}
     • STAKES: dramatize the pain's CONSEQUENCE hard ("kẹt giữa đường tối, con nhỏ
       trên xe, gọi cứu hộ cả tiếng") — push the fear, that's fine.
     • OBJECTION: smash ONE real doubt in a clause ("không lo nóng máy / không nặng").
-    • SOCIAL PROOF: a popularity/crowd vibe is GREAT for desire and a viewer can't
-      check it at the door — use a PLAUSIBLE one ("mấy nghìn người sắm rồi", "bán cháy
-      hàng", "ai dùng cũng quay lại"); use a REAL figure if the brief has one. Don't
-      go absurd ("cả thế giới dùng") — plausible sells, cartoonish breaks trust.
+    • SOCIAL PROOF (NEAR-MANDATORY — herd effect beats a lone reviewer): weave AT LEAST
+      ONE crowd/social beat so it's not just "I tried it" — a popularity vibe the viewer
+      can't check at the door: "mấy nghìn người sắm rồi", "bán cháy hàng", "ai dùng cũng
+      quay lại mua", "review toàn 5 sao". A SECOND, different beat = a THIRD-PARTY angle
+      ("nhỏ bạn mình dùng cũng mê", "cả nhà giờ ai cũng ăn", "đồng nghiệp hỏi mua ở đâu")
+      — others using it with good results, not only the speaker. Use a REAL figure ONLY
+      if the brief has one; otherwise a plausible vibe. NEVER invent a specific number
+      ("740k hộp") and NEVER claim a certification (Halal/FDA/clinically proven). Don't
+      go cartoonish ("cả thế giới dùng") — plausible sells, fake-specific breaks trust.
   Keep them woven + punchy (energy!), NOT a flat checklist.
 - BELIEVABLE PROOF — SHOW, don't just TELL (this is what makes a viewer BELIEVE, and a
   believed promise = an order that STAYS, not one refused at the door). A flat "xịn lắm,

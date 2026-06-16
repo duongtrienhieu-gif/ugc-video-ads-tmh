@@ -628,9 +628,12 @@ THREE cut ROLES (set "role"):
 3. "mechanism3d" — for a line describing a process INSIDE the product/body a phone
    can't film (an ingredient acting inside, airflow inside a device, a coating at
    molecular level…). Write the conceptPrompt; it renders as a clean 3D animation.
-   Use SPARINGLY — at most ~2 per video. If SEVERAL lines describe internal benefits,
-   make only the strongest one a 3D cut and ground the rest as a real product
-   close-up (+ a sticker for the claim) — the ad must not become a science reel.
+   Use for GENUINE internal-mechanism lines (an ingredient acting inside the body, a
+   process a phone can't film) — up to ~3 per video for an ingredient/mechanism-heavy
+   product (supplement / skincare / health), fewer otherwise. Each 3D cut MUST be a
+   distinct internal mechanism (Kali→mạch máu, Vitamin C→collagen dưới da, chất xơ→đường
+   ruột). Do NOT 3D a line that's just a NAMING/benefit/result ("giàu Kali" = a product
+   close-up + sticker, NOT 3D); and never exceed ~3 — the ad must not become a science reel.
 
 STICKERS (separate array — 0-credit text pops that ride on a cut, REPLACING the
 old overlays). Be GENEROUS — stickers are FREE and do NOT compete with the cuts,
