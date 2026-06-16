@@ -26,8 +26,10 @@ export interface StudioAngle {
   id: StudioAngleId
   labelVi: string
   descVi: string
-  /** Conditional toggles (the lock table) — Phase-2 UI shows/locks accordingly. */
-  toggles: { avatar: ToggleState; voice: ToggleState; product: ToggleState; line: ToggleState }
+  /** Conditional toggles (the lock table) — Phase-2 UI shows/locks accordingly.
+   *  (No `line` here: a spoken line is purely a consequence of `voice` being on —
+   *  the UI reveals a "Câu thoại" box when the user picks a voice.) */
+  toggles: { avatar: ToggleState; voice: ToggleState; product: ToggleState }
   /** Default render model tier. */
   model: StudioModelTier
   /** Product-present scene → gpt-4o-image faithful first-frame before i2v (anti-drift). */
@@ -38,17 +40,17 @@ export interface StudioAngle {
 
 // The 11 angles (offer/CTA dropped per user). Lock rules = the discussion we agreed.
 export const STUDIO_ANGLES: StudioAngle[] = [
-  { id: 'hook',         labelVi: 'Hook chặn lướt',   descVi: 'Mở màn bắt mắt 1-2s', toggles: { avatar: 'on', voice: 'on', product: 'on', line: 'on' }, model: 'seedance', faithfulFrame: true },
-  { id: 'problem',      labelVi: 'Vấn đề / nỗi đau',  descVi: 'Tình huống trước khi có sản phẩm', toggles: { avatar: 'on', voice: 'on', product: 'lock-off', line: 'on' }, model: 'seedance', faithfulFrame: false },
-  { id: 'reveal',       labelVi: 'Reveal sản phẩm',  descVi: 'Mở hộp / lần đầu thấy', toggles: { avatar: 'on', voice: 'on', product: 'lock-on', line: 'on' }, model: 'seedance', faithfulFrame: true },
-  { id: 'demo',         labelVi: 'Dùng sản phẩm',    descVi: 'Tay/avatar thao tác sản phẩm', toggles: { avatar: 'on', voice: 'on', product: 'lock-on', line: 'on' }, model: 'seedance', faithfulFrame: true },
-  { id: 'closeup',      labelVi: 'Cận cảnh / chất liệu', descVi: 'Macro chi tiết hero', toggles: { avatar: 'lock-off', voice: 'on', product: 'lock-on', line: 'on' }, model: 'seedance', faithfulFrame: true },
-  { id: 'mechanism3d',  labelVi: '3D cơ chế',         descVi: 'Animation bên trong hoạt động', toggles: { avatar: 'lock-off', voice: 'on', product: 'lock-off', line: 'on' }, model: 'seedance', faithfulFrame: false },
-  { id: 'before_after', labelVi: 'Before → After',    descVi: 'Kết quả / chuyển biến', toggles: { avatar: 'on', voice: 'on', product: 'on', line: 'on' }, model: 'seedance', faithfulFrame: false },
-  { id: 'social_proof', labelVi: 'Social proof',      descVi: 'Thẻ review / đám đông (ảnh)', toggles: { avatar: 'lock-off', voice: 'on', product: 'lock-on', line: 'on' }, model: 'seedance', faithfulFrame: false, isCard: true },
-  { id: 'ingredient',   labelVi: 'Thành phần / spec', descVi: 'Sản phẩm + callout chữ', toggles: { avatar: 'lock-off', voice: 'on', product: 'lock-on', line: 'on' }, model: 'seedance', faithfulFrame: true },
-  { id: 'lifestyle',    labelVi: 'Bối cảnh đời thường', descVi: 'Sản phẩm trong setting thật', toggles: { avatar: 'on', voice: 'on', product: 'on', line: 'on' }, model: 'seedance', faithfulFrame: true },
-  { id: 'comparison',   labelVi: 'So sánh',           descVi: 'Đối chiếu cách cũ / hàng thường', toggles: { avatar: 'on', voice: 'on', product: 'lock-on', line: 'on' }, model: 'seedance', faithfulFrame: true },
+  { id: 'hook',         labelVi: 'Hook chặn lướt',   descVi: 'Mở màn bắt mắt 1-2s', toggles: { avatar: 'on', voice: 'on', product: 'on' }, model: 'seedance', faithfulFrame: true },
+  { id: 'problem',      labelVi: 'Vấn đề / nỗi đau',  descVi: 'Tình huống trước khi có sản phẩm', toggles: { avatar: 'on', voice: 'on', product: 'lock-off' }, model: 'seedance', faithfulFrame: false },
+  { id: 'reveal',       labelVi: 'Reveal sản phẩm',  descVi: 'Mở hộp / lần đầu thấy', toggles: { avatar: 'on', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
+  { id: 'demo',         labelVi: 'Dùng sản phẩm',    descVi: 'Tay/avatar thao tác sản phẩm', toggles: { avatar: 'on', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
+  { id: 'closeup',      labelVi: 'Cận cảnh / chất liệu', descVi: 'Macro chi tiết hero', toggles: { avatar: 'lock-off', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
+  { id: 'mechanism3d',  labelVi: '3D cơ chế',         descVi: 'Animation bên trong hoạt động', toggles: { avatar: 'lock-off', voice: 'on', product: 'lock-off' }, model: 'seedance', faithfulFrame: false },
+  { id: 'before_after', labelVi: 'Before → After',    descVi: 'Kết quả / chuyển biến', toggles: { avatar: 'on', voice: 'on', product: 'on' }, model: 'seedance', faithfulFrame: false },
+  { id: 'social_proof', labelVi: 'Social proof',      descVi: 'Thẻ review / đám đông (ảnh)', toggles: { avatar: 'lock-off', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: false, isCard: true },
+  { id: 'ingredient',   labelVi: 'Thành phần / spec', descVi: 'Sản phẩm + callout chữ', toggles: { avatar: 'lock-off', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
+  { id: 'lifestyle',    labelVi: 'Bối cảnh đời thường', descVi: 'Sản phẩm trong setting thật', toggles: { avatar: 'on', voice: 'on', product: 'on' }, model: 'seedance', faithfulFrame: true },
+  { id: 'comparison',   labelVi: 'So sánh',           descVi: 'Đối chiếu cách cũ / hàng thường', toggles: { avatar: 'on', voice: 'on', product: 'lock-on' }, model: 'seedance', faithfulFrame: true },
 ]
 
 export interface StudioIdea {
@@ -141,7 +143,7 @@ Output STRICT JSON { "ideas": [ ${STUDIO_ANGLES.length} objects, SAME order ] }.
 
 // ── Per-scene: toggle resolver + prompt engineer (Phase 2) ───────────────────
 
-export interface SceneToggles { avatar: boolean; voice: boolean; product: boolean; line: boolean }
+export interface SceneToggles { avatar: boolean; voice: boolean; product: boolean }
 export interface SceneSpec {
   role: 'broll' | 'lips' | 'mechanism3d' | 'social_proof'
   tier: StudioModelTier
@@ -155,7 +157,8 @@ export interface SceneSpec {
 export function resolveSceneSpec(angle: StudioAngle, t: SceneToggles): SceneSpec {
   if (angle.isCard) return { role: 'social_proof', tier: 'seedance', framing: 'none', withFaithfulFrame: false, isCard: true }
   if (angle.id === 'mechanism3d') return { role: 'mechanism3d', tier: 'seedance', framing: 'none', withFaithfulFrame: false, isCard: false }
-  if (t.avatar && t.voice && t.line) return { role: 'lips', tier: 'infinitalk', framing: 'creator', withFaithfulFrame: false, isCard: false }
+  // avatar + voice = a talking creator → lipsync (the spoken line is required, enforced by the UI)
+  if (t.avatar && t.voice) return { role: 'lips', tier: 'infinitalk', framing: 'creator', withFaithfulFrame: false, isCard: false }
   return { role: 'broll', tier: 'seedance', framing: t.avatar ? 'creator' : 'hands_noface', withFaithfulFrame: !!angle.faithfulFrame && t.product, isCard: false }
 }
 
@@ -168,13 +171,19 @@ const ENGINEER_SCHEMA = {
 // Anti-drift rules learned from mode-1 — baked into every scene prompt so the i2v render
 // comes out clean (the user's quality-first stance: spend calls, avoid bad renders).
 const ANTI_DRIFT = `
-DRIFT-PROOF RULES (the video model fails on these — engineer the prompt to AVOID them):
-- The product must look EXACTLY like the reference (same colour/shape/label) — never invent packaging.
-- NO floating objects: anything held is gripped firmly with both hands or rests on a surface (no "floating bowl/head").
-- A person: ONE consistent identity; if no avatar, hands-only (no face) to avoid warped faces.
-- NEVER ask the model to render TEXT/numbers (it garbles them) — text is added later as an overlay.
+DRIFT-PROOF RULES (keep the render clean WITHOUT dodging the point of the scene):
+- The product must look EXACTLY like the reference (same colour/shape/label) — never invent or redesign packaging.
+- IF AN AVATAR IS CHOSEN: the avatar's FACE IS CLEARLY VISIBLE and the avatar uses the product with THEIR OWN HANDS,
+  performing the real, specific action of the scene. This is the WHOLE POINT — do NOT hide the face, do NOT cut away to
+  anonymous disembodied hands, do NOT switch to a product-only shot to "play it safe". A real creator genuinely using
+  the product is exactly what we want. (The faithful first-frame image + Seedance keep the identity/product stable, so
+  there is no need to avoid faces — never use "consistency" or "avoid distortion" as an excuse to remove the person.)
+- ONLY when NO avatar is chosen: use a clean hands-only or macro framing — a deliberate close-up choice, not an escape.
+- ONE consistent person identity throughout the clip.
+- NO floating objects: anything held is gripped firmly or rests on a surface (no "floating bowl/jar").
+- NEVER ask the model to render TEXT/numbers (it garbles them) — spoken lines are voiced later, captions overlaid later.
 - 3D = clean cross-section animation, NO people / NO packaging / NO text.
-- Copy any correct ORIENTATION (how it's worn/placed) so it's never shown backwards.`
+- Copy the correct ORIENTATION (how it's worn/placed/applied) so nothing is shown backwards.`
 
 /** QUALITY-FIRST per-scene prompt: AI writes a drift-resistant i2v prompt for THIS exact
  *  config, then a SECOND self-critique pass fixes any drift risk. Returns the final prompt
@@ -188,10 +197,12 @@ export async function engineerScenePrompt(args: {
   const productContext = buildProductContextBlock(args.product)
   const cfg =
     `Scene angle: ${args.angle.labelVi} (${args.angle.id}). Render role: ${spec.role}. ` +
-    `Person: ${spec.framing === 'creator' ? 'a creator visible' : spec.framing === 'hands_noface' ? 'hands only, NO face' : 'no person'}. ` +
+    `Person: ${spec.framing === 'creator'
+      ? 'the chosen avatar/creator — FACE CLEARLY VISIBLE, actively using the product with their own hands'
+      : spec.framing === 'hands_noface' ? 'hands only, NO face (no avatar was chosen)' : 'no person'}. ` +
     `Product in frame: ${args.toggles.product ? 'YES (must match the reference exactly)' : 'NO'}. ` +
     `Duration: ${args.durationSec}s.` +
-    (args.toggles.line && args.line ? ` Spoken line (for context only, NOT shown as text): "${args.line}".` : '')
+    (args.toggles.voice && args.line ? ` Spoken line (for mood/context only, NOT rendered as on-screen text): "${args.line}".` : '')
 
   // Pass 1 — draft.
   const draftRaw = await directGeminiText({
@@ -210,9 +221,11 @@ export async function engineerScenePrompt(args: {
     const fixRaw = await directGeminiText({
       apiKey: args.geminiKey,
       systemInstruction:
-        `You review an image-to-video prompt for DRIFT RISK (floating objects, garbled text, ` +
-        `warped faces, wrong/redesigned product, people in a 3D shot). Rewrite it to remove every ` +
-        `risk while keeping the intent.${ANTI_DRIFT}\n` +
+        `You review an image-to-video prompt and enforce these, rewriting only as needed: the product matches the ` +
+        `reference EXACTLY; no floating objects; no rendered text/numbers; a 3D shot has no people/packaging. ` +
+        `CRITICAL: if an avatar is present its FACE STAYS VISIBLE and it keeps actively using the product — you must ` +
+        `NOT remove the person, NOT replace them with anonymous hands, NOT turn it into a product-only shot. Keep the ` +
+        `creator performing the real action.${ANTI_DRIFT}\n` +
         `Output STRICT JSON {"conceptPromptEn":"<fixed prompt>","noteVi":"<1 short ${langName} line>"}.`,
       prompt: `Scene: ${cfg}\nPROMPT TO REVIEW:\n"""${draft.conceptPromptEn}"""`,
       maxOutputTokens: 700, temperature: 0.3, thinkingBudget: 0, responseMimeType: 'application/json', responseSchema: ENGINEER_SCHEMA,
