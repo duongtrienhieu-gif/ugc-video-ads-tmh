@@ -437,11 +437,12 @@ function enforceRenderSafeHolds(scenes: BrollScene[], product: Product | null | 
 // an eating shot). So we force ONLY unambiguous physical "doing-it-with-the-product"
 // verbs (a true filmable demo), and still cap face-only concept cuts.
 //
-// DEMO_ACTION_RE = clear physical actions ONLY (bite/apply/spray… / cắn/nhai/thoa/xịt).
-// It EXCLUDES ambiguous verbs (eat/use/try, ăn/dùng/thử) and flavor/texture DESCRIPTORS
-// (taste/crunchy, vị/giòn/dẻo) — those can sit over a talking head, so the director
-// decides. EN \b-bounded; VN syllables bounded by whitespace/punctuation (space-sep).
-const DEMO_ACTION_RE = /\b(?:bite|chew|apply|spray|sprinkle|rub|dab|squeeze)\b|(?:^|[\s.,!?;:"'(])(?:cắn|nhai|thoa|bôi|xịt|rắc|chấm|vắt|nặn)(?=$|[\s.,!?;:"')])/i
+// DEMO_ACTION_RE = clear physical actions ONLY (bite/apply/spray… / cắn/nhai/thoa/xịt /
+// MS gigit/kunyah/sapu/sembur/tabur/gosok/celup/perah). EXCLUDES ambiguous verbs
+// (eat/use/try, ăn/dùng/thử, MS makan/guna/cuba) and flavour/texture DESCRIPTORS
+// (taste/crunchy, vị/giòn/dẻo, MS rasa/sedap/rangup) — those can sit over a talking head.
+// EN \b-bounded; VN/MS syllables bounded by whitespace/punctuation (space-sep).
+const DEMO_ACTION_RE = /\b(?:bite|chew|apply|spray|sprinkle|rub|dab|squeeze)\b|(?:^|[\s.,!?;:"'(])(?:cắn|nhai|thoa|bôi|xịt|rắc|chấm|vắt|nặn|gigit|kunyah|telan|sapu|sembur|semburkan|tabur|taburkan|gosok|celup|perah)(?=$|[\s.,!?;:"')])/i
 // Deictic — points AT the product ("này / đây / em này / cái này", MS "ni"): must SHOW
 // the product, never a bare face → a bad lips candidate.
 const DEICTIC_RE = /(?:^|[\s.,!?;:"'(])(?:này|đây|cái này|em này)(?=$|[\s.,!?;:"')])|\bni\b/i
@@ -449,7 +450,7 @@ const DEICTIC_RE = /(?:^|[\s.,!?;:"'(])(?:này|đây|cái này|em này)(?=$|[\s.
 // NOT a hands-only crop (which the i2v model renders as a disembodied floating mouth +
 // floating bowl — the user's "#8 đầu lơ lửng"). So an eating line is a CREATOR-framing
 // shot of the same person taking a bite.
-const EATING_ACTION_RE = /\b(?:bite|chew)\b|(?:^|[\s.,!?;:"'(])(?:cắn|nhai)(?=$|[\s.,!?;:"')])/i
+const EATING_ACTION_RE = /\b(?:bite|chew)\b|(?:^|[\s.,!?;:"'(])(?:cắn|nhai|gigit|kunyah|telan)(?=$|[\s.,!?;:"')])/i
 // A line that should NOT become a "lips" talking-head (it begs for a product visual).
 function isBadLipsCandidate(quote: string | undefined): boolean {
   const q = quote ?? ''
@@ -795,6 +796,17 @@ RULES:
   (set role:"broll", kind:"product_action", cameraFraming:"creator", AND write its
   conceptPrompt describing exactly that endorsement shot). NEVER end on a bare
   talking-head with no product — the viewer must see the product at the call to buy.
+- FELT-BENEFIT / RESULT lines (the laddered payoff the script now leads with — "người nhẹ
+  hẳn, đỡ mệt mỏi nặng đầu", "ngủ ngon, sáng dậy khỏe re", MS "rasa ringan, tak penat
+  lagi", "tidur lena") → FILM THE PERSON LIVING THAT RESULT: a relatable BEFORE→AFTER
+  micro-beat or the after-state itself (was tired / heavy → now light, energetic, relieved,
+  smiling), role:"broll" kind:"concept" cameraFraming:"creator", NOT a product close-up.
+  This is the cut where the viewer SEES the benefit, not just hears it. (Universal: a tire
+  pump "hết kẹt giữa đường" → a relieved driver back on the road; a serum "da hết khô căng"
+  → a confident glance in the mirror.)
+- APPETITE (edible products): a taste / "ngon" / craving line → the creator taking a
+  satisfied BITE + happy reaction (their OWN face in frame, creator-framing), or a close
+  appetising macro of the food — never a static jar. The bite shot sells the craving.
 - Universal: infer setting/usage from the product context; never hardcode a niche.${anchorHint}
 
 SCRIPT (cover all of it):
