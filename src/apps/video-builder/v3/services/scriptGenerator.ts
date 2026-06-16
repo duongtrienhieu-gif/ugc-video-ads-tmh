@@ -411,6 +411,25 @@ ${pronounRule(args.lang)}
   Be SPECIFIC ("giòn rụm như bánh vừa nướng"), NEVER abstract ("ngon", "đẹp",
   "tốt"). The sensory line is also what the visual director films, so it must be
   filmable, not feeling-only.
+- APPETITE-FIRST (ONLY when the product is EATEN or DRUNK — a food, snack, drink, seasoning,
+  anything taken by mouth): make TASTE / CRAVE the LEAD desire, not a footnote under the
+  health mechanism. Open the wanting on flavour ("thơm phức, đậm đà, cắn miếng là ghiền"),
+  and make sure ONE beat is an enjoyment moment the director can FILM — a satisfied bite /
+  sip + the face reaction. This is a WEIGHTING shift (more crave, less raw mechanism), NOT
+  extra length. For NON-edible products this rule does nothing — keep the normal
+  mechanism/result focus.
+- BENEFIT LADDER (UNIVERSAL — the upgrade that makes people FEEL the benefit instead of
+  reading a label): NEVER leave a benefit as a bare mechanism / medical-sounding term
+  ("kiểm soát cholesterol", "hỗ trợ tim mạch", "kháng khuẩn"). Ladder each one DOWN to what
+  the buyer FEELS in daily life + the FEAR it lifts, in a SHORT phrase. This REWRITES the
+  benefit you already chose — it does NOT add new benefits or length:
+    • "kiểm soát cholesterol" → "người nhẹ hẳn, đỡ mệt mỏi nặng đầu, bớt lo mấy cái mạch máu"
+    • "bơm đầy lốp 3 phút" → "hết cảnh kẹt giữa đường tối, khỏi gọi cứu hộ cả tiếng"
+    • "cấp ẩm sâu" → "da hết khô căng, soi gương tự tin, không cần che khuyết điểm"
+  Mechanism may appear ONCE as the reason; the SELL is always the laddered felt result +
+  fear. Use HEDGED support verbs ("hỗ trợ / giúp / cảm thấy") — never a cure ("chữa khỏi /
+  hết hẳn") and never a cert (Halal/FDA/clinically proven); those are the money-losing lines
+  (see guards below).
 - EMPATHY ECHO — the hook touches a pain / persona / moment; the benefit block
   MUST come back to that EXACT pain or moment in a NEW state (after using the
   product). The viewer needs the emotional loop to close ("hồi đó mình hay đau
@@ -590,6 +609,9 @@ ECONOMICAL, write tight from the start, every line earns its place):
 - COMPRESSIBLE (cut HERE first when space is tight): the NUMBER of benefits — keep only
   the 2-3 STRONGEST as punchy hits, drop the rest; adjectives; any repetition or
   throat-clearing. Better 3 benefits + a real proof beat than 6 benefits and no proof.
+  NOTE: the BENEFIT LADDER + APPETITE rules above are about HOW you WRITE the kept benefit
+  (felt result + fear / crave) — they do NOT mean keep MORE benefits. Still 2-3, just
+  laddered. Laddering replaces the mechanism phrase, it must not lengthen the script.
 Do NOT sacrifice the anchor, the proof beat, the social-proof crowd line, or the CTA to
 cram in more benefits.
 
