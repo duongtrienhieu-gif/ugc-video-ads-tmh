@@ -16,7 +16,7 @@ import { generateThumbnailHooks, generateAiThumbnail, THUMBNAIL_ARCHETYPES, THUM
 import { CAPTION_PRESETS, CAPTION_PRESET_ORDER, DEFAULT_CAPTION_PRESET, type CaptionPresetId } from '../services/captionPresets'
 import { renderCaptionBlob } from '../services/captionRenderer'
 import { BANNER_PRESETS, BANNER_PRESET_ORDER, DEFAULT_BANNER_PRESET, type BannerPresetId } from '../services/bannerPresets'
-import { renderBannerBlob, deriveBannerSlogan, localizeProductName, generateBannerHook } from '../services/bannerRenderer'
+import { renderBannerBlob, deriveBannerSlogan, localizeProductName, generateBannerHook, glossBannerToVietnamese } from '../services/bannerRenderer'
 import { SCRIPT_LANG_GEMINI_NAME, type AiThumbnail } from '../types'
 
 const now = () => Date.now()
@@ -41,26 +41,43 @@ export default function HybridExportPhase() {
   const captionPreset = hybrid.captionPreset ?? DEFAULT_CAPTION_PRESET
   const bannerOn = hybrid.bannerOn !== false               // default ON
   const bannerPreset = hybrid.bannerPreset ?? DEFAULT_BANNER_PRESET
-  // P5z — the banner is a short CURIOSITY HOOK about the video's topic (what makes a
-  // scroller stop), NOT the product name. Generated from the script's opening line (1
-  // cached Gemini call). Fallback = product name · benefit (localized) if the hook fails.
+  // P5z2 — banner = an EDITABLE hook. AI drafts one curiosity line in the OUTPUT language
+  // (prefill); the user can edit it, ask for another suggestion, see a live preview + a VN
+  // gloss (when not Vietnamese), then render. The user's text (persisted) wins.
+  const outputLang = state.scriptBrain.outputLang
+  const langName = SCRIPT_LANG_GEMINI_NAME[outputLang]
   const rawProductName = state.inputs.product?.productName ?? ''
   const scriptHookText = script?.blocks?.[0]?.text ?? ''
   const [bannerHook, setBannerHook] = useState('')
   const [bannerName, setBannerName] = useState(rawProductName)
+  const [suggesting, setSuggesting] = useState(false)
   useEffect(() => {
     let alive = true
-    const langName = SCRIPT_LANG_GEMINI_NAME[state.scriptBrain.outputLang]
-    if (scriptHookText) {
-      generateBannerHook(scriptHookText, langName, geminiKey).then((h) => { if (alive) setBannerHook(h) }).catch(() => {})
-    }
-    if (rawProductName) {
-      localizeProductName(rawProductName, langName, geminiKey).then((n) => { if (alive) setBannerName(n) }).catch(() => {})
-    } else { setBannerName('') }
+    if (scriptHookText) generateBannerHook(scriptHookText, langName, geminiKey).then((h) => { if (alive) setBannerHook(h) }).catch(() => {})
+    if (rawProductName) localizeProductName(rawProductName, langName, geminiKey).then((n) => { if (alive) setBannerName(n) }).catch(() => {})
+    else setBannerName('')
     return () => { alive = false }
-  }, [scriptHookText, rawProductName, state.scriptBrain.outputLang, geminiKey])
-  const bannerSlogan = bannerHook || deriveBannerSlogan(bannerName || rawProductName, script?.anchor, scriptHookText)
-  const bannerPreviewText = bannerSlogan || 'Hook gây tò mò'
+  }, [scriptHookText, rawProductName, langName, geminiKey])
+  // effective text the video uses: user edit > AI hook > product-name fallback.
+  const aiDefaultBanner = bannerHook || deriveBannerSlogan(bannerName || rawProductName, script?.anchor, scriptHookText)
+  const bannerText = (hybrid.bannerText ?? '').trim().length > 0 ? hybrid.bannerText! : aiDefaultBanner
+  const bannerPreviewText = bannerText || 'Hook gây tò mò'
+  const suggestBanner = async () => {
+    if (!scriptHookText || !geminiKey) return
+    setSuggesting(true)
+    try {
+      const h = await generateBannerHook(scriptHookText, langName, geminiKey, true)   // fresh = bypass cache
+      if (h) setHybridCaption({ bannerText: h })
+    } finally { setSuggesting(false) }
+  }
+  // VN gloss of a non-VN banner (debounced; cached) so the user understands it.
+  const [bannerGloss, setBannerGloss] = useState('')
+  useEffect(() => {
+    if (outputLang === 'vi' || !bannerText) { setBannerGloss(''); return }
+    let alive = true
+    const t = setTimeout(() => { glossBannerToVietnamese(bannerText, geminiKey).then((g) => { if (alive) setBannerGloss(g) }).catch(() => {}) }, 600)
+    return () => { alive = false; clearTimeout(t) }
+  }, [bannerText, outputLang, geminiKey])
   const scenes = hybrid.scenes ?? []
   const doneCount = scenes.filter((_, i) => hybrid.clips[i]).length
   const allDone = scenes.length > 0 && doneCount === scenes.length
@@ -83,7 +100,7 @@ export default function HybridExportPhase() {
       const videoRef = await assembleFromHybridState(h, script, resolution, {
         onProgress: (r) => setAssembleRatio(r),
         onStage: (label) => setAssembleStage(label),
-        bannerSlogan,
+        bannerSlogan: bannerText,
       })
       setHybridFinal(videoRef)
       addToast('✓ Đã tạo video', 'success')
@@ -172,7 +189,7 @@ export default function HybridExportPhase() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-bold text-gray-900">🏷️ Banner hook (dải trên)</p>
-              <p className="text-[11px] text-gray-500">Banner: <strong>"{bannerPreviewText}"</strong> (hook gây tò mò từ kịch bản) — 0 credit. Đổi xong bấm <strong>Ghép lại / Tạo video</strong>.</p>
+              <p className="text-[11px] text-gray-500">Câu hook gây tò mò trên đầu video — sửa tự do, xem trước rồi mới ghép. 0 credit.</p>
             </div>
             <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[12px] font-semibold text-gray-700">
               <input type="checkbox" checked={bannerOn} onChange={(e) => setHybridCaption({ bannerOn: e.target.checked })} />
@@ -180,7 +197,28 @@ export default function HybridExportPhase() {
             </label>
           </div>
           {bannerOn && (
-            <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+            <div className="mt-2">
+              {/* Editable hook text + suggest button (AI gợi ý ở ĐÚNG ngôn ngữ đích) */}
+              <div className="flex items-center gap-2">
+                <input type="text" value={hybrid.bannerText ?? bannerText}
+                  onChange={(e) => setHybridCaption({ bannerText: e.target.value })}
+                  placeholder="Nhập câu hook cho banner…"
+                  className="min-w-0 flex-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-[13px] text-gray-900 focus:border-violet-400 focus:outline-none" />
+                <button onClick={suggestBanner} disabled={suggesting || !scriptHookText}
+                  className="flex shrink-0 items-center gap-1 rounded-lg border border-violet-300 bg-violet-50 px-2.5 py-1.5 text-[12px] font-bold text-violet-700 hover:bg-violet-100 disabled:opacity-50">
+                  {suggesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Gợi ý
+                </button>
+              </div>
+              {/* VN gloss when the output language isn't Vietnamese */}
+              {outputLang !== 'vi' && bannerGloss && (
+                <p className="mt-1 text-[11px] text-gray-500">🇻🇳 Nghĩa: <span className="font-semibold text-gray-700">{bannerGloss}</span></p>
+              )}
+              {/* Live banner RESULT preview (selected preset) — judge it BEFORE rendering video */}
+              <div className="mt-2 flex items-center justify-center rounded-lg bg-gray-800 p-3">
+                <BannerLivePreview presetId={bannerPreset} text={bannerPreviewText} />
+              </div>
+              {/* Pick a style */}
+              <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
               {BANNER_PRESET_ORDER.map((id) => (
                 <button key={id} onClick={() => setHybridCaption({ bannerPreset: id })}
                   className={`flex flex-col items-stretch gap-1 rounded-lg border p-1.5 text-[11px] font-bold transition-all ${
@@ -192,6 +230,7 @@ export default function HybridExportPhase() {
                   <span className="text-center">{BANNER_PRESETS[id].labelVi}</span>
                 </button>
               ))}
+              </div>
             </div>
           )}
         </div>
@@ -328,6 +367,23 @@ function BannerPresetPreview({ presetId, slogan }: { presetId: BannerPresetId; s
       {url && <img src={url} alt="" className="max-h-8 w-auto object-contain px-1" />}
     </div>
   )
+}
+
+// Big live banner RESULT preview (selected preset + current text) so the user judges the
+// banner BEFORE rendering the whole video — instant + free (canvas, 0 credit).
+function BannerLivePreview({ presetId, text }: { presetId: BannerPresetId; text: string }) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    let made: string | null = null
+    renderBannerBlob(text, presetId)
+      .then((b) => { if (!alive) return; made = URL.createObjectURL(b); setUrl(made) })
+      .catch(() => {})
+    return () => { alive = false; if (made) URL.revokeObjectURL(made) }
+  }, [presetId, text])
+  return url
+    ? <img src={url} alt="" className="max-h-12 w-auto max-w-full object-contain" />
+    : <span className="text-[11px] text-gray-400">Đang dựng banner…</span>
 }
 
 // ── AI thumbnail card (one archetype) — ported from mode-1 ExportPhase ────────

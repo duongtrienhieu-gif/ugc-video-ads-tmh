@@ -124,7 +124,11 @@ export async function assembleHybridVideo(
   const CAP_SCALE_K = (evenH * 0.055) / 160
   // P5x — top hook banner: a centred pill ~86% width sat ~3.5% below the top, OR a
   // full-width ribbon flush to y=0. Held the whole segment (no enable window).
-  const BANNER_PILL_W = Math.round((evenW * 0.86) / 2) * 2
+  // P5z2 — pill sizes to its CONTENT (short text = small pill), scaled by a fixed factor
+  // (renderer glyph FONT_PX 64 × dpr 2 = 128px → ~3% of frame height), capped at 92% width
+  // so a long line shrinks instead of overflowing. Ribbon stays full-width.
+  const BANNER_MAX_W = Math.round((evenW * 0.92) / 2) * 2
+  const BANNER_K = (evenH * 0.030) / 128
   const BANNER_TOP = Math.round((evenH * 0.035) / 2) * 2
   const normFiles: string[] = []
   const failedIdx: number[] = []
@@ -236,11 +240,13 @@ export async function assembleHybridVideo(
         const inIdx = j + 1
         const next = `m${j}`
         if (s.mode === 'banner') {
-          // Top hook banner: pill ~86% width near the top, OR full-width ribbon at y=0.
-          // Scaled by WIDTH only (uniform → no text distortion). Held the whole segment.
-          const bw = s.fullWidth ? evenW : BANNER_PILL_W
+          // Top hook banner: content-sized pill near the top (capped at 92%), OR full-width
+          // ribbon at y=0. Scaled by WIDTH only (uniform → no text distortion). Whole segment.
           const by = s.fullWidth ? 0 : BANNER_TOP
-          parts.push(`[${inIdx}:v]format=rgba,scale=${bw}:-2,setsar=1[ov${j}]`)
+          const scaleExpr = s.fullWidth
+            ? `scale=${evenW}:-2`
+            : `scale='min(iw*${BANNER_K.toFixed(4)},${BANNER_MAX_W})':-2`
+          parts.push(`[${inIdx}:v]format=rgba,${scaleExpr},setsar=1[ov${j}]`)
           parts.push(`[${last}][ov${j}]overlay=x=(W-w)/2:y=${by}[${next}]`)
           last = next
           continue

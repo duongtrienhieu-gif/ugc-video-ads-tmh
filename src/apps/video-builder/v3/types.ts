@@ -749,6 +749,9 @@ export interface HybridState {
    *  assemble, 0 credit). Absent = ON + default preset. Skipped on social-proof cards. */
   bannerOn?: boolean
   bannerPreset?: import('./services/bannerPresets').BannerPresetId
+  /** P5z2 — user-edited banner text (overrides the AI hook). Persisted per project so
+   *  F5 / re-assemble keeps it. Empty = fall back to the AI hook. */
+  bannerText?: string
 }
 
 export function createEmptyHybridState(): HybridState {

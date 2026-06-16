@@ -76,12 +76,14 @@ export function deriveBannerSlogan(productName?: string, anchor?: string, _hook?
 // the product (a name persuades no one to stop). Generate ONE ultra-short curiosity hook
 // in the output language from the script's opening line. Cached; graceful fallback to ''.
 const hookCache = new Map<string, string>()
-export async function generateBannerHook(scriptHook: string, langName: string, apiKey: string): Promise<string> {
+export async function generateBannerHook(scriptHook: string, langName: string, apiKey: string, fresh = false): Promise<string> {
   const src = (scriptHook ?? '').trim()
   if (!src || !apiKey) return ''
   const key = `${langName}::${src}`
-  const hit = hookCache.get(key)
-  if (hit !== undefined) return hit
+  if (!fresh) {                       // fresh = the "Gợi ý" button wants a NEW variation
+    const hit = hookCache.get(key)
+    if (hit !== undefined) return hit
+  }
   try {
     const out = await directGeminiText({
       apiKey,
@@ -92,8 +94,31 @@ export async function generateBannerHook(scriptHook: string, langName: string, a
       prompt: `Video opening line: "${src}"\nBanner hook:`,
       maxOutputTokens: 40, temperature: 0.7, thinkingBudget: 0,
     })
-    const cleaned = (out ?? '').split('\n')[0].replace(/^["'“”]+|["'“”.!]+$/g, '').trim().slice(0, 42)
+    const cleaned = (out ?? '').split('\n')[0].replace(/^["'“”]+|["'“”.!]+$/g, '').trim().slice(0, 60)
     hookCache.set(key, cleaned)
+    return cleaned
+  } catch { return '' }
+}
+
+// P5z2 — short VN gloss of a banner hook (so a Vietnamese user understands an MS/EN banner
+// before approving it). Spirit-translation, not word-for-word. Cached; '' on failure.
+const glossCache = new Map<string, string>()
+export async function glossBannerToVietnamese(text: string, apiKey: string): Promise<string> {
+  const src = (text ?? '').trim()
+  if (!src || !apiKey) return ''
+  const hit = glossCache.get(src)
+  if (hit !== undefined) return hit
+  try {
+    const out = await directGeminiText({
+      apiKey,
+      systemInstruction:
+        `Dịch câu quảng cáo sau sang tiếng Việt ngắn gọn, ĐÚNG TINH THẦN (giữ năng lượng/ý đồ, ` +
+        `không dịch word-by-word). CHỈ xuất bản dịch tiếng Việt, không thêm gì.`,
+      prompt: src,
+      maxOutputTokens: 50, temperature: 0.3, thinkingBudget: 0,
+    })
+    const cleaned = (out ?? '').split('\n')[0].replace(/^["'“”]+|["'“”]+$/g, '').trim().slice(0, 70)
+    glossCache.set(src, cleaned)
     return cleaned
   } catch { return '' }
 }
