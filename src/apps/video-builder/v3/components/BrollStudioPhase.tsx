@@ -151,7 +151,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
   const [voiceName, setVoiceName] = useState(lastVoice?.name ?? '')
   const [productOn, setProductOn] = useState(() => lockOn(angle.toggles.product))
   const [res, setRes] = useState<StudioResolution>('720p')
-  const [dur, setDur] = useState(6)
+  const [dur, setDur] = useState(8)   // Seedance chỉ nhận 4/8/12s
   const [line, setLine] = useState(idea?.suggestedLine ?? '')
   const [brief, setBrief] = useState('')   // free-form: Vietnamese scene description
   const [prompt, setPrompt] = useState('')
@@ -361,11 +361,15 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
           className={`mt-2 w-full rounded-lg border px-2 py-1 text-[12px] focus:outline-none ${voiceNeedsLine ? 'border-rose-300' : 'border-gray-300 focus:border-violet-400'}`} />
       )}
 
-      {/* Độ dài */}
-      <div className="mt-2 flex items-center gap-2">
-        <span className="w-7 text-[11px] text-gray-500">{dur}s</span>
-        <input type="range" min={2} max={10} step={1} value={dur} onChange={(e) => setDur(Number(e.target.value))} className="flex-1" />
+      {/* Độ dài — Seedance 1.5 Pro chỉ nhận 4 / 8 / 12s (theo docs KIE) → credit chính xác */}
+      <div className="mt-2 flex items-center gap-1.5">
+        <span className="text-[11px] text-gray-500">Dài</span>
+        {[4, 8, 12].map((d) => (
+          <button key={d} onClick={() => setDur(d)}
+            className={`flex-1 rounded-md px-1.5 py-1 text-[11px] font-semibold ${dur === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{d}s</button>
+        ))}
       </div>
+      {spec.role === 'lips' && <p className="mt-1 text-[10px] text-gray-400">Lipsync: độ dài thực tế chạy theo câu thoại (audio), số giây trên chỉ để ước credit.</p>}
 
       {/* Độ phân giải — nhãn + credit rõ ràng + giải thích đánh đổi */}
       <div className="mt-2 flex gap-1" title="Cùng chất lượng dựng cảnh & độ chống-lỗi, chỉ khác độ nét + giá. Dùng 480p để test rẻ, ưng rồi xuất 720p.">
