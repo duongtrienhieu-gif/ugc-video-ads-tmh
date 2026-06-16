@@ -547,13 +547,17 @@ DIRECTING RULES:
   (the "How the user physically uses it" / description lines) WHERE and HOW this
   specific product is really used, put the action in that real-world SETTING, and
   set "cameraFraming":
-    • "hands_noface" — only the hands + the product doing the action in its
-      setting, NO face. Use GENEROUSLY for usage / demo / benefit-in-action lines;
-      it is the most dynamic, "real footage" shot. The product still appears
-      (locked to its reference) — describe its real look briefly.
+    • "hands_noface" — only the hands + the product doing the action ON A SURFACE or
+      IN-HAND (scooping from the jar, holding, pouring, squeezing onto a fingertip), in
+      its setting, NO face. Use for usage / demo beats that are GENUINELY hands+product
+      only. The product still appears (locked to its reference) — describe its real look
+      briefly. ⚠️ NEVER use "hands_noface" when the action APPLIES the product TO THE BODY
+      (onto the neck / face / cheeks / lips / teeth / hair / scalp / chest / skin) — a
+      head-area application with no head renders a DEFORMED, headless body. Those are "creator".
     • "creator" (default) — the creator, face visible, does the action / reacts.
-  KEEP "creator" for: the CTA close, ANY before/after, ANY emotion / reaction
-  beat, and the first product reveal — those need the face.
+  KEEP "creator" for: the CTA close, ANY before/after, ANY emotion / reaction beat, the
+  first product reveal, AND ANY application of the product onto the body (skincare /
+  dental / hair) — those need the face / person visible.
   The setting is ALWAYS INFERRED from the product, NEVER hardcoded. It works for
   ANY product — examples of the inference: a seasoning → hands sprinkling it over
   food in a kitchen; a tyre inflator → hands pumping a car tyre at the roadside; a
@@ -1018,7 +1022,14 @@ OUTPUT strict JSON, no fences:
     // close (anchorBlock 'cta'), a 3D mechanism, an emotion/person CONCEPT_SCENE,
     // a before/after, or any fixed product preset. Anything else → 'creator'.
     // (undefined ⇒ 'creator' downstream.)
-    const noFaceAllowed = presetId === 'PRODUCT_IN_ACTION' && item.anchorBlock !== 'cta' && !is3D
+    // EXTRA VETO (fix "biến dạng cả người"): a no-face shot is only coherent for hands+
+    // product actions on a surface / in-hand (scoop, hold, pour, squeeze onto a fingertip).
+    // When the action APPLIES the product to the body near the head — skincare/dental/hair
+    // (topicalCategory) or any neck/face/mouth/hair/chest mention in the scene — dropping the
+    // head forces the model to render a HEADLESS, DEFORMED torso. Those MUST keep the creator.
+    const APPLIES_TO_BODY_RE = /\b(neck|throat|nape|face|cheeks?|forehead|chin|jaw|lips?|mouth|teeth|gums?|hair|scalp|ears?|temples?|eyelids?|under[\s-]?eyes?|skin|chest|shoulders?|collar\s?bones?|d[ée]collet)/i
+    const appliesToBody = !!topicalCategory || APPLIES_TO_BODY_RE.test(conceptPrompt)
+    const noFaceAllowed = presetId === 'PRODUCT_IN_ACTION' && item.anchorBlock !== 'cta' && !is3D && !appliesToBody
     const cameraFraming: CameraFraming | undefined =
       noFaceAllowed && item.cameraFraming === 'hands_noface' ? 'hands_noface' : undefined
     out.push({
