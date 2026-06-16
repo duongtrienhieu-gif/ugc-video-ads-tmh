@@ -500,7 +500,9 @@ function enforceProductHero(scenes: BrollScene[], product: Product | null | unde
 const SOCIAL_PROOF_CUE_RE = /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|m[oọ]i ng[ưu][ờo]i|ai (?:d[ùu]ng|mua)|nhi[eề]u ng[ưu][ờo]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|mua l[aạ]i|l[ưu][ợo]t (?:mua|b[áa]n)|ng[ưu][ờo]i (?:mua|đ[ặa]t)|5 sao|n[ăa]m sao|c[oộ]ng đ[ồo]ng|\b(?:sold|sold[- ]?out|repeat|viral|popular)\b|ramai|terjual|bintang|\blaku\b|semua orang|orang (?:beli|guna|pakai|cuba)/i
 // STRICTER cue for PROMOTE only — clear THIRD-PARTY proof, NO lone "viral"/"popular"
 // (those live in hooks). Requires a %, a people-count, repeat-buyers, or reviews/stars.
-const SOCIAL_PROOF_PROMOTE_RE = /\d+\s*%|ph[aầ]n tr[ăa]m|ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|nhi[eề]u ng[ưu][ờo]i|quay l[aạ]i mua|mua l[aạ]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|review|đ[áa]nh gi[áa]|\d+\s*sao|n[ăa]m sao|terjual|ramai (?:beli|membeli)|orang (?:beli|guna|pakai)/i
+// BILINGUAL: VN + Malay parity (a MY script's proof line — "5 bintang", "ribuan orang
+// dah beli", "ulasan/review", "terlaris" — must promote to the cheap card just like VN).
+const SOCIAL_PROOF_PROMOTE_RE = /\d+\s*%|ph[aầ]n tr[ăa]m|peratus|ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|nhi[eề]u ng[ưu][ờo]i|ribu(?:an)?\s*orang|quay l[aạ]i mua|mua l[aạ]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|terjual|terlaris|\blaku\b|review|đ[áa]nh gi[áa]|ulasan|\d+\s*sao|n[ăa]m sao|\d+\s*bintang|\bbintang\b|ramai (?:beli|membeli|dah|guna|cuba)|orang (?:dah\s+)?(?:beli|guna|pakai|cuba)/i
 function capSocialProof(scenes: BrollScene[]): void {
   const lastIdx = scenes.length - 1
   let kept = 0
