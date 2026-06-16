@@ -9,6 +9,7 @@ import { assembleHybridVideo, type HybridSceneClip, type HybridStickerPlacement,
 import { renderStickerBlob, type StickerStyle } from './stickerRenderer'
 import { renderCaptionBlob } from './captionRenderer'
 import { buildCaptionChunks } from './captionChunker'
+import './socialProofRenderer'   // P5v — registers __testSocialProof + bundles the card renderer (wired in a later step)
 import { DEFAULT_CAPTION_PRESET, type CaptionPresetId } from './captionPresets'
 import { computeWordTimestampFromAlignment, computeQuoteTimestamp } from './insertTimingEngine'
 import { saveAsset } from '../../../../utils/assetStore'
