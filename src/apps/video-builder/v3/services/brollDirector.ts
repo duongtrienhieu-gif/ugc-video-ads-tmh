@@ -498,6 +498,9 @@ function enforceProductHero(scenes: BrollScene[], product: Product | null | unde
 // genuine crowd/sold/review line; cap at 3, never the final CTA cut. Anything else →
 // demote to a product broll (weak concept → backfilled). Universal cues (VN/EN/MS).
 const SOCIAL_PROOF_CUE_RE = /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|m[oọ]i ng[ưu][ờo]i|ai (?:d[ùu]ng|mua)|nhi[eề]u ng[ưu][ờo]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|mua l[aạ]i|l[ưu][ợo]t (?:mua|b[áa]n)|ng[ưu][ờo]i (?:mua|đ[ặa]t)|5 sao|n[ăa]m sao|c[oộ]ng đ[ồo]ng|\b(?:sold|sold[- ]?out|repeat|viral|popular)\b|ramai|terjual|bintang|\blaku\b|semua orang|orang (?:beli|guna|pakai|cuba)/i
+// STRICTER cue for PROMOTE only — clear THIRD-PARTY proof, NO lone "viral"/"popular"
+// (those live in hooks). Requires a %, a people-count, repeat-buyers, or reviews/stars.
+const SOCIAL_PROOF_PROMOTE_RE = /\d+\s*%|ph[aầ]n tr[ăa]m|ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|nhi[eề]u ng[ưu][ờo]i|quay l[aạ]i mua|mua l[aạ]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|review|đ[áa]nh gi[áa]|\d+\s*sao|n[ăa]m sao|terjual|ramai (?:beli|membeli)|orang (?:beli|guna|pakai)/i
 function capSocialProof(scenes: BrollScene[]): void {
   const lastIdx = scenes.length - 1
   let kept = 0
@@ -518,13 +521,16 @@ function capSocialProof(scenes: BrollScene[]): void {
     kept++
     if (kept > 3) demote(s)                                 // cap 3
   }
-  // Pass 2 — PROMOTE: a plain broll scene whose LINE is clearly social proof (review /
-  // crowd / 5-sao) should be the cheap ~6cr FB-card image, not the 17-20cr product video
-  // the director mis-routed it to. Same cap (3) + never the CTA cut + never a lips beat.
+  // Pass 2 — PROMOTE: a plain broll scene whose LINE is clearly THIRD-PARTY proof (a %,
+  // a people-count, repeat buyers, reviews / stars) should be the cheap ~6cr FB-card image,
+  // not the 17-20cr product video the director mis-routed it to. Uses a STRICTER cue than the
+  // demote check — the broad SOCIAL_PROOF_CUE_RE matches lone "viral"/"popular" which leak
+  // into HOOKS (the user audited: the hook "tại sao ... viral" wrongly became a blank card).
+  // Never promotes the HOOK (scene 0) or the CTA (last), and respects the cap (3).
   for (let i = 0; i < scenes.length && kept < 3; i++) {
     const s = scenes[i]
-    if (i === lastIdx || s.role !== 'broll') continue
-    if (!SOCIAL_PROOF_CUE_RE.test(s.quote ?? '')) continue
+    if (i === 0 || i === lastIdx || s.role !== 'broll') continue   // never the hook / CTA
+    if (!SOCIAL_PROOF_PROMOTE_RE.test(s.quote ?? '')) continue
     promote(s); kept++
   }
 }

@@ -50,9 +50,10 @@ const ACTIVE_RENDERS = new Set<number>()
 let ASSETS_GEN_ACTIVE = false
 
 const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
-  lips:        { label: '🗣 Nói',  cls: 'bg-violet-600/90 text-white' },
-  broll:       { label: '🎬 Cảnh', cls: 'bg-sky-600/90 text-white' },
-  mechanism3d: { label: '🧬 3D',   cls: 'bg-amber-500/90 text-white' },
+  lips:         { label: '🗣 Nói',  cls: 'bg-violet-600/90 text-white' },
+  broll:        { label: '🎬 Cảnh', cls: 'bg-sky-600/90 text-white' },
+  mechanism3d:  { label: '🧬 3D',   cls: 'bg-amber-500/90 text-white' },
+  social_proof: { label: '🗯 Bằng chứng', cls: 'bg-emerald-600/90 text-white' },
 }
 
 interface Props { onContinue?: () => void }
@@ -615,7 +616,7 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
   // conceptPrompt (lipsync uses keyframe + voice), so the editor is hidden for
   // lips scenes. Dirty state tracks unsaved edits so the Save button enables only
   // when there's an actual change.
-  const canEditPrompt = scene.role !== 'lips'
+  const canEditPrompt = scene.role !== 'lips' && scene.role !== 'social_proof'
   const [editing, setEditing] = useState(false)
   const [draftPrompt, setDraftPrompt] = useState(scene.conceptPrompt ?? '')
   useEffect(() => { setDraftPrompt(scene.conceptPrompt ?? '') }, [scene.conceptPrompt])
@@ -657,18 +658,24 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
             </div>
           </div>
         ) : done ? (
-          <>
-            <video ref={videoRef} src={url} muted playsInline
-              onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
-              onClick={togglePlay}
-              className="h-full w-full cursor-pointer object-contain" />
-            {!playing && (
-              <button onClick={togglePlay}
-                className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <span className="rounded-full bg-black/60 p-3 text-white"><Play className="h-5 w-5 fill-white" /></span>
-              </button>
-            )}
-          </>
+          scene.role === 'social_proof' ? (
+            // P5w — social-proof is a STATIC FB-card IMAGE, not a video; show it as <img>
+            // (a video tag stays blank on an image → the "bấm play không ra ảnh" bug).
+            <img src={url} alt="" className="h-full w-full object-contain" />
+          ) : (
+            <>
+              <video ref={videoRef} src={url} muted playsInline
+                onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
+                onClick={togglePlay}
+                className="h-full w-full cursor-pointer object-contain" />
+              {!playing && (
+                <button onClick={togglePlay}
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <span className="rounded-full bg-black/60 p-3 text-white"><Play className="h-5 w-5 fill-white" /></span>
+                </button>
+              )}
+            </>
+          )
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             <button onClick={onRender} disabled={!hasAssets}
