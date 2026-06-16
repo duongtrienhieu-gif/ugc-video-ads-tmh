@@ -394,7 +394,13 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
 
       {avatarPickerOpen && (
         <BankPicker bankType="models" isOpen
-          onSelect={(item) => { const m = item as Model; setAvatarRef(m.characterImage || null); setAvatarName(m.name); setAvatarPickerOpen(false) }}
+          onSelect={(item) => {
+            const m = item as Model
+            // characterImage là ảnh chính; fallback sang variant đầu nếu rỗng (giống fix product).
+            const img = m.characterImage || m.variants?.[0]?.imageUrl || null
+            if (!img) addToast(`Avatar "${m.name}" chưa có ảnh — chọn avatar khác hoặc bấm 📎 tải ảnh lên`, 'error')
+            setAvatarRef(img); setAvatarName(m.name); setAvatarPickerOpen(false)
+          }}
           onClose={() => setAvatarPickerOpen(false)} />
       )}
       {voicePickerOpen && (

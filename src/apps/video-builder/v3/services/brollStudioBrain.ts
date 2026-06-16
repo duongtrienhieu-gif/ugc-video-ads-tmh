@@ -192,10 +192,10 @@ export function resolveSceneSpec(angle: StudioAngle, t: SceneToggles): SceneSpec
   if (angle.isCard) return { role: 'social_proof', tier: 'seedance', framing: 'none', withFaithfulFrame: false, isCard: true }
   if (angle.id === 'mechanism3d') return { role: 'mechanism3d', tier: 'seedance', framing: 'none', withFaithfulFrame: false, isCard: false }
   // avatar + voice = a talking creator → lipsync (the spoken line is required, enforced by the UI)
-  if (t.avatar && t.voice) return { role: 'lips', tier: 'infinitalk', framing: 'creator', withFaithfulFrame: false, isCard: false }
+  if (t.avatar && t.voice) return { role: 'lips', tier: 'infinitalk', framing: 'creator', withFaithfulFrame: true, isCard: false }
   // Faithful frame whenever the PRODUCT is in frame (anti-drift lock) — not just when the
   // angle opted in. Any scene showing the product must lock it to the real reference image.
-  return { role: 'broll', tier: 'seedance', framing: t.avatar ? 'creator' : 'hands_noface', withFaithfulFrame: t.product, isCard: false }
+  return { role: 'broll', tier: 'seedance', framing: t.avatar ? 'creator' : 'hands_noface', withFaithfulFrame: t.product || t.avatar, isCard: false }
 }
 
 const ENGINEER_SCHEMA = {
