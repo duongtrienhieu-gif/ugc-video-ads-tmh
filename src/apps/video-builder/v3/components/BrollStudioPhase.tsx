@@ -219,9 +219,23 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
         const r = await engineerScenePrompt({ angle, idea, toggles, line, durationSec: dur, product, lang, geminiKey, briefVi: freeform ? brief.trim() : undefined })
         promptEn = r.conceptPromptEn; setPrompt(r.conceptPromptEn); setNote(r.noteVi)
       }
-      // 2. Resolve refs sang URL công khai (KIE fetch từ xa)
+      // 2. Resolve ẢNH SẢN PHẨM → URL công khai (KIE fetch từ xa). Dùng TOÀN BỘ
+      //    productImages (4 ảnh chuẩn) — `productImage` chỉ là alias cũ, thường RỖNG ở
+      //    sản phẩm mới → nếu chỉ đọc nó thì faithful-frame không chạy → SẢN PHẨM BỊ DRIFT.
+      const imageRefs = [...(product.productImages ?? []), product.productImage]
+        .filter((r): r is string => !!r && r.trim() !== '')
+      const seenRef = new Set<string>()
       const productUrls: string[] = []
-      if (product.productImage) { const u = await getUrl(product.productImage); if (u) productUrls.push(u) }
+      for (const ref of imageRefs) {
+        if (seenRef.has(ref)) continue
+        seenRef.add(ref)
+        const u = await getUrl(ref)
+        if (u) productUrls.push(u)
+        if (productUrls.length >= 4) break
+      }
+      if (toggles.product && productUrls.length === 0) {
+        addToast('⚠️ Sản phẩm chưa có ảnh trong Project → cảnh sẽ bị lệch sản phẩm. Thêm ảnh sản phẩm rồi render lại.', 'error')
+      }
       const avatarUrl = avatarRef ? ((await getUrl(avatarRef)) ?? undefined) : undefined
       // 3. TTS cho cảnh lipsync — câu thoại gõ tiếng Việt được DỊCH sang ngôn ngữ thị trường trước
       let audioUrl: string | undefined
