@@ -7,10 +7,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react'
-import { Loader2, ArrowLeft, Sparkles, Wand2, Lock } from 'lucide-react'
-import { useAdsVideoStore } from '../stores/adsVideoStore'
+import { Loader2, ArrowLeft, Sparkles, Wand2, Lock, Package } from 'lucide-react'
+import { useBrollStudioStore } from '../stores/brollStudioStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAppStore } from '../../../../stores/appStore'
+import BankPicker from '../../../../components/BankPicker'
+import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import {
   STUDIO_ANGLES, generateStudioIdeas, engineerScenePrompt, resolveSceneSpec,
   type StudioIdea, type StudioAngle, type SceneToggles, type ToggleState,
@@ -128,12 +130,20 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey }: {
   )
 }
 
+const LANGS: { id: ScriptLang; label: string }[] = [
+  { id: 'vi', label: 'Tiếng Việt' }, { id: 'ms', label: 'Bahasa Malaysia' }, { id: 'en', label: 'English' },
+]
+
 export default function BrollStudioPhase({ onBack }: { onBack: () => void }) {
-  const state = useAdsVideoStore((s) => s.state)
+  // Mode-2 has its OWN input (separate store) — never touches mode-1 state.
+  const product = useBrollStudioStore((s) => s.product)
+  const setProduct = useBrollStudioStore((s) => s.setProduct)
+  const lang = useBrollStudioStore((s) => s.lang)
+  const setLang = useBrollStudioStore((s) => s.setLang)
   const geminiKey = useSettingsStore((s) => s.geminiApiKey)
   const addToast = useAppStore((s) => s.addToast)
-  const product = state.inputs.product
-  const lang = state.scriptBrain.outputLang
+  const productThumb = useAssetUrl(product?.productImage ?? undefined)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [ideas, setIdeas] = useState<Record<string, StudioIdea>>({})
   const [loading, setLoading] = useState(false)
   const [freeText, setFreeText] = useState('')
@@ -153,7 +163,7 @@ export default function BrollStudioPhase({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="h-full overflow-y-auto p-6">
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-7xl">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-gray-900">🎬 Xưởng B-roll</h2>
@@ -164,17 +174,33 @@ export default function BrollStudioPhase({ onBack }: { onBack: () => void }) {
           </button>
         </div>
 
+        {/* GLOBAL input (Mode 2 standalone) — only PRODUCT + language; avatar/voice are
+            picked per-scene. Reads its own store, never mode-1's state. */}
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-black/10 bg-white p-3">
+          <button onClick={() => setPickerOpen(true)}
+            className="flex items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-[12px] font-semibold text-gray-700 hover:bg-gray-100">
+            {productThumb ? <img src={productThumb} alt="" className="h-8 w-8 rounded object-cover" /> : <Package className="h-4 w-4 text-gray-400" />}
+            {product ? product.productName : 'Chọn sản phẩm'}
+          </button>
+          <div className="flex overflow-hidden rounded-lg border border-gray-200 text-[12px] font-semibold">
+            {LANGS.map((l) => (
+              <button key={l.id} onClick={() => setLang(l.id)}
+                className={lang === l.id ? 'bg-violet-600 px-3 py-2 text-white' : 'bg-white px-3 py-2 text-gray-500 hover:bg-gray-50'}>{l.label}</button>
+            ))}
+          </div>
+        </div>
+
         <button onClick={buildStudio} disabled={loading || !product}
           className="mb-5 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-2.5 text-[13px] font-bold text-white shadow-sm hover:from-violet-700 hover:to-fuchsia-700 disabled:opacity-50">
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           {Object.keys(ideas).length > 0 ? 'Tạo lại ý tưởng' : 'Tạo xưởng (gợi ý 11 cảnh)'}
         </button>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           {STUDIO_ANGLES.map((a) => (
             <StudioSceneCard key={a.id} angle={a} idea={ideas[a.id]} product={product} lang={lang} geminiKey={geminiKey} />
           ))}
-          <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50/40 p-3 sm:col-span-2">
+          <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50/40 p-3">
             <p className="text-sm font-bold text-gray-900"><Wand2 className="mr-1 inline h-4 w-4 text-violet-600" /> Cảnh tự do (mô tả bằng lời)</p>
             <p className="mt-0.5 text-[11px] text-gray-400">Gõ mô tả — AI tự dựng prompt chuẩn bám sản phẩm.</p>
             <textarea value={freeText} onChange={(e) => setFreeText(e.target.value)} rows={2}
@@ -184,6 +210,10 @@ export default function BrollStudioPhase({ onBack }: { onBack: () => void }) {
           </div>
         </div>
       </div>
+
+      <BankPicker bankType="products" isOpen={pickerOpen}
+        onSelect={(item) => { setProduct(item as Product); setPickerOpen(false) }}
+        onClose={() => setPickerOpen(false)} />
     </div>
   )
 }
