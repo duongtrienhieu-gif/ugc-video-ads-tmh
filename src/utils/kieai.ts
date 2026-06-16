@@ -939,8 +939,21 @@ export async function generateVideoJob(params: {
 }): Promise<{ taskId: string }> {
   const input: Record<string, unknown> = { prompt: params.prompt }
 
-  if (params.jobModelId.startsWith('bytedance/')) {
-    // Seedance
+  if (params.jobModelId === 'bytedance/seedance-1.5-pro') {
+    // Seedance 1.5 Pro — KIE schema (docs.kie.ai): image-to-video takes `input_urls`
+    // (ARRAY of 0-2 URLs, NOT first_frame_image_url), `duration` is a STRING limited to
+    // "4"/"8"/"12"s, resolution 480p/720p. generate_audio=false keeps the CHEAP tier
+    // (480p without-audio = 1.75 cr/s; with-audio would be 3.5). Audio is added later
+    // in our pipeline, so we never want Seedance's own audio.
+    input.resolution = params.resolution === '720p' ? '720p' : '480p'
+    input.aspect_ratio = params.aspectRatio
+    const imgs = [params.startFrameUrl, ...(params.referenceImageUrls ?? [])].filter(Boolean) as string[]
+    if (imgs.length) input.input_urls = imgs.slice(0, 2)   // i2v seed (keyframe first)
+    const d = Math.round(params.duration ?? 8)
+    input.duration = d <= 4 ? '4' : d <= 8 ? '8' : '12'    // snap to the only allowed values
+    input.generate_audio = false
+  } else if (params.jobModelId.startsWith('bytedance/')) {
+    // Other ByteDance (Seedance 2.0 / 2.0-fast) — original schema, untouched.
     input.resolution = params.resolution
     input.aspect_ratio = params.aspectRatio
     if (params.duration) input.duration = params.duration
