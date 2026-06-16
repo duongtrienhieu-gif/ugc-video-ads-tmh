@@ -356,6 +356,39 @@ export function validateBody(
     }
   }
 
+  // 9. FOREIGN-MARKET DRIFT (P5z5) — the script must NOT cite a foreign country/market
+  //    that doesn't match its own output language (the "mấy nghìn người bên Malaysia" in a
+  //    Vietnamese ad bug). Own market is exempt (VN→Việt Nam, MS→Malaysia). Catches a place
+  //    name used as crowd/origin; the fix is to drop the country, not the popularity.
+  {
+    const allBody = `${blocks.pain ?? ''} ${blocks.discovery ?? ''} ${blocks.benefit ?? ''} ${blocks.cta ?? ''}`
+    const foreignRe = lang === 'ms' || lang === 'Bahasa Malaysia'
+      ? /\b(vi[eệ]t ?nam|vietnam|indonesia|th[aá]i ?lan|thailand|singapura|filipina)\b/i
+      : /\b(malaysia|m[ãa] ?lai|indonesia|singapore|th[aá]i ?lan|thailand|philippines)\b/i
+    const m = allBody.match(foreignRe)
+    if (m) {
+      failures.push(
+        `The script names a foreign market "${m[0]}" that does not match its language — that is ` +
+        `drift (e.g. "bán chạy bên Malaysia" in a Vietnamese ad). Remove the country name; state ` +
+        `the popularity / crowd WITHOUT tying it to a foreign place.`,
+      )
+    }
+  }
+
+  // 10. FABRICATED PRECISE RATING (P5z5) — a decimal star rating ("4.8/5 sao", "4.9 bintang")
+  //     is an invented exact stat. Social proof should be a plausible VIBE, not a fake precise
+  //     number. Vague "review toàn 5 sao" / "ulasan 5 bintang" (no decimal) is fine.
+  {
+    const allBody = `${blocks.discovery ?? ''} ${blocks.benefit ?? ''} ${blocks.cta ?? ''}`
+    const m = allBody.match(/\b\d+[.,]\d+\s*(?:\/\s*5\s*)?(sao|bintang|star)\b/i)
+    if (m) {
+      failures.push(
+        `Body invents a precise rating ("${m[0].trim()}"). Don't fabricate an exact stat — use a ` +
+        `plausible vibe instead ("review toàn 5 sao" / "ulasan 5 bintang", no decimal number).`,
+      )
+    }
+  }
+
   return { ok: failures.length === 0, failures }
 }
 

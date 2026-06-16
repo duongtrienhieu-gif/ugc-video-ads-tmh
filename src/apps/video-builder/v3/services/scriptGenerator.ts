@@ -515,8 +515,17 @@ ${pronounRule(args.lang)}
 - DON'T BE TEMPLATED — this product will be turned into MANY ads, so vary it: pick a
   clear CREATOR STANCE for this take (skeptic-turned-fan / nerd-who-tested / friend
   warning you / the person who had the problem) and let it colour the whole script; and
-  VARY THE CLOSE — do NOT end every script with the same stock line ("kẻo hết hàng" /
-  "grab cepat sebelum stok habis"). Rotate the CTA lever + wording each time.
+  VARY THE CLOSE — do NOT end every script with the same stock line. Rotate the CTA lever
+  + wording each time.
+  AVOID THESE OVER-USED TEMPLATES (they make every ad sound the same — find a fresh line):
+    • Opening clichés: "Mình đã mất rất nhiều tiền vì không biết đến … sớm hơn", "… đang
+      thay đổi cách mọi người …", MS "No way … ni macam ni", "Aku rugi berbulan sebab …".
+    • Close clichés: "kẻo hết hàng", "đáng tiền lắm luôn", "game changer", "must-have",
+      MS "grab cepat sebelum stok habis", "jangan tunggu lama", "memang berbaloi".
+  Use the IDEA if it fits, but rephrase it freshly — never the stock sentence verbatim.
+- OFFER = ONE clear deal, stated ONCE. Pick a single offer ("mua 1 tặng 1", "giảm 50%",
+  MS "Beli 1 Free 1", "RM79 je") — do NOT stack a ladder of tiers ("mua 1 tặng 1, mua 2
+  tặng 2, mua 3 tặng 3, mua 4 tặng 4") — that reads spammy and clutters the CTA.
 - LANGUAGE (anchor/expectation/conviction): every example phrase in the rules above
   is ILLUSTRATIVE Vietnamese — WRITE THE ACTUAL SCRIPT 100% in ${args.lang}. For
   Bahasa Malaysia use the natural LOCAL register (light rojak), NEVER Vietnamese
