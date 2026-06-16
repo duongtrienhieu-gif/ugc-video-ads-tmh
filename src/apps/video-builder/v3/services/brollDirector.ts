@@ -88,9 +88,10 @@ export interface BrollDirectorParams {
 // P4o — <50s = 3, 50-70s = 4, >70s = 5 (HARD CAP). 5 is the ceiling — a longer
 // ad does NOT keep adding talking-head cuts (kept the b-roll the hero).
 function lipsCountForDuration(sec: number): number {
-  if (sec < 50) return 3
-  if (sec <= 70) return 4
-  return 5
+  // P5u — user: "1 video chỉ cần 3 lips" — keep the creator's face as a light trust
+  // thread, give the rest of the timeline to product broll. ~3 lips (4 only for long
+  // ads ≥75s so the face doesn't vanish for too long).
+  return sec >= 75 ? 4 : 3
 }
 
 // ── Density floor (deterministic) ───────────────────────────────────────────
@@ -107,7 +108,7 @@ function lipsCountForDuration(sec: number): number {
 // breathe (10 cuts/60s) and matches the "1 idea = 1 cut, group short sentences"
 // flexibility the user wants. Small-video floor also drops 8 → 6 so a 40s ad
 // doesn't get padded to 8 cuts.
-const TARGET_AVG_CUT_SEC = 6.0
+const TARGET_AVG_CUT_SEC = 4.5   // P5u — snappier pace (was 6.0 → slideshow-slow); ~15 cuts/69s
 function densityFloor(dur: number): number {
   return Math.max(6, Math.round(dur / TARGET_AVG_CUT_SEC))
 }
@@ -444,21 +445,40 @@ const DEMO_ACTION_RE = /\b(?:bite|chew|apply|spray|sprinkle|rub|dab|squeeze)\b|(
 // Deictic — points AT the product ("này / đây / em này / cái này", MS "ni"): must SHOW
 // the product, never a bare face → a bad lips candidate.
 const DEICTIC_RE = /(?:^|[\s.,!?;:"'(])(?:này|đây|cái này|em này)(?=$|[\s.,!?;:"')])|\bni\b/i
+// EATING subset of demo actions — these need the AVATAR'S OWN face/mouth (identity),
+// NOT a hands-only crop (which the i2v model renders as a disembodied floating mouth +
+// floating bowl — the user's "#8 đầu lơ lửng"). So an eating line is a CREATOR-framing
+// shot of the same person taking a bite.
+const EATING_ACTION_RE = /\b(?:bite|chew)\b|(?:^|[\s.,!?;:"'(])(?:cắn|nhai)(?=$|[\s.,!?;:"')])/i
 // A line that should NOT become a "lips" talking-head (it begs for a product visual).
 function isBadLipsCandidate(quote: string | undefined): boolean {
   const q = quote ?? ''
   return DEMO_ACTION_RE.test(q) || DEICTIC_RE.test(q)
 }
-function enforceProductHero(scenes: BrollScene[]): void {
+function enforceProductHero(scenes: BrollScene[], product: Product | null | undefined): void {
   const lastIdx = scenes.length - 1
+  const name = product?.productName?.trim() || 'the product'
   // (a) a clear DEMO-ACTION line → must SHOW that action, never a talking head.
   for (let i = 0; i < scenes.length; i++) {
     if (i === lastIdx) continue                 // CTA owned by the lock
     const s = scenes[i]
     if (s.role === 'mechanism3d') continue
     if (!DEMO_ACTION_RE.test(s.quote ?? '')) continue
-    if (s.role === 'lips' || s.kind === 'concept') {
-      s.role = 'broll'; s.kind = 'product_action'; s.cameraFraming = 'hands_noface'
+    const isEating = EATING_ACTION_RE.test(s.quote ?? '')
+    // Fix a lips/concept demo line always; ALSO fix an eating shot that isn't already
+    // creator-framed (so a hands-only eating crop → the avatar's own face). A non-eating
+    // shot that's already a product_action broll is left untouched (keep its concept).
+    const needsFix = s.role === 'lips' || s.kind === 'concept' || (isEating && s.cameraFraming !== 'creator')
+    if (!needsFix) continue
+    s.role = 'broll'; s.kind = 'product_action'
+    if (isEating) {
+      // Eating → the AVATAR eats it herself, face visible (creator framing locks the
+      // SAME person). Explicit concept so the model never renders a stray mouth/bowl.
+      s.cameraFraming = 'creator'
+      s.conceptPrompt =
+        `The SAME creator takes a natural, appetising bite of ${name} herself — her face and hand clearly in frame, eating it, a satisfied look. ONE person (the creator), real UGC, natural light. NOT a disembodied mouth, NOT a separate floating bowl.`
+    } else {
+      s.cameraFraming = 'hands_noface'
       s.conceptPrompt = ''                       // weak → backfilled, grounded in this line
     }
   }
@@ -626,6 +646,11 @@ names — never pad with vague stickers, but never leave a concrete callout bare
     "tiết kiệm thời gian, không cần trạm xăng") → ONE {style:"list", items:["🔋
     20000mAh","⏱ 4 tiếng","⚡ 30 phút"], quote} — a stacked card (each item may
     start with its own emoji).
+  • MANDATORY: an INGREDIENT / NUTRIENT / ACTIVE / SPEC callout (vitamins, minerals,
+    actives, mAh, %, bar, mg…) MUST get a sticker — a "list" if it names several
+    (e.g. "giàu Kali, Magie, Vitamin C" → {style:"list", items:["Kali","Magie",
+    "Vitamin C"], quote}), a "pill"/"number" if it names one. NEVER leave an
+    ingredient/spec line bare — that is the proof the buyer screenshots.
   Stickers carry the info the old hand-drawn overlays used to; do NOT make overlay
   scenes. They pop ONE at a time, spaced ~3s apart (two within 3s collide and the
   later one is dropped) — so cover the KEY callouts; don't stack many on one line.
@@ -840,7 +865,7 @@ OUTPUT strict JSON only (no markdown fences):
   // P5q — make the PRODUCT the hero: appetite/usage lines → product action (not a
   // talking head), and cap face-only concept cuts at 2. Runs after the CTA lock + before
   // backfill so the converted weak concepts get grounded in their line + the product.
-  enforceProductHero(scenes)
+  enforceProductHero(scenes, params.product)
 
   await backfillWeakConcepts(scenes, params.product, params.geminiKey)
 
@@ -1049,7 +1074,7 @@ const MAX_LIPS_SEC = 5
 // feels frantic". Lips stays 5s (a talking-head shouldn't hold longer).
 // P3t — nâng 6 → 8 để khớp với Grok i2v duration step (6 / 8 / 10 — P3s đã loại 7s).
 // Mỗi cảnh broll giờ thở tới 8s thay vì bị chẻ làm đôi 3s/3s với prompt clone.
-const MAX_BROLL_SEC = 8.0
+const MAX_BROLL_SEC = 6.0   // P5u — hard cap: no cut > ~6s (capSplitScenes splits longer ones)
 // 2s minimum so a leftover cut never flashes < 2s and disrupts the eye.
 const MIN_CUT_SEC = 2.0
 
