@@ -493,6 +493,26 @@ function enforceProductHero(scenes: BrollScene[], product: Product | null | unde
   }
 }
 
+// P5w — social-proof card guard (anti-abuse). A 'social_proof' scene is only valid on a
+// genuine crowd/sold/review line; cap at 3, never the final CTA cut. Anything else →
+// demote to a product broll (weak concept → backfilled). Universal cues (VN/EN/MS).
+const SOCIAL_PROOF_CUE_RE = /\b(review|reviews|sold|repeat\s*order|verified|viral|ulasan|terjual|ramai)\b|ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|m[oọ]i ng[ưu][ờo]i|ai (?:c[ũu]ng|d[ùu]ng)|nhi[eề]u ng[ưu][ờo]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|đ[áa]nh gi[áa]|l[ưu][ợo]t mua|5 sao|n[ăa]m sao|bintang|orang beli/i
+function capSocialProof(scenes: BrollScene[]): void {
+  const lastIdx = scenes.length - 1
+  let kept = 0
+  const demote = (s: BrollScene) => {
+    s.role = 'broll'; s.kind = 'product_action'; s.cameraFraming = 'hands_noface'; s.conceptPrompt = ''
+  }
+  for (let i = 0; i < scenes.length; i++) {
+    const s = scenes[i]
+    if (s.role !== 'social_proof') continue
+    if (i === lastIdx) { demote(s); continue }              // CTA never a card
+    if (!SOCIAL_PROOF_CUE_RE.test(s.quote ?? '')) { demote(s); continue }  // mis-tagged
+    kept++
+    if (kept > 3) demote(s)                                 // cap 3
+  }
+}
+
 // ── Public: plan a full-coverage hybrid shot list ───────────────────────────
 export async function directBrollScenes(
   params: BrollDirectorParams,
@@ -568,7 +588,7 @@ NO gaps and no dead air. Read the actual script + the product, and direct like a
 real creator. The product can be ANYTHING (gadget, tool, cosmetic, food, apparel,
 appliance, accessory…) — never assume a niche.${productContext}
 
-THREE cut ROLES (set "role"):
+FOUR cut ROLES (set "role"):
 1. "lips" — the creator ON CAMERA saying a specific line (face visible, will be
    lip-synced to that exact voice span). Give the "quote" (verbatim spoken line) — a
    lips cut is a SHORT line (~3-5s of speech). NO conceptPrompt needed.
@@ -634,6 +654,13 @@ THREE cut ROLES (set "role"):
    distinct internal mechanism (Kali→mạch máu, Vitamin C→collagen dưới da, chất xơ→đường
    ruột). Do NOT 3D a line that's just a NAMING/benefit/result ("giàu Kali" = a product
    close-up + sticker, NOT 3D); and never exceed ~3 — the ad must not become a science reel.
+4. "social_proof" — ONLY for a genuine SOCIAL-PROOF line: a crowd/popularity, a sold
+   count, repeat buyers, or reviews — "mấy nghìn người mua rồi", "ai dùng cũng quay lại",
+   "review toàn 5 sao", "bán cháy hàng", "nhỏ bạn mình dùng cũng mê". Renders as a
+   realistic Facebook-post / review screenshot (handled by the app — NO conceptPrompt
+   needed, just the "quote"). Use AT MOST ~2 (3 absolute max) per video, ONLY on real
+   social-proof lines. NEVER for a product / benefit / demo / pain line (those stay
+   broll/lips), and NEVER make the final CTA cut a social_proof card.
 
 STICKERS (separate array — 0-credit text pops that ride on a cut, REPLACING the
 old overlays). Be GENEROUS — stickers are FREE and do NOT compete with the cuts,
@@ -869,6 +896,7 @@ OUTPUT strict JSON only (no markdown fences):
   // talking head), and cap face-only concept cuts at 2. Runs after the CTA lock + before
   // backfill so the converted weak concepts get grounded in their line + the product.
   enforceProductHero(scenes, params.product)
+  capSocialProof(scenes)   // P5w — social_proof only on real proof lines, cap 3, never CTA
 
   await backfillWeakConcepts(scenes, params.product, params.geminiKey)
 
