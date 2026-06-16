@@ -11,6 +11,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { ScriptLang } from '../types'
+import { SCRIPT_LANG_GEMINI_NAME } from '../types'
+import { generateGpt4oImageFast } from '../../../../utils/kieai'
+import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
 
 export interface SocialProofReview { name: string; text: string; stars?: number }
 export interface SocialProofOpts {
@@ -180,6 +183,56 @@ export async function renderSocialProofCanvas(opts: SocialProofOpts): Promise<HT
   return canvas
 }
 
+// ── AI path (P5v-2): a REALISTIC Facebook-post screenshot via GPT-4o image (the same
+// engine as thumbnails). Looks like a real customer's post (header + caption + the
+// product photo + reactions + 3 comments) → believable, unlike the plain canvas card.
+// Text rendered in the script's language. The product photo is passed as a ref so the
+// post shows the REAL product. Falls back to the canvas card if AI fails / no key.
+function buildSocialProofPrompt(langName: string, productName: string): string {
+  return `Create a REALISTIC screenshot of a FACEBOOK POST (mobile app UI), as if a happy real customer shared it. Make it believable — a real person's phone screenshot, NOT an ad poster, NOT a collage. Render ALL text crisply and correctly spelled in ${langName}.
+LAYOUT top→bottom:
+1) Post header: a round profile photo of an ordinary person + a real ${langName} personal name (bold) + " · 3h" + a small public/globe icon.
+2) Caption (1–2 lines): that person warmly recommending the product — casual + genuine, in ${langName}.
+3) The PRODUCT PHOTO (from the reference image) as the post's attached image — a natural real-life snapshot, the product clearly recognisable and UNCHANGED.
+4) Reactions row: 👍❤️😍 + a like count (e.g. "1.2K") + "248 ${langName === 'Bahasa Malaysia' ? 'komen' : langName === 'English' ? 'comments' : 'bình luận'}" + a few shares.
+5) A thin divider, then THREE (3) comments — each: a small round avatar + a DIFFERENT ordinary ${langName} name (bold) + a short enthusiastic praise comment + "Like · Reply · 2h" + a couple of likes.
+STYLE: authentic Facebook mobile screenshot, clean white UI, soft shadows, realistic. Product: ${productName}.`
+}
+
+/** Generate the social-proof card as a realistic FB-post image (GPT-4o). Returns an
+ *  asset ref. Falls back to the canvas card on any failure (no key / KIE error). */
+export async function generateSocialProofImage(params: {
+  kieApiKey: string
+  lang: ScriptLang
+  productName: string
+  productImageRef?: string
+  soldText?: string
+  reviews?: SocialProofReview[]
+}): Promise<string> {
+  const langName = SCRIPT_LANG_GEMINI_NAME[params.lang]
+  try {
+    const filesUrl: string[] = []
+    if (params.productImageRef) {
+      const u = isAssetRef(params.productImageRef) ? await getUrl(params.productImageRef) : params.productImageRef
+      if (u) filesUrl.push(u)
+    }
+    const remoteUrl = await generateGpt4oImageFast({
+      apiKey: params.kieApiKey,
+      prompt: buildSocialProofPrompt(langName, params.productName?.trim() || 'the product'),
+      filesUrl,
+      size: '2:3',
+      softTimeoutMs: 100_000, attemptTimeoutMs: 150_000, maxAttempts: 2,
+    })
+    const blob = await fetch(remoteUrl).then((r) => r.blob())
+    return await saveAsset(blob, blob.type || 'image/png')
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[socialProof] AI gen failed → canvas fallback:', e)
+    const blob = await renderSocialProofBlob({ lang: params.lang, productName: params.productName, soldText: params.soldText, reviews: params.reviews })
+    return await saveAsset(blob, 'image/png')
+  }
+}
+
 export async function renderSocialProofBlob(opts: SocialProofOpts): Promise<Blob> {
   const canvas = await renderSocialProofCanvas(opts)
   return await new Promise<Blob>((resolve, reject) => {
@@ -196,6 +249,21 @@ if (typeof window !== 'undefined') {
     const blob = await renderSocialProofBlob({ lang: lang ?? 'vi', productName: productName ?? 'Sản phẩm' })
     const url = URL.createObjectURL(blob)
     window.open(url, '_blank')
+    return url
+  }
+  // __testSocialProofAI() — realistic FB-post via GPT-4o (≈6cr), using the current
+  // project's KIE key + product image + output language. Eyeball the REAL look.
+  ;(window as unknown as Record<string, unknown>).__testSocialProofAI = async () => {
+    const settings = (await import('../../../../stores/settingsStore')).useSettingsStore.getState()
+    const st = (await import('../stores/adsVideoStore')).useAdsVideoStore.getState().state
+    const ref = await generateSocialProofImage({
+      kieApiKey: settings.kieApiKey,
+      lang: st.scriptBrain.outputLang,
+      productName: st.inputs.product?.productName ?? 'Sản phẩm',
+      productImageRef: st.inputs.product?.productImage ?? undefined,
+    })
+    const url = await getUrl(ref)
+    if (url) window.open(url, '_blank')
     return url
   }
 }
