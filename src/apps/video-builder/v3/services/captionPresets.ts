@@ -43,10 +43,10 @@ export interface CaptionPreset {
 // STROKE for readability over any footage. Fonts all cover VN+MS+EN. The accent applies to
 // exactly ONE key word per chunk (see captionRenderer) so the highlight is always visible.
 export const CAPTION_PRESETS: Record<CaptionPresetId, CaptionPreset> = {
-  // Neutral clean sans, lower-case, plain YELLOW keyword.
+  // Neutral clean sans (Be Vietnam Pro — VN-native, the safe one), plain YELLOW keyword.
   clean_white: {
     id: 'clean_white', labelVi: 'Clean White',
-    family: `'Inter', 'Be Vietnam Pro', sans-serif`, weight: '700',
+    family: `'Be Vietnam Pro', system-ui, sans-serif`, weight: '700',
     fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.15, shadow: false, accent: '#FFD400', accentMode: 'color',
   },
   // Geometric heavy, UPPERCASE, thick stroke, plain HOT-PINK keyword — the loud one.
@@ -61,10 +61,11 @@ export const CAPTION_PRESETS: Record<CaptionPresetId, CaptionPreset> = {
     family: `'Baloo 2', 'Be Vietnam Pro', sans-serif`, weight: '800',
     fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.13, shadow: false, accent: '#FF7A00', accentMode: 'underline',
   },
-  // Be Vietnam Pro, NEON-green keyword with a GLOW — the TikTok-native one.
+  // Oswald — TALL CONDENSED (a dramatically different silhouette from the other 3),
+  // NEON-green keyword with a glow. VN-capable.
   neon_pop: {
     id: 'neon_pop', labelVi: 'Neon Pop',
-    family: `'Be Vietnam Pro', sans-serif`, weight: '700',
+    family: `'Oswald', 'Be Vietnam Pro', sans-serif`, weight: '700',
     fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.18, shadow: false, accent: '#19FF6A', accentMode: 'glow',
   },
 }

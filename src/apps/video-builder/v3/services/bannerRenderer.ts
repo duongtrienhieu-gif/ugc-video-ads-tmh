@@ -76,7 +76,14 @@ export function deriveBannerSlogan(productName?: string, anchor?: string, _hook?
 // the product (a name persuades no one to stop). Generate ONE ultra-short curiosity hook
 // in the output language from the script's opening line. Cached; graceful fallback to ''.
 const hookCache = new Map<string, string>()
-export async function generateBannerHook(scriptHook: string, langName: string, apiKey: string, fresh = false): Promise<string> {
+// P5z4 — distinct angles so "Gợi ý" stops repeating itself (was lazy: 4 clicks → 3 same).
+const BANNER_ANGLES = [
+  'a curiosity QUESTION', 'a CONTRARIAN / myth-busting take', 'a FOMO / "everyone\'s on it" angle',
+  'a bold RESULT / transformation tease', 'an INSIDER-secret angle', 'a "stop scrolling" pattern-interrupt',
+]
+export async function generateBannerHook(
+  scriptHook: string, langName: string, apiKey: string, fresh = false, avoid: string[] = [],
+): Promise<string> {
   const src = (scriptHook ?? '').trim()
   if (!src || !apiKey) return ''
   const key = `${langName}::${src}`
@@ -84,18 +91,23 @@ export async function generateBannerHook(scriptHook: string, langName: string, a
     const hit = hookCache.get(key)
     if (hit !== undefined) return hit
   }
+  // Rotate the angle by how many we've already shown so each click leans a new direction.
+  const angle = BANNER_ANGLES[avoid.length % BANNER_ANGLES.length]
+  const avoidBlock = avoid.length
+    ? `\nDo NOT repeat or paraphrase any of these earlier hooks — go in a CLEARLY different direction:\n${avoid.map((a) => `- "${a}"`).join('\n')}`
+    : ''
   try {
     const out = await directGeminiText({
       apiKey,
       systemInstruction:
         `Write ONE ultra-short BANNER hook for a TikTok ad, in ${langName}: a ≤6-word curiosity ` +
-        `line that makes a scroller instantly wonder what the video is about. Do NOT use the ` +
-        `product name, no price, no quotes. Punchy + native. Output ONLY the line.`,
-      prompt: `Video opening line: "${src}"\nBanner hook:`,
-      maxOutputTokens: 40, temperature: 0.7, thinkingBudget: 0,
+        `line that makes a scroller instantly wonder what the video is about. Lean into ${angle}. ` +
+        `Do NOT use the product name, no price, no quotes. Punchy + native. Output ONLY the line.`,
+      prompt: `Video opening line: "${src}"${avoidBlock}\nBanner hook:`,
+      maxOutputTokens: 40, temperature: fresh ? 1.0 : 0.7, thinkingBudget: 0,
     })
     const cleaned = (out ?? '').split('\n')[0].replace(/^["'“”]+|["'“”.!]+$/g, '').trim().slice(0, 60)
-    hookCache.set(key, cleaned)
+    if (!fresh) hookCache.set(key, cleaned)   // don't cache fresh variations (always re-roll)
     return cleaned
   } catch { return '' }
 }

@@ -59,16 +59,21 @@ export async function ensureCaptionFonts(): Promise<void> {
       fontsInjected = true
       const link = document.createElement('link')
       link.rel = 'stylesheet'
-      link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@600;700&family=Montserrat:wght@700;800&family=Baloo+2:wght@700;800&display=swap'
+      link.href = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Baloo+2:wght@700;800&family=Oswald:wght@600;700&display=swap'
       document.head.appendChild(link)
     }
     const fonts = (document as Document & { fonts?: FontFaceSet }).fonts
     if (fonts) {
+      // P5z4 — pass a VN-diacritic + MS/EN sample so the browser DOWNLOADS the
+      // 'vietnamese' subset of each font. Without the text arg it only fetched the
+      // 'latin' subset → canvas drew VN glyphs (đ/ỉ/ậ…) in a FALLBACK font, so all 4
+      // presets looked the same. The sample forces the real glyphs to load.
+      const S = 'AĂÂĐÊÔƠƯ ăn giòn rụm đỉnh thật sẵn rằng của bạn RM79 5 sao'
       await Promise.all([
-        fonts.load(`800 ${FONT_PX}px 'Montserrat'`).catch(() => {}),
-        fonts.load(`700 ${FONT_PX}px 'Inter'`).catch(() => {}),
-        fonts.load(`800 ${FONT_PX}px 'Baloo 2'`).catch(() => {}),
-        fonts.load(`700 ${FONT_PX}px 'Be Vietnam Pro'`).catch(() => {}),
+        fonts.load(`800 ${FONT_PX}px 'Montserrat'`, S).catch(() => {}),
+        fonts.load(`800 ${FONT_PX}px 'Baloo 2'`, S).catch(() => {}),
+        fonts.load(`700 ${FONT_PX}px 'Oswald'`, S).catch(() => {}),
+        fonts.load(`700 ${FONT_PX}px 'Be Vietnam Pro'`, S).catch(() => {}),
       ])
       await fonts.ready
     }

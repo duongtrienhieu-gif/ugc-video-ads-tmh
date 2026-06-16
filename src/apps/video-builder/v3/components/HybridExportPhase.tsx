@@ -51,6 +51,7 @@ export default function HybridExportPhase() {
   const [bannerHook, setBannerHook] = useState('')
   const [bannerName, setBannerName] = useState(rawProductName)
   const [suggesting, setSuggesting] = useState(false)
+  const [hookHistory, setHookHistory] = useState<string[]>([])
   useEffect(() => {
     let alive = true
     if (scriptHookText) generateBannerHook(scriptHookText, langName, geminiKey).then((h) => { if (alive) setBannerHook(h) }).catch(() => {})
@@ -66,8 +67,10 @@ export default function HybridExportPhase() {
     if (!scriptHookText || !geminiKey) return
     setSuggesting(true)
     try {
-      const h = await generateBannerHook(scriptHookText, langName, geminiKey, true)   // fresh = bypass cache
-      if (h) setHybridCaption({ bannerText: h })
+      // pass everything shown so far so the AI diverges (fixes the "4 lần ra 3 lần y chang" laziness)
+      const avoid = [...new Set([bannerText, ...hookHistory].filter(Boolean))].slice(-6)
+      const h = await generateBannerHook(scriptHookText, langName, geminiKey, true, avoid)
+      if (h) { setHybridCaption({ bannerText: h }); setHookHistory((prev) => [...prev, h].slice(-6)) }
     } finally { setSuggesting(false) }
   }
   // VN gloss of a non-VN banner (debounced; cached) so the user understands it.

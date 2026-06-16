@@ -36,28 +36,28 @@ export interface BannerPreset {
 }
 
 export const BANNER_PRESETS: Record<BannerPresetId, BannerPreset> = {
-  // 1 — dark translucent pill, amber keyword. Reads on bright AND dark footage → default.
+  // 1 — Montserrat (geometric), dark glass pill, amber keyword. Reads on any footage → default.
   glass_dark: {
     id: 'glass_dark', labelVi: 'Glass tối',
-    family: `'Be Vietnam Pro', system-ui, sans-serif`, weight: '800', shape: 'pill',
+    family: `'Montserrat', 'Be Vietnam Pro', sans-serif`, weight: '800', shape: 'pill',
     bg: 'rgba(18,20,22,0.80)', text: '#FFFFFF', accent: '#FAC775', accentMode: 'color',
   },
-  // 2 — cream pill, teal keyword with a teal underline (soft / premium).
+  // 2 — Be Vietnam Pro (neutral), cream pill, teal keyword + underline (soft / premium).
   cream_underline: {
     id: 'cream_underline', labelVi: 'Kem + gạch nhấn',
     family: `'Be Vietnam Pro', system-ui, sans-serif`, weight: '800', shape: 'pill',
     bg: '#FAF3E6', text: '#2C2C2A', accent: '#0F6E56', accentMode: 'underline',
   },
-  // 3 — light pill, keyword on a highlighter swipe (young / UGC).
+  // 3 — Baloo 2 (rounded fat), light pill, keyword on a highlighter swipe (young / UGC).
   marker: {
     id: 'marker', labelVi: 'Bút dạ quang',
-    family: `'Be Vietnam Pro', system-ui, sans-serif`, weight: '800', shape: 'pill',
+    family: `'Baloo 2', 'Be Vietnam Pro', sans-serif`, weight: '800', shape: 'pill',
     bg: '#FBF7F0', text: '#2C2C2A', accent: '#FAC775', accentMode: 'highlight', highlightText: '#633806',
   },
-  // 4 — full-width teal ribbon flush to the top edge, amber keyword (promo / authority).
+  // 4 — Oswald (tall condensed), full-width teal ribbon, amber keyword (promo / authority).
   ribbon: {
     id: 'ribbon', labelVi: 'Ribbon viền trên',
-    family: `'Be Vietnam Pro', system-ui, sans-serif`, weight: '800', shape: 'ribbon',
+    family: `'Oswald', 'Be Vietnam Pro', sans-serif`, weight: '700', shape: 'ribbon',
     bg: '#0F6E56', text: '#E1F5EE', accent: '#FAC775', accentMode: 'color',
   },
 }
