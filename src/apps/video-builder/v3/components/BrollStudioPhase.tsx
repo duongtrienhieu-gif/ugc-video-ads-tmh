@@ -10,18 +10,19 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef } from 'react'
-import { Loader2, ArrowLeft, Sparkles, Wand2, Package, Mic, Upload, X, Check, Play, RotateCcw } from 'lucide-react'
+import { Loader2, ArrowLeft, Sparkles, Wand2, Package, Mic, Upload, X, Check, Play, RotateCcw, Download } from 'lucide-react'
 import { useBrollStudioStore } from '../stores/brollStudioStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAppStore } from '../../../../stores/appStore'
 import BankPicker from '../../../../components/BankPicker'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
-import { saveAsset } from '../../../../utils/assetStore'
-import { listVoices, listSharedVoices } from '../../../../utils/elevenlabs'
+import { saveAsset, getUrl } from '../../../../utils/assetStore'
+import { listVoices, listSharedVoices, textToSpeech } from '../../../../utils/elevenlabs'
 import {
   STUDIO_ANGLES, generateStudioIdeas, engineerScenePrompt, resolveSceneSpec,
   type StudioIdea, type StudioAngle, type SceneToggles,
 } from '../services/brollStudioBrain'
+import { renderStudioScene } from '../services/brollStudioRenderer'
 import { estimateSceneCredit, FAITHFUL_FRAME_CR, type StudioResolution } from '../services/brollStudioModels'
 import type { Product, Model } from '../../../../stores/types'
 import type { ScriptLang } from '../types'
@@ -130,6 +131,9 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
 }) {
   const addToast = useAppStore((s) => s.addToast)
   const elevenKey = useSettingsStore((s) => s.elevenLabsApiKey)
+  const kieKey = useSettingsStore((s) => s.kieApiKey)
+  const sceneResult = useBrollStudioStore((s) => s.scenes[angle.id])
+  const setSceneResult = useBrollStudioStore((s) => s.setSceneResult)
 
   const [avatarRef, setAvatarRef] = useState<string | null>(null)
   const [avatarName, setAvatarName] = useState('')
@@ -145,7 +149,15 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
   const [variant, setVariant] = useState(0)
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false)
   const [voicePickerOpen, setVoicePickerOpen] = useState(false)
+  const [rendering, setRendering] = useState(false)
+  const [stage, setStage] = useState('')
+  const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // Re-hydrate a previously rendered clip for this angle (persisted in the store).
+  useEffect(() => {
+    if (sceneResult?.videoAssetId) getUrl(sceneResult.videoAssetId).then((u) => setVideoUrl(u ?? null))
+  }, [sceneResult?.videoAssetId])
 
   const avatarThumb = useAssetUrl(avatarRef ?? undefined)
   const avatarAllowed = angle.toggles.avatar !== 'lock-off'
@@ -186,6 +198,62 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
     } catch (e) {
       addToast(`Tạo prompt lỗi: ${(e instanceof Error ? e.message : String(e)).slice(0, 100)}`, 'error')
     } finally { setBusy(false) }
+  }
+
+  const doRender = async () => {
+    if (!product) { addToast('Chưa chọn sản phẩm', 'error'); return }
+    if (voiceNeedsLine) { addToast('Đã chọn giọng thì phải điền Câu thoại', 'error'); return }
+    if (!kieKey) { addToast('Thiếu KIE API key trong Cài đặt', 'error'); return }
+    if (spec.role === 'lips' && !elevenKey) { addToast('Cảnh lipsync cần ElevenLabs key', 'error'); return }
+    setRendering(true); setStage('Chuẩn bị…')
+    try {
+      // 1. Prompt — tự sinh nếu user chưa mở expander tạo
+      let promptEn = prompt
+      if (!promptEn) {
+        setStage('Viết prompt…')
+        const r = await engineerScenePrompt({ angle, idea, toggles, line, durationSec: dur, product, lang, geminiKey })
+        promptEn = r.conceptPromptEn; setPrompt(r.conceptPromptEn); setNote(r.noteVi)
+      }
+      // 2. Resolve refs sang URL công khai (KIE fetch từ xa)
+      const productUrls: string[] = []
+      if (product.productImage) { const u = await getUrl(product.productImage); if (u) productUrls.push(u) }
+      const avatarUrl = avatarRef ? ((await getUrl(avatarRef)) ?? undefined) : undefined
+      // 3. TTS cho cảnh lipsync
+      let audioUrl: string | undefined
+      if (spec.role === 'lips') {
+        setStage('Tạo giọng đọc (TTS)…')
+        const buf = await textToSpeech({ apiKey: elevenKey, voiceId, text: line.trim() })
+        const aId = await saveAsset(new Blob([buf], { type: 'audio/mpeg' }), 'audio/mpeg')
+        audioUrl = (await getUrl(aId)) ?? undefined
+      }
+      // 4. Render
+      const remoteUrl = await renderStudioScene({
+        kieApiKey: kieKey, conceptPromptEn: promptEn, role: spec.role,
+        resolution: res, durationSec: dur, withFaithfulFrame: spec.withFaithfulFrame,
+        productImageUrls: productUrls, avatarImageUrl: avatarUrl, audioUrl,
+        onStage: setStage,
+      })
+      // 5. Lưu thành asset (URL của KIE chỉ tạm thời) + persist theo angle
+      setStage('Lưu clip…')
+      const raw = await (await fetch(remoteUrl)).blob()
+      const vId = await saveAsset(new Blob([raw], { type: 'video/mp4' }), 'video/mp4')
+      setVideoUrl((await getUrl(vId)) ?? remoteUrl)
+      setSceneResult(angle.id, { videoAssetId: vId, durationSec: dur, resolution: res, label: angle.labelVi, createdAt: Date.now() })
+      addToast(`✓ Render xong: ${angle.labelVi}`, 'success')
+    } catch (e) {
+      addToast(`Render lỗi: ${(e instanceof Error ? e.message : String(e)).slice(0, 130)}`, 'error')
+    } finally { setRendering(false); setStage('') }
+  }
+
+  const handleDownload = async () => {
+    if (!videoUrl) return
+    try {
+      const blob = new Blob([await (await fetch(videoUrl)).blob()], { type: 'video/mp4' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = `${angle.id}-${dur}s.mp4`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch { addToast('Tải clip lỗi', 'error') }
   }
 
   return (
@@ -256,9 +324,23 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
         <button onClick={() => setRes('720p')} className={`flex-1 rounded-md px-1.5 py-1 text-[10px] font-semibold ${res === '720p' ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>720p · Final · {c720}cr</button>
       </div>
 
-      <div className="mt-2 flex items-center gap-2">
-        <button disabled title="Render + tải — Phase 3"
-          className="rounded-lg bg-gray-200 px-2.5 py-1.5 text-[12px] font-bold text-gray-500">Render ~{credit}cr</button>
+      <div className="mt-2 flex flex-col gap-1.5">
+        <button onClick={doRender} disabled={rendering || !product || voiceNeedsLine}
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 px-2.5 py-1.5 text-[12px] font-bold text-white hover:from-violet-700 hover:to-fuchsia-700 disabled:opacity-50">
+          {rendering && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {rendering ? (stage || 'Đang render…') : videoUrl ? `Render lại ~${credit}cr` : `Render ~${credit}cr`}
+        </button>
+        {videoUrl && (
+          <>
+            <div className="overflow-hidden rounded-lg border border-black/10 bg-black">
+              <video src={videoUrl} controls playsInline className="max-h-56 w-full object-contain" />
+            </div>
+            <button onClick={handleDownload}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[12px] font-semibold text-violet-700 hover:bg-violet-100">
+              <Download className="h-3.5 w-3.5" /> Tải clip
+            </button>
+          </>
+        )}
       </div>
 
       {/* Prompt = chi tiết kỹ thuật → giấu trong expander, sinh khi cần */}

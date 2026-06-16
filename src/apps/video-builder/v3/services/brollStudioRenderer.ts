@@ -15,9 +15,15 @@ export interface RenderStudioSceneParams {
   kieApiKey: string
   /** The i2v concept prompt (English) — what to animate. */
   conceptPromptEn: string
+  /** Scene role (from resolveSceneSpec). 'lips' → InfiniteTalk; else → Seedance. */
+  role?: 'broll' | 'lips' | 'mechanism3d' | 'social_proof'
   /** Product image URLs (refs) — used for the faithful first-frame + i2v grounding. */
   productImageUrls?: string[]
-  /** Product-present scene → gpt-4o-image faithful frame first (anti product-drift). */
+  /** Chosen avatar image URL (creator scenes / lips) — locks the SAME person. */
+  avatarImageUrl?: string
+  /** Resolved TTS audio URL — REQUIRED for lips (InfiniteTalk). */
+  audioUrl?: string
+  /** Product/avatar-present scene → gpt-4o-image faithful frame first (anti-drift). */
   withFaithfulFrame: boolean
   resolution: StudioResolution
   durationSec: number
@@ -26,18 +32,25 @@ export interface RenderStudioSceneParams {
 
 /** Render one studio scene → returns the remote video URL (caller saves it as an asset). */
 export async function renderStudioScene(params: RenderStudioSceneParams): Promise<string> {
+  const role = params.role ?? 'broll'
+  // Refs that lock identity/product into the faithful first-frame (avatar first so the
+  // creator's face is preserved, then the product so packaging stays exact).
+  const refs = [params.avatarImageUrl, ...(params.productImageUrls ?? [])].filter(Boolean) as string[]
   let startFrameUrl: string | undefined
 
-  // Anti-drift: build a faithful product still first (gpt-4o-image keeps the product
-  // EXACT), then animate THAT — so i2v only adds motion, never re-invents the product.
-  if (params.withFaithfulFrame && params.productImageUrls?.length) {
+  // Anti-drift: build a faithful still first (gpt-4o-image keeps the product AND the chosen
+  // person EXACT), then animate THAT — so the model only adds motion, never re-invents them.
+  // Lips always needs a still (the talking-head image), so force a frame when refs exist.
+  const wantFrame = (params.withFaithfulFrame || role === 'lips') && refs.length > 0
+  if (wantFrame) {
     params.onStage?.('Tạo khung hình chuẩn (gpt-4o)…')
+    const lock = params.avatarImageUrl
+      ? 'Keep the SAME person as the avatar reference (same face, hair, identity) AND, if shown, the SAME product as the product reference (same colour, shape, label).'
+      : 'The product must look EXACTLY like the reference (same colour, shape, label).'
     startFrameUrl = await generateGpt4oImageFast({
       apiKey: params.kieApiKey,
-      prompt:
-        `${params.conceptPromptEn} — ONE clean still frame, vertical 9:16. The product must look ` +
-        `EXACTLY like the reference image (same colour, shape, label) — do NOT redesign it. No text overlays.`,
-      filesUrl: params.productImageUrls.slice(0, 4),
+      prompt: `${params.conceptPromptEn} — ONE clean still frame, vertical 9:16. ${lock} Do NOT redesign anything. No text overlays.`,
+      filesUrl: refs.slice(0, 4),
       size: '2:3',
       softTimeoutMs: 100_000,
       attemptTimeoutMs: 150_000,
@@ -45,6 +58,24 @@ export async function renderStudioScene(params: RenderStudioSceneParams): Promis
     })
   }
 
+  // ── Talking-head (avatar + voice) → InfiniteTalk lipsync ────────────────────
+  if (role === 'lips') {
+    if (!params.audioUrl) throw new Error('Cảnh lipsync thiếu audio (TTS) — bật giọng + điền câu thoại.')
+    params.onStage?.('Render lipsync (InfiniteTalk)…')
+    const { taskId } = await generateVideoJob({
+      apiKey: params.kieApiKey,
+      jobModelId: STUDIO_MODELS.infinitalk.jobModelId,
+      prompt: params.conceptPromptEn,
+      aspectRatio: '9:16',
+      resolution: params.resolution,
+      duration: params.durationSec,
+      startFrameUrl: startFrameUrl ?? params.avatarImageUrl,   // → input.image_url
+      audioUrl: params.audioUrl,                               // → input.audio_url
+    })
+    return await pollVideoJobUntilDone({ apiKey: params.kieApiKey, taskId, logTag: 'STUDIO-LIPS' })
+  }
+
+  // ── B-roll / 3D mechanism → Seedance i2v ────────────────────────────────────
   params.onStage?.('Render cảnh (Seedance i2v)…')
   const { taskId } = await generateVideoJob({
     apiKey: params.kieApiKey,
@@ -53,9 +84,9 @@ export async function renderStudioScene(params: RenderStudioSceneParams): Promis
     aspectRatio: '9:16',
     resolution: params.resolution,
     duration: params.durationSec,
-    // i2v: animate the faithful frame if we made one; else seed from the product photo.
+    // i2v: animate the faithful frame if we made one; else seed from the first ref (if any).
     startFrameUrl,
-    referenceImageUrls: startFrameUrl ? undefined : params.productImageUrls?.slice(0, 1),
+    referenceImageUrls: startFrameUrl ? undefined : (refs.length ? refs.slice(0, 1) : undefined),
   })
   return await pollVideoJobUntilDone({ apiKey: params.kieApiKey, taskId, logTag: 'STUDIO' })
 }
