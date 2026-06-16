@@ -503,6 +503,16 @@ const SOCIAL_PROOF_CUE_RE = /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|m[
 // BILINGUAL: VN + Malay parity (a MY script's proof line — "5 bintang", "ribuan orang
 // dah beli", "ulasan/review", "terlaris" — must promote to the cheap card just like VN).
 const SOCIAL_PROOF_PROMOTE_RE = /\d+\s*%|ph[aầ]n tr[ăa]m|peratus|ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|nhi[eề]u ng[ưu][ờo]i|ribu(?:an)?\s*orang|quay l[aạ]i mua|mua l[aạ]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|terjual|terlaris|\blaku\b|review|đ[áa]nh gi[áa]|ulasan|\d+\s*sao|n[ăa]m sao|\d+\s*bintang|\bbintang\b|ramai (?:beli|membeli|dah|guna|cuba)|orang (?:dah\s+)?(?:beli|guna|pakai|cuba)/i
+
+// P5r2 — "applies to the BODY" detector for the no-face veto (runs on the ENGLISH
+// conceptPrompt, so English-only is enough). A no-face / hands-only shot only works for a
+// product used ON A SURFACE or as a HAND-HELD TOOL. The moment the product is applied to /
+// worn on / eaten / drunk on a PERSON'S body (any part, head OR limb), dropping the head
+// renders a DEFORMED head-less body — and it's a lazy dodge. Those MUST show the creator.
+// Covers head-area + limbs/torso + wear/consume verbs (the gap the user flagged: knee
+// brace / watch / snack-eaten / drink were NOT caught before — only head-area was).
+const APPLIES_PRODUCT_TO_BODY_RE =
+  /\b(?:neck|throat|nape|face|cheeks?|forehead|chin|jaw|lips?|mouth|teeth|gums?|tongue|hair|scalp|ears?|eyes?|eyelids?|nose|skin|chest|shoulders?|collar\s?bones?|d[ée]collet|back|waist|belly|stomach|tummy|arms?|elbows?|wrists?|knees?|legs?|thighs?|calf|calves|ankles?|foot|feet|nails?)\b|\b(?:wear|wears|wearing|worn|strap|straps|strapped|strapping|fasten(?:s|ed|ing)?|buckle[ds]?|wrap(?:s|ped|ping)?\s+around|eat|eats|eating|bite|bites|biting|chew|chews|chewing|drink|drinks|drinking|sip|sips|sipping|swallow|swallows|swallowing)\b/i
 function capSocialProof(scenes: BrollScene[]): void {
   const lastIdx = scenes.length - 1
   let kept = 0
@@ -778,6 +788,13 @@ RULES:
   lines are similar (a list of symptoms, a list of ingredients/benefits), VARY the
   shot type across them (slip a product close-up or hands-action between concept or 3D
   cuts) so it stays a hand-held review, not a mood montage or a science reel.
+- REAL USAGE, NEVER A DODGE: if the product is APPLIED to / WORN on / EATEN / DRUNK on the
+  body (cream-serum on skin/face, a brace on a knee, a watch on a wrist, a snack eaten, a
+  drink sipped, a pill taken), the demo cut MUST show the CREATOR actually doing it on
+  THEMSELVES — face/person visible — NOT merely "holding" it, and NEVER a head-less
+  hands-only shot (a body part with no head renders deformed). "hands_noface" is ONLY for a
+  product used on a SURFACE or a HAND-HELD TOOL (scoop from a jar, operate a gadget, wipe a
+  counter, pour). For wearables/edibles/topicals → cameraFraming "creator", real action.
 - LIPS SPACING (HARD RULE): NEVER put two "lips" cuts back-to-back. Every lips cut
   MUST have AT LEAST ONE broll cut between it and the next lips. It is GREAT to run 2,
   3, even 4 broll cuts between two lips cuts — a broll-heavy ad showing the product
@@ -1059,8 +1076,6 @@ function sanitizeScenes(raw: RawScene[] | undefined): BrollScene[] {
     if (role !== 'lips' && role !== 'social_proof') {
       // No-face only makes sense for a real product-action cut; otherwise creator.
       scene.kind = SCENE_KINDS.includes(r.kind as BrollSceneKind) ? (r.kind as BrollSceneKind) : 'product_action'
-      const wantsNoFace = r.cameraFraming === 'hands_noface'
-      scene.cameraFraming = wantsNoFace && role === 'broll' && scene.kind !== 'concept' ? 'hands_noface' : 'creator'
       // Backstop: the model sometimes returns an empty conceptPrompt for product
       // cuts (assuming the product image is enough) → the render would collapse to a
       // bland generic closeup. Fill a grounded default BY KIND so every cut keeps a
@@ -1074,6 +1089,12 @@ function sanitizeScenes(raw: RawScene[] | undefined): BrollScene[] {
           : 'Hands actively using and holding the product in its real everyday setting.'
       }
       scene.conceptPrompt = cp
+      // P5r2 — no-face veto: a product APPLIED / WORN / EATEN / DRUNK on the body (any
+      // part) must show the CREATOR doing it (face visible) — never a head-less hands-only
+      // shot (deforms + lazy). no-face stays only for surface / hand-held-tool actions.
+      const wantsNoFace = r.cameraFraming === 'hands_noface'
+      const onBody = APPLIES_PRODUCT_TO_BODY_RE.test(cp)
+      scene.cameraFraming = wantsNoFace && role === 'broll' && scene.kind !== 'concept' && !onBody ? 'hands_noface' : 'creator'
     }
     scene.reason = typeof r.reason === 'string' ? r.reason : undefined
     out.push(scene)
