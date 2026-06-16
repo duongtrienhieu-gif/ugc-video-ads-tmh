@@ -23,12 +23,21 @@ import {
   type StudioIdea, type StudioAngle, type SceneToggles,
 } from '../services/brollStudioBrain'
 import { renderStudioScene } from '../services/brollStudioRenderer'
+import { muxAudioIntoVideo } from '../../../video-translate/muxAudioVideo'
 import { estimateSceneCredit, FAITHFUL_FRAME_CR, type StudioResolution } from '../services/brollStudioModels'
 import type { Product, Model } from '../../../../stores/types'
 import type { ScriptLang } from '../types'
 
 const lockOn = (s: string) => s === 'on' || s === 'lock-on'
 const LANG_TAG: Record<ScriptLang, string> = { vi: 'VN', ms: 'MY', en: 'EN' }
+
+/** Decode an audio blob's duration (sec) so we can pick the right mux mode. */
+async function audioBlobDuration(blob: Blob): Promise<number> {
+  const buf = await blob.arrayBuffer()
+  const ctx = new AudioContext()
+  try { const dec = await ctx.decodeAudioData(buf); return dec.duration }
+  finally { ctx.close().catch(() => {}) }
+}
 
 function sceneCredit(angle: StudioAngle, t: SceneToggles, res: StudioResolution, dur: number): number {
   const spec = resolveSceneSpec(angle, t)
@@ -209,7 +218,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
     if (voiceNeedsLine) { addToast('Đã chọn giọng thì phải điền Câu thoại', 'error'); return }
     if (briefMissing) { addToast('Nhập mô tả cảnh tự do trước', 'error'); return }
     if (!kieKey) { addToast('Thiếu KIE API key trong Cài đặt', 'error'); return }
-    if (spec.role === 'lips' && !elevenKey) { addToast('Cảnh lipsync cần ElevenLabs key', 'error'); return }
+    if (voiceId && !elevenKey) { addToast('Cảnh có giọng đọc cần ElevenLabs key trong Cài đặt', 'error'); return }
     setRendering(true); setStage('Chuẩn bị…')
     try {
       // 1. Prompt — tự sinh nếu user chưa mở expander tạo
@@ -237,26 +246,40 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
         addToast('⚠️ Sản phẩm chưa có ảnh trong Project → cảnh sẽ bị lệch sản phẩm. Thêm ảnh sản phẩm rồi render lại.', 'error')
       }
       const avatarUrl = avatarRef ? ((await getUrl(avatarRef)) ?? undefined) : undefined
-      // 3. TTS cho cảnh lipsync — câu thoại gõ tiếng Việt được DỊCH sang ngôn ngữ thị trường trước
+      // 3. TTS cho MỌI cảnh có giọng — câu thoại gõ tiếng Việt được DỊCH sang ngôn ngữ
+      //    thị trường trước (translateLineForMarket). Lips → đẩy audio vào InfiniteTalk;
+      //    cảnh khác (B-roll voiceover) → ghép audio đè lên clip ở bước 5.
       let audioUrl: string | undefined
-      if (spec.role === 'lips') {
+      let audioBlob: Blob | undefined
+      if (voiceId && line.trim()) {
         setStage('Dịch + tạo giọng đọc…')
         const spokenText = await translateLineForMarket(line.trim(), lang, geminiKey)
         const buf = await textToSpeech({ apiKey: elevenKey, voiceId, text: spokenText })
-        const aId = await saveAsset(new Blob([buf], { type: 'audio/mpeg' }), 'audio/mpeg')
+        audioBlob = new Blob([buf], { type: 'audio/mpeg' })
+        const aId = await saveAsset(audioBlob, 'audio/mpeg')
         audioUrl = (await getUrl(aId)) ?? undefined
       }
-      // 4. Render
+      // 4. Render (lips dùng audioUrl; B-roll/3D bỏ qua — Seedance không có audio)
       const remoteUrl = await renderStudioScene({
         kieApiKey: kieKey, conceptPromptEn: promptEn, role: spec.role,
         resolution: res, durationSec: dur, withFaithfulFrame: spec.withFaithfulFrame,
         productImageUrls: productUrls, avatarImageUrl: avatarUrl, audioUrl,
         onStage: setStage,
       })
-      // 5. Lưu thành asset (URL của KIE chỉ tạm thời) + persist theo angle
       setStage('Lưu clip…')
-      const raw = await (await fetch(remoteUrl)).blob()
-      const vId = await saveAsset(new Blob([raw], { type: 'video/mp4' }), 'video/mp4')
+      let finalBlob = new Blob([await (await fetch(remoteUrl)).blob()], { type: 'video/mp4' })
+
+      // 5. Voiceover trên cảnh KHÔNG lipsync → ghép giọng đè lên clip câm (ffmpeg).
+      //    audio dài hơn clip → giữ khung cuối (extend); ngắn hơn → đệm im lặng (pad-audio).
+      if (spec.role !== 'lips' && audioBlob) {
+        setStage('Ghép lồng tiếng vào clip…')
+        const aDur = await audioBlobDuration(audioBlob).catch(() => dur)
+        const mode = aDur > dur + 0.3 ? 'extend' : 'pad-audio'
+        finalBlob = await muxAudioIntoVideo({ videoBlob: finalBlob, audioBlob, mode })
+      }
+
+      // 6. Lưu thành asset (URL KIE chỉ tạm thời) + persist theo angle
+      const vId = await saveAsset(finalBlob, 'video/mp4')
       setVideoUrl((await getUrl(vId)) ?? remoteUrl)
       setSceneResult(angle.id, { videoAssetId: vId, durationSec: dur, resolution: res, label: angle.labelVi, createdAt: Date.now() })
       addToast(`✓ Render xong: ${angle.labelVi}`, 'success')
