@@ -138,3 +138,97 @@ Output STRICT JSON { "ideas": [ ${STUDIO_ANGLES.length} objects, SAME order ] }.
   }
   return { ideas, product: p }
 }
+
+// ── Per-scene: toggle resolver + prompt engineer (Phase 2) ───────────────────
+
+export interface SceneToggles { avatar: boolean; voice: boolean; product: boolean; line: boolean }
+export interface SceneSpec {
+  role: 'broll' | 'lips' | 'mechanism3d' | 'social_proof'
+  tier: StudioModelTier
+  framing: 'creator' | 'hands_noface' | 'none'
+  withFaithfulFrame: boolean
+  isCard: boolean
+}
+
+/** DETERMINISTIC: turn (angle + toggles) into the render spec (role/model/framing/frame).
+ *  This is the "brain locks" — a scene can never resolve into an incoherent render. */
+export function resolveSceneSpec(angle: StudioAngle, t: SceneToggles): SceneSpec {
+  if (angle.isCard) return { role: 'social_proof', tier: 'seedance', framing: 'none', withFaithfulFrame: false, isCard: true }
+  if (angle.id === 'mechanism3d') return { role: 'mechanism3d', tier: 'seedance', framing: 'none', withFaithfulFrame: false, isCard: false }
+  if (t.avatar && t.voice && t.line) return { role: 'lips', tier: 'infinitalk', framing: 'creator', withFaithfulFrame: false, isCard: false }
+  return { role: 'broll', tier: 'seedance', framing: t.avatar ? 'creator' : 'hands_noface', withFaithfulFrame: !!angle.faithfulFrame && t.product, isCard: false }
+}
+
+const ENGINEER_SCHEMA = {
+  type: 'object',
+  properties: { conceptPromptEn: { type: 'string' }, noteVi: { type: 'string' } },
+  required: ['conceptPromptEn', 'noteVi'],
+} as const
+
+// Anti-drift rules learned from mode-1 — baked into every scene prompt so the i2v render
+// comes out clean (the user's quality-first stance: spend calls, avoid bad renders).
+const ANTI_DRIFT = `
+DRIFT-PROOF RULES (the video model fails on these — engineer the prompt to AVOID them):
+- The product must look EXACTLY like the reference (same colour/shape/label) — never invent packaging.
+- NO floating objects: anything held is gripped firmly with both hands or rests on a surface (no "floating bowl/head").
+- A person: ONE consistent identity; if no avatar, hands-only (no face) to avoid warped faces.
+- NEVER ask the model to render TEXT/numbers (it garbles them) — text is added later as an overlay.
+- 3D = clean cross-section animation, NO people / NO packaging / NO text.
+- Copy any correct ORIENTATION (how it's worn/placed) so it's never shown backwards.`
+
+/** QUALITY-FIRST per-scene prompt: AI writes a drift-resistant i2v prompt for THIS exact
+ *  config, then a SECOND self-critique pass fixes any drift risk. Returns the final prompt
+ *  + a short VN NOTE (what the rendered clip will be). ~2 Gemini calls (paid key — fine). */
+export async function engineerScenePrompt(args: {
+  angle: StudioAngle; idea?: StudioIdea; toggles: SceneToggles; line?: string
+  durationSec: number; product: Product; lang: ScriptLang; geminiKey: string
+}): Promise<{ conceptPromptEn: string; noteVi: string; spec: SceneSpec }> {
+  const spec = resolveSceneSpec(args.angle, args.toggles)
+  const langName = SCRIPT_LANG_GEMINI_NAME[args.lang]
+  const productContext = buildProductContextBlock(args.product)
+  const cfg =
+    `Scene angle: ${args.angle.labelVi} (${args.angle.id}). Render role: ${spec.role}. ` +
+    `Person: ${spec.framing === 'creator' ? 'a creator visible' : spec.framing === 'hands_noface' ? 'hands only, NO face' : 'no person'}. ` +
+    `Product in frame: ${args.toggles.product ? 'YES (must match the reference exactly)' : 'NO'}. ` +
+    `Duration: ${args.durationSec}s.` +
+    (args.toggles.line && args.line ? ` Spoken line (for context only, NOT shown as text): "${args.line}".` : '')
+
+  // Pass 1 — draft.
+  const draftRaw = await directGeminiText({
+    apiKey: args.geminiKey,
+    systemInstruction:
+      `You are a UGC ad B-ROLL prompt engineer. Write ONE vivid ENGLISH image-to-video prompt — ` +
+      `SHOT TYPE + concrete ACTION + real SETTING — grounded in the product, for the scene below.${productContext}\n${ANTI_DRIFT}\n` +
+      `Output STRICT JSON {"conceptPromptEn":"…","noteVi":"<1 short ${langName} line: what the clip shows>"}.`,
+    prompt: `${cfg}\nIdea seed: ${args.idea?.conceptPromptEn ?? args.idea?.ideaVi ?? args.angle.descVi}\nWrite the prompt.`,
+    maxOutputTokens: 700, temperature: 0.6, thinkingBudget: 0, responseMimeType: 'application/json', responseSchema: ENGINEER_SCHEMA,
+  })
+  let draft = safeParseEngineer(draftRaw)
+
+  // Pass 2 — self-critique for drift, then fix.
+  try {
+    const fixRaw = await directGeminiText({
+      apiKey: args.geminiKey,
+      systemInstruction:
+        `You review an image-to-video prompt for DRIFT RISK (floating objects, garbled text, ` +
+        `warped faces, wrong/redesigned product, people in a 3D shot). Rewrite it to remove every ` +
+        `risk while keeping the intent.${ANTI_DRIFT}\n` +
+        `Output STRICT JSON {"conceptPromptEn":"<fixed prompt>","noteVi":"<1 short ${langName} line>"}.`,
+      prompt: `Scene: ${cfg}\nPROMPT TO REVIEW:\n"""${draft.conceptPromptEn}"""`,
+      maxOutputTokens: 700, temperature: 0.3, thinkingBudget: 0, responseMimeType: 'application/json', responseSchema: ENGINEER_SCHEMA,
+    })
+    const fixed = safeParseEngineer(fixRaw)
+    if (fixed.conceptPromptEn) draft = fixed
+  } catch { /* keep the draft if the critique pass fails */ }
+
+  return { conceptPromptEn: draft.conceptPromptEn, noteVi: draft.noteVi, spec }
+}
+
+function safeParseEngineer(raw: string): { conceptPromptEn: string; noteVi: string } {
+  try {
+    let s = raw.trim()
+    if (s.startsWith('```')) s = s.replace(/^```(?:json)?\s*/m, '').replace(/```\s*$/m, '').trim()
+    const p = JSON.parse(s) as { conceptPromptEn?: string; noteVi?: string }
+    return { conceptPromptEn: (p.conceptPromptEn ?? '').trim(), noteVi: (p.noteVi ?? '').trim() }
+  } catch { return { conceptPromptEn: '', noteVi: '' } }
+}
