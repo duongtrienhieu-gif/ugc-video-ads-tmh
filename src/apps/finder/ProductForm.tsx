@@ -291,6 +291,28 @@ async function fetchPageContent(url: string): Promise<PageContent> {
       },
     },
     {
+      name: 'jina-html',
+      run: async () => {
+        // Rendered HTML (post-JS) via Jina. Jina executes the page, so SPA /
+        // LadiPage banner images that live in CSS `background-image` (and lazy
+        // attrs) become visible — these carry the real ingredients/price/
+        // mechanism text. Raw CORS proxies get IP-blocked on these landing
+        // domains (allorigins 522 / corsproxy 403 / codetabs 400), Jina does
+        // not. extractImageUrlsFromHtml then recovers every banner URL.
+        const r = await fetch(`https://r.jina.ai/${url}`, {
+          headers: { 'X-Return-Format': 'html' },
+          signal: AbortSignal.any([ctrl.signal, AbortSignal.timeout(20000)]),
+        })
+        if (!r.ok) { console.log('[FETCH] jina-html status:', r.status, r.statusText); return null }
+        const html = await r.text()
+        const text = extractTextFromHtml(html)
+        const imageUrls = extractImageUrlsFromHtml(html, url)
+        console.log(`[FETCH] jina-html extracted: text=${text.length}c · images=${imageUrls.length}`)
+        if (!text.trim() && imageUrls.length === 0) return null
+        return { text: text.slice(0, 16000), imageUrls, source: 'jina-html' }
+      },
+    },
+    {
       name: 'jina-rich',
       run: async () => {
         const r = await fetch(`https://r.jina.ai/${url}`, {
