@@ -692,6 +692,13 @@ gift, a safety/result claim. Cover MOST such moments, not just two or three — 
 spec/feature-heavy product (gadget, tool, appliance) should get MANY stickers; an
 emotional/abstract script naturally gets fewer. Scale to what THIS script actually
 names — never pad with vague stickers, but never leave a concrete callout bare.
+  • ⛔ NON-VERBATIM (critical) — a sticker COMPRESSES the point into a punchy TAG (a
+    number, %, price, ingredient, proof, offer, badge), it must NOT restate the spoken
+    sentence. That line is ALREADY burned on-screen as a CAPTION, so a sticker repeating
+    those same words is dead weight + clutter. E.g. line "mình hay ăn 1-2 thanh mỗi ngày"
+    → "1-2/ngày" (or no sticker), NOT "1-2 Thanh Mỗi Ngày"; line "giúp tỉnh táo hơn" → an
+    icon/skip, NOT "Tỉnh Táo Hơn". Prefer the hard stat/proof/offer the voice does NOT
+    say word-for-word (a %, a count, an ingredient name, "Mua 1 Tặng 1", "-50%").
   • single callout → {style:"number"|"price"|"badge"|"countdown"|…, text:"2kg" /
     "tự ngắt" / "mấy giây", quote, wordAnchor}. Prepend a fitting emoji to text.
   • a line listing SEVERAL specs/claims (e.g. "20000mAh, 4 hours, 30 min", or

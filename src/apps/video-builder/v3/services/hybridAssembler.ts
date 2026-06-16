@@ -121,11 +121,13 @@ export async function assembleHybridVideo(
   // Caption: max width 92% (the rare over-long line shrinks to this), sat 12% above the
   // bottom so it clears the TikTok action bar. Consistent placement every chunk.
   const CAP_MAXW = Math.round((evenW * 0.92) / 2) * 2
-  const CAP_BOT_MARGIN = Math.round(evenH * 0.12)
+  // P5s — caption sat a touch higher (12%→14%) so it clears TikTok's own bottom UI
+  // (username / action bar) instead of colliding with it.
+  const CAP_BOT_MARGIN = Math.round(evenH * 0.14)
   // P5y — fixed caption scale: renderer draws each chunk at FONT_PX(80)×dpr(2)=160px
   // glyphs; this maps them to ~5.5% of frame height, the SAME for every chunk (no more
   // box-fit ballooning of short chunks). Width is clamped to CAP_MAXW at use site.
-  const CAP_SCALE_K = (evenH * 0.055) / 160
+  const CAP_SCALE_K = (evenH * 0.048) / 160   // P5s — caption ~13% smaller (was 0.055): bớt to/nặng, đỡ che khung
   // P5x — top hook banner: a centred pill ~86% width sat ~3.5% below the top, OR a
   // full-width ribbon flush to y=0. Held the whole segment (no enable window).
   // P5z2 — pill sizes to its CONTENT (short text = small pill), scaled by a fixed factor

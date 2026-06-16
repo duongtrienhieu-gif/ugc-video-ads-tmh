@@ -19,8 +19,26 @@ import type { HybridState, GeneratedScript } from '../types'
 import type { BrollSticker } from './brollDirector'
 import type { VoiceAlignment } from '../types'
 
+// P5s — sticker↔caption de-dup. A sticker that just repeats the words being spoken (and
+// burned as a caption) at the same moment is dead weight (the user audited "trùng 100% →
+// sticker vô nghĩa"). Drop any sticker ITEM whose words are ≥60% covered by the caption
+// visible during its window. Caption wins (it's voice-synced); the sticker only survives
+// if it adds NEW words (a stat/ingredient/offer the caption doesn't already show).
+const stkWords = (s: string): string[] =>
+  s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter((w) => w.length > 1)
+function coveredByCaption(text: string, at: number, dur: number, chunks: { text: string; startSec: number; endSec: number }[]): boolean {
+  const overlap = chunks.filter((c) => c.endSec > at && c.startSec < at + dur)
+  if (!overlap.length) return false
+  const capWords = new Set(overlap.flatMap((c) => stkWords(c.text)))
+  const sw = stkWords(text)
+  if (!sw.length) return false
+  const inter = sw.filter((w) => capWords.has(w)).length
+  return inter / sw.length >= 0.6
+}
+
 async function buildStickerPlacements(
   raw: BrollSticker[], alignment: VoiceAlignment | undefined, realDur: number, script: GeneratedScript,
+  captionChunks: { text: string; startSec: number; endSec: number }[] = [],
 ): Promise<HybridStickerPlacement[]> {
   const dated = raw
     .map((stk) => {
@@ -41,8 +59,10 @@ async function buildStickerPlacements(
   type Group = { at: number; items: string[] }
   const groups: Group[] = []
   for (const { stk, at } of dated) {
-    const label = (stk.items && stk.items.length > 0) ? stk.items : (stk.text ? [stk.text] : [])
-    if (label.length === 0) continue
+    let label = (stk.items && stk.items.length > 0) ? stk.items : (stk.text ? [stk.text] : [])
+    // P5s — drop item(s) the caption already shows at this moment (no on-screen echo).
+    if (captionChunks.length) label = label.filter((it) => !coveredByCaption(it, at, 3, captionChunks))
+    if (label.length === 0) continue   // every item echoed the caption → skip the sticker
     const g = groups[groups.length - 1]
     if (g && at - g.at < MERGE_WINDOW) {
       g.items.push(...label)               // merge into the current card (no drop)
@@ -125,10 +145,15 @@ export async function assembleFromHybridState(
   if (sc.some((_, i) => !hybrid.clips[i])) throw new Error('Còn cảnh chưa render — render hết đã')
   const realDur = hybrid.voiceDurationSec ?? script.totalDurationSec
   const clips: HybridSceneClip[] = sc.map((scene, i) => ({ scene, videoRef: hybrid.clips[i] }))
-  const placements = await buildStickerPlacements(hybrid.stickers, hybrid.voiceAlignment, realDur, script)
   // P5k — captions default ON (absent = on); preset defaults to Clean White.
   const captionsOn = hybrid.captionsOn !== false
   const presetId = hybrid.captionPreset ?? DEFAULT_CAPTION_PRESET
+  // P5s — caption chunks computed up-front so stickers can de-dup against them (drop a
+  // sticker that just echoes the spoken caption at its moment). Same chunks the captions use.
+  const capDedupChunks = captionsOn
+    ? buildCaptionChunks(hybrid.voiceAlignment, script.blocks.map((b) => b.text).join(' '), realDur)
+    : []
+  const placements = await buildStickerPlacements(hybrid.stickers, hybrid.voiceAlignment, realDur, script, capDedupChunks)
   opts?.onStage?.(captionsOn ? 'Tạo phụ đề…' : 'Bỏ qua phụ đề…')
   const cardWindows = sc
     .filter((s) => s.role === 'social_proof')
