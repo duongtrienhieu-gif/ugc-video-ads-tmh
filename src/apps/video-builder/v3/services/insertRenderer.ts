@@ -296,8 +296,9 @@ function buildInsertKeyframePrompt(
       `IDENTITY LOCK: Person from reference image #${personRefIndex}. ` +
       `Preserve EXACTLY the face, skin tone, hair, AND — if they wear any HEADWEAR ` +
       `(hijab, scarf, hat, headband, turban, cap) — its SAME color & style. The hijab/` +
-      `headwear color + the creator's signature look are part of WHO THEY ARE — NEVER ` +
-      `change them. The SAME recognizable human being in every scene. Only the TOP / ` +
+      `headwear color + the creator's signature look are part of WHO THEY ARE — keep them ` +
+      `the SAME across scenes (the ONE exception is a before/after split-screen — see its ` +
+      `wardrobe rule below). The SAME recognizable human being in every scene. Only the TOP / ` +
       `garment may change, as noted below.`,
     )
     paragraphs.push(
@@ -319,11 +320,12 @@ function buildInsertKeyframePrompt(
       (!!conceptPrompt && BEFORE_AFTER_RE.test(conceptPrompt))
     if (isBeforeAfter) {
       paragraphs.push(
-        `BEFORE/AFTER WARDROBE: the BEFORE half and the AFTER half are the SAME person ` +
-        `at two different times — the AFTER half may wear a DIFFERENT TOP and look fresher / ` +
-        `brighter so it is obvious time has passed. But KEEP the SAME face AND the SAME hijab/` +
-        `headwear color & style on BOTH halves — it is the same creator. Change ONLY the top, ` +
-        `never the face or the hijab color.`,
+        `BEFORE/AFTER WARDROBE (OVERRIDES the hijab-color lock above, ONLY for this split): the ` +
+        `two halves are the SAME person on TWO DIFFERENT DAYS — they MUST wear a COMPLETELY ` +
+        `DIFFERENT outfit on each half: different hijab/headwear COLOR, different top, AND ` +
+        `different pants/bottoms. The AFTER half looks fresher / brighter. Keep ONLY the SAME ` +
+        `FACE (that is the identity) — everything WORN differs so it clearly reads as "before" ` +
+        `vs weeks later. NEVER the same outfit on both sides.`,
       )
     }
   }

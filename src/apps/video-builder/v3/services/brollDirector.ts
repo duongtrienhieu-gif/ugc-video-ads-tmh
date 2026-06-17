@@ -572,10 +572,13 @@ function enforceBeforeAfterSplit(scenes: BrollScene[], script: GeneratedScript):
     s.kind = 'concept'
     s.cameraFraming = 'creator'
     s.conceptPrompt =
-      `Split-screen, the SAME creator from the avatar reference on BOTH halves (identity ` +
-      `locked — same face + same hijab/headwear). LEFT = BEFORE: the problem — uncomfortable / ` +
-      `frustrated, the affected body part (the situation in "${painCue}"). RIGHT = AFTER: the ` +
-      `same person visibly better — relieved, comfortable, a genuine relieved smile. No on-screen text.`
+      `Split-screen, the SAME creator (SAME face) on BOTH halves but a COMPLETELY DIFFERENT ` +
+      `outfit on each half — different hijab colour, different top AND different pants (two ` +
+      `different days). LEFT = BEFORE: the problem IN ACTION — wincing / guarding the affected ` +
+      `body part, struggling to move it (the situation in "${painCue}"). RIGHT = AFTER: the SAME ` +
+      `body part now WORKING FREELY — actively doing the very thing they couldn't before (bend / ` +
+      `walk / climb / lift / stretch it with ease), proving recovery through MOVEMENT — NOT a ` +
+      `passive seated smile. No on-screen text.`
     s.reason = 'before/after split (enforced)'
     made++
   }
@@ -963,12 +966,14 @@ RULES:
   state AFTER using the product vs the problem BEFORE — a result / "sau khi dùng" / "giờ thì…" /
   "trước… giờ…" / "lepas pakai" / "selepas N hari" / a visible improvement — render that cut as
   a SPLIT-SCREEN: role:"broll", kind:"concept", cameraFraming:"creator". The conceptPrompt MUST
-  contain the words "split-screen" + "before/after" and read: "Split-screen, the SAME creator on
-  BOTH halves — LEFT = BEFORE (the problem / pain / the affected body part / a frustrated,
-  uncomfortable expression), RIGHT = AFTER (the same area / person improved — relieved,
-  comfortable, a genuine relieved smile)." Same face + same hijab both halves (identity), no
-  on-screen text. This is the signature transformation shot — do NOT render it as a single
-  plain talking-head.
+  contain the words "split-screen" + "before/after" and read: "Split-screen, the SAME creator
+  (SAME face) on BOTH halves but a COMPLETELY DIFFERENT outfit on each half — different hijab
+  colour + top + pants (two different days). LEFT = BEFORE (the problem IN ACTION — wincing,
+  guarding / unable to move the affected body part). RIGHT = AFTER (the SAME body part now
+  WORKING FREELY — actively DOING the thing they couldn't before: bend / walk / climb / lift /
+  stretch it with ease)." The AFTER must prove recovery through MOVEMENT, the OPPOSITE action of
+  the before — NEVER just sitting and smiling. Only the FACE is identical across the two halves;
+  everything worn differs. No on-screen text. Signature transformation shot — never a single talking-head.
 - Universal: infer setting/usage from the product context; never hardcode a niche.${anchorHint}
 
 SCRIPT (cover all of it):
