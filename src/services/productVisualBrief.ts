@@ -65,6 +65,7 @@ const SYSTEM_PROMPT =
 - perImage: one entry per input image IN ORDER (index 0..N-1). "shows" = what that specific image depicts; "clean" = true ONLY if it is a clear single-product shot with no heavy text/graphics overlay and a usable plain-ish background (i.e. good as an AI image-generation reference).
 - heroImageIndex = the index of the single CLEANEST product shot (best default reference). If none are clean, pick the least cluttered.
 - recommendedRefIndexes = 1-2 indexes (clean ones) to pass as i2i references.
+- productSummary MUST also describe the product's MATERIAL / TEXTURE / CONSISTENCY whenever it is visible in any photo (open lid, swatch, scoop, smear, the contents inside a jar/bottle): say what the CONTENTS physically are and how thick they are — e.g. "thick amber gel that holds its shape, glossy", "rich opaque white cream", "soft waxy balm", "fine loose powder", "thin clear watery serum", "viscous golden oil", "crunchy solid bar". This is how the downstream renderer keeps a gel/cream/balm from drifting into thin liquid on a close-up — if the texture is visible, NAME it; if it is never visible, say so.
 - Base everything ONLY on what you can see. Never invent ingredients, certifications, or claims that are not visible. Keep brand names and scientific terms as printed.`
 
 function buildUserPrompt(n: number): string {

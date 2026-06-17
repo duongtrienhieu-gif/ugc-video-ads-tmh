@@ -271,6 +271,18 @@ function buildInsertKeyframePrompt(
       `on a surface), NEVER a made-up pack. The product must look the SAME in every scene. ` +
       preset.objectInteraction,
     )
+    // Texture fidelity — when the CONTENTS / material are shown (open jar, scoop, dab, a
+    // macro / close-up / zoom into the product), the model must keep their TRUE physical
+    // consistency from the reference photo + brief, not default to a thin liquid. This is
+    // the gel/cream/balm/paste drift fix (a thick gel rendered as runny water on zoom).
+    paragraphs.push(
+      `TEXTURE FIDELITY: if the product's CONTENTS / material are shown (open lid, on a ` +
+      `fingertip, on a spoon, a macro or close-up), render them at the EXACT consistency in ` +
+      `the reference photo + product brief — a thick gel / cream / balm / paste / ointment ` +
+      `HOLDS ITS SHAPE and looks dense, glossy and substantial; a serum/oil is viscous, not ` +
+      `watery; a powder stays granular. NEVER turn a thick gel/cream/balm into thin runny ` +
+      `liquid or water. Match the reference's color AND material-state, including inside the jar.`,
+    )
   }
   if (personRefIndex > 0) {
     // Z98 V1 — identity vs wardrobe split. Bước 3 talking-head video keeps the
