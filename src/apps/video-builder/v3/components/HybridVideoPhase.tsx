@@ -759,9 +759,9 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
           </div>
         )}
 
-        {done && !rendering && !queued && (
+        {(done || failed) && !rendering && !queued && (
           <button onClick={onRender}
-            className="mt-auto flex items-center justify-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-50">
+            className={`mt-auto flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-[10px] font-bold ${failed ? 'border-rose-300 bg-rose-50 text-rose-600 hover:bg-rose-100' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
             <RotateCcw className="h-3 w-3" /> Render lại ~{credit}cr
           </button>
         )}
