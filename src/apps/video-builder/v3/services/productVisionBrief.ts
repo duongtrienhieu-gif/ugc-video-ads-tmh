@@ -22,6 +22,7 @@ const VISION_SCHEMA = {
     heroComponents:   { type: 'array', items: { type: 'string' } },
     howUsed:          { type: 'string' },
     correctUsage:     { type: 'string' },
+    materialState:    { type: 'string' },
     sizeCue:          { type: 'string' },
     colors:           { type: 'array', items: { type: 'string' } },
     settings:         { type: 'array', items: { type: 'string' } },
@@ -35,6 +36,7 @@ interface VisionBrief {
   heroComponents?: string[]
   howUsed?: string
   correctUsage?: string
+  materialState?: string
   sizeCue?: string
   colors?: string[]
   settings?: string[]
@@ -88,7 +90,12 @@ Fill this JSON (all values in English, concise):
   hinge sits on the SIDE of the knee joint with the kneecap exposed through the front
   opening; NEVER worn with the hinge over the front of the kneecap". Empty if orientation
   doesn't matter (e.g. a seasoning, a drink).
-- sizeCue: a real-world size reference (fits in a palm / knee-sized / phone-sized…).
+- materialState: if the product's CONTENTS / material are visible (open lid, swatch, smear,
+  scoop, what's inside a jar/tube/bottle), describe their TEXTURE + CONSISTENCY concretely —
+  e.g. "thick amber gel that holds its shape, glossy", "rich opaque white cream", "soft waxy
+  balm", "fine loose powder", "thin clear watery serum", "viscous golden oil". This is what lets
+  the renderer keep a gel/cream/balm from drifting into thin liquid on a close-up. Empty if the
+  contents are never visible (closed packaging only).
 - colors: the visible color variants.
 - settings: 3-6 real places this product is naturally used or shown.
 - shotIdeas: 6-8 DISTINCT, filmable camera moments THIS exact product affords — each
@@ -127,6 +134,7 @@ function formatBrief(b: VisionBrief): string | null {
   if (b.heroComponents?.length) lines.push(`- Hero parts to film: ${b.heroComponents.join('; ')}`)
   if (b.howUsed) lines.push(`- How it is physically used (from photos): ${b.howUsed}`)
   if (b.correctUsage) lines.push(`- ⚠ CORRECT ORIENTATION (MUST follow in every wear/placement shot — getting this wrong shows the product used backwards): ${b.correctUsage}`)
+  if (b.materialState) lines.push(`- Contents texture / consistency (KEEP this exact material-state on any open/scoop/macro shot — never render a thick gel/cream/balm as thin liquid): ${b.materialState}`)
   if (b.sizeCue) lines.push(`- Real-world size: ${b.sizeCue}`)
   if (b.colors?.length) lines.push(`- Color variants: ${b.colors.join(', ')}`)
   if (b.settings?.length) lines.push(`- Natural settings: ${b.settings.join(', ')}`)
