@@ -81,7 +81,7 @@ export const VIRAL_HOOK_REFERENCES_VI: string[] = [
   'Mình cuối cùng cũng hiểu tại sao nó viral.',
 ]
 
-// 12 listicle-shape hooks (N reasons / N lý do) — curated to match the same
+// 24 listicle-shape hooks (N reasons / N lý do) — curated to match the same
 // Tier S+ shock register as the narrative pool but with a clear list opener.
 export const VIRAL_HOOK_REFERENCES_VI_LISTICLE: string[] = [
   '3 lý do mình bỏ luôn món cũ chỉ sau 1 tuần.',
@@ -96,9 +96,22 @@ export const VIRAL_HOOK_REFERENCES_VI_LISTICLE: string[] = [
   '3 thứ ai dùng rồi cũng nhận ra.',
   '4 lý do khiến mình tin nó worth từng đồng.',
   'Đúng 3 thứ mình check trước khi mua bất kỳ món gì.',
+  // +12 (nâng depth → 24 cho re-roll đa dạng) — phủ thêm sub-archetype
+  'Đây là 3 thứ làm mình chốt đơn ngay lần đầu.',
+  '2 điều nhỏ xíu nhưng đổi hẳn trải nghiệm của mình.',
+  'Nói thật, 3 lý do này mới giữ chân mình lâu vậy.',
+  '4 sai lầm mình từng mắc trước khi biết tới cái này.',
+  '5 thứ mình từng nghĩ là sang chảnh, hoá ra cần thật.',
+  'Có đúng 1 lý do khiến mình không đổi sang cái khác.',
+  'Đây là 3 câu hỏi mình tự đặt trước khi xuống tiền.',
+  '3 điểm cái này ăn đứt mấy món mình từng xài.',
+  'Mình kể 3 thứ mà review không ai nói cho bạn.',
+  '2 lý do mình mua thêm cái thứ hai để tặng.',
+  'Đây là 4 dấu hiệu cho thấy bạn nên đổi ngay.',
+  '3 thứ mình tiếc là không mua sớm hơn.',
 ]
 
-// 12 comparison-shape hooks (A vs B / side-by-side).
+// 24 comparison-shape hooks (A vs B / side-by-side).
 export const VIRAL_HOOK_REFERENCES_VI_COMPARISON: string[] = [
   'Mình so sánh cả hai và kết quả hoàn toàn khác dự đoán.',
   'Cái 200k với cái 99k, mình thử cả hai để nói thật.',
@@ -112,9 +125,22 @@ export const VIRAL_HOOK_REFERENCES_VI_COMPARISON: string[] = [
   'Cũ vs mới — mình giữ cái nào sau 1 tuần test?',
   'Mình đặt 2 cái cạnh nhau, sự thật rõ ràng.',
   'Đây là sai lầm khiến nhiều người tốn gấp đôi chi phí.',
+  // +12 (nâng depth → 24) — price-gap / old-vs-new / expensive≠best / familiar / hyped-vs-real
+  'Hàng hot trên mạng vs cái mình đang xài — ai thắng?',
+  'Cái đắt nhất chưa chắc ngon nhất, mình thử cho biết.',
+  'Loại bình dân với loại cao cấp, khác nhau đúng 1 điểm.',
+  'Mình để cái cũ cạnh cái mới, quay luôn cho bạn xem.',
+  'Cùng một việc, mình thử 2 cách — cách nào nhanh hơn?',
+  'Bạn mình team cái kia, mình team cái này — thử thì biết.',
+  'Mình mua bản rẻ trước, rồi bản xịn, kể thật khác biệt.',
+  'Hàng chính hãng với hàng trôi nổi, đặt cạnh là thấy.',
+  'So với thứ mình xài 3 năm nay, cái này hơn ở đâu?',
+  'Một bên mọi người khen, một bên mình tự thử — kết quả?',
+  'Giá gấp ba lần nhưng có đáng gấp ba không? Mình test.',
+  'Trước mình dùng loại thường, giờ so lại mới thấy tiếc.',
 ]
 
-// 12 journey-shape hooks (multi-day / multi-week test).
+// 24 journey-shape hooks (multi-day / multi-week test).
 export const VIRAL_HOOK_REFERENCES_VI_JOURNEY: string[] = [
   'Mình dùng đúng 7 ngày, đây là kết quả thật.',
   'Test 30 ngày liên tục — ngày cuối mình ngạc nhiên.',
@@ -128,6 +154,19 @@ export const VIRAL_HOOK_REFERENCES_VI_JOURNEY: string[] = [
   '7 ngày một thử thách, ngày cuối mình quay lại nhìn.',
   'Sau 1 tháng, mình không muốn quay lại cách cũ.',
   'Test đủ 4 tuần — đây là sự thật.',
+  // +12 (nâng depth → 24) — turning-point / before-after / daily-log / fixed-duration / escalating
+  'Ngày 1 mình còn nghi, ngày 10 thì khỏi bàn.',
+  'Mình quay lại đúng chỗ cũ sau 3 tuần để so.',
+  'Tuần đầu chưa thấy gì, tuần thứ ba mới rõ.',
+  '10 ngày dùng thử, mình chốt luôn không nghĩ nhiều.',
+  'Mình chụp hình ngày đầu và ngày cuối để tự so.',
+  'Cứ mỗi tối mình dùng, đến ngày thứ 7 mới tin.',
+  'Hôm đầu mình suýt trả lại, giờ thì mừng vì giữ.',
+  'Một tháng trôi qua, mình mới hiểu mình mua đúng.',
+  'Ngày nào mình cũng dùng và đây là điều xảy ra.',
+  'Mình hẹn 2 tuần mới đánh giá, và đây là lúc đó.',
+  'Từ ngày đầu lóng ngóng đến giờ làm trong 1 nốt nhạc.',
+  'Sau 5 ngày mình đã thấy khác, 1 tháng thì rõ hẳn.',
 ]
 
 // 120 Malaysia TikTok Shop viral hooks — bahasa rojak natural (BM + EN + code-switch).
@@ -280,6 +319,19 @@ export const VIRAL_HOOK_REFERENCES_MS_LISTICLE: string[] = [
   '3 benda yang aku nampak orang lain miss.',
   'Aku ada 3 reason kenapa ni different.',
   'Ada 2 sebab utama aku tetap dengan ni.',
+  // +12 (nâng depth → 24) — mirror sub-archetype VN
+  '3 benda buat aku checkout terus kali pertama.',
+  '2 perkara kecil tapi ubah pengalaman aku terus.',
+  'Jujur, 3 sebab ni je buat aku setia lama.',
+  '4 silap aku buat sebelum jumpa benda ni.',
+  '5 benda aku ingat mahal-mahal, rupanya berbaloi.',
+  'Satu sebab je aku tak nak tukar lain.',
+  'Ni 3 soalan aku tanya diri sebelum bayar.',
+  '3 benda yang ni boleh buat, yang lama tak.',
+  'Aku share 3 benda review lain tak cerita.',
+  '2 sebab aku beli satu lagi untuk hadiah.',
+  'Ni 4 tanda korang patut tukar sekarang.',
+  '3 benda aku menyesal tak beli awal-awal.',
 ]
 
 export const VIRAL_HOOK_REFERENCES_MS_COMPARISON: string[] = [
@@ -295,6 +347,19 @@ export const VIRAL_HOOK_REFERENCES_MS_COMPARISON: string[] = [
   'Mahal vs murah — result buat aku rethink.',
   'Aku try kedua-duanya, satu je yang kekal.',
   'Beza dia memang gila weh, korang nak tengok?',
+  // +12 (nâng depth → 24) — mirror sub-archetype VN
+  'Yang viral vs yang aku guna — mana menang?',
+  'Yang paling mahal belum tentu paling best, aku try.',
+  'Kelas biasa vs kelas premium, beza satu benda je.',
+  'Aku letak yang lama sebelah yang baru, rakam terus.',
+  'Satu kerja, dua cara — mana lagi laju?',
+  'Member aku team yang tu, aku team yang ni.',
+  'Aku beli versi murah dulu, lepas tu versi mahal.',
+  'Original vs tiruan, letak sebelah nampak terus.',
+  'Banding dengan yang aku guna 3 tahun, lagi best tak?',
+  'Sebelah orang puji, sebelah aku test sendiri.',
+  'Harga tiga kali ganda, berbaloi tiga kali tak?',
+  'Dulu aku guna yang biasa, banding baru rasa rugi.',
 ]
 
 export const VIRAL_HOOK_REFERENCES_MS_JOURNEY: string[] = [
@@ -310,6 +375,19 @@ export const VIRAL_HOOK_REFERENCES_MS_JOURNEY: string[] = [
   '14 hari challenge, hari last aku speechless.',
   'Aku catat setiap hari selama 30 hari.',
   'Test 4 minggu — ni sebab aku stick dengan ni.',
+  // +12 (nâng depth → 24) — mirror sub-archetype VN
+  'Hari 1 aku ragu, hari 10 dah tak payah cakap.',
+  'Aku balik tengok tempat sama lepas 3 minggu.',
+  'Minggu pertama biasa je, minggu ketiga baru jelas.',
+  '10 hari cuba, aku terus decide tak fikir panjang.',
+  'Aku snap gambar hari pertama dan hari akhir.',
+  'Tiap malam aku guna, hari ke-7 baru aku percaya.',
+  'Hari pertama aku nak refund, sekarang bersyukur simpan.',
+  'Sebulan berlalu, baru aku faham aku beli betul.',
+  'Tiap hari aku guna, ni apa yang jadi.',
+  'Aku janji nilai lepas 2 minggu, ni masanya.',
+  'Dari kekok hari pertama sampai laju sekarang.',
+  'Lepas 5 hari dah rasa beza, sebulan makin jelas.',
 ]
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
