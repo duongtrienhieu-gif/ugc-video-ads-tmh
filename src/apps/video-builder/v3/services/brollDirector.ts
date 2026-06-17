@@ -899,6 +899,16 @@ RULES:
 - APPETITE (edible products): a taste / "ngon" / craving line → the creator taking a
   satisfied BITE + happy reaction (their OWN face in frame, creator-framing), or a close
   appetising macro of the food — never a static jar. The bite shot sells the craving.
+- RAW INGREDIENT HERO — when a line NAMES the real natural ingredients the product is MADE of
+  (nuts, fruit, seeds, grains, herbs, flowers, botanicals, roots, oils, tea, honey…), render
+  the ACTUAL ingredients themselves — fresh, real, appetising — as a macro hero shot beside /
+  tumbling around / being added to the product, NOT just a packaging close-up with text.
+  Universal (infer the real source from the brief): food → the nuts / dried fruit / seeds on a
+  board next to the product; skincare → the botanical source (chamomile flowers, green-tea
+  leaves, aloe, rice) beside the jar; supplement/health → the herb / root / fruit the active
+  comes from (ginger, turmeric, ginkgo leaf) beside the bottle. Keep the ingredient NAME as a
+  sticker. This is DISTINCT from a 3D cut (the ingredient ACTING inside the body) and from a
+  plain packaging close-up — here we SEE the real ingredients. cameraFraming:"hands_noface".
 - Universal: infer setting/usage from the product context; never hardcode a niche.${anchorHint}
 
 SCRIPT (cover all of it):
