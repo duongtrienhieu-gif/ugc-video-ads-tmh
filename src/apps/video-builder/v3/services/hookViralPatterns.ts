@@ -19,10 +19,11 @@
 // Lang-specific because Vietnamese viral hooks DO NOT translate one-to-one into
 // Bahasa Malaysia (different cadence, code-switching, "korang/aku/eh wait").
 
-// 50 Vietnamese viral hooks — Tier S+/S curated by the user. The earlier
+// 60 Vietnamese viral hooks — Tier S+/S curated by the user. The earlier
 // "100 TikTok Shop e-commerce" pool was dropped at the user's request because
 // many of those entries were softer e-commerce paraphrases that diluted the
-// Tier S+ scroll-stop voice. The 50 below are the only references injected.
+// Tier S+ scroll-stop voice. The 60 below are the only references injected.
+// (+10 Buying-frame block added to match the MS BUYING pattern — VN had only 1.)
 export const VIRAL_HOOK_REFERENCES_VI: string[] = [
   // ── Tier S+ (cực mạnh) ────────────────────────────────────────────────────
   'Nếu bạn còn đang làm điều này thì bạn đang mất tiền mỗi ngày.',
@@ -79,6 +80,17 @@ export const VIRAL_HOOK_REFERENCES_VI: string[] = [
   'Thứ này đang thay đổi cách mọi người làm việc mỗi ngày.',
   'Sau khi xem hàng nghìn đánh giá, đây là kết luận.',
   'Mình cuối cùng cũng hiểu tại sao nó viral.',
+  // ── Buying-frame (khung mua — trước khi mua / đừng chốt vội / tiếc nuối) ────
+  'Khoan đã, đừng chốt đơn trước khi nghe mình nói.',
+  'Trước khi bỏ vào giỏ, đây là thứ bạn nên biết.',
+  'Đây là điều mình luôn kiểm tra trước khi xuống tiền.',
+  'Mình tiếc vì không mua cái này sớm hơn.',
+  'Mình từng mua nhầm loại rẻ tiền, giờ kể bạn nghe.',
+  'Nếu định mua, xem cái này rồi hẵng quyết.',
+  'Có 1 thứ phải check trước khi đặt, kẻo phí tiền.',
+  'Đừng để tiền mất oan chỉ vì mua vội.',
+  'Mình suýt lướt qua, may mà dừng lại mua.',
+  'Giỏ hàng để đó đã, nghe mình 30 giây thôi.',
 ]
 
 // 24 listicle-shape hooks (N reasons / N lý do) — curated to match the same
