@@ -11,6 +11,58 @@
 import { generateGpt4oImageFast, generateVideoJob, pollVideoJobUntilDone } from '../../../../utils/kieai'
 import { STUDIO_MODELS, type StudioResolution } from './brollStudioModels'
 
+// ── Synthetic creator (Mode 2 freedom) ──────────────────────────────────────
+// Spirit of the studio: the user is NEVER forced to pick an avatar. When a scene
+// SHOWS A PERSON (product used on the body / a human beat) but no avatar was
+// chosen, the app auto-builds ONE consistent creator portrait and reuses it across
+// EVERY person scene — so identity stays the same (no random stranger per cut) and
+// an on-body shot never renders a head-less deformed torso. Product-only scenes
+// (3D / macro close-up / ingredient) stay person-free — they never call this.
+// Cached by product+lang+gender so it's generated ONCE (~6cr) then free to reuse.
+const _syntheticCreatorCache = new Map<string, Promise<string>>()
+const LOCALE_PORTRAIT: Record<string, string> = {
+  vi: 'a Vietnamese',
+  ms: 'a Malaysian (cast Malay / Chinese / Indian naturally)',
+  en: 'a',
+}
+
+/** Infer ONE creator gender from the product so the synthetic creator is consistent
+ *  across the whole video. Heuristic (no extra call): men's / tools / auto / gym →
+ *  male; everything else defaults female (the dominant UGC-creator gender). VN+MY+EN. */
+export function inferCreatorGender(productName?: string, visualBrief?: string): 'female' | 'male' {
+  const t = `${productName ?? ''} ${visualBrief ?? ''}`.toLowerCase()
+  if (/\b(men'?s|male|gym|barber|shav(e|ing)|beard|drill|tools?|tyre|tire|car|auto|engine|lelaki|jantan|alat|kereta|bor)\b/.test(t)
+    || /đàn ông|nam gi[ơo]i|c[ạa]o r[âa]u|r[âa]u|máy khoan|máy bơm|ô ?tô|xe máy|d[uụ]ng c[uụ]/.test(t)) {
+    return 'male'
+  }
+  return 'female'
+}
+
+/** Get (or generate once + cache) a consistent synthetic creator portrait URL.
+ *  Reused as the avatar reference for every person scene of this product so the
+ *  same face appears throughout. On failure the cache entry is dropped so a later
+ *  scene can retry. Returns a remote KIE image URL. */
+export function getSyntheticCreatorUrl(args: {
+  kieApiKey: string; productKey: string; lang: 'vi' | 'ms' | 'en'; gender: 'female' | 'male'
+}): Promise<string> {
+  const key = `${args.productKey}|${args.lang}|${args.gender}`
+  const hit = _syntheticCreatorCache.get(key)
+  if (hit) return hit
+  const locale = LOCALE_PORTRAIT[args.lang] ?? 'a'
+  const who = args.gender === 'male' ? 'a man' : 'a woman'
+  const p = generateGpt4oImageFast({
+    apiKey: args.kieApiKey,
+    prompt: `A photorealistic vertical portrait of ${who}, ${locale} everyday UGC TikTok creator in their early 30s, warm friendly natural expression, plain home background, soft natural daylight, authentic phone-shot look, upper body facing camera. No text, no logos, no product in frame.`,
+    size: '2:3',
+    softTimeoutMs: 100_000,
+    attemptTimeoutMs: 150_000,
+    maxAttempts: 3,
+  })
+  _syntheticCreatorCache.set(key, p)
+  p.catch(() => _syntheticCreatorCache.delete(key))
+  return p
+}
+
 export interface RenderStudioSceneParams {
   kieApiKey: string
   /** The i2v concept prompt (English) — what to animate. */

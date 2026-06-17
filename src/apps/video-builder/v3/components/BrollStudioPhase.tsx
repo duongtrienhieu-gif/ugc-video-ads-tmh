@@ -22,7 +22,7 @@ import {
   STUDIO_ANGLES, FREEFORM_ANGLE, generateStudioIdeas, engineerScenePrompt, resolveSceneSpec, translateLineForMarket,
   type StudioIdea, type StudioAngle, type SceneToggles,
 } from '../services/brollStudioBrain'
-import { renderStudioScene } from '../services/brollStudioRenderer'
+import { renderStudioScene, inferCreatorGender, getSyntheticCreatorUrl } from '../services/brollStudioRenderer'
 import { muxAudioIntoVideo } from '../../../video-translate/muxAudioVideo'
 import { estimateSceneCredit, FAITHFUL_FRAME_CR, type StudioResolution } from '../services/brollStudioModels'
 import type { Product, Model } from '../../../../stores/types'
@@ -245,11 +245,27 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
         const r = await engineerScenePrompt({ angle, idea, toggles, line, durationSec: dur, product, lang, geminiKey, briefVi: freeform ? brief.trim() : undefined })
         promptEn = r.conceptPromptEn; setPrompt(r.conceptPromptEn); setNote(r.noteVi); setPromptSig(cfgSig())
       }
-      // Guard: cảnh dùng sản phẩm TRÊN NGƯỜI (bôi/đeo/ăn) mà CHƯA chọn avatar → tay-không-
-      // mặt trên cơ thể sẽ méo (thân cụt đầu). Chặn + nhắc chọn avatar (khỏi phí credit).
-      if (!avatarRef && spec.role !== 'lips' && APPLIES_TO_BODY_RE.test(promptEn)) {
-        addToast('Cảnh dùng sản phẩm TRÊN NGƯỜI (bôi/đeo/ăn) — hãy chọn Avatar để thấy người dùng thật, tránh méo thân. Chọn avatar rồi render lại.', 'error')
-        return
+      // TỰ DO — KHÔNG ép user chọn avatar. Lấy avatar đã chọn (nếu có). Nếu CHƯA chọn
+      // mà cảnh SHOW NGƯỜI (dùng SP trên người / on-body — APPLIES_TO_BODY_RE) thì app
+      // TỰ dựng MỘT creator ảo NHẤT QUÁN (sinh 1 lần, cache theo SP+lang+giới) → identity
+      // giống nhau mọi cảnh + hết méo thân cụt đầu. Cảnh product-only (avatar lock-off:
+      // cận cảnh / thành phần / 3D) KHÔNG gọi → giữ nguyên không người.
+      let avatarUrl = avatarRef ? ((await getUrl(avatarRef)) ?? undefined) : undefined
+      let useFaithful = spec.withFaithfulFrame
+      const avatarAllowed = angle.toggles.avatar !== 'lock-off'
+      if (!avatarUrl && avatarAllowed && spec.role === 'broll' && APPLIES_TO_BODY_RE.test(promptEn)) {
+        try {
+          setStage('Tạo người mẫu ảo (1 lần, nhất quán)…')
+          const gender = inferCreatorGender(product.productName, JSON.stringify(product.visualBrief ?? ''))
+          avatarUrl = await getSyntheticCreatorUrl({
+            kieApiKey: kieKey,
+            productKey: product.productName || product.id || 'studio',
+            lang, gender,
+          })
+          useFaithful = true   // có người → faithful-frame khoá mặt → nhất quán, hết méo
+        } catch {
+          addToast('Chưa tạo được người mẫu ảo — cảnh sẽ render dạng tay/cận (có thể kém tự nhiên).', 'error')
+        }
       }
       // 2. Resolve ẢNH SẢN PHẨM → URL công khai (KIE fetch từ xa). Dùng TOÀN BỘ
       //    productImages (4 ảnh chuẩn) — `productImage` chỉ là alias cũ, thường RỖNG ở
@@ -268,7 +284,6 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
       if (toggles.product && productUrls.length === 0) {
         addToast('⚠️ Sản phẩm chưa có ảnh trong Project → cảnh sẽ bị lệch sản phẩm. Thêm ảnh sản phẩm rồi render lại.', 'error')
       }
-      const avatarUrl = avatarRef ? ((await getUrl(avatarRef)) ?? undefined) : undefined
       // 3. TTS cho MỌI cảnh có giọng — câu thoại gõ tiếng Việt được DỊCH sang ngôn ngữ
       //    thị trường trước (translateLineForMarket). Lips → đẩy audio vào InfiniteTalk;
       //    cảnh khác (B-roll voiceover) → ghép audio đè lên clip ở bước 5.
@@ -296,7 +311,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
       // 4. Render (lips dùng audioUrl; B-roll/3D bỏ qua — Seedance không có audio)
       const remoteUrl = await renderStudioScene({
         kieApiKey: kieKey, conceptPromptEn: promptEn, role: spec.role,
-        resolution: res, durationSec: effDur, withFaithfulFrame: spec.withFaithfulFrame,
+        resolution: res, durationSec: effDur, withFaithfulFrame: useFaithful,
         // Toggle "Sản phẩm" TẮT → KHÔNG bơm ảnh sản phẩm vào faithful-frame/Seedance seed,
         // nếu không Seedance vẫn seed từ ảnh SP → sản phẩm lòi lại dù prompt đã sạch.
         productImageUrls: toggles.product ? productUrls : [],
