@@ -391,6 +391,12 @@ export default function HybridVideoPhase(_props: Props) {
   const renderScene = (i: number) => {
     if (!hasAssets) { addToast('Bấm "Tạo giọng + mặt" trước', 'error'); return }
     if (!kieApiKey) { addToast('Thiếu KIE key', 'error'); return }
+    // A user-initiated "Render lại" must NEVER be silently blocked by a STALE lock.
+    // ACTIVE_RENDERS is a module-level Set (survives a tab-switch / remount) while
+    // renderingIdx is this-session truth. If a lock is set but this session isn't
+    // actually rendering `i` (a previous render died on a tab-switch / stuck poll),
+    // it's stale → clear it so runRender doesn't bail at `if (ACTIVE_RENDERS.has(i))`.
+    if (ACTIVE_RENDERS.has(i) && !renderingIdx.has(i)) ACTIVE_RENDERS.delete(i)
     // If a slot is free, launch directly.
     if (renderingIdx.size < MAX_CONCURRENT_RENDERS) {
       void runRender(i)
@@ -760,7 +766,13 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
         )}
 
         {(done || failed) && !rendering && !queued && (
-          <button onClick={onRender}
+          <button onClick={() => {
+            // Auto-save an unsaved prompt edit so "Render lại" ALWAYS uses the new
+            // prompt (before, an edit that wasn't "Lưu"-ed first was silently lost).
+            if (promptDirty) onSavePrompt(draftPrompt.trim())
+            if (editing) setEditing(false)
+            onRender()
+          }}
             className={`mt-auto flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-[10px] font-bold ${failed ? 'border-rose-300 bg-rose-50 text-rose-600 hover:bg-rose-100' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
             <RotateCcw className="h-3 w-3" /> Render lại ~{credit}cr
           </button>
