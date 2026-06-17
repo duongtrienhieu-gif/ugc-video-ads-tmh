@@ -180,8 +180,13 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
 
   const toggles: SceneToggles = { avatar: !!avatarRef, voice: !!voiceId, product: productOn }
   const spec = resolveSceneSpec(angle, toggles)
-  const c480 = sceneCredit(angle, toggles, '480p', dur)
-  const c720 = sceneCredit(angle, toggles, '720p', dur)
+  // Lipsync (InfiniteTalk) length is driven by the SPOKEN LINE (audio), NOT the 4/8/12
+  // Seedance steps — so estimate seconds from the line (~13 chars/s) and bill on THAT, and
+  // hide the 4/8/12 picker for lips. Seedance scenes still use the picked 4/8/12.
+  const estLipsSec = Math.max(2, Math.min(15, Math.round((line.trim().length || 24) / 13)))
+  const effDur = spec.role === 'lips' ? estLipsSec : dur
+  const c480 = sceneCredit(angle, toggles, '480p', effDur)
+  const c720 = sceneCredit(angle, toggles, '720p', effDur)
   const credit = res === '480p' ? c480 : c720
   const voiceNeedsLine = !!voiceId && !line.trim()
   const briefMissing = !!freeform && !brief.trim()
@@ -276,7 +281,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
       // 4. Render (lips dùng audioUrl; B-roll/3D bỏ qua — Seedance không có audio)
       const remoteUrl = await renderStudioScene({
         kieApiKey: kieKey, conceptPromptEn: promptEn, role: spec.role,
-        resolution: res, durationSec: dur, withFaithfulFrame: spec.withFaithfulFrame,
+        resolution: res, durationSec: effDur, withFaithfulFrame: spec.withFaithfulFrame,
         productImageUrls: productUrls, avatarImageUrl: avatarUrl, audioUrl,
         onStage: setStage,
       })
@@ -375,15 +380,19 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
           className={`mt-2 w-full rounded-lg border bg-white px-2 py-1 text-[12px] text-gray-900 focus:outline-none ${voiceNeedsLine ? 'border-rose-300' : 'border-gray-300 focus:border-violet-400'}`} />
       )}
 
-      {/* Độ dài — Seedance 1.5 Pro chỉ nhận 4 / 8 / 12s (theo docs KIE) → credit chính xác */}
-      <div className="mt-2 flex items-center gap-1.5">
-        <span className="text-[11px] text-gray-500">Dài</span>
-        {[4, 8, 12].map((d) => (
-          <button key={d} onClick={() => setDur(d)}
-            className={`flex-1 rounded-md px-1.5 py-1 text-[11px] font-semibold ${dur === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{d}s</button>
-        ))}
-      </div>
-      {spec.role === 'lips' && <p className="mt-1 text-[10px] text-gray-400">Lipsync: độ dài thực tế chạy theo câu thoại (audio), số giây trên chỉ để ước credit.</p>}
+      {/* Độ dài — Seedance nhận 4/8/12s; nhưng LIPSYNC (InfiniteTalk) chạy theo CÂU THOẠI
+          (audio) nên ẩn picker, chỉ hiện độ dài ước theo thoại để bám credit. */}
+      {spec.role === 'lips' ? (
+        <p className="mt-2 text-[11px] text-gray-500">⏱ Độ dài ≈ <b className="text-gray-700">{estLipsSec}s</b> — lipsync chạy theo <b>câu thoại</b> (audio), không cố định 4/8/12. Credit ước theo đây.</p>
+      ) : (
+        <div className="mt-2 flex items-center gap-1.5">
+          <span className="text-[11px] text-gray-500">Dài</span>
+          {[4, 8, 12].map((d) => (
+            <button key={d} onClick={() => setDur(d)}
+              className={`flex-1 rounded-md px-1.5 py-1 text-[11px] font-semibold ${dur === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{d}s</button>
+          ))}
+        </div>
+      )}
 
       {/* Độ phân giải — nhãn + credit rõ ràng + giải thích đánh đổi */}
       <div className="mt-2 flex gap-1" title="Cùng chất lượng dựng cảnh & độ chống-lỗi, chỉ khác độ nét + giá. Dùng 480p để test rẻ, ưng rồi xuất 720p.">
