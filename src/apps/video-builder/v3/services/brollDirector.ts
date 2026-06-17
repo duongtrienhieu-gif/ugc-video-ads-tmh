@@ -815,6 +815,14 @@ RULES:
   gender/age you will CONTRADICT the real avatar (a female avatar rendered as a man). You MAY
   and SHOULD still describe what the person DOES + their EMOTION + the SETTING (that is the
   visual density) — just never who they are.
+- PRODUCT IDENTITY IS LOCKED DOWNSTREAM — NEVER describe the product's PACKAGING APPEARANCE in
+  a conceptPrompt: no colour ("red tube"), no shape/form ("tube / bottle / jar / squat"), no
+  label text, no "black/white text", no on-pack graphics. The product's EXACT look is pinned by
+  the reference photo + the PRODUCT LOCK at render — if you ALSO describe it in words, the model
+  invents its OWN package and you get the SAME product drifting into 3 different shapes across
+  cuts (the user audited this). Refer to it ONLY as "the product" (or its spoken name) and
+  describe just the ACTION, the part/texture being shown, the setting, and the ingredients
+  around it. (Same rule as the creator: describe what's DONE, never the IDENTITY.)
 - COVER 100%: the scenes' durations sum to ~${dur}s; every spoken beat has a cut;
   NO empty span.
 - GROUPING (the #1 rule — be FLEXIBLE, not mechanical):
