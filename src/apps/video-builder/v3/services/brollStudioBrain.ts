@@ -270,11 +270,15 @@ export async function engineerScenePrompt(args: {
     : 'for the scene below — a NO-PRODUCT beat (feeling / problem / lifestyle); the product object and its packaging must NOT appear'
   const localeHint = (!args.toggles.avatar && spec.role !== 'mechanism3d')
     ? ` Setting / casting locale: ${LOCALE_HINT[args.lang]}.` : ''
+  // Identity lock for the creator: the ONE person in this scene IS the avatar reference image.
+  // The brief (if any) describes the SITUATION/emotion/setting — it must NOT spawn a new
+  // generic person or override the avatar's face/ethnicity/age (that comes from the ref image).
+  const personClause = spec.framing === 'creator'
+    ? `the chosen avatar/creator — THIS single person IS the avatar reference image: keep that EXACT face / hair / identity / ethnicity / age, do NOT invent a different-looking person and do NOT assign any new ethnicity or age from words in the description. FACE CLEARLY VISIBLE${showProduct ? ', actively using the product with their own hands' : ", performing the scene's real action/expression (no product in this shot)"}`
+    : spec.framing === 'hands_noface' ? 'hands only, NO face (no avatar was chosen)' : 'no person'
   const cfg =
     `Scene angle: ${args.angle.labelVi} (${args.angle.id}). Render role: ${spec.role}. ` +
-    `Person: ${spec.framing === 'creator'
-      ? 'the chosen avatar/creator — FACE CLEARLY VISIBLE, actively using the product with their own hands'
-      : spec.framing === 'hands_noface' ? 'hands only, NO face (no avatar was chosen)' : 'no person'}. ` +
+    `Person: ${personClause}. ` +
     `Product in frame: ${showProduct ? 'YES (must match the reference exactly)' : 'NO — the physical product / its packaging must NOT appear, be held, or be referenced in this shot'}. ` +
     `Duration: ${args.durationSec}s.` + localeHint +
     (args.toggles.voice && args.line ? ` Spoken line (for mood/context only, NOT rendered as on-screen text): "${args.line}".` : '')
@@ -290,6 +294,7 @@ export async function engineerScenePrompt(args: {
       `Output STRICT JSON {"conceptPromptEn":"…","noteVi":"<1 short VIETNAMESE line for the operator: what the clip shows>"}.`,
     prompt: `${cfg}\n${args.briefVi
       ? `User scene description (written in VIETNAMESE — understand it and build THIS exact scene${showProduct ? ', grounded in the product' : '. ⛔ Render ONLY what the description says — do NOT add the product or its packaging into the shot'}): "${args.briefVi}"`
+        + (args.toggles.avatar ? ` ⚠ The description gives the SITUATION / emotion / setting only — the PERSON in this scene IS the chosen avatar (keep that exact face/identity from the reference); do NOT create a new generic person and do NOT take the person's ethnicity/age/appearance from words in the description.` : '')
       : `Idea seed: ${args.idea?.conceptPromptEn ?? args.idea?.ideaVi ?? args.angle.descVi}`}${variantNudge}\nWrite the prompt.`,
     maxOutputTokens: 700, temperature: args.variant ? 0.95 : 0.6, thinkingBudget: 0, responseMimeType: 'application/json', responseSchema: ENGINEER_SCHEMA,
   })

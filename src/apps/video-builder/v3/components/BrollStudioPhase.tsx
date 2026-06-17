@@ -193,6 +193,10 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
   // Signature of every input that changes the prompt → if it changed since the prompt was
   // generated, the cached prompt is STALE and must be re-made (fixes prompt≠config bug).
   const cfgSig = () => `${avatarRef ?? ''}|${voiceId}|${productOn}|${dur}|${line.trim()}|${freeform ? brief.trim() : ''}`
+  // Prompt đã sinh nhưng cấu hình (avatar/giọng/SP/giây/thoại) đổi sau đó → prompt hiển thị
+  // CŨ. Render vẫn đúng (tự sinh lại theo sig), nhưng cần báo để user khỏi tưởng app bỏ qua
+  // avatar/SP. Hiện badge cảnh báo trong expander.
+  const promptStale = !!prompt && promptSig !== cfgSig()
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; e.target.value = ''
@@ -435,7 +439,9 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
 
       {/* Prompt = chi tiết kỹ thuật → giấu trong expander, sinh khi cần */}
       <details className="mt-2 rounded-lg border border-gray-200 bg-gray-50">
-        <summary className="cursor-pointer select-none px-2 py-1.5 text-[11px] font-semibold text-gray-600">⚙️ Xem/sửa prompt</summary>
+        <summary className="cursor-pointer select-none px-2 py-1.5 text-[11px] font-semibold text-gray-600">
+          ⚙️ Xem/sửa prompt {promptStale && <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-700">⚠ cũ</span>}
+        </summary>
         <div className="border-t border-gray-200 p-2">
           {!prompt ? (
             <button onClick={() => makePrompt(0)} disabled={busy || !product || voiceNeedsLine || briefMissing}
@@ -444,6 +450,11 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
             </button>
           ) : (
             <>
+              {promptStale && (
+                <p className="mb-1.5 rounded bg-amber-50 p-1.5 text-[10px] leading-snug text-amber-700">
+                  ⚠ Anh đã đổi avatar/giọng/sản phẩm/độ dài sau khi tạo prompt — prompt dưới đây là <b>bản cũ</b>. Khi bấm <b>Render</b> hệ thống sẽ <b>tự sinh lại</b> đúng cấu hình mới (hoặc bấm "Tạo biến thể khác" để xem trước).
+                </p>
+              )}
               <p className="whitespace-pre-line rounded bg-white p-2 text-[11px] text-gray-600">📝 {note}</p>
               <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3}
                 className="mt-1.5 w-full rounded border border-gray-200 bg-white p-1.5 font-mono text-[10px] text-gray-700" />
