@@ -322,8 +322,9 @@ function buildInsertKeyframePrompt(
       paragraphs.push(
         `BEFORE/AFTER WARDROBE (OVERRIDES the hijab-color lock above, ONLY for this split): the ` +
         `two halves are the SAME person on TWO DIFFERENT DAYS — they MUST wear a COMPLETELY ` +
-        `DIFFERENT outfit on each half: different hijab/headwear COLOR, different top, AND ` +
-        `different pants/bottoms. The AFTER half looks fresher / brighter. Keep ONLY the SAME ` +
+        `DIFFERENT outfit on each half: different top, different bottoms, AND different ` +
+        `headwear/hairstyle (if any — e.g. a different hijab color). The AFTER half looks ` +
+        `fresher / brighter. Keep ONLY the SAME ` +
         `FACE (that is the identity) — everything WORN differs so it clearly reads as "before" ` +
         `vs weeks later. NEVER the same outfit on both sides.`,
       )

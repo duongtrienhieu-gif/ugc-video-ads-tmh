@@ -573,12 +573,14 @@ function enforceBeforeAfterSplit(scenes: BrollScene[], script: GeneratedScript):
     s.cameraFraming = 'creator'
     s.conceptPrompt =
       `Split-screen, the SAME creator (SAME face) on BOTH halves but a COMPLETELY DIFFERENT ` +
-      `outfit on each half — different hijab colour, different top AND different pants (two ` +
-      `different days). LEFT = BEFORE: the problem IN ACTION — wincing / guarding the affected ` +
-      `body part, struggling to move it (the situation in "${painCue}"). RIGHT = AFTER: the SAME ` +
-      `body part now WORKING FREELY — actively doing the very thing they couldn't before (bend / ` +
-      `walk / climb / lift / stretch it with ease), proving recovery through MOVEMENT — NOT a ` +
-      `passive seated smile. No on-screen text.`
+      `outfit on each half — different top, different bottoms, and different headwear/hairstyle ` +
+      `if any (two different days). LEFT = BEFORE: the problem in a concrete moment (the ` +
+      `situation in "${painCue}") — visibly uncomfortable / the un-improved state. RIGHT = AFTER: ` +
+      `the OPPOSITE — the SAME person in the RESOLVED state, shown through the ACTION/look that ` +
+      `fits THIS product (infer it: e.g. moving/walking freely for a pain·joint product; touching ` +
+      `clear glowing skin at the mirror for skincare; light + energetic for a supplement; full ` +
+      `shiny hair for haircare; a confident bright smile for teeth). Demonstrate the result as a ` +
+      `concrete ACTION/state that REVERSES the before — NOT a passive seated smile. No on-screen text.`
     s.reason = 'before/after split (enforced)'
     made++
   }
@@ -967,13 +969,15 @@ RULES:
   "trước… giờ…" / "lepas pakai" / "selepas N hari" / a visible improvement — render that cut as
   a SPLIT-SCREEN: role:"broll", kind:"concept", cameraFraming:"creator". The conceptPrompt MUST
   contain the words "split-screen" + "before/after" and read: "Split-screen, the SAME creator
-  (SAME face) on BOTH halves but a COMPLETELY DIFFERENT outfit on each half — different hijab
-  colour + top + pants (two different days). LEFT = BEFORE (the problem IN ACTION — wincing,
-  guarding / unable to move the affected body part). RIGHT = AFTER (the SAME body part now
-  WORKING FREELY — actively DOING the thing they couldn't before: bend / walk / climb / lift /
-  stretch it with ease)." The AFTER must prove recovery through MOVEMENT, the OPPOSITE action of
-  the before — NEVER just sitting and smiling. Only the FACE is identical across the two halves;
-  everything worn differs. No on-screen text. Signature transformation shot — never a single talking-head.
+  (SAME face) on BOTH halves but a COMPLETELY DIFFERENT outfit on each half — different top,
+  bottoms, and headwear/hairstyle if any (two different days). LEFT = BEFORE (the problem in a
+  concrete moment — uncomfortable / the un-improved state). RIGHT = AFTER (the OPPOSITE — the
+  SAME person resolved, shown through the action/look that fits THIS product)." The AFTER must
+  show the result as a concrete ACTION/state that REVERSES the before — never just sitting and
+  smiling — and you INFER the right action from the product (moving/walking freely for a pain·
+  joint product; touching clear glowing skin for skincare; light + energetic for a supplement;
+  full shiny hair for haircare; a confident bright smile for teeth — NEVER hardcode one niche).
+  Only the FACE is identical across the two halves; everything worn differs. No on-screen text.
 - Universal: infer setting/usage from the product context; never hardcode a niche.${anchorHint}
 
 SCRIPT (cover all of it):
