@@ -439,6 +439,23 @@ ${pronounRule(args.lang)}
   fear. Use HEDGED support verbs ("hỗ trợ / giúp / cảm thấy") — never a cure ("chữa khỏi /
   hết hẳn") and never a cert (Halal/FDA/clinically proven); those are the money-losing lines
   (see guards below).
+- VISUAL DENSITY (one filmable BEAT per sentence — this is what lets the video director cut
+  clean, grounded shots instead of guessing, and is what kills generic b-roll): in the
+  DISCOVERY and BENEFIT blocks, write each visual moment as its OWN short spoken sentence —
+  do NOT bundle two or three separate moments into one long compound sentence (the director
+  cuts on sentence beats; a 3-moment run-on collapses into one vague shot). AND every sentence
+  that makes a CLAIM, names a SPEC, or states a RESULT must carry a CONCRETE FILMABLE SUBJECT
+  — a real object / part / texture / action, or a person doing something visible — NEVER a
+  bare adjective-only line ("xịn lắm / đáng tiền / ai cũng khen / chất lượng thật sự" standing
+  alone). This is STILL natural spoken speech, NOT a shot list: do NOT write camera or scene
+  directions — just talk in concrete nouns + verbs a phone could film. Universal across niches
+  (illustrative — split into beats, each filmable):
+    • health → "Mình uống một viên buổi sáng." / "Trưa không còn tụt năng lượng gục xuống bàn." (NOT "giúp khỏe hơn")
+    • home   → "Xịt lên mặt kính." / "Lau một đường, vết ố tan ra thấy liền." (NOT "làm sạch hiệu quả")
+    • auto   → "Cắm vào tẩu thuốc xe." / "Ba phút lốp căng, đồng hồ tự tắt." (NOT "tiện lợi dễ dùng")
+    • food   → "Cắn một miếng." / "Vỏ vỡ rốp, nhân chảy ra nóng hổi." (NOT "ăn rất ngon")
+  Write the actual script 100% in the target language per the LANGUAGE rule (the examples are
+  illustrative Vietnamese; for Bahasa Malaysia use the native rojak register, never a calque).
 - EMPATHY ECHO — the hook touches a pain / persona / moment; the benefit block
   MUST come back to that EXACT concrete MOMENT (the same time / place / action from
   the hook or pain) in a NEW, VISIBLY CHANGED state — close the loop on the SAME scene a
