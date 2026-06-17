@@ -685,12 +685,18 @@ FOUR cut ROLES (set "role"):
 3. "mechanism3d" — for a line describing a process INSIDE the product/body a phone
    can't film (an ingredient acting inside, airflow inside a device, a coating at
    molecular level…). Write the conceptPrompt; it renders as a clean 3D animation.
-   Use for GENUINE internal-mechanism lines (an ingredient acting inside the body, a
-   process a phone can't film) — up to ~3 per video for an ingredient/mechanism-heavy
-   product (supplement / skincare / health), fewer otherwise. Each 3D cut MUST be a
-   distinct internal mechanism (Kali→mạch máu, Vitamin C→collagen dưới da, chất xơ→đường
-   ruột). Do NOT 3D a line that's just a NAMING/benefit/result ("giàu Kali" = a product
-   close-up + sticker, NOT 3D); and never exceed ~3 — the ad must not become a science reel.
+   *** INCLUDE AT LEAST ONE when the script genuinely has the material: if the PRODUCT
+   BRIEF names an active / ingredient / material AND a script line EXPLAINS how it works
+   INSIDE the body / skin / device, that line SHOULD become a mechanism3d cut — it is the
+   signature "how it works inside" shot that sells an ingredient / mechanism product
+   (supplement / skincare / health / any product with a real internal mechanism). Do NOT
+   skip it for those products — it is their strongest differentiator. ***
+   Use 1-3 per video (lean toward more for an ingredient/mechanism-heavy product). Each 3D
+   cut MUST be a DISTINCT internal mechanism (Kali→mạch máu, Vitamin C→collagen dưới da,
+   chất xơ→đường ruột). Do NOT 3D a line that's just a NAMING/benefit/result ("giàu Kali" =
+   a product close-up + sticker, NOT 3D), and never exceed ~3 — don't turn it into a science
+   reel. ONLY skip 3D entirely when the product genuinely has NO internal mechanism (a simple
+   gadget / tool / apparel / accessory).
 4. "social_proof" — ONLY for a genuine SOCIAL-PROOF line: a crowd/popularity, a sold
    count, repeat buyers, or reviews — "mấy nghìn người mua rồi", "ai dùng cũng quay lại",
    "review toàn 5 sao", "bán cháy hàng", "nhỏ bạn mình dùng cũng mê". Renders as a
