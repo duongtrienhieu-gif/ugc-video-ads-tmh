@@ -99,7 +99,7 @@ function VoicePickerModal({ apiKey, lang, onSelect, onClose }: {
         </div>
         <div className="flex items-center gap-2 border-b border-black/8 p-3">
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm giọng…"
-            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none" />
+            className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-violet-400 focus:outline-none" />
           <div className="flex overflow-hidden rounded-lg border border-gray-200 text-[11px] font-semibold">
             {([['all', 'Tất cả'], ['female', 'Nữ'], ['male', 'Nam']] as const).map(([g, label]) => (
               <button key={g} onClick={() => setGender(g)} className={gender === g ? 'bg-violet-600 px-2.5 py-2 text-white' : 'bg-white px-2.5 py-2 text-gray-500 hover:bg-gray-50'}>{label}</button>
@@ -326,7 +326,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
       {freeform && (
         <textarea value={brief} onChange={(e) => setBrief(e.target.value)} rows={2}
           placeholder="VD: phụ nữ 50 tuổi đang đau đầu gối, chưa lộ sản phẩm, nền bếp…"
-          className={`mt-2 w-full rounded-lg border px-2 py-1.5 text-[12px] focus:outline-none ${briefMissing ? 'border-rose-300' : 'border-gray-300 focus:border-violet-400'}`} />
+          className={`mt-2 w-full rounded-lg border bg-white px-2 py-1.5 text-[12px] text-gray-900 focus:outline-none ${briefMissing ? 'border-rose-300' : 'border-gray-300 focus:border-violet-400'}`} />
       )}
 
       {/* ── Selections: chỉ hiện cái dùng được (khoá-tắt ẩn hẳn) ─────────────── */}
@@ -372,7 +372,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
       {/* Câu thoại — chỉ khi đã chọn giọng (sẽ LỒNG TIẾNG, không vẽ lên hình) */}
       {voiceId && (
         <input value={line} onChange={(e) => setLine(e.target.value)} placeholder="Câu thoại (giọng sẽ đọc)…"
-          className={`mt-2 w-full rounded-lg border px-2 py-1 text-[12px] focus:outline-none ${voiceNeedsLine ? 'border-rose-300' : 'border-gray-300 focus:border-violet-400'}`} />
+          className={`mt-2 w-full rounded-lg border bg-white px-2 py-1 text-[12px] text-gray-900 focus:outline-none ${voiceNeedsLine ? 'border-rose-300' : 'border-gray-300 focus:border-violet-400'}`} />
       )}
 
       {/* Độ dài — Seedance 1.5 Pro chỉ nhận 4 / 8 / 12s (theo docs KIE) → credit chính xác */}
@@ -411,7 +411,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
       </div>
 
       {/* Prompt = chi tiết kỹ thuật → giấu trong expander, sinh khi cần */}
-      <details className="mt-2 rounded-lg border border-gray-200 bg-gray-50/60">
+      <details className="mt-2 rounded-lg border border-gray-200 bg-gray-50">
         <summary className="cursor-pointer select-none px-2 py-1.5 text-[11px] font-semibold text-gray-600">⚙️ Xem/sửa prompt</summary>
         <div className="border-t border-gray-200 p-2">
           {!prompt ? (
@@ -423,7 +423,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
             <>
               <p className="whitespace-pre-line rounded bg-white p-2 text-[11px] text-gray-600">📝 {note}</p>
               <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3}
-                className="mt-1.5 w-full rounded border border-gray-200 p-1.5 font-mono text-[10px] text-gray-500" />
+                className="mt-1.5 w-full rounded border border-gray-200 bg-white p-1.5 font-mono text-[10px] text-gray-700" />
               <button onClick={() => { const n = variant + 1; setVariant(n); makePrompt(n) }} disabled={busy}
                 className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50">
                 {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />} Tạo biến thể khác
