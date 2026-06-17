@@ -1038,6 +1038,10 @@ OUTPUT strict JSON only (no markdown fences):
   // ladder + any re-roll, before establish/CTA (those only convert lips→broll, never
   // re-introduce adjacency) so the flipped cuts get backfilled below.
   separateLipsRuns(scenes)
+  // separateLipsRuns may DEMOTE an adjacent lips → re-top-up so the ladder count (e.g. 3
+  // lips) is GUARANTEED even after de-adjacency (the adjacency-guard in enforceLipsCount
+  // keeps the re-added lips spread, so this won't re-create a run).
+  scenes = enforceLipsCount(scenes, lipsCount)
 
   // P4h — product establishment + deictic (deterministic backstop to the Layer-1
   // prompt): the hook / early lines that NAME or POINT AT the product must SHOW it,
@@ -1152,7 +1156,11 @@ function enforceLipsCount(scenes: BrollScene[], target: number): BrollScene[] {
       const size = bounds[g + 1] - bounds[g]
       if (size > gapSize) { gapSize = size; gapMid = Math.round((bounds[g] + bounds[g + 1]) / 2) }
     }
-    const cand = brollIdx.filter((i) => !chosen.includes(i))
+    // Prefer a candidate NOT adjacent to an existing/chosen lips so promoted lips stay
+    // SPREAD (then separateLipsRuns won't demote one → the ladder count holds).
+    const occ = new Set([...lipsIdx, ...chosen])
+    let cand = brollIdx.filter((i) => !chosen.includes(i) && !occ.has(i - 1) && !occ.has(i + 1))
+    if (cand.length === 0) cand = brollIdx.filter((i) => !chosen.includes(i))   // forced: allow adjacent
     if (cand.length === 0) break
     // P5r — pick lips from TALK lines, not action/deictic lines. A lips promotion
     // turns a broll into a talking head, so NEVER grab a demo-action / point-at-product
@@ -1432,9 +1440,13 @@ function dedupeScenePrompts(timed: TimedBrollScene[]): TimedBrollScene[] {
     const base = stripMod((s.conceptPrompt ?? '').trim())
     if (!base) continue
     const w = sigWords(base)
-    const dup = i !== lastIdx && accepted.some((a) => jac(a, w) >= 0.7)   // never touch the locked CTA last cut
+    const dup = i !== lastIdx && accepted.some((a) => jac(a, w) >= 0.55)   // never touch the locked CTA last cut
     if (dup) {
-      s.conceptPrompt = `${base} — DIFFERENT SHOT (must NOT resemble the other cuts): ${DISTINCT_SHOT_VARIANTS[vi % DISTINCT_SHOT_VARIANTS.length]}`
+      // REPLACE (not append): appending "— DIFFERENT SHOT: macro" onto "creator massaging
+      // the knee" contradicts itself and the model just re-renders the massage. Render the
+      // distinct variant INSTEAD, anchored to this beat → a genuinely different image.
+      const beat = (s.quote ?? '').slice(0, 50).replace(/"/g, '')
+      s.conceptPrompt = `DIFFERENT SHOT — must look NOTHING like any other cut. Render INSTEAD: ${DISTINCT_SHOT_VARIANTS[vi % DISTINCT_SHOT_VARIANTS.length]}. Same product + beat as "${beat}".`
       vi++
       accepted.push(sigWords(s.conceptPrompt))
     } else {
