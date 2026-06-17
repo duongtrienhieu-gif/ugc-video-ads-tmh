@@ -151,13 +151,17 @@ function buildInsertKeyframePrompt(
     // Z61 — emotion concept (video) features a PERSON; lock it to the creator
     // avatar so the same face appears across the whole ad (not a random
     // stranger). Graphic concept (ken_burns infographic) has no person.
-    const isEmotionPerson = renderMode === 'video' && personRefIndex > 0
+    // Identity-grounding fix: lock to the avatar whenever a person ref is attached,
+    // in ANY render mode (not only 'video') — so a creator concept never renders a
+    // random stranger / wrong gender just because it was a still-mode preview.
+    const isEmotionPerson = personRefIndex > 0
     if (isEmotionPerson) {
       paragraphs.push(
         `IDENTITY LOCK: The person in this scene is the SAME person from reference ` +
         `image #${personRefIndex} — preserve EXACTLY their face, hair, skin tone, ` +
-        `age and build. This must read as the same creator who appears elsewhere ` +
-        `in the video, NOT a different model.`,
+        `GENDER, age and build. This must read as the same creator who appears elsewhere ` +
+        `in the video, NOT a different model and NEVER a different gender. The scene text ` +
+        `only describes what they DO and the setting — their identity comes from this reference.`,
       )
     }
     paragraphs.push(
@@ -184,12 +188,20 @@ function buildInsertKeyframePrompt(
         'NO PRODUCT — concept / mood illustration only. ZERO product-like objects in ' +
         'frame: no brace, no jar, no bottle, no tube, no sachet, no pill, no device, ' +
         'no toothbrush head, no medical appliance — branded OR unbranded, real OR ' +
-        'generic, full OR partial. Show ONLY anatomy, ingredients in their raw form, ' +
-        'mechanism diagrams, body parts, or feelings/emotions. The product belongs ' +
-        'in CUT scenes (HOLD_PRODUCT, PRODUCT_IN_ACTION, etc.), never here.',
+        'generic, full OR partial. Also NO manufactured object as the hero subject: no ' +
+        'appliance, electronics, gadget, speaker, box or furniture. Any object the scene ' +
+        'text names only as SETTING (e.g. an air-conditioner, a fan) stays small in the ' +
+        'BACKGROUND — it is NEVER the focal subject. Show ONLY anatomy, ingredients in ' +
+        'their raw form, mechanism diagrams, body parts, or feelings/emotions. The product ' +
+        'belongs in CUT scenes (HOLD_PRODUCT, PRODUCT_IN_ACTION, etc.), never here.',
       )
     } else {
-      paragraphs.push('No product packaging in frame — this is a reaction / emotion shot of the person only.')
+      paragraphs.push(
+        'No product packaging in frame — this is a reaction / emotion shot of the PERSON only. ' +
+        'The person is the SOLE hero subject: do NOT render any appliance, device, gadget, ' +
+        'speaker, box or furniture as a focal/hero subject. An object named only as setting ' +
+        '(an air-conditioner, a fan…) stays small in the background, never the subject.',
+      )
     }
 
     // Z48 — the ART STYLE now lives INSIDE the conceptPrompt (the Director
@@ -376,14 +388,17 @@ function buildInsertKeyframePrompt(
  *    • PRODUCT_IN_ACTION — the person uses/applies the product (brush, rub…)
  *    • CONCEPT_SCENE + video (emotion) — a person expressing a feeling
  *  Graphic CONCEPT_SCENE (ken_burns infographic) has NO person → no avatar. */
-function usesAvatarRef(presetId: ActionPresetId, renderMode?: InsertRenderMode, is3D = false): boolean {
+function usesAvatarRef(presetId: ActionPresetId, renderMode?: InsertRenderMode, is3D = false, cameraFraming?: CameraFraming): boolean {
   // Z98 — a 3D mechanism animation has NO person, even though it's a video concept.
   if (is3D) return false
   if (['HOLD_PRODUCT', 'DRINK', 'TAKE_PILL', 'BEFORE_AFTER_REACTION', 'PRODUCT_IN_ACTION'].includes(presetId)) {
     return true
   }
-  // Emotion concept scenes feature the creator; graphic infographics do not.
-  if (presetId === 'CONCEPT_SCENE') return renderMode === 'video'
+  // Emotion concept scenes feature the creator → MUST lock the avatar so the same person
+  // appears (a female avatar must never render as a man). Identity-grounding fix: lock
+  // whenever the cut is creator-framed, in ANY render mode (still preview included) — not
+  // only 'video'. A graphic infographic concept (no person) is cameraFraming !== 'creator'.
+  if (presetId === 'CONCEPT_SCENE') return cameraFraming === 'creator' || renderMode === 'video'
   return false
 }
 
@@ -402,6 +417,7 @@ async function resolveRefs(
   quote?: string,
   conceptPrompt?: string,
   noFace = false,
+  cameraFraming?: CameraFraming,
 ): Promise<{ refs: string[]; productRefIndex: number; personRefIndex: number }> {
   const refs: string[] = []
   let productRefIndex = 0
@@ -433,7 +449,7 @@ async function resolveRefs(
       }
     }
   }
-  if (!noFace && usesAvatarRef(preset.id, renderMode, is3D)) {
+  if (!noFace && usesAvatarRef(preset.id, renderMode, is3D, cameraFraming)) {
     // Director upgrade — a 'hands_noface' shot deliberately omits the avatar so
     // no face appears; personRefIndex stays 0 → no IDENTITY LOCK in the prompt.
     // Chain anchor first, raw avatar portrait second.
@@ -470,7 +486,7 @@ export async function renderInsert(
   const noFace = params.cameraFraming === 'hands_noface' && !is3D && params.presetId === 'PRODUCT_IN_ACTION'
   const { refs: filesUrl, productRefIndex, personRefIndex } = await resolveRefs(
     preset, params.product, params.avatar, params.creatorKeyframeRef, params.renderMode, is3D,
-    params.visualBrief, params.quote, params.conceptPrompt, noFace,
+    params.visualBrief, params.quote, params.conceptPrompt, noFace, params.cameraFraming,
   )
 
   // Z37 — the scene verb that drives the Kling motion prompts (Stage 2/3).

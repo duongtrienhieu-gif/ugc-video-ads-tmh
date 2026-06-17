@@ -767,6 +767,14 @@ RULES:
   ⚠ DIVERSITY UNCHANGED — this biases role/kind PER LINE, it does NOT make a whole block one
   shot type. Cuts inside the SAME block still MIX creator / concept / product_action /
   product_closeup as each line demands, and NO-TWO-CUTS-ALIKE still holds across the video.
+- CREATOR IDENTITY IS LOCKED DOWNSTREAM — NEVER describe WHO the creator is. Any conceptPrompt
+  that shows a person MUST refer to them as "the same creator from the avatar reference" (or
+  "the same person from the avatar reference") and MUST NOT invent or state their GENDER, AGE,
+  ETHNICITY, body type, or looks. Lines like "a Malaysian man in his early 30s" / "a woman in
+  her late 20s" are FORBIDDEN — the avatar reference supplies identity at render; if you name a
+  gender/age you will CONTRADICT the real avatar (a female avatar rendered as a man). You MAY
+  and SHOULD still describe what the person DOES + their EMOTION + the SETTING (that is the
+  visual density) — just never who they are.
 - COVER 100%: the scenes' durations sum to ~${dur}s; every spoken beat has a cut;
   NO empty span.
 - GROUPING (the #1 rule — be FLEXIBLE, not mechanical):
