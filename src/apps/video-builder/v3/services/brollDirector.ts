@@ -750,6 +750,23 @@ RULES:
   short MICRO-SEQUENCE of 2-3 complementary cuts (action → result/taste → the
   satisfied human reaction) instead of one flat shot — that is real directing.
   Each cut still gets its own quote slice + conceptPrompt.
+- BLOCK ROLE → DEFAULT VISUAL INTENT (a soft BIAS to help role/kind selection, NOT a lock):
+  every line above is tagged with its block — [hook] / [pain] / [discovery] / [benefit] /
+  [cta]. When the LINE ITSELF is ambiguous about what to show, lean on the block's default:
+    • [pain]      → the problem / before-state moment, usually on a person (creator).
+    • [discovery] → the product being used + how it works (product_action / product_closeup,
+                    or mechanism3d for a genuine internal process).
+    • [benefit]   → the RESULT lived on a person (the after-state, creator) — film the human
+                    payoff, not the packaging.
+    • [cta]       → product endorsement (already enforced).
+  ⚠ THE QUOTE ALWAYS WINS — this is a DEFAULT, never an override of the line. If a [benefit]
+  line is actually about a mechanism / feature / spec → make it product_closeup / mechanism3d
+  (NOT a person). If a [discovery] line is actually a felt RESULT on a person → make it a
+  creator concept cut (NOT a product shot). Read the line first; use the block lean only to
+  break a tie.
+  ⚠ DIVERSITY UNCHANGED — this biases role/kind PER LINE, it does NOT make a whole block one
+  shot type. Cuts inside the SAME block still MIX creator / concept / product_action /
+  product_closeup as each line demands, and NO-TWO-CUTS-ALIKE still holds across the video.
 - COVER 100%: the scenes' durations sum to ~${dur}s; every spoken beat has a cut;
   NO empty span.
 - GROUPING (the #1 rule — be FLEXIBLE, not mechanical):
