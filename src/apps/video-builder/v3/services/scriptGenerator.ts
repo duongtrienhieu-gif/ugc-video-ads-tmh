@@ -551,9 +551,13 @@ ${pronounRule(args.lang)}
     • Close clichés: "kẻo hết hàng", "đáng tiền lắm luôn", "game changer", "must-have",
       MS "grab cepat sebelum stok habis", "jangan tunggu lama", "memang berbaloi".
   Use the IDEA if it fits, but rephrase it freshly — never the stock sentence verbatim.
-- OFFER = ONE clear deal, stated ONCE. Pick a single offer ("mua 1 tặng 1", "giảm 50%",
-  MS "Beli 1 Free 1", "RM79 je") — do NOT stack a ladder of tiers ("mua 1 tặng 1, mua 2
-  tặng 2, mua 3 tặng 3, mua 4 tặng 4") — that reads spammy and clutters the CTA.
+- OFFER + CTA PRICE (HARD): NEVER speak a PRICE or money amount in the CTA (or anywhere) —
+  no "RM79", "giảm 50%", "chỉ 99k", "-50%". Price is NOT spoken. Mention a DEAL ONLY if the
+  PRODUCT BRIEF explicitly states one: if the brief says "mua 1 tặng 1" / "Beli 1 Free 1",
+  you MAY state THAT one deal ONCE, VERBATIM as written — NEVER escalate it into a tier ladder
+  ("mua 2 tặng 2", "mua 3 tặng 3") and NEVER invent a deal the brief doesn't have. If the brief
+  has NO offer, do NOT mention any deal — close on pure URGENCY / FOMO / fear-of-missing-out /
+  regret instead ("kẻo hết / nhanh tay kẻo lỡ / bỏ lỡ là tiếc / đừng để mai hối hận").
 - LANGUAGE (anchor/expectation/conviction): every example phrase in the rules above
   is ILLUSTRATIVE Vietnamese — WRITE THE ACTUAL SCRIPT 100% in ${args.lang}. For
   Bahasa Malaysia use the natural LOCAL register (light rojak), NEVER Vietnamese

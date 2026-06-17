@@ -74,13 +74,15 @@ export const AD_STRUCTURES: Record<AdStructure, AdStructureConfig> = {
         'Kết quả sau khi dùng. Đây là block ĐÓNG empathy echo (theo rule ở dưới) — lặp lại ' +
         'khoảnh khắc / cảm giác từ hook ở trạng thái mới.',
       cta:
-        '1-2 câu, KHÔNG lan man. Sản phẩm vẫn trong tay creator. Phải có ' +
-        'ÍT NHẤT 1 đòn bẩy mua hàng cụ thể (chọn 1 trong các loại, tuỳ brief): ' +
+        '1-2 câu, KHÔNG lan man, KHÔNG nhắc GIÁ / số tiền. Sản phẩm vẫn trong tay creator. ' +
+        'Kêu gọi MÃNH LIỆT bằng FOMO / sợ bỏ lỡ / hối tiếc / khan hiếm / gấp gáp: ' +
         'SCARCITY ("kẻo hết hàng / chỉ còn vài hộp / cuối tuần này thôi"), ' +
-        'URGENCY ("hốt lẹ / nhanh tay / trong 24h / sale hôm nay"), ' +
-        'SOCIAL PROOF ("đã 10k người đặt / 2.3k đánh giá 5 sao"), ' +
-        'RISK REVERSAL ("đổi trả 30 ngày / không thích hoàn tiền"). ' +
-        'KHÔNG dùng câu CTA flat kiểu "Mua ngay tại link bio" — thiếu đòn bẩy.',
+        'URGENCY ("hốt lẹ / nhanh tay / kẻo lỡ"), ' +
+        'FOMO/REGRET ("bỏ lỡ là tiếc / đừng để mai hối hận / nhiều người nhanh tay rồi"), ' +
+        'RISK REVERSAL ("đổi trả / không thích hoàn tiền"). ' +
+        'OFFER: CHỈ nhắc nếu BRIEF có ghi, đúng nguyên văn (vd "mua 1 tặng 1") — KHÔNG bịa, ' +
+        'KHÔNG bậc thang (2 tặng 2 / 3 tặng 3), KHÔNG nói GIÁ. Brief không ghi offer → chỉ kêu gọi. ' +
+        'KHÔNG dùng câu CTA flat kiểu "Mua ngay tại link bio".',
     },
     bodyAntiPatterns: [
       'Bạn có hay', 'Bạn đã bao giờ', 'Có khi nào bạn', 'Dạo này bạn có',
@@ -119,12 +121,14 @@ export const AD_STRUCTURES: Record<AdStructure, AdStructureConfig> = {
         'Thay đổi sau khi dùng. Đây là block ĐÓNG empathy echo (theo rule ở dưới) — lặp lại ' +
         'khoảnh khắc hook + pain ở trạng thái mới.',
       cta:
-        '1-2 câu nhẹ nhàng, tone narrative tiếp nối câu chuyện ở trên — không bán cứng. ' +
-        'Phải có ÍT NHẤT 1 đòn bẩy mua hàng cụ thể (chọn loại hợp tone story): ' +
-        'SOCIAL PROOF mềm ("ai dùng rồi cũng quay lại / 10k người đã thử"), ' +
-        'RISK REVERSAL ("đổi trả 30 ngày / không thích hoàn tiền"), ' +
-        'SCARCITY mềm ("đợt giảm tuần này thôi"), ' +
+        '1-2 câu nhẹ nhàng, tone narrative tiếp nối câu chuyện ở trên — không bán cứng, ' +
+        'KHÔNG nhắc GIÁ / số tiền. Kêu gọi bằng FOMO / sợ bỏ lỡ / hối tiếc / khan hiếm mềm: ' +
+        'SOCIAL PROOF mềm ("ai dùng rồi cũng quay lại / nhiều người đã thử"), ' +
+        'SCARCITY/FOMO mềm ("đợt này thôi / kẻo lỡ / để lâu lại tiếc"), ' +
+        'RISK REVERSAL ("đổi trả / không thích hoàn tiền"), ' +
         'INVITATION ("nếu bạn cũng đang ở đó, thử coi"). ' +
+        'OFFER: CHỈ nhắc nếu BRIEF có ghi, đúng nguyên văn (vd "mua 1 tặng 1") — KHÔNG bịa, ' +
+        'KHÔNG bậc thang (2 tặng 2 / 3 tặng 3), KHÔNG nói GIÁ. Brief không ghi offer → chỉ kêu gọi. ' +
         'KHÔNG dùng câu CTA flat kiểu "Mua ngay tại link bio".',
     },
     bodyAntiPatterns: [
