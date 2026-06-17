@@ -278,6 +278,17 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
         const aId = await saveAsset(audioBlob, 'audio/mpeg')
         audioUrl = (await getUrl(aId)) ?? undefined
       }
+      // Lipsync — exact-credit gate: InfiniteTalk độ dài = audio thật (chỉ biết sau TTS) +
+      // là phần ĐẮT. Giờ đã có giọng → đo độ dài thật → tính credit CHÍNH XÁC → xác nhận
+      // trước khi render. Huỷ thì chỉ mất bước TTS (rẻ), chưa tốn credit lipsync.
+      if (spec.role === 'lips' && audioBlob) {
+        const realSec = await audioBlobDuration(audioBlob).catch(() => effDur)
+        const exact = sceneCredit(angle, toggles, res, realSec)
+        if (!window.confirm(`Giọng đọc dài ${realSec.toFixed(1)}s → cảnh lipsync này tốn ~${exact}cr (${res}). Render?`)) {
+          addToast('Đã huỷ — chưa render lipsync (mới tạo giọng, chưa tốn credit lipsync).', 'success')
+          return
+        }
+      }
       // 4. Render (lips dùng audioUrl; B-roll/3D bỏ qua — Seedance không có audio)
       const remoteUrl = await renderStudioScene({
         kieApiKey: kieKey, conceptPromptEn: promptEn, role: spec.role,
@@ -383,7 +394,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
       {/* Độ dài — Seedance nhận 4/8/12s; nhưng LIPSYNC (InfiniteTalk) chạy theo CÂU THOẠI
           (audio) nên ẩn picker, chỉ hiện độ dài ước theo thoại để bám credit. */}
       {spec.role === 'lips' ? (
-        <p className="mt-2 text-[11px] text-gray-500">⏱ Độ dài ≈ <b className="text-gray-700">{estLipsSec}s</b> — lipsync chạy theo <b>câu thoại</b> (audio), không cố định 4/8/12. Credit ước theo đây.</p>
+        <p className="mt-2 text-[11px] text-gray-500">⏱ Độ dài ≈ <b className="text-gray-700">{estLipsSec}s</b> — lipsync chạy theo <b>câu thoại</b> (audio), không cố định 4/8/12. Đây là ước; <b>số chính xác hiện khi bấm Render để anh xác nhận</b>.</p>
       ) : (
         <div className="mt-2 flex items-center gap-1.5">
           <span className="text-[11px] text-gray-500">Dài</span>
