@@ -421,20 +421,30 @@ ${pronounRule(args.lang)}
 - BENEFIT LADDER (UNIVERSAL — the upgrade that makes people FEEL the benefit instead of
   reading a label): NEVER leave a benefit as a bare mechanism / medical-sounding term
   ("kiểm soát cholesterol", "hỗ trợ tim mạch", "kháng khuẩn"). Ladder each one DOWN to what
-  the buyer FEELS in daily life + the FEAR it lifts, in a SHORT phrase. This REWRITES the
-  benefit you already chose — it does NOT add new benefits or length:
-    • "kiểm soát cholesterol" → "người nhẹ hẳn, đỡ mệt mỏi nặng đầu, bớt lo mấy cái mạch máu"
-    • "bơm đầy lốp 3 phút" → "hết cảnh kẹt giữa đường tối, khỏi gọi cứu hộ cả tiếng"
-    • "cấp ẩm sâu" → "da hết khô căng, soi gương tự tin, không cần che khuyết điểm"
+  the buyer FEELS in daily life + the FEAR it lifts — AND anchor that felt result to ONE
+  OBSERVABLE everyday ACTION / SITUATION a phone could film, so the feeling is SHOWN through
+  a visible moment, not stated as a bare inner adjective. This REWRITES the benefit you
+  already chose — it does NOT add new benefits or length:
+    • "kiểm soát cholesterol" → "người nhẹ hẳn — leo ba tầng cầu thang không còn đứng thở dốc"
+    • "bơm đầy lốp 3 phút" → "hết cảnh kẹt giữa đường — tự cắm bơm, ba phút lên xe đi tiếp"
+    • "cấp ẩm sâu" → "da hết khô căng — sáng soi gương, ra đường khỏi lớp che khuyết điểm"
+    • (đồ gia dụng) "lực hút mạnh" → "hút một đường là sàn sạch bóng, cúi xuống sờ hết sạn"
+    • (thú cưng) "hợp vị, dễ ăn" → "vừa đổ ra là nó chạy lại, ăn sạch bát không bỏ thừa"
+  SHOW THE RESULT, DON'T JUST NAME THE FEELING — a pure inner-state line ("thấy khỏe hơn /
+  tự tin hơn / dễ chịu hơn" and the equivalent in any language) is too abstract to film ON
+  ITS OWN. Keep the feeling ONLY if the same or the next clause carries the visible action /
+  situation that proves it. Feeling = the WHY; the observable action = the SHOT.
   Mechanism may appear ONCE as the reason; the SELL is always the laddered felt result +
   fear. Use HEDGED support verbs ("hỗ trợ / giúp / cảm thấy") — never a cure ("chữa khỏi /
   hết hẳn") and never a cert (Halal/FDA/clinically proven); those are the money-losing lines
   (see guards below).
 - EMPATHY ECHO — the hook touches a pain / persona / moment; the benefit block
-  MUST come back to that EXACT pain or moment in a NEW state (after using the
-  product). The viewer needs the emotional loop to close ("hồi đó mình hay đau
-  đầu lúc 3 giờ chiều / giờ thì ngồi trọn ca không phải vò đầu nữa"). Universal
-  across niches.
+  MUST come back to that EXACT concrete MOMENT (the same time / place / action from
+  the hook or pain) in a NEW, VISIBLY CHANGED state — close the loop on the SAME scene a
+  camera could film, NOT on an abstract "thấy khá hơn". Reuse the moment, show the new
+  behaviour in it ("hồi đó 3 giờ chiều gục trên bàn ôm đầu / giờ 3 giờ chiều vẫn ngồi làm
+  phăng phăng"). Anchoring to the concrete moment (not the bare feeling) keeps the echo
+  filmable. Universal across niches.
 - POINT-OF-CONTACT — at least ONE sentence in pain / discovery is a very
   CONCRETE everyday moment (a TIME of day / a PLACE / an ACTION / an inner
   thought) the persona would silently nod at, not an abstract feeling. Example
