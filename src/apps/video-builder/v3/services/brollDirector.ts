@@ -547,6 +547,40 @@ function capSocialProof(scenes: BrollScene[]): void {
   }
 }
 
+// ── Before/After split-screen (deterministic guarantee) ─────────────────────
+// A transformation line (state AFTER using vs the problem BEFORE) MUST render as a
+// SPLIT-SCREEN of the SAME creator (left = before-problem, right = after-improved) — the
+// signature shot the app used to make but lost across refactors. The renderer's
+// BEFORE_AFTER detector keys off "split-screen"+"before/after" in the conceptPrompt, so we
+// just write that conceptPrompt here. Deterministic backstop on top of the prompt nudge;
+// caps at 2 so the ad doesn't become a wall of split-screens. Skips hook(0) + CTA(last).
+const RESULT_TRANSFORM_RE = /giờ thì|giờ đây|kết quả|đỡ hẳn|hết hẳn|khác hẳn|sau khi dùng|sau \d|sau mấy (ngày|tuần|tháng)|trước .{0,12}(giờ|nay)|lepas (guna|pakai|seminggu)|selepas|sekarang dah|dah tak|dah kurang|dah lega|dah hilang|before.{0,6}after|result|after \d/i
+const SPLIT_ALREADY_RE = /split[- ]?screen|before.{0,8}after/i
+
+function enforceBeforeAfterSplit(scenes: BrollScene[], script: GeneratedScript): void {
+  const painCue = (
+    script.blocks.find((b) => b.id === 'pain')?.text
+    ?? script.blocks.find((b) => b.id === 'hook')?.text
+    ?? 'the earlier discomfort'
+  ).slice(0, 80).replace(/"/g, '')
+  let made = 0
+  for (let i = 1; i < scenes.length - 1 && made < 2; i++) {   // never hook(0) / CTA(last)
+    const s = scenes[i]
+    if (s.role !== 'broll') continue                          // not lips / 3D / social_proof
+    if (!RESULT_TRANSFORM_RE.test(s.quote ?? '')) continue
+    if (s.conceptPrompt && SPLIT_ALREADY_RE.test(s.conceptPrompt)) { made++; continue }  // director already split it
+    s.kind = 'concept'
+    s.cameraFraming = 'creator'
+    s.conceptPrompt =
+      `Split-screen, the SAME creator from the avatar reference on BOTH halves (identity ` +
+      `locked — same face + same hijab/headwear). LEFT = BEFORE: the problem — uncomfortable / ` +
+      `frustrated, the affected body part (the situation in "${painCue}"). RIGHT = AFTER: the ` +
+      `same person visibly better — relieved, comfortable, a genuine relieved smile. No on-screen text.`
+    s.reason = 'before/after split (enforced)'
+    made++
+  }
+}
+
 // ── Public: plan a full-coverage hybrid shot list ───────────────────────────
 export async function directBrollScenes(
   params: BrollDirectorParams,
@@ -909,6 +943,16 @@ RULES:
   comes from (ginger, turmeric, ginkgo leaf) beside the bottle. Keep the ingredient NAME as a
   sticker. This is DISTINCT from a 3D cut (the ingredient ACTING inside the body) and from a
   plain packaging close-up — here we SEE the real ingredients. cameraFraming:"hands_noface".
+- BEFORE/AFTER SPLIT-SCREEN (MANDATORY for a transformation line): when a line describes the
+  state AFTER using the product vs the problem BEFORE — a result / "sau khi dùng" / "giờ thì…" /
+  "trước… giờ…" / "lepas pakai" / "selepas N hari" / a visible improvement — render that cut as
+  a SPLIT-SCREEN: role:"broll", kind:"concept", cameraFraming:"creator". The conceptPrompt MUST
+  contain the words "split-screen" + "before/after" and read: "Split-screen, the SAME creator on
+  BOTH halves — LEFT = BEFORE (the problem / pain / the affected body part / a frustrated,
+  uncomfortable expression), RIGHT = AFTER (the same area / person improved — relieved,
+  comfortable, a genuine relieved smile)." Same face + same hijab both halves (identity), no
+  on-screen text. This is the signature transformation shot — do NOT render it as a single
+  plain talking-head.
 - Universal: infer setting/usage from the product context; never hardcode a niche.${anchorHint}
 
 SCRIPT (cover all of it):
@@ -1011,6 +1055,7 @@ OUTPUT strict JSON only (no markdown fences):
   // backfill so the converted weak concepts get grounded in their line + the product.
   enforceProductHero(scenes, params.product)
   capSocialProof(scenes)   // P5w — social_proof only on real proof lines, cap 3, never CTA
+  enforceBeforeAfterSplit(scenes, params.script)   // transformation line → split-screen before/after (deterministic)
 
   await backfillWeakConcepts(scenes, params.product, params.geminiKey)
 
