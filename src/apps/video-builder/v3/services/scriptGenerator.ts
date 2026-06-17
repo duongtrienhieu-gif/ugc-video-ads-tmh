@@ -36,6 +36,7 @@ import {
   detectHookShape,
   buildSemanticAnswerRule,
   scriptShapeToHookSemantic,
+  validateNumbersInHook,
 } from './hookSemanticBinder'
 import { AD_ANGLES } from './adAngles'
 import {
@@ -1136,9 +1137,24 @@ export async function generateHooks(params: GenerateHooksParams): Promise<HookVa
       skeletons: picked,
     })
     if (adapted.length >= Math.min(4, picked.length)) {
-      // Keep order; if the model returned fewer than 6, top up with the
-      // remaining raw skeletons so the user still sees 6 cards.
-      finalTexts = picked.map((raw, i) => adapted[i]?.trim() || raw)
+      // Keep order; if the model returned fewer than 6, top up with the remaining
+      // raw skeletons so the user still sees 6 cards. GUARD the adapt step — the
+      // curated skeletons are safe by construction; only the Gemini rewrite can
+      // drift, so we verify each adapted hook and revert that ONE to its skeleton
+      // when it breaks a hard rule (universal, language-agnostic):
+      //   • WORD CAP — a hook must read in <3s; >18 words kills the scroll-stop.
+      //   • FABRICATED NUMBER — a factual number in the adapted hook that appears
+      //     in NEITHER the skeleton NOR the brief means adapt invented it. (We pass
+      //     skeleton+brief as the backing text, so numbers already in the curated
+      //     skeleton — "90%", "10.000", "RM20" — and rhetorical counts are kept.)
+      finalTexts = picked.map((raw, i) => {
+        const cand = adapted[i]?.trim()
+        if (!cand) return raw
+        const words = cand.replace(/[.,!?;:"'“”…–—()]/g, ' ').split(/\s+/).filter(Boolean).length
+        if (words > 18) return raw
+        if (validateNumbersInHook(cand, `${raw}\n${params.productPitch}`)) return raw
+        return cand
+      })
     }
   } catch (e) {
     // eslint-disable-next-line no-console
