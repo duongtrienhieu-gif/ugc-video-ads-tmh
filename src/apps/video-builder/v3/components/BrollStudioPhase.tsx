@@ -293,7 +293,10 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
       const remoteUrl = await renderStudioScene({
         kieApiKey: kieKey, conceptPromptEn: promptEn, role: spec.role,
         resolution: res, durationSec: effDur, withFaithfulFrame: spec.withFaithfulFrame,
-        productImageUrls: productUrls, avatarImageUrl: avatarUrl, audioUrl,
+        // Toggle "Sản phẩm" TẮT → KHÔNG bơm ảnh sản phẩm vào faithful-frame/Seedance seed,
+        // nếu không Seedance vẫn seed từ ảnh SP → sản phẩm lòi lại dù prompt đã sạch.
+        productImageUrls: toggles.product ? productUrls : [],
+        avatarImageUrl: avatarUrl, audioUrl,
         onStage: setStage,
       })
       setStage('Lưu clip…')

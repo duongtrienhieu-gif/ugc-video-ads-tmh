@@ -223,6 +223,18 @@ DRIFT-PROOF RULES (keep the render clean WITHOUT dodging the point of the scene)
 - 3D = clean cross-section animation, NO people / NO packaging / NO text.
 - Copy the correct ORIENTATION (how it's worn/placed/applied) so nothing is shown backwards.`
 
+// Same drift rules, but for a NO-PRODUCT beat (operator turned the product toggle OFF):
+// the scene is a feeling / problem / lifestyle moment and the product object must NEVER appear.
+const ANTI_DRIFT_NOPRODUCT = `
+DRIFT-PROOF RULES (keep the render clean WITHOUT dodging the point of the scene):
+- ⛔ NO PRODUCT: the product and its packaging must NOT appear, be held, opened, applied, peeled off, or be referenced ANYWHERE in the frame. This is a no-product beat — render only the feeling / problem / lifestyle moment described, never the product object.
+- IF AN AVATAR IS CHOSEN: the avatar's FACE IS CLEARLY VISIBLE, performing the real, specific action of the scene. Do NOT hide the face, do NOT cut away to anonymous disembodied hands. (The faithful first-frame image + Seedance keep the identity stable — never use "consistency" or "avoid distortion" as an excuse to remove the person.)
+- ONLY when NO avatar is chosen: use a clean hands-only or macro framing — a deliberate close-up choice, not an escape.
+- ONE consistent person identity throughout the clip.
+- NO floating objects: anything held is gripped firmly or rests on a surface.
+- NEVER ask the model to render TEXT/numbers (it garbles them) — spoken lines are voiced later, captions overlaid later.
+- 3D = clean cross-section animation, NO people / NO text.`
+
 // When NO avatar is chosen, the global market toggle is allowed to shape the SETTING + the
 // look of any incidental people (the avatar pick handles identity when one IS chosen).
 const LOCALE_HINT: Record<ScriptLang, string> = {
@@ -242,7 +254,20 @@ export async function engineerScenePrompt(args: {
   briefVi?: string
 }): Promise<{ conceptPromptEn: string; noteVi: string; spec: SceneSpec }> {
   const spec = resolveSceneSpec(args.angle, args.toggles)
-  const productContext = buildProductContextBlock(args.product)
+  const showProduct = args.toggles.product
+  // When the operator turned the product toggle OFF, the product object must NOT appear.
+  // Feed the niche context only as background understanding, clearly marked off-screen — and
+  // swap the drift rules + grounding language so Gemini never re-introduces the product.
+  const productContext = showProduct
+    ? buildProductContextBlock(args.product)
+    : (() => {
+        const ctx = buildProductContextBlock(args.product)
+        return ctx ? `\n[NICHE CONTEXT — for understanding the topic ONLY; the product itself must NEVER appear in this shot]${ctx}` : ''
+      })()
+  const driftRules = showProduct ? ANTI_DRIFT : ANTI_DRIFT_NOPRODUCT
+  const groundingClause = showProduct
+    ? 'grounded in the product'
+    : 'for the scene below — a NO-PRODUCT beat (feeling / problem / lifestyle); the product object and its packaging must NOT appear'
   const localeHint = (!args.toggles.avatar && spec.role !== 'mechanism3d')
     ? ` Setting / casting locale: ${LOCALE_HINT[args.lang]}.` : ''
   const cfg =
@@ -250,7 +275,7 @@ export async function engineerScenePrompt(args: {
     `Person: ${spec.framing === 'creator'
       ? 'the chosen avatar/creator — FACE CLEARLY VISIBLE, actively using the product with their own hands'
       : spec.framing === 'hands_noface' ? 'hands only, NO face (no avatar was chosen)' : 'no person'}. ` +
-    `Product in frame: ${args.toggles.product ? 'YES (must match the reference exactly)' : 'NO'}. ` +
+    `Product in frame: ${showProduct ? 'YES (must match the reference exactly)' : 'NO — the physical product / its packaging must NOT appear, be held, or be referenced in this shot'}. ` +
     `Duration: ${args.durationSec}s.` + localeHint +
     (args.toggles.voice && args.line ? ` Spoken line (for mood/context only, NOT rendered as on-screen text): "${args.line}".` : '')
 
@@ -261,10 +286,10 @@ export async function engineerScenePrompt(args: {
     apiKey: args.geminiKey,
     systemInstruction:
       `You are a UGC ad B-ROLL prompt engineer. Write ONE vivid ENGLISH image-to-video prompt — ` +
-      `SHOT TYPE + concrete ACTION + real SETTING — grounded in the product, for the scene below.${productContext}\n${ANTI_DRIFT}\n` +
+      `SHOT TYPE + concrete ACTION + real SETTING — ${groundingClause}.${productContext}\n${driftRules}\n` +
       `Output STRICT JSON {"conceptPromptEn":"…","noteVi":"<1 short VIETNAMESE line for the operator: what the clip shows>"}.`,
     prompt: `${cfg}\n${args.briefVi
-      ? `User scene description (written in VIETNAMESE — understand it and build THIS exact scene, grounded in the product): "${args.briefVi}"`
+      ? `User scene description (written in VIETNAMESE — understand it and build THIS exact scene${showProduct ? ', grounded in the product' : '. ⛔ Render ONLY what the description says — do NOT add the product or its packaging into the shot'}): "${args.briefVi}"`
       : `Idea seed: ${args.idea?.conceptPromptEn ?? args.idea?.ideaVi ?? args.angle.descVi}`}${variantNudge}\nWrite the prompt.`,
     maxOutputTokens: 700, temperature: args.variant ? 0.95 : 0.6, thinkingBudget: 0, responseMimeType: 'application/json', responseSchema: ENGINEER_SCHEMA,
   })
@@ -274,12 +299,18 @@ export async function engineerScenePrompt(args: {
   try {
     const fixRaw = await directGeminiText({
       apiKey: args.geminiKey,
-      systemInstruction:
-        `You review an image-to-video prompt and enforce these, rewriting only as needed: the product matches the ` +
-        `reference EXACTLY; no floating objects; no rendered text/numbers; a 3D shot has no people/packaging. ` +
-        `CRITICAL: if an avatar is present its FACE STAYS VISIBLE and it keeps actively using the product — you must ` +
-        `NOT remove the person, NOT replace them with anonymous hands, NOT turn it into a product-only shot. Keep the ` +
-        `creator performing the real action.${ANTI_DRIFT}\n` +
+      systemInstruction: (showProduct
+        ? `You review an image-to-video prompt and enforce these, rewriting only as needed: the product matches the ` +
+          `reference EXACTLY; no floating objects; no rendered text/numbers; a 3D shot has no people/packaging. ` +
+          `CRITICAL: if an avatar is present its FACE STAYS VISIBLE and it keeps actively using the product — you must ` +
+          `NOT remove the person, NOT replace them with anonymous hands, NOT turn it into a product-only shot. Keep the ` +
+          `creator performing the real action.`
+        : `You review an image-to-video prompt for a NO-PRODUCT beat and rewrite as needed: ⛔ the product and its ` +
+          `packaging must NOT appear, be held, opened, applied, peeled, or referenced anywhere — if the prompt shows or ` +
+          `mentions the product, REMOVE it and keep only the feeling / problem / lifestyle moment. No floating objects; ` +
+          `no rendered text/numbers. CRITICAL: if an avatar is present its FACE STAYS VISIBLE — do NOT replace it with ` +
+          `anonymous hands.`) +
+        `${driftRules}\n` +
         `Output STRICT JSON {"conceptPromptEn":"<fixed prompt>","noteVi":"<1 short VIETNAMESE line for the operator>"}.`,
       prompt: `Scene: ${cfg}\nPROMPT TO REVIEW:\n"""${draft.conceptPromptEn}"""`,
       maxOutputTokens: 700, temperature: 0.3, thinkingBudget: 0, responseMimeType: 'application/json', responseSchema: ENGINEER_SCHEMA,

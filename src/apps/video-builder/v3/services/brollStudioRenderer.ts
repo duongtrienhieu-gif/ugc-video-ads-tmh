@@ -44,9 +44,12 @@ export async function renderStudioScene(params: RenderStudioSceneParams): Promis
   const wantFrame = (params.withFaithfulFrame || role === 'lips') && refs.length > 0
   if (wantFrame) {
     params.onStage?.('Tạo khung hình chuẩn (gpt-4o)…')
+    const hasProductRef = !!params.productImageUrls?.length
     const lock = params.avatarImageUrl
-      ? 'Keep the SAME person as the avatar reference (same face, hair, identity) AND, if shown, the SAME product as the product reference (same colour, shape, label).'
-      : 'The product must look EXACTLY like the reference (same colour, shape, label).'
+      ? `Keep the SAME person as the avatar reference (same face, hair, identity).${hasProductRef ? ' AND, if shown, the SAME product as the product reference (same colour, shape, label).' : ' Do NOT add any product or packaging into the frame.'}`
+      : hasProductRef
+        ? 'The product must look EXACTLY like the reference (same colour, shape, label).'
+        : 'Do NOT add any product or packaging into the frame.'
     startFrameUrl = await generateGpt4oImageFast({
       apiKey: params.kieApiKey,
       prompt: `${params.conceptPromptEn} — ONE clean still frame, vertical 9:16. ${lock} Do NOT redesign anything. No text overlays.`,
