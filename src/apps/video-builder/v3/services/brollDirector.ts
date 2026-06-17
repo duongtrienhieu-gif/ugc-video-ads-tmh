@@ -594,7 +594,7 @@ export async function directBrollScenes(
   // P5m — the anchor (the ONE memorable reason/number) gets a HERO cut + a sticker;
   // the OFFER lands as a sticker at the CTA so the deal is visible, not just spoken.
   const anchorHint = params.script.anchor?.trim()
-    ? `\n\nANCHOR — the ONE memorable reason/number this script drives home: "${params.script.anchor.trim()}". Give it a clear HERO cut in the FIRST HALF (the spec / number / result shown BIG + clean, a real product shot) and reinforce it at the CTA. Put a number/price STICKER on the anchor, and another on the OFFER (price / "Beli 1 Free 1" / "-50%") at the CTA so the deal lands VISUALLY, not just in the voice.`
+    ? `\n\nANCHOR — the ONE memorable reason/number this script drives home: "${params.script.anchor.trim()}". Give it a clear HERO cut in the FIRST HALF (the spec / number / result shown BIG + clean, a real product shot) and reinforce it at the CTA. Put a STICKER on the anchor (the spec / number / result — NEVER a price / money amount). At the CTA, sticker the OFFER ONLY if the script actually states one (e.g. "Beli 1 Free 1") — NEVER a price / "-50%" / money sticker (price is never shown).`
     : ''
   // P3q — shape hint (empty for 'narrative', the previous default).
   const shapeHint = params.shape ? buildShapeDirectorHint(params.shape) : ''
@@ -943,6 +943,14 @@ RULES:
   comes from (ginger, turmeric, ginkgo leaf) beside the bottle. Keep the ingredient NAME as a
   sticker. This is DISTINCT from a 3D cut (the ingredient ACTING inside the body) and from a
   plain packaging close-up — here we SEE the real ingredients. cameraFraming:"hands_noface".
+- STYLIZED ACTIVE (TPCN / cosmetics — the ingredient is an ABSTRACT substance with NO real-world
+  object: peptide, collagen, hyaluronic acid, niacinamide, a vitamin/mineral complex, glucosamine,
+  probiotics, zinc…): when such an active is just NAMED (NOT "acting inside the body" — that case
+  is the 3D cut), render a PREMIUM stylized macro of the active's FORM — a serum / oil DROPLET with
+  glowing suspended molecules or particles, a CAPSULE / tablet cross-section revealing the actives,
+  a fine POWDER swirl, or glossy gel beads — the "science-beauty" shot, NOT a flat packaging
+  close-up + text. Keep the active NAME as a sticker. (Real natural source → RAW INGREDIENT HERO;
+  active ACTING inside the body → 3D mechanism; abstract active just named → this.) cameraFraming:"hands_noface".
 - BEFORE/AFTER SPLIT-SCREEN (MANDATORY for a transformation line): when a line describes the
   state AFTER using the product vs the problem BEFORE — a result / "sau khi dùng" / "giờ thì…" /
   "trước… giờ…" / "lepas pakai" / "selepas N hari" / a visible improvement — render that cut as
