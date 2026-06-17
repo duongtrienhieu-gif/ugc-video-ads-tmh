@@ -29,7 +29,7 @@ import {
 } from '../types'
 import { AD_STRUCTURES } from './adStructures'
 import { pickShapedViralHooks } from './hookViralPatterns'
-import { validateBody, validateShapeExecution, validateAnchor, spellFixVi, type BodyBlocks } from './scriptValidator'
+import { validateBody, validateShapeExecution, validateAnchor, spellFixVi, stripMoney, type BodyBlocks } from './scriptValidator'
 import { buildMsBodyVocabBlock } from './bodyPatternsMs'
 import { buildShapeOverrideBlock } from './scriptShapes'
 import {
@@ -222,6 +222,11 @@ export async function generateScript(
       if (!refit) break
       blockMap = refit
     }
+    // HARD price guard (user rule: the CTA NEVER speaks a price). The prompt nudge is
+    // unreliable — the model still emits "RM59 je", "tak payah bayar sampai RM138", "chỉ 99k",
+    // "giảm 50%". Deterministically strip money + discount-% from the CTA block ONLY (the
+    // offer NAME like "mua 1 tặng 1" / "Beli 1 Percuma 1" survives — it carries no price number).
+    if (blockMap.cta) blockMap.cta = stripMoney(blockMap.cta)
     // Keep the user's picked hook verbatim through any refit.
     if ((params.chosenHook ?? '').trim()) blockMap.hook = params.chosenHook!.trim()
     parsed = { ...parsed, blocks: blockMap }

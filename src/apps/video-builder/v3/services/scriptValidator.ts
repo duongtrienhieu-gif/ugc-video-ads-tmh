@@ -68,6 +68,45 @@ export function spellFixVi(text: string): string {
   return out
 }
 
+// ── HARD price strip (user rule: CTA/script NEVER speaks a price) ─────────────
+// The prompt nudge ("don't say a price") is unreliable — the model still emits
+// "RM59 je", "chỉ 99k", "tak payah bayar sampai RM138", "giảm 50%". This is a
+// DETERMINISTIC post-gen strip that removes money amounts + discount-% while
+// KEEPING the offer NAME ("mua 1 tặng 1" / "Beli 1 Percuma 1" — no number) and the
+// FOMO. Currency-anchored (RM / $ / đồng / đ / vnđ / "giá|harga" + N | discount %)
+// so it never touches "10k người" (social proof), "UMF 10+", "B12", "20000mAh",
+// "5 sao", "96%" stats. VN + MS + EN.
+export function stripMoney(text: string): string {
+  let out = text
+  const LEAD = '(?:(?:ch[ỉi]|cuma|hanya|gi[áa]|harga|c[òo]n|sekarang ni|từ|dari|from|just|only)\\s+)*'
+  const END = '(?=$|[\\s,.!?…;:)])'
+  // (replace with a SPACE, not '', so two words never fuse — cleanup collapses spaces after)
+  // 1. "no need to pay up to RM###" / "thay vì 138k" style price-compare clauses
+  out = out.replace(/,?\s*(?:tak payah bayar(?:\s+sampai)?|tak perlu bayar(?:\s+sampai)?|thay vì(?:\s+tới| đến)?|instead of)\s*(?:RM|rm|\$|₫)?\s?\d[\d.,]*\s?(?:k|ribu|rb|nghìn|ngàn|đồng|đ|vnđ)?/gi, ' ')
+  // 2. RM / $ / ₫ amounts — currency on EITHER side ("RM59" or "149 RM") + optional lead +
+  //    optional trailing unit/filler ("je / sahaja / lận / thôi / lebih").
+  out = out.replace(new RegExp(`,?\\s*${LEAD}(?:(?:RM|rm|\\$|₫)\\s?\\d[\\d.,]*|\\d[\\d.,]*\\s?(?:RM|rm))\\s?(?:k|ribu|rb|je|sahaja|saja|l[ậa]n|th[ôo]i|lebih)?`, 'gi'), ' ')
+  // 3. "N đồng / N đ / N vnđ" — đồng is ALWAYS currency (lead optional). Lookahead end
+  //    (NOT \b — \b is unreliable after the non-ASCII "đ").
+  out = out.replace(new RegExp(`,?\\s*${LEAD}\\d[\\d.,]*\\s?(?:đồng|vnđ|đ)${END}`, 'gi'), ' ')
+  // 4. "N k / N nghìn / N ngàn" ONLY with a price LEAD (so "10k người" / "mấy ngàn người"
+  //    social-proof counts are NEVER stripped — they have no chỉ/giá/còn lead).
+  out = out.replace(/,?\s*(?:ch[ỉi]|cuma|hanya|gi[áa]|harga|c[òo]n)\s+\d[\d.,]*\s?(?:k|nghìn|ngàn)(?:\s?th[ôo]i)?(?=$|[\s,.!?…;:)])/gi, ' ')
+  // 5. Discount percent ONLY in a discount context (keep "96%" stats, "5 sao")
+  out = out.replace(/,?\s*(?:giảm|diskaun|sale|tiết kiệm|hemat|off)\s*-?\s*\d+\s?%|,?\s*-\s?\d+\s?%(?:\s?(?:off|giảm|discount))?/gi, ' ')
+  // cleanup leftover punctuation / double spaces / dangling connectors
+  out = out
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.!?…])/g, '$1')
+    .replace(/([,.!?…])\s*\1+/g, '$1')
+    .replace(/,\s*([.!?…])/g, '$1')
+    .replace(/([.!?…]\s*),\s*/g, '$1')
+    .replace(/\s+,/g, ',')
+    .replace(/^[\s,;–-]+/, '')
+    .trim()
+  return out
+}
+
 // ── Tokenization helpers (VN-friendly) ───────────────────────────────────────
 
 // VN stopword list + `meaningfulTokens` helper removed in P3r — the literal-reuse
