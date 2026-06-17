@@ -30,6 +30,9 @@ import type { ScriptLang } from '../types'
 
 const lockOn = (s: string) => s === 'on' || s === 'lock-on'
 const LANG_TAG: Record<ScriptLang, string> = { vi: 'VN', ms: 'MY', en: 'EN' }
+// Product used ON THE BODY (apply/wear/eat/drink) → needs the avatar/person; a head-less
+// hands-only render of a body part deforms. Runs on the English conceptPrompt.
+const APPLIES_TO_BODY_RE = /\b(neck|throat|face|cheeks?|forehead|chin|jaw|lips?|mouth|teeth|hair|scalp|ears?|eyes?|nose|skin|chest|shoulders?|back|waist|belly|stomach|arms?|wrists?|knees?|legs?|thighs?|ankles?|feet|foot)\b|\b(wear|wears|wearing|worn|strap|straps|strapped|fasten|buckle|eat|eats|eating|bite|bites|chew|drink|drinks|sip|swallow)\b/i
 
 /** Decode an audio blob's duration (sec) so we can pick the right mux mode. */
 async function audioBlobDuration(blob: Blob): Promise<number> {
@@ -155,6 +158,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
   const [line, setLine] = useState(idea?.suggestedLine ?? '')
   const [brief, setBrief] = useState('')   // free-form: Vietnamese scene description
   const [prompt, setPrompt] = useState('')
+  const [promptSig, setPromptSig] = useState('')   // config the current prompt was built for
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [variant, setVariant] = useState(0)
@@ -181,6 +185,9 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
   const credit = res === '480p' ? c480 : c720
   const voiceNeedsLine = !!voiceId && !line.trim()
   const briefMissing = !!freeform && !brief.trim()
+  // Signature of every input that changes the prompt → if it changed since the prompt was
+  // generated, the cached prompt is STALE and must be re-made (fixes prompt≠config bug).
+  const cfgSig = () => `${avatarRef ?? ''}|${voiceId}|${productOn}|${dur}|${line.trim()}|${freeform ? brief.trim() : ''}`
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; e.target.value = ''
@@ -207,7 +214,7 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
         ? ` · Câu thoại "${line.trim()}" được ${avatarRef ? 'lồng tiếng + nhép môi' : 'lồng tiếng'} (model không vẽ chữ)`
         : ''
       const meta = `${who} · ${productOn ? 'có sản phẩm' : 'không sản phẩm'} · ${dur}s · ${res}${voiceId ? ` · giọng ${voiceName}` : ''}${spoken}`
-      setPrompt(r.conceptPromptEn); setNote(`${r.noteVi}\n${meta}`)
+      setPrompt(r.conceptPromptEn); setNote(`${r.noteVi}\n${meta}`); setPromptSig(cfgSig())
     } catch (e) {
       addToast(`Tạo prompt lỗi: ${(e instanceof Error ? e.message : String(e)).slice(0, 100)}`, 'error')
     } finally { setBusy(false) }
@@ -221,12 +228,19 @@ function StudioSceneCard({ angle, idea, product, lang, geminiKey, lastVoice, onV
     if (voiceId && !elevenKey) { addToast('Cảnh có giọng đọc cần ElevenLabs key trong Cài đặt', 'error'); return }
     setRendering(true); setStage('Chuẩn bị…')
     try {
-      // 1. Prompt — tự sinh nếu user chưa mở expander tạo
-      let promptEn = prompt
+      // 1. Prompt — dùng lại prompt đã tạo CHỈ KHI cấu hình chưa đổi (sig khớp); nếu đổi
+      //    avatar/giọng/giây/câu thoại sau khi tạo prompt → prompt cũ lệch → sinh lại.
+      let promptEn = (prompt && promptSig === cfgSig()) ? prompt : ''
       if (!promptEn) {
         setStage('Viết prompt…')
         const r = await engineerScenePrompt({ angle, idea, toggles, line, durationSec: dur, product, lang, geminiKey, briefVi: freeform ? brief.trim() : undefined })
-        promptEn = r.conceptPromptEn; setPrompt(r.conceptPromptEn); setNote(r.noteVi)
+        promptEn = r.conceptPromptEn; setPrompt(r.conceptPromptEn); setNote(r.noteVi); setPromptSig(cfgSig())
+      }
+      // Guard: cảnh dùng sản phẩm TRÊN NGƯỜI (bôi/đeo/ăn) mà CHƯA chọn avatar → tay-không-
+      // mặt trên cơ thể sẽ méo (thân cụt đầu). Chặn + nhắc chọn avatar (khỏi phí credit).
+      if (!avatarRef && spec.role !== 'lips' && APPLIES_TO_BODY_RE.test(promptEn)) {
+        addToast('Cảnh dùng sản phẩm TRÊN NGƯỜI (bôi/đeo/ăn) — hãy chọn Avatar để thấy người dùng thật, tránh méo thân. Chọn avatar rồi render lại.', 'error')
+        return
       }
       // 2. Resolve ẢNH SẢN PHẨM → URL công khai (KIE fetch từ xa). Dùng TOÀN BỘ
       //    productImages (4 ảnh chuẩn) — `productImage` chỉ là alias cũ, thường RỖNG ở
