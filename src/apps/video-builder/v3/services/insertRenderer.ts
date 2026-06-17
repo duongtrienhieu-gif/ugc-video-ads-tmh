@@ -294,30 +294,23 @@ function buildInsertKeyframePrompt(
     const isAfterTime = !!quote && AFTER_TIME_RE.test(quote)
     paragraphs.push(
       `IDENTITY LOCK: Person from reference image #${personRefIndex}. ` +
-      `Preserve EXACTLY the face and skin tone — the SAME human being. Do NOT ` +
-      `redesign the person. Hair and clothing may differ as noted below.`,
+      `Preserve EXACTLY the face, skin tone, hair, AND — if they wear any HEADWEAR ` +
+      `(hijab, scarf, hat, headband, turban, cap) — its SAME color & style. The hijab/` +
+      `headwear color + the creator's signature look are part of WHO THEY ARE — NEVER ` +
+      `change them. The SAME recognizable human being in every scene. Only the TOP / ` +
+      `garment may change, as noted below.`,
     )
     paragraphs.push(
       isAfterTime
-        ? `WARDROBE: COMPLETELY DIFFERENT outfit from the reference photo AND ` +
-          `from the earlier problem/demo scenes — DO NOT copy or reuse ANY ` +
-          `clothing item from the reference (different top, different color, ` +
-          `different style). If the person wears any HEADWEAR in the reference ` +
-          `(hijab, scarf, hat, headband, turban, beanie, cap) — also CHANGE its ` +
-          `color or style; the headwear is part of the outfit, not part of the ` +
-          `identity. The background may shift too (different time of day, ` +
-          `different room corner). USE the reference ONLY for face / skin tone / ` +
-          `the person's identity — ignore the clothes and headwear. Implies DAYS ` +
-          `HAVE PASSED since the earlier scenes, like a real KOC filming a ` +
-          `"result" update a few weeks later.`
-        : `WARDROBE: COMPLETELY DIFFERENT outfit from the reference photo — DO ` +
-          `NOT copy or reuse ANY clothing item from the reference (different ` +
-          `top, different color, different style). If the person wears any ` +
-          `HEADWEAR in the reference (hijab, scarf, hat, headband, turban, ` +
-          `beanie, cap) — also CHANGE its color or style; the headwear is part ` +
-          `of the outfit, not part of the identity. USE the reference ONLY for ` +
-          `face / skin tone / the person's identity — ignore the clothes and ` +
-          `headwear. This is a different filming day from the talking-head video.`,
+        ? `WARDROBE (after-time / result scene): the creator may wear a DIFFERENT TOP from ` +
+          `the earlier scenes to imply days have passed (a "result update" filmed later), and ` +
+          `the look is a touch fresher / brighter. But KEEP the SAME face AND the SAME hijab/` +
+          `headwear color & style. Change ONLY the top/garment — nothing else. At most TWO ` +
+          `looks total across the whole ad; do NOT invent a brand-new outfit + new hijab color.`
+        : `WARDROBE: keep a CONSISTENT everyday outfit — the SAME general top AND the SAME ` +
+          `hijab/headwear color & style as the creator's signature look across scenes. Minor ` +
+          `natural variation is fine; a wholesale new outfit or a new hijab color each scene is ` +
+          `NOT — that reads as a different person. This is ONE creator filming, not many.`,
     )
     // Z98 #2 — inside a BEFORE/AFTER comparison the two halves are the SAME
     // person at two points in time; they MUST wear different outfits or "time
@@ -326,12 +319,11 @@ function buildInsertKeyframePrompt(
       (!!conceptPrompt && BEFORE_AFTER_RE.test(conceptPrompt))
     if (isBeforeAfter) {
       paragraphs.push(
-        `BEFORE/AFTER WARDROBE: the BEFORE side and the AFTER side are the SAME ` +
-        `person at two different times — they MUST wear CLEARLY DIFFERENT outfits ` +
-        `(different colors, different tops, and different headwear if any). The ` +
-        `"after" look is fresher / brighter. Two distinct outfits in one frame so ` +
-        `it is visually obvious that days or weeks have passed — never the same ` +
-        `outfit on both sides.`,
+        `BEFORE/AFTER WARDROBE: the BEFORE half and the AFTER half are the SAME person ` +
+        `at two different times — the AFTER half may wear a DIFFERENT TOP and look fresher / ` +
+        `brighter so it is obvious time has passed. But KEEP the SAME face AND the SAME hijab/` +
+        `headwear color & style on BOTH halves — it is the same creator. Change ONLY the top, ` +
+        `never the face or the hijab color.`,
       )
     }
   }
