@@ -22,9 +22,8 @@ interface InputPanelProps {
 }
 
 const LANG_OPTIONS: { value: LangMode; label: string; glyph: string }[] = [
-  { value: 'ms',   label: 'Bahasa Malaysia', glyph: '🇲🇾' },
-  { value: 'vi',   label: 'Tiếng Việt',       glyph: '🇻🇳' },
-  { value: 'both', label: 'Cả hai',           glyph: '🌏' },
+  { value: 'ms', label: 'Bahasa Malaysia', glyph: '🇲🇾' },
+  { value: 'vi', label: 'Tiếng Việt',       glyph: '🇻🇳' },
 ]
 
 export default function InputPanel({
@@ -145,7 +144,7 @@ export default function InputPanel({
 
         {/* STEP 3 — Language */}
         <Section step={3} title="Ngôn ngữ output">
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
             {LANG_OPTIONS.map((l) => (
               <button
                 key={l.value}

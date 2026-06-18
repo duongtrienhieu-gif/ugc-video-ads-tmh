@@ -350,19 +350,19 @@ export interface AdsAngle {
 
 export const ADS_ANGLES: AdsAngle[] = [
   {
-    id: 'hook-stop', label: 'Hook giật scroll', hint: 'Chặn lướt trong 1 giây',
-    glyph: '🪝', educational: false, defaultLength: 'medium', defaultCta: 'balanced',
-    briefEn: 'Scroll-stopper. Line 1 = a polarizing / pattern-interrupt / curiosity-loop opener. Then SHORT scannable beats that pay off the loop. STRUCTURE: hook line → 1-2 short agitate lines → a ✅/❌ contrast or 2-3 punchy bullet beats → CTA. Lots of white space. NOT a story paragraph.',
+    id: 'listicle', label: '3 Lý do / 3 Sai lầm', hint: 'Liệt kê quét nhanh, read-through cao',
+    glyph: '🔢', educational: false, defaultLength: 'medium', defaultCta: 'balanced',
+    briefEn: 'High-read-through LISTICLE. Hook = "3 mistakes most people make about X" OR "3 reasons people quietly switched to Y". STRUCTURE: hook line → a numbered scannable list (👉 #1 / #2 / #3), EACH item 1-2 lines: name the mistake/reason + a quick sting, weaving the product in as the fix on the last 1-2 items → short CTA. The numbered list IS the body — every point tight, no long prose.',
   },
   {
     id: 'story', label: 'Kể chuyện cảm xúc', hint: 'Hành trình struggle → kết quả',
     glyph: '📖', educational: false, defaultLength: 'long', defaultCta: 'soft',
-    briefEn: 'The ONE narrative angle: first-person emotional arc — scene → struggle (identity-level, not just a symptom) → turning point (product discovered) → relief/result. Flowing prose is allowed here, BUT still break into short 1-3 line paragraphs with blank lines and an emoji or two — never one dense block. End on a soft CTA.',
+    briefEn: 'The ONE narrative angle: first-person emotional arc — scene → struggle (identity-level, not just a symptom) → turning point (product discovered) → relief. CRUCIAL before the CTA: FUTURE-PACE the dream outcome — paint a vivid "now my mornings look like…" after-state the reader craves. Flowing prose allowed BUT break into short 1-3 line paragraphs with blank lines + an emoji or two — never one dense block. Soft CTA.',
   },
   {
     id: 'soft-rec', label: 'Gợi ý kiểu bạn bè', hint: 'Bán mềm, như review thật',
     glyph: '🤝', educational: false, defaultLength: 'medium', defaultCta: 'soft',
-    briefEn: 'Honest friend-to-friend recommendation / review. Casual, believable, mention what you liked + one tiny caveat. STRUCTURE: short conversational paragraphs (1-2 lines each), a quick ✅ "what I liked" mini-list, soft CTA. Light and scannable, not a long monologue.',
+    briefEn: 'Honest friend-to-friend recommendation / review. Casual, believable: what you liked + one tiny caveat. STRUCTURE: short conversational paragraphs → a quick ✅ "what I liked" mini-list → a 1-line DESIRE beat (the small daily moment it improved / "now I don\'t even think about it anymore") → soft CTA. Light and scannable, not a monologue.',
   },
   {
     id: 'social-proof', label: 'Bằng chứng đám đông', hint: 'Nhiều người dùng + testimonial',
@@ -372,7 +372,7 @@ export const ADS_ANGLES: AdsAngle[] = [
   {
     id: 'mechanism', label: 'Giải thích cơ chế', hint: 'Vì sao hiệu quả (ingredient)',
     glyph: '🧪', educational: true, defaultLength: 'medium', defaultCta: 'balanced',
-    briefEn: 'Explain WHY it works without lecturing. STRUCTURE: hook (a surprising "why") → cause → effect in 2-4 SHORT stepped lines (each ≤ 2 lines, can use 👉 or numbers) → a ✅ payoff of what the user feels → CTA. Plain-language analogies, NEVER medical-textbook, NEVER cure claims. Keep it tight — NOT a long essay.',
+    briefEn: 'UNIQUE-MECHANISM angle (the strongest for cold traffic). STRUCTURE: hook (a surprising "why") → WHY the things people tried before FAILED (the missing piece) → the product\'s unique mechanism in 2-4 SHORT stepped lines (cause → effect, use 👉 or numbers, plain-language analogy) → a ✅ payoff of what the user FEELS (desire) → CTA. NEVER medical-textbook, NEVER cure claims. Tight, NOT an essay.',
   },
   {
     id: 'comparison', label: 'So sánh / Trước-sau', hint: 'Upgrade rõ rệt, có timeline',
@@ -382,7 +382,7 @@ export const ADS_ANGLES: AdsAngle[] = [
   {
     id: 'hard-offer', label: 'Chốt mạnh + ưu đãi', hint: 'Urgency, CTA mạnh',
     glyph: '🚨', educational: false, defaultLength: 'short', defaultCta: 'hard',
-    briefEn: 'Fast direct-response for warm audiences. STRUCTURE: punchy hook → pain in 1 line → ✅ 2-3 benefit bullets → urgency/scarcity (ONLY if the brief states a real offer) → strong 👉 CTA. Ultra-scannable, short lines, no storytelling. Never speak an invented price.',
+    briefEn: 'Fast direct-response for warm audiences. STRUCTURE: punchy hook → pain in 1 line → ✅ 2-3 benefit bullets → urgency/scarcity AND risk-reversal — ONLY using offer terms stated in the brief (deal, warranty, refund, "tukar jika rosak"); if the brief has NO offer, close on pure FOMO instead → strong 👉 CTA. Ultra-scannable, short lines, no storytelling, never an invented price.',
   },
 ]
 
