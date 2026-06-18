@@ -206,7 +206,7 @@ KIỂU KỊCH BẢN = ${arch.labelVi}: ${arch.taglineVi}
 ${arch.brainHint}
 
 CẤU HÌNH:
-- Sản phẩm thật RA TAY kiểu: ${HERO_TYPE_LABEL[config.heroType]} (GIỮ NGUYÊN bao bì/nhãn thật, KHÔNG thêm mặt/tay cho sản phẩm).
+- Sản phẩm-hiệp sĩ ra tay kiểu: ${HERO_TYPE_LABEL[config.heroType]}. Sản phẩm thật được NHÂN CÁCH HÓA (thêm MẮT biểu cảm + TAY nhỏ thành hiệp sĩ) NHƯNG GIỮ NGUYÊN bao bì/nhãn/màu/dáng thật để vẫn nhận ra đúng sản phẩm.
 - Cảnh "đồ thường thất bại" (FalseSolution): ${config.falseSolution ? 'CÓ — chèn 1 cảnh giải pháp thường thất bại / phản diện mạnh thêm trước HeroEntrance' : 'KHÔNG'}
 - Kiểu CTA cuối: ${CTA_STYLE_LABEL[config.ctaStyle]}
 - Số cảnh: ĐÚNG ${sceneCount} cảnh.
@@ -219,8 +219,9 @@ INSIGHT (đã phân tích):
 - Ẩn dụ: ${insight.metaphor}
 ${buildProductContext(product)}
 
-🎯 SẢN PHẨM THẬT = HERO (đây là video BÁN HÀNG — KHÔNG phải nuôi kênh):
-- Sản phẩm CÓ THẬT (xem bao bì/nhãn ở [SẢN PHẨM]). Từ hero_entrance trở đi, SẢN PHẨM THẬT phải xuất hiện và là thứ diệt phản diện — action/videoPromptEn mô tả ĐÚNG bao bì thật (đúng dạng tuýp/chai/hộp + tên nhãn), KHÔNG bịa bao bì mới, KHÔNG thêm mặt/tay cho sản phẩm.
+🎯 SẢN PHẨM THẬT = HERO NHÂN CÁCH HÓA (đây là video BÁN HÀNG — KHÔNG phải nuôi kênh):
+- Sản phẩm CÓ THẬT (xem bao bì/nhãn ở [SẢN PHẨM]). Nhân vật role='hero' = CHÍNH sản phẩm thật được nhân cách hóa: thêm MẮT biểu cảm + TAY nhỏ thành hiệp sĩ, NHƯNG giữ nguyên bao bì/nhãn/màu/dáng thật (vẫn nhận ra đúng sản phẩm — KHÔNG bịa bao bì mới). appearance + imagePromptEn của hero phải mô tả đúng bao bì thật + chi tiết mắt/tay thêm vào.
+- Từ hero_entrance trở đi, sản phẩm-hiệp sĩ này là thứ diệt phản diện (tự tay xịt/đánh, hoặc tung hoạt chất).
 - Mọi video KẾT bằng cảnh cta: hiện packshot SẢN PHẨM THẬT + KÊU GỌI MUA/ĐẶT HÀNG + "bấm giỏ hàng / link dưới" + câu "hiệu quả tùy cơ địa". Hướng khách tới ĐẶT MUA, tuyệt đối KHÔNG "follow kênh".
 - hasProduct: mỗi cảnh đặt true nếu sản phẩm thật trong khung (thường hero_entrance/application/result/cta, đôi khi false_solution để so sánh), false nếu cảnh chỉ có phản diện/nỗi đau (challenger/rootcause/agitation).
 

@@ -77,17 +77,17 @@ export const ARCHETYPE_ORDER: ArchetypeId[] = [
 
 // ── Module toggles ───────────────────────────────────────────────────────────
 export const HERO_TYPE_LABEL: Record<HeroType, string> = {
-  product_savior:   'Sản phẩm thật bay ra cứu nguy',
-  ingredient_burst: 'Hoạt chất bung ra từ sản phẩm',
-  helper_army:      'Đạo quân lợi khuẩn từ sản phẩm',
+  product_knight:    'Sản phẩm hóa hiệp sĩ (mắt/tay)',
+  ingredient_weapon: 'Hiệp sĩ tung hoạt chất',
+  helper_army:       'Hiệp sĩ + đạo quân lợi khuẩn',
 }
 
-/** SẢN PHẨM THẬT luôn là hero — trục này = cách sản phẩm thật RA TAY. Mọi kiểu GIỮ
- *  NGUYÊN bao bì thật (khóa bằng 4 ảnh ở P2), không thêm mặt/tay. */
+/** SẢN PHẨM THẬT luôn là hero, được NHÂN CÁCH HÓA (thêm mắt + tay nhỏ) NHƯNG GIỮ
+ *  nguyên bao bì/nhãn/màu/dáng thật (khóa bằng 4 ảnh ở P2). Trục này = hiệp-sĩ ra tay kiểu gì. */
 export const HERO_TYPE_DESC: Record<HeroType, string> = {
-  product_savior:   'Tuýp/chai/hộp THẬT bay vào khung + hào quang/foam/tia phun ra diệt phản diện. Giữ y bao bì thật — an toàn, hợp đa số sản phẩm.',
-  ingredient_burst: 'Sản phẩm thật mở ra, HOẠT CHẤT (tia/luồng) bung ra thành "vũ khí" diệt phản diện — hợp serum / sản phẩm nhiều hoạt chất (đi cùng KB4).',
-  helper_army:      'Đám lợi khuẩn / vi hạt nhỏ ÙA RA TỪ sản phẩm thật để dọn dẹp — hợp probiotic / collagen / men vi sinh. Bao bì sản phẩm vẫn hiện thật.',
+  product_knight:    'Sản phẩm thật được nhân cách hóa thành HIỆP SĨ — thêm mắt biểu cảm + tay nhỏ, NHƯNG giữ nguyên bao bì/nhãn/màu/dáng thật. Tự tay xịt/đánh diệt phản diện. Đúng kiểu 9 video mẫu.',
+  ingredient_weapon: 'Sản phẩm-hiệp sĩ VUNG hoạt chất (tia/luồng) làm vũ khí — hợp serum / sản phẩm nhiều hoạt chất (đi cùng KB4).',
+  helper_army:       'Sản phẩm-hiệp sĩ chỉ huy ĐẠO QUÂN lợi khuẩn/vi hạt ùa ra dọn dẹp — hợp probiotic / collagen / men vi sinh.',
 }
 
 /** Giải thích cảnh FalseSolution cho user. */

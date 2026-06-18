@@ -18,7 +18,7 @@ import {
 import { analyzeInsight, generateScript } from './services/personifiedBrain'
 
 const DEFAULT_CONFIG: PersonifiedConfig = {
-  archetype: 'KB1_invader', length: 'medium', heroType: 'product_savior',
+  archetype: 'KB1_invader', length: 'medium', heroType: 'product_knight',
   falseSolution: true, ctaStyle: 'villain_flees',
 }
 

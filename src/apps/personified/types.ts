@@ -27,13 +27,13 @@ export type ArchetypeId =
   | 'KB3_grumpy_organ'     // Bộ Phận Cằn Nhằn — organ tự kể, mắng chủ, ẩn dụ công sở
   | 'KB4_ingredient_battle'// Khoe Vũ Khí Hoạt Chất — mỗi hoạt chất 1 cảnh, villain tự khai
 
-/** SẢN PHẨM THẬT LUÔN là hero (app bán hàng) — trục này = sản phẩm thật xuất hiện
- *  KIỂU GÌ để diệt phản diện. Mọi lựa chọn GIỮ NGUYÊN bao bì thật (khóa bằng 4 ảnh
- *  ở P2), KHÔNG thêm mặt/tay. */
+/** SẢN PHẨM THẬT LUÔN là hero (app bán hàng) và được NHÂN CÁCH HÓA — thêm mắt
+ *  biểu cảm + tay nhỏ thành "hiệp sĩ" NHƯNG GIỮ NGUYÊN bao bì/nhãn/màu/dáng thật
+ *  (khóa bằng 4 ảnh ở P2). Trục này = hiệp-sĩ-sản-phẩm ra tay kiểu gì. */
 export type HeroType =
-  | 'product_savior'    // sản phẩm thật bay ra + hào quang/foam/tia (mặc định)
-  | 'ingredient_burst'  // hoạt chất/tia từ sản phẩm thật bung ra (serum/multi-ingredient)
-  | 'helper_army'       // đạo quân lợi khuẩn/vi hạt ùa ra TỪ sản phẩm thật (probiotic/collagen)
+  | 'product_knight'    // sản phẩm hóa hiệp sĩ tự tay diệt phản diện (mặc định)
+  | 'ingredient_weapon' // hiệp sĩ vung hoạt chất (tia/luồng) làm vũ khí (serum/multi-ingredient)
+  | 'helper_army'       // hiệp sĩ chỉ huy đạo quân lợi khuẩn/vi hạt ùa ra (probiotic/collagen)
 
 /** Mọi CTA đều CHỐT ĐƠN (app bán hàng) — chỉ khác cách dẫn. Luôn kết bằng packshot
  *  sản phẩm thật + kêu mua + giỏ/link dưới + disclaimer "tùy cơ địa". */
