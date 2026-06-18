@@ -560,7 +560,12 @@ const SOCIAL_PROOF_CUE_RE = /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|m[
 // (those live in hooks). Requires a %, a people-count, repeat-buyers, or reviews/stars.
 // BILINGUAL: VN + Malay parity (a MY script's proof line — "5 bintang", "ribuan orang
 // dah beli", "ulasan/review", "terlaris" — must promote to the cheap card just like VN).
-const SOCIAL_PROOF_PROMOTE_RE = /\d+\s*%|ph[aầ]n tr[ăa]m|peratus|ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|nhi[eề]u ng[ưu][ờo]i|ribu(?:an)?\s*orang|quay l[aạ]i mua|mua l[aạ]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|terjual|terlaris|\blaku\b|review|đ[áa]nh gi[áa]|ulasan|\d+\s*sao|n[ăa]m sao|\d+\s*bintang|\bbintang\b|ramai (?:beli|membeli|dah|guna|cuba)|orang (?:dah\s+)?(?:beli|guna|pakai|cuba)/i
+// P6r — bare "\d+%" REMOVED: it fired on a COMPOSITION claim ("100% thảo dược tự nhiên" /
+// "pakai 100% herba") and mis-read it as "100% of buyers" → a product line became a proof
+// card. A real "% proof" line (e.g. "95% người dùng hài lòng") now rides on the social_proof
+// SHOT INTENT instead (the promote branch is intent-led below); this regex is only the
+// no-intent fallback. "\d+ sao / bintang" (star ratings) stays — that IS proof.
+const SOCIAL_PROOF_PROMOTE_RE = /ph[aầ]n tr[ăa]m|peratus|ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|nhi[eề]u ng[ưu][ờo]i|ribu(?:an)?\s*orang|quay l[aạ]i mua|mua l[aạ]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|terjual|terlaris|\blaku\b|review|đ[áa]nh gi[áa]|ulasan|\d+\s*sao|n[ăa]m sao|\d+\s*bintang|\bbintang\b|ramai (?:beli|membeli|dah|guna|cuba)|orang (?:dah\s+)?(?:beli|guna|pakai|cuba)/i
 
 // P5r2 — "applies to the BODY" detector for the no-face veto (runs on the ENGLISH
 // conceptPrompt, so English-only is enough). A no-face / hands-only shot only works for a
@@ -597,14 +602,21 @@ function capSocialProof(scenes: BrollScene[]): void {
       // immediately followed by a verb so the cue failed and the line got wrongly demoted).
       if (i !== 0 && (s.shotIntent === 'social_proof' || SOCIAL_PROOF_CUE_RE.test(s.quote ?? ''))) valid.push(i)
       else demote(s)                                         // mis-tagged / hook → demote now
-    } else if (s.role === 'broll' && i !== 0 && SOCIAL_PROOF_PROMOTE_RE.test(s.quote ?? '')) {
-      valid.push(i)                                          // a broll that COULD be the proof card
+    } else if (s.role === 'broll' && i !== 0) {
+      // P6r — INTENT-LED promote: a broll becomes a proof candidate ONLY when Gemini declared
+      // social_proof intent (catches real proof the regex misses — "ramai repeat order, ramai
+      // puji"). The strict regex is a FALLBACK for scenes with NO declared intent. A broll with
+      // a NON-proof intent (product_macro on "100% thảo dược") is NEVER promoted → no false card.
+      if (s.shotIntent === 'social_proof' || (!s.shotIntent && SOCIAL_PROOF_PROMOTE_RE.test(s.quote ?? ''))) valid.push(i)
     }
   }
   if (valid.length === 0) return
-  // The ONE: prefer clear THIRD-PARTY proof — Gemini's social_proof intent OR the strict
-  // regex; else the first cue-valid candidate.
-  const chosen = valid.find((i) => scenes[i].shotIntent === 'social_proof' || SOCIAL_PROOF_PROMOTE_RE.test(scenes[i].quote ?? '')) ?? valid[0]
+  // The ONE: a Gemini-declared social_proof INTENT wins first (regardless of array order, so a
+  // real-proof scene beats an earlier regex-only match); else a strict third-party regex hit;
+  // else the first valid candidate.
+  const chosen = valid.find((i) => scenes[i].shotIntent === 'social_proof')
+    ?? valid.find((i) => SOCIAL_PROOF_PROMOTE_RE.test(scenes[i].quote ?? ''))
+    ?? valid[0]
   for (const i of valid) {
     if (i === chosen) promote(scenes[i])
     else if (scenes[i].role === 'social_proof') demote(scenes[i])   // extra cards → product broll
@@ -1226,6 +1238,16 @@ function tryParse(raw: string): { scenes?: RawScene[] } | null {
 const SCENE_ROLES: BrollSceneRole[] = ['lips', 'broll', 'mechanism3d', 'social_proof']
 const SCENE_KINDS: BrollSceneKind[] = ['product_action', 'product_closeup', 'concept']
 
+// P6r — a line with strong VISUAL fuel (Gemini tagged it product_macro / product_demo /
+// mechanism3d / before_after / social_proof / offer / endorsement) must NOT be turned into a
+// talking head by the lips ladder — that buried an ingredient/demo/proof beat as a bare face
+// (user audit: "câu liệt kê thành phần bị ép lips"). Rank such lines as the WORST lips
+// candidates (used only if no talk line is left); next worst = a demo-action / deictic line;
+// best (0) = a plain talk line. Keeps the ladder intent-led, same as every other layer.
+const LIPS_UNFIT_INTENTS = new Set<ShotIntent>(['product_macro', 'product_demo', 'mechanism3d', 'before_after', 'social_proof', 'offer', 'endorsement'])
+const lipsUnfit = (s: BrollScene): number =>
+  (s.shotIntent && LIPS_UNFIT_INTENTS.has(s.shotIntent)) ? 2 : (isBadLipsCandidate(s.quote) ? 1 : 0)
+
 // Guarantee the lips ladder: if fewer "lips" than `target`, convert the broll cuts
 // sitting in the LARGEST gaps between existing lips into lips, so the creator's face
 // re-appears at evenly-spread points (hook + middle beats). Never drops below the
@@ -1253,14 +1275,13 @@ function enforceLipsCount(scenes: BrollScene[], target: number): BrollScene[] {
     let cand = brollIdx.filter((i) => !chosen.includes(i) && !occ.has(i - 1) && !occ.has(i + 1))
     if (cand.length === 0) cand = brollIdx.filter((i) => !chosen.includes(i))   // forced: allow adjacent
     if (cand.length === 0) break
-    // P5r — pick lips from TALK lines, not action/deictic lines. A lips promotion
-    // turns a broll into a talking head, so NEVER grab a demo-action / point-at-product
-    // line (that's a product visual). Prefer the talk candidate nearest the gap; only
-    // fall back to a "bad" candidate if no talk line is left.
+    // P5r/P6r — pick lips from TALK lines, never from a line that carries a product visual.
+    // Rank by lipsUnfit (0 talk → 1 demo/deictic → 2 visual-fuel intent) then by nearness to
+    // the gap, so a talking-head promotion never lands on an ingredient/demo/proof/3D beat
+    // while any plain talk line is still available.
     cand.sort((a, b) => {
-      const badA = isBadLipsCandidate(scenes[a].quote) ? 1 : 0
-      const badB = isBadLipsCandidate(scenes[b].quote) ? 1 : 0
-      if (badA !== badB) return badA - badB
+      const ua = lipsUnfit(scenes[a]), ub = lipsUnfit(scenes[b])
+      if (ua !== ub) return ua - ub
       return Math.abs(a - gapMid) - Math.abs(b - gapMid)
     })
     chosen.push(cand[0])
@@ -1270,6 +1291,7 @@ function enforceLipsCount(scenes: BrollScene[], target: number): BrollScene[] {
       role: 'lips',
       quote: scenes[i].quote,
       durationSec: scenes[i].durationSec,
+      shotIntent: 'lips',   // P6r — keep the displayed tag consistent with the new role
       reason: 'promoted to lips (enforce ladder)',
     }
   }
