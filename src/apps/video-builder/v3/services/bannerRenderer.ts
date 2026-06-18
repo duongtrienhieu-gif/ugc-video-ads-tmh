@@ -115,7 +115,9 @@ export async function generateBannerHook(
         `concreteness is what grabs. NO brand/product name, NO price or %, NO quotes, no hashtag, ` +
         `no emoji. Output ONLY the hook line.`,
       prompt: `FULL AD SCRIPT:\n${src.slice(0, 1500)}${avoidBlock}\n\nBanner hook (${langName}, ≤6 words):`,
-      maxOutputTokens: 40, temperature: fresh ? 0.85 : 0.65, thinkingBudget: 0,
+      // P6v — user: banner hook ra "khác hẳn" hơn. Mặc định 0.65→0.8 (banner đầu ra đa dạng/
+      // giật gân hơn); nút "Gợi ý" (fresh) giữ 0.9 để mỗi lần bấm ra một góc rõ rệt khác.
+      maxOutputTokens: 40, temperature: fresh ? 0.9 : 0.8, thinkingBudget: 0,
     })
     const cleaned = (out ?? '').split('\n')[0].replace(/^["'“”]+|["'“”.!]+$/g, '').trim().slice(0, 60)
     if (!fresh) hookCache.set(key, cleaned)   // don't cache fresh variations (always re-roll)

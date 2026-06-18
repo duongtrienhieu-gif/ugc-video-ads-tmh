@@ -31,6 +31,10 @@ async function buildCaptionPlacements(
   // P6b — karaoke: emit ONE placement per WORD (accent box behind the spoken word),
   // timed to the per-word alignment, instead of one static placement per phrase chunk.
   karaoke = false,
+  // P6v — progress callback: karaoke renders 100+ word PNGs BEFORE ffmpeg starts, so the
+  // % bar (ffmpeg-driven) sits at 0% the whole time → looked frozen ("ko biết có tạo dc ko").
+  // Report "Tạo phụ đề N/total…" so the user sees it's actually working.
+  onStage?: (label: string) => void,
 ): Promise<HybridCaptionPlacement[]> {
   const fallback = script.blocks.map((b) => b.text).join(' ')
   const chunks = buildCaptionChunks(alignment, fallback, realDur)
@@ -58,6 +62,7 @@ async function buildCaptionPlacements(
   await ensureCaptionFonts()   // warm fonts ONCE, not per frame
   const out: (HybridCaptionPlacement | null)[] = new Array(tasks.length).fill(null)
   let next = 0
+  let done = 0   // P6v — shared across workers (single-threaded JS → no race on ++)
   const worker = async (): Promise<void> => {
     for (let my = next++; my < tasks.length; my = next++) {
       const t = tasks[my]
@@ -65,6 +70,8 @@ async function buildCaptionPlacements(
         const blob = await renderCaptionBlob(t.text, presetId, highlightTerms, t.wi < 0 ? undefined : t.wi)
         out[my] = { pngRef: await saveAsset(blob, 'image/png'), atSec: t.atSec, durationSec: t.durationSec }
       } catch { /* skip a bad frame — never break the assemble */ }
+      done++
+      if (onStage && (done % 6 === 0 || done === tasks.length)) onStage(`Tạo phụ đề ${done}/${tasks.length}…`)
     }
   }
   await Promise.all(Array.from({ length: Math.min(6, tasks.length) }, worker))
@@ -99,7 +106,7 @@ export async function assembleFromHybridState(
   // P5y (ii) — caption keyword highlight: colour the script's KEY terms (from the anchor).
   const highlightTerms = deriveCaptionHighlights(script.anchor, script.blocks.map((b) => b.text).join(' '))
   const captions = captionsOn
-    ? await buildCaptionPlacements(hybrid.voiceAlignment, script, realDur, presetId, cardWindows, highlightTerms, hybrid.captionKaraoke !== false)
+    ? await buildCaptionPlacements(hybrid.voiceAlignment, script, realDur, presetId, cardWindows, highlightTerms, hybrid.captionKaraoke !== false, opts?.onStage)
     : []
   // P5x — top hook banner: a short slogan from the script's KEY (anchor → hook fallback),
   // rendered as ONE PNG and held over every non-card segment. Default ON; 0 credit.
