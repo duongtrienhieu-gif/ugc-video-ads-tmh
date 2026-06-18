@@ -264,7 +264,7 @@ function scanMasterFrameJob(): SessionMeta | null {
     if (isTerminal) return null
     return {
       moduleId: 'video-builder',
-      moduleNameVi: 'UGC Builder — Master Frame',
+      moduleNameVi: 'Xưởng Video AI — Master Frame',
       status: 'in-progress',
       startedAt: job.createdAt,
       updatedAt: job.updatedAt ?? job.createdAt,
@@ -294,7 +294,7 @@ function scanSceneGenJob(): SessionMeta | null {
     const approved = job.items.filter((i) => i?.status === 'approved').length
     return {
       moduleId: 'video-builder',
-      moduleNameVi: 'UGC Builder — B-Roll Queue',
+      moduleNameVi: 'Xưởng Video AI — B-Roll Queue',
       status: 'in-progress',
       startedAt: job.startedAt ?? Date.now(),
       updatedAt: job.startedAt ?? Date.now(),
@@ -323,7 +323,7 @@ function scanVideoGenJob(): SessionMeta | null {
     const done = job.items.filter((i) => i?.status === 'completed' || i?.status === 'approved').length
     return {
       moduleId: 'video-builder',
-      moduleNameVi: 'UGC Builder — Video Render',
+      moduleNameVi: 'Xưởng Video AI — Video Render',
       status: 'in-progress',
       startedAt: job.startedAt ?? Date.now(),
       updatedAt: job.startedAt ?? Date.now(),
@@ -338,21 +338,21 @@ function scanVideoGenJob(): SessionMeta | null {
 export const EXTERNAL_BRIDGES: ExternalJobBridge[] = [
   {
     moduleId: 'video-builder',
-    moduleNameVi: 'UGC Builder — Master Frame',
+    moduleNameVi: 'Xưởng Video AI — Master Frame',
     persistKey: 'ugc-lab-v2-master-frame-job',
     scan: scanMasterFrameJob,
     discard: () => { try { localStorage.removeItem('ugc-lab-v2-master-frame-job') } catch {/* ignore */} },
   },
   {
     moduleId: 'video-builder',
-    moduleNameVi: 'UGC Builder — B-Roll Queue',
+    moduleNameVi: 'Xưởng Video AI — B-Roll Queue',
     persistKey: 'ugc-lab-v2-scene-gen-job',
     scan: scanSceneGenJob,
     discard: () => { try { localStorage.removeItem('ugc-lab-v2-scene-gen-job') } catch {/* ignore */} },
   },
   {
     moduleId: 'video-builder',
-    moduleNameVi: 'UGC Builder — Video Render',
+    moduleNameVi: 'Xưởng Video AI — Video Render',
     persistKey: 'ugc-lab-v2-video-gen-job',
     scan: scanVideoGenJob,
     discard: () => { try { localStorage.removeItem('ugc-lab-v2-video-gen-job') } catch {/* ignore */} },

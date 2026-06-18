@@ -1504,7 +1504,7 @@ export default function ResultsView({ result, videoSrc, fileName, onReset, onRes
               </button>
             </div>
             <p className="text-[10px] text-violet-600">
-              Template sẽ dùng được trong UGC Builder — AI đọc analysis này để tạo storyboard cùng style.
+              Template sẽ dùng được trong Xưởng Video AI — AI đọc analysis này để tạo storyboard cùng style.
             </p>
           </div>
         )}

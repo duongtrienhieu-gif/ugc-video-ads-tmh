@@ -90,7 +90,7 @@ export default function GeneratedScriptCard({ script, onRemove, onDuplicate }: P
   const sendToUgc = () => {
     const text = buildSaveableScriptText(script)
     navigator.clipboard.writeText(text).catch(() => {})
-    addToast('🎬 Đã copy script — paste vào "Kịch bản" trong UGC Builder')
+    addToast('🎬 Đã copy script — paste vào "Kịch bản" trong Xưởng Video AI')
     openApp('video-builder')
   }
 
@@ -202,7 +202,7 @@ export default function GeneratedScriptCard({ script, onRemove, onDuplicate }: P
         <span className="mx-1 text-[10px] text-gray-300">|</span>
         <ActionBtn icon={Mic} label="→ Giọng đọc" onClick={sendToVoice} />
         <ActionBtn icon={Bot} label="→ Avatar" onClick={sendToAvatar} />
-        <ActionBtn icon={Film} label="→ UGC Builder" onClick={sendToUgc} />
+        <ActionBtn icon={Film} label="→ Xưởng Video AI" onClick={sendToUgc} />
       </div>
     </div>
   )

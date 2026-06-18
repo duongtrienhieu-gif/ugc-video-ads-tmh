@@ -131,7 +131,7 @@ export default function VariantsModal({ model, onClose }: Props) {
           <div>
             <h2 className="text-base font-bold text-white">Quản lý góc mặt — {model.name}</h2>
             <p className="text-xs text-white/70">
-              Thêm nhiều góc khác nhau của cùng avatar để lock identity khi gen B-roll (UGC Builder)
+              Thêm nhiều góc khác nhau của cùng avatar để lock identity khi gen B-roll (Xưởng Video AI)
             </p>
           </div>
           <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white hover:bg-white/30">
@@ -230,7 +230,7 @@ export default function VariantsModal({ model, onClose }: Props) {
             <div className="text-xs text-amber-700">
               <p className="font-semibold">Vì sao cần nhiều góc?</p>
               <p className="mt-0.5">
-                Khi gen B-roll trong UGC Builder, AI cần phải vẽ avatar ở nhiều tư thế (ăn, cầm sản phẩm, ngồi, đứng).
+                Khi gen B-roll trong Xưởng Video AI, AI cần phải vẽ avatar ở nhiều tư thế (ăn, cầm sản phẩm, ngồi, đứng).
                 Với chỉ 1 ảnh gốc chính diện, AI phải "tưởng tượng" các góc khác → drift identity. Với 3-5 ảnh nhiều góc,
                 AI có anchor đầy đủ → giữ mặt nhất quán xuyên 9 ảnh B-roll.
               </p>
@@ -244,7 +244,7 @@ export default function VariantsModal({ model, onClose }: Props) {
             {variants.length === 0 ? (
               'Chưa có variant nào — gen hoặc upload để cải thiện B-roll'
             ) : (
-              <><Check className="inline h-3.5 w-3.5 text-emerald-500" /> Sẽ tự dùng làm reference trong UGC Builder</>
+              <><Check className="inline h-3.5 w-3.5 text-emerald-500" /> Sẽ tự dùng làm reference trong Xưởng Video AI</>
             )}
           </span>
           <button onClick={onClose} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-bold text-white hover:bg-violet-700">

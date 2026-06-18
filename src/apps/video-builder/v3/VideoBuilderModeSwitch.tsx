@@ -15,6 +15,7 @@
 import { useState } from 'react'
 import AdsVideoEngine from './AdsVideoEngine'
 import BrollStudioPhase from './components/BrollStudioPhase'
+import Personified from '../../personified/Personified'   // Mode 3 — Xưởng Nhân Vật Hoá 3D
 import './services/brollStudioRenderer'   // registers dev helper __testStudioScene (mode-2)
 
 interface Props {
@@ -24,7 +25,8 @@ interface Props {
   onSwitchToV1: () => void
 }
 
-type BuilderMode = 'engine' | 'studio'
+// Mode 3 'personified' is fully standalone (its own state) — same isolation rule as Mode 2.
+type BuilderMode = 'engine' | 'studio' | 'personified'
 
 export default function VideoBuilderModeSwitch({ onSwitchToV2, onSwitchToV1 }: Props) {
   const [mode, setMode] = useState<BuilderMode>('engine')
@@ -52,14 +54,25 @@ export default function VideoBuilderModeSwitch({ onSwitchToV2, onSwitchToV1 }: P
         >
           🎞️ Xưởng B-roll
         </button>
+        <button
+          type="button"
+          onClick={() => setMode('personified')}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+            mode === 'personified' ? 'bg-white text-gray-900' : 'text-white/70 hover:bg-white/10'
+          }`}
+        >
+          👹 Nhân Vật Hoá
+        </button>
       </div>
 
       {/* ── Body — exactly one mode is mounted at a time ─────────────────── */}
       <div className="flex-1 overflow-hidden">
         {mode === 'engine' ? (
           <AdsVideoEngine onSwitchToV2={onSwitchToV2} onSwitchToV1={onSwitchToV1} />
-        ) : (
+        ) : mode === 'studio' ? (
           <BrollStudioPhase onBack={() => setMode('engine')} />
+        ) : (
+          <Personified />
         )}
       </div>
     </div>
