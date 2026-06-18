@@ -28,6 +28,7 @@ import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import BankPicker from '../../../../components/BankPicker'
 import type { Model, Product } from '../../../../stores/types'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
+import { ensureLocalizedName, applyLocalizedName } from '../services/localizeProductName'
 import {
   SCRIPT_LANG_LABEL_VI, HOOK_ARCHETYPES,
   type AdStructure, type ScriptTargetDurationSec, type ScriptLang,
@@ -198,8 +199,10 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   // understands the product (painPoints/benefits/ingredients/usageGuide/offer).
   // The AI reads + understands this brief; it is not recited verbatim. Shared by
   // the hook generator and the script generator.
-  const buildProductBrief = () => {
-    const p = state.inputs.product
+  const buildProductBrief = (prod: typeof state.inputs.product = state.inputs.product) => {
+    // P6i — speak the product name in the picked output language (localized name cached on
+    // the product by ensureLocalizedName before gen). Falls back to the original name.
+    const p = applyLocalizedName(prod, brain.outputLang)
     const pitchParts: string[] = []
     if (p?.productDescription) pitchParts.push(p.productDescription)
     if (p?.targetMarket)       pitchParts.push(`Target market: ${p.targetMarket}`)
@@ -226,7 +229,11 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     setIsGeneratingHooks(true)
     setScriptBrainError(null)
     try {
-      const brief = buildProductBrief()
+      // P6i — localize the product name into the picked output language ONCE (cached);
+      // both hooks + script then speak ONE consistent localized name (brand tokens kept).
+      const ep = await ensureLocalizedName(state.inputs.product, brain.outputLang, geminiKey)
+      if (ep !== state.inputs.product) setProduct(ep)
+      const brief = buildProductBrief(ep)
       // P3i — pass the PREVIOUS batch when re-rolling so Gemini is forced to break
       // out of the same template (the user pressed "Đổi" because they didn't like
       // those exact ones).
@@ -261,6 +268,11 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     if (!state.inputs.product) { addToast('Chưa chọn sản phẩm', 'error'); return }
     if (!state.inputs.avatar)  { addToast('Chưa chọn avatar', 'error'); return }
 
+    // P6i — localize the product name into the picked output language ONCE (cached); both
+    // generate paths below speak ONE consistent localized name. (brief = buildProductBrief(ep))
+    const ep = await ensureLocalizedName(state.inputs.product, brain.outputLang, geminiKey)
+    if (ep !== state.inputs.product) setProduct(ep)
+
     const isQuick = genTab === 'quick'
     const chosenHook = isQuick && brain.pickedHookIdx >= 0
       ? brain.hookVariants[brain.pickedHookIdx]?.text
@@ -270,7 +282,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     setIsGeneratingScript(true)
     setScriptBrainError(null)
     try {
-      const brief = buildProductBrief()
+      const brief = buildProductBrief(ep)
       const result = await generateScript({
         geminiKey,
         structure: brain.structure,
@@ -341,7 +353,10 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     setIsGeneratingScript(true)
     setScriptBrainError(null)
     try {
-      const brief = buildProductBrief()
+      // P6i — localized product name (cached for this lang) so the regenerated script speaks it too.
+      const ep = await ensureLocalizedName(state.inputs.product, brain.outputLang, geminiKey)
+      if (ep !== state.inputs.product) setProduct(ep)
+      const brief = buildProductBrief(ep)
       const result = await generateScript({
         geminiKey,
         structure: brain.structure,

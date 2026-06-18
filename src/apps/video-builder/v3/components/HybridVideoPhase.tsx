@@ -16,6 +16,7 @@ import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import { directBrollScenes, assignSceneTiming, groundOrphanScenes, type TimedBrollScene } from '../services/brollDirector'
 import { fixSceneConceptPrompt, type SceneFix } from '../services/sceneConceptFixer'
+import { ensureLocalizedName, applyLocalizedName } from '../services/localizeProductName'
 import { generateProductVisualBrief } from '../services/productVisionBrief'
 import { renderOneHybridScene, type HybridRenderContext } from '../services/hybridRenderer'
 import { resumeInsertVideo } from '../services/insertRenderer'
@@ -147,8 +148,16 @@ export default function HybridVideoPhase(_props: Props) {
         const brief = await generateProductVisualBrief(product, geminiKey)
         if (brief) { product = { ...product, visualBrief: brief }; setProduct(product) }
       }
+      // P6i — ensure the localized product name is cached for this lang (script step usually
+      // did it already → cached/instant), then feed the DIRECTOR the localized-name copy so
+      // every conceptPrompt / PRODUCT LOCK / sticker uses the same spoken name as the script.
+      if (product) {
+        const ep = await ensureLocalizedName(product, state.scriptBrain.outputLang, geminiKey)
+        if (ep !== product) { product = ep; setProduct(product) }
+      }
       const res = await directBrollScenes({
-        geminiKey, script, lang: state.scriptBrain.outputLang, product, voiceDurationSec: voiceDur,
+        geminiKey, script, lang: state.scriptBrain.outputLang,
+        product: applyLocalizedName(product, state.scriptBrain.outputLang), voiceDurationSec: voiceDur,
         shape: state.scriptBrain.shape,
       })
       const timed = assignSceneTiming(res.scenes, h.voiceAlignment, script, voiceDur)
@@ -235,7 +244,10 @@ export default function HybridVideoPhase(_props: Props) {
 
   const ctx = (): HybridRenderContext => ({
     kieApiKey, keyframeRef: hybrid.keyframeRef, voiceRef: hybrid.voiceRef,
-    product: state.inputs.product, avatar: state.inputs.avatar, creatorVideoConfig: state.creatorVideoConfig, resolution,
+    // P6i — render with the localized-name copy so PRODUCT LOCK / social-proof card use the
+    // same spoken name as the script (cached on the product by the script/director step).
+    product: applyLocalizedName(state.inputs.product, state.scriptBrain.outputLang),
+    avatar: state.inputs.avatar, creatorVideoConfig: state.creatorVideoConfig, resolution,
     lang: state.scriptBrain.outputLang,   // P5w — social-proof card text language
   })
 

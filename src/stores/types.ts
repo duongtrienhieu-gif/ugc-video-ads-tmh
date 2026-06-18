@@ -16,6 +16,13 @@ export interface Product {
    *  Cached so the b-roll director (text-only) can "see" the product. Optional +
    *  additive — empty until computed; never required to construct a Product. */
   visualBrief?: string
+  /** P6i — the product name as a local creator would SAY it in the picked output
+   *  language (descriptive/common-noun parts translated, genuine brand tokens kept).
+   *  Computed ONCE per (name, lang) + cached so the script + director + stickers/banner/
+   *  thumbnail all use ONE consistent localized name. The ORIGINAL `productName` (bank/UI
+   *  display) is NEVER overwritten. `localizedNameLang` = which output lang it's for. */
+  localizedName?: string
+  localizedNameLang?: string
   createdAt: number
 }
 
