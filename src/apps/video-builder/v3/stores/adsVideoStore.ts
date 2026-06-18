@@ -39,7 +39,7 @@ import {
   type ExportRenderStage,
 } from '../types'
 import { COST_MODE_CONFIG, DEFAULT_COST_MODE, defaultInsertRenderMode, DEFAULT_EXPORT_FORMAT, DEFAULT_EXPORT_QUALITY } from '../types'
-import type { BrollScene, TimedBrollScene, BrollSticker } from '../services/brollDirector'
+import type { BrollScene, TimedBrollScene, BrollSticker, BrollSceneKind } from '../services/brollDirector'
 import { CREATOR_PRESETS } from '../services/creatorPresets'
 import type { Model, Product } from '../../../../stores/types'
 
@@ -78,8 +78,11 @@ interface AdsVideoStoreState {
   /** Cache a rendered clip for scene INDEX (a re-render replaces just that one). */
   setHybridClip:          (idx: number, videoRef: string) => void
   /** P3t — patch ONE scene's conceptPrompt without re-running the director.
-   *  The user fixes a drift inline + re-renders that single scene. */
-  setSceneConceptPrompt:  (idx: number, conceptPrompt: string) => void
+   *  The user fixes a drift inline + re-renders that single scene. P6a — the AI
+   *  fixer may also flip kind / cameraFraming (e.g. a product macro → a creator
+   *  emotion shot); pass them together so the prompt never fights the framing.
+   *  Both optional → the manual textarea edit (conceptPrompt only) is unchanged. */
+  setSceneConceptPrompt:  (idx: number, conceptPrompt: string, plan?: { kind?: BrollSceneKind; cameraFraming?: 'creator' | 'hands_noface' }) => void
   /** P3x — mark the creator-assets (giọng + mặt) generation in flight. Persisted
    *  so navigating away + back keeps the "đang tạo" lock (no double-charge).
    *  Pass a timestamp to start, undefined to clear. */
@@ -442,13 +445,18 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
   // scene card and re-render that ONE scene, without re-creating the voice +
   // keyframe (which is what "Tạo lại" used to force). Persisted, so the edit
   // survives a refresh.
-  setSceneConceptPrompt: (idx, conceptPrompt) =>
+  setSceneConceptPrompt: (idx, conceptPrompt, plan) =>
     commit(set, get, (s) => {
       const cur = s.hybrid.scenes
       if (!cur) return s
       const scenes = cur.slice()
       if (idx < 0 || idx >= scenes.length) return s
-      scenes[idx] = { ...scenes[idx], conceptPrompt }
+      scenes[idx] = {
+        ...scenes[idx],
+        conceptPrompt,
+        ...(plan?.kind ? { kind: plan.kind } : {}),
+        ...(plan?.cameraFraming ? { cameraFraming: plan.cameraFraming } : {}),
+      }
       return { ...s, hybrid: { ...s.hybrid, scenes } }
     }),
 
