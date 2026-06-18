@@ -383,6 +383,13 @@ function buildInsertKeyframePrompt(
     'Avoid: malformed hands, extra fingers, distorted product, redesigned packaging, ' +
     'cinematic lighting, 3D-render look, cartoon, beauty filter.',
   )
+  // P6f — motion-drift guard (one shared place): the i2v step morphs/warps on complex or
+  // implausible motion. Pin ONE simple physically-coherent movement + a stable product shape.
+  paragraphs.push(
+    'MOTION: one simple, continuous, physically-plausible movement only — natural human pace, ' +
+    'no morphing, no warping, no extra or vanishing limbs/fingers; the product keeps a STABLE ' +
+    'shape, size and identity throughout (it never melts, bends or changes form).',
+  )
 
   return paragraphs.join('\n\n')
 }

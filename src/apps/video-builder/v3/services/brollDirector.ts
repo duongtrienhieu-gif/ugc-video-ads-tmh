@@ -456,6 +456,18 @@ function isBadLipsCandidate(quote: string | undefined): boolean {
   const q = quote ?? ''
   return DEMO_ACTION_RE.test(q) || DEICTIC_RE.test(q)
 }
+// P6f — shared archetype cues (ONE source of truth for the meaning→shot system). Matched on
+// the ENGLISH conceptPrompt the director writes, so universal across markets/niches.
+//   • RESULT_BEHAVIOR_RE = the creator DOING the thing the result enables (walk/climb/cook…) —
+//     a filmable, varied "show the result" beat, NOT a static talking-head reaction.
+//   • isEndorsementLook = the "creator holds product beside face + thumbs-up/recommend" look,
+//     which must be RESERVED for the CTA. Excludes the deliberate penult OFFER shot (which
+//     says "OFFER moment / tapping / pointing") so capEndorsement never re-routes the offer.
+const RESULT_BEHAVIOR_RE = /\b(walk|walking|climb|climbing|stair|strid|run|running|jog|bend|squat|lift|carr|danc|play(?:s|ing)?|cook|cooking|garden|reach(?:es|ing)?\s+up|moving freely|move(?:s)? freely|freely|effortless|pain-free|with ease|easily|relaxed)\b/i
+const ENDORSE_LOOK_RE = /thumbs[- ]?up|genuine endorsement|holds?\b[^.]{0,30}\bbeside (?:their|the) face|\brecommend/i
+const OFFER_LOOK_RE = /offer moment|the deal|tapping|pointing/i
+const isEndorsementLook = (cp: string): boolean => ENDORSE_LOOK_RE.test(cp) && !OFFER_LOOK_RE.test(cp)
+
 function enforceProductHero(scenes: BrollScene[], product: Product | null | undefined): void {
   const lastIdx = scenes.length - 1
   const name = product?.productName?.trim() || 'the product'
@@ -483,14 +495,44 @@ function enforceProductHero(scenes: BrollScene[], product: Product | null | unde
       s.conceptPrompt = ''                       // weak → backfilled, grounded in this line
     }
   }
-  // (b) cap face-only "concept" cuts at 2 — convert the rest to a product shot.
-  let conceptKept = 0
+  // (b) P6f — cap only STATIC reaction-face concepts at 2 (a wall of talking-head faces is
+  // the thing to avoid). A "result_behavior" concept (creator walking / climbing / cooking —
+  // SHOWING the result) is filmable + varied, so it is NOT capped: that is exactly the
+  // "show the result, don't restate the feeling" beat we want more of. (Was: capped ALL
+  // concept cuts → starved result-behavior, pushing feeling lines back to a generic product
+  // hold = the endorsement-collision root.)
+  let staticFaceKept = 0
   for (let i = 0; i < scenes.length; i++) {
     if (i === lastIdx) continue
     const s = scenes[i]
     if (s.role !== 'broll' || s.kind !== 'concept') continue
-    conceptKept++
-    if (conceptKept > 2) { s.kind = 'product_action'; s.cameraFraming = 'hands_noface'; s.conceptPrompt = '' }
+    if (RESULT_BEHAVIOR_RE.test(s.conceptPrompt ?? '')) continue   // a "doing" concept → keep
+    staticFaceKept++
+    if (staticFaceKept > 2) { s.kind = 'product_action'; s.cameraFraming = 'hands_noface'; s.conceptPrompt = '' }
+  }
+}
+
+// P6f Part B — the ENDORSEMENT archetype (creator holds product beside face + thumbs-up /
+// recommend to camera) is the CTA's signature shot and must appear AT MOST ONCE. The CTA lock
+// (+ penult OFFER shot) already own the close. ANY OTHER cut that the director / a backstop
+// left reading as that same endorsement is a visual TWIN of the CTA (the #7≈#12 bug) → re-route
+// it to a grounded NON-endorsement moment that SHOWS its own line's result. Skips the hook (0 —
+// product establishment is intentional there) and the CTA (last). Runs AFTER enforceRenderSafeHolds
+// (which itself can mint an endorsement-like hold), so nothing re-creates the twin afterwards.
+function capEndorsement(scenes: BrollScene[]): void {
+  const lastIdx = scenes.length - 1
+  for (let i = 1; i < lastIdx; i++) {
+    const s = scenes[i]
+    if (s.role !== 'broll') continue
+    if (!isEndorsementLook(s.conceptPrompt ?? '')) continue
+    const beat = (s.quote ?? '').slice(0, 70).replace(/"/g, '')
+    s.kind = 'concept'
+    s.cameraFraming = 'creator'
+    s.conceptPrompt =
+      `The SAME creator in a real, candid everyday moment that SHOWS the result of "${beat}" through ` +
+      `what they naturally DO (relaxed, free movement in its real-life setting) — NOT presenting the ` +
+      `product to camera, NO thumbs-up, no posing. Authentic UGC iPhone footage, natural light.`
+    s.reason = 'endorsement de-duplicated (reserved for the CTA)'
   }
 }
 
@@ -722,6 +764,20 @@ FOUR cut ROLES (set "role"):
          mà sợ đường lên" / "nak makan manis tapi takut gula naik" = a craving-vs-fear
          beat → the creator EYEING a tempting treat then pulling back, conflicted (no
          product packaging needed). cameraFraming:"creator".
+     • LINE-MEANING → SHOT (the ~2/3 of lines that have NO explicit action — NEVER default
+       them to "creator holding the product + smile"):
+         - a RESULT / FEELING line ("lutut ringan, tak sakit", "so comfy now", "confident") →
+           show the RESULT as observable BEHAVIOUR: the creator DOING what the result enables
+           (walking / climbing stairs / squatting / cooking / playing — relaxed, pain-free),
+           cameraFraming:"creator". NOT a thumbs-up, NOT holding the product up to camera.
+         - a SPEC / CLAIM / how-it-works line ("tiga spring booster", "bernafas") → show the
+           REASON: a product macro / a hero part / a 3D mechanism (cameraFraming:"hands_noface").
+         - a pure SUMMARY / verdict line ("senang cerita, memang selesa sangat" / "long story
+           short") = NOT its own shot (no new visual). FOLD it onto the neighbouring beat — do
+           NOT invent a separate "creator + product + smile" cut for it.
+       RULE OF THUMB: show the RESULT (behaviour) or the REASON (mechanism) — NEVER restate the
+       feeling with a generic product-hold. The "creator holds product up + smile / thumbs-up"
+       ENDORSEMENT shot is RESERVED for the CTA only; do NOT use it on any other line.
      • "cameraFraming": "hands_noface" — ONLY for a product used ON A SURFACE or held/
        operated IN-HAND (scoop from a jar, pour, snap, wipe a counter, operate a gadget),
        NO face. For any usage ON THE BODY (apply / wear / eat / drink — skin, face, hair,
@@ -741,6 +797,11 @@ FOUR cut ROLES (set "role"):
          section, one feature, the result on a surface — NOT always the packaging.
      (4) SETTING — the real-world place (kitchen counter, bathroom mirror, desk,
          car, outdoors) inferred from the product's usage.
+   PHYSICAL SIMPLICITY (anti-drift): describe ONE simple, physically-plausible action per
+   cut, in ONE clause — something a phone can actually film in 2-4s (a hand picks it up, a
+   finger taps it, a person takes one step). Do NOT stack two actions, fast/complex motion,
+   or an abstract verb ("demonstrates the benefits", "shows how amazing") — vague/compound
+   motion is what makes the video model hallucinate/morph. Concrete + single + slow.
    GOOD: "POV over the hands snapping the biscuit in half on a wooden board,
    walnut chunks and fig bits tumbling out, morning kitchen light." BAD: "close-up
    of the product" / "the biscuit on a table" (generic → identical clones).
@@ -1131,6 +1192,8 @@ OUTPUT strict JSON only (no markdown fences):
   // it overrides whatever the director / backfill wrote (the CTA endorsement + offer
   // shots carry no floating words, so they're untouched).
   enforceRenderSafeHolds(scenes, params.product)
+  // P6f Part B — reserve the endorsement look for the CTA (must run LAST, after the holds pass).
+  capEndorsement(scenes)
 
   const stickers = sanitizeStickers(parsed.stickers)
   // P4l — MS sticker safety net: even with the rojak hint, Gemini sometimes leaks
@@ -1458,9 +1521,9 @@ const DISTINCT_SHOT_VARIANTS_PRODUCT = [
   'a clean PRODUCT-HERO still resting on a real surface in its setting (no person)',
   'a WIDE lifestyle still — the product small inside the real daily setting (no face), a candid real-life frame',
 ]
-const CTA_ENDORSE_RE = /thumbs-up to camera|genuine endorsement at the call to buy/i
-const CTA_OFFER_PROMPT =
-  'Close-up of the creator presenting the product to camera and tapping / pointing at it excitedly as the deal is announced — the OFFER moment, the product the hero in frame (NOT a thumbs-up beside the face).'
+// P6f — CTA_ENDORSE_RE / CTA_OFFER_PROMPT removed: the "earlier endorsement → OFFER shot"
+// pass is superseded by capEndorsement (Part B, plan-time), which re-routes ANY non-CTA
+// endorsement to a grounded result shot (not just collapses two into the offer).
 const DEDUP_STOP = new Set(['this','that','with','from','into','onto','their','they','them','your','about','over','shot','scene','camera','frame','video','clip','footage','natural','real','iphone','authentic','setting','light','lighting'])
 const sigWords = (p: string): Set<string> =>
   new Set(p.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w.length > 3 && !DEDUP_STOP.has(w)))
@@ -1473,18 +1536,22 @@ const jac = (a: Set<string>, b: Set<string>): number => {
 const stripMod = (p: string): string =>
   p.replace(/\s*—\s*(?:DIFFERENT SHOT\b.*|[^—]*\bsame (?:subject|action)\b.*)$/i, '').trim()
 
-/** P5r — guarantee every B-roll cut renders a DISTINCT image. (1) CTA: keep ONLY the last
- *  endorsement, turn earlier endorsements into the OFFER shot. (2) Any non-card/non-lips cut
- *  whose prompt is ≥70% similar to an earlier accepted cut → rewrite into a genuinely
- *  different shot. Never rewrites the locked CTA last cut. Runs AFTER split (the source of
- *  the clone pairs) so it catches both split-halves and director-authored repeats. */
+/** P5r — guarantee every B-roll cut renders a DISTINCT image. Any non-card/non-lips cut whose
+ *  prompt is ≥0.55 similar to an earlier accepted cut → rewrite into a genuinely different shot
+ *  (from the pool matching its framing). Never rewrites the locked CTA last cut. Runs AFTER
+ *  split (the source of clone pairs) so it catches split-halves + director repeats.
+ *  P6f Part C — SEED the CTA's signature into `accepted` up front: the loop only compares
+ *  BACKWARD and the CTA is rewrite-exempt, so without this an EARLIER cut that renders like the
+ *  CTA endorsement slips through (it's never compared against the later CTA). Seeding forces
+ *  every earlier cut to differ from the CTA too. */
 function dedupeScenePrompts(timed: TimedBrollScene[]): TimedBrollScene[] {
   const lastIdx = timed.length - 1
-  const endorse = timed.filter((s) => s.role !== 'lips' && s.role !== 'social_proof' && CTA_ENDORSE_RE.test(s.conceptPrompt ?? ''))
-  if (endorse.length > 1) {
-    for (const s of endorse.slice(0, -1)) { s.conceptPrompt = CTA_OFFER_PROMPT; s.kind = 'product_action'; s.cameraFraming = 'creator' }
-  }
   const accepted: Set<string>[] = []
+  const ctaCut = timed[lastIdx]
+  if (ctaCut && ctaCut.role !== 'lips' && ctaCut.role !== 'social_proof') {
+    const ctaSig = sigWords(stripMod((ctaCut.conceptPrompt ?? '').trim()))
+    if (ctaSig.size) accepted.push(ctaSig)
+  }
   let vi = 0
   for (let i = 0; i < timed.length; i++) {
     const s = timed[i]
