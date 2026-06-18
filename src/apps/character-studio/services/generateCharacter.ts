@@ -106,6 +106,16 @@ export function buildJsonPrompt(profile: CharacterProfile): Record<string, Recor
   return result
 }
 
+// Global photographic-realism anchor, appended LAST (the position the model
+// weights most). Image models — GPT Image especially — default to a glossy
+// beauty-retouched look that instantly reads as "AI". A single skinTexture
+// phrase buried mid-prompt gets ignored, so this forces an unretouched real-
+// photo rendering. The second half is the SAFETY BRAKE: imperfections must stay
+// subtle and flattering so the avatar looks real, NOT ugly. Does not mention
+// camera type (the cameraDevice field owns that) to avoid conflicting layers.
+const REALISM_DIRECTIVE =
+  'Render as a real, unretouched photograph — natural skin showing visible pores and fine texture, realistic uneven skin tone, age-appropriate subtle imperfections, natural matte/oil balance, and slight natural facial asymmetry. NO beauty filter, NO skin smoothing, NO airbrushing, NO waxy or plastic glossy skin, NO glamour retouch, NO HDR over-sharpening, NO doll-like perfection. Keep all imperfections SUBTLE and flattering: the subject still looks healthy, clean and attractive — do NOT add deep wrinkles, heavy acne, dark blotches, redness or disfiguring marks beyond what is explicitly described above.'
+
 /**
  * Builds a natural language image generation prompt from the character profile.
  * If productDescription is provided (from Gemini Vision analysis of the uploaded
@@ -196,6 +206,9 @@ function buildImagePrompt(profile: CharacterProfile, productDescription?: string
   ) {
     parts.push('Subject is making direct, confident eye contact with the camera lens. Face is fully visible, looking straight ahead at the viewer.')
   }
+
+  // Photographic-realism anchor — appended last so it carries the most weight.
+  parts.push(REALISM_DIRECTIVE)
 
   return parts.join(' ')
 }
