@@ -35,6 +35,26 @@ import { buildShapeDirectorHint } from './scriptShapes'
 export type BrollSceneRole = 'lips' | 'broll' | 'mechanism3d' | 'social_proof'
 export type BrollSceneKind = 'product_action' | 'product_closeup' | 'concept'
 
+// P6m (refactor P1) — the SINGLE declared "shot intent" per scene: the ONE archetype that
+// matches the line's meaning, chosen by Gemini in the schema. P1 only CAPTURES + DISPLAYS it
+// (no layer reads it for decisions yet — zero behavior change); P2 will move the caps/dedup
+// to key off this instead of regex, then delete the colliding mutators. Universal/niche-free.
+export type ShotIntent =
+  | 'lips'            // creator talking on camera
+  | 'product_demo'    // product being USED in its real setting
+  | 'product_macro'   // clean close-up / texture / a spec detail (no person)
+  | 'mechanism3d'     // 3D animation of the internal mechanism
+  | 'result_behavior' // creator DOING the thing the result enables (walk/cook/relaxed)
+  | 'reaction'        // creator's emotion (skeptic / craving / worry / delight), no product
+  | 'before_after'    // split-screen transformation
+  | 'social_proof'    // FB/review card
+  | 'offer'           // penult deal/offer shot
+  | 'endorsement'     // CTA: creator holds product + thumbs-up
+export const SHOT_INTENTS: ShotIntent[] = [
+  'lips', 'product_demo', 'product_macro', 'mechanism3d', 'result_behavior',
+  'reaction', 'before_after', 'social_proof', 'offer', 'endorsement',
+]
+
 export interface BrollScene {
   /** lips = creator on camera (lip-synced); broll = product/concept cut;
    *  mechanism3d = clean 3D internal animation. */
@@ -49,6 +69,9 @@ export interface BrollScene {
   cameraFraming?: CameraFraming
   /** broll only — which kind of B-roll shot. */
   kind?: BrollSceneKind
+  /** P6m — Gemini's declared single shot archetype for this line (P1: captured + shown
+   *  only; not yet used for decisions). */
+  shotIntent?: ShotIntent
   /** one short phrase explaining the choice (debug / UI). */
   reason?: string
 }
@@ -128,6 +151,7 @@ const BROLL_RESPONSE_SCHEMA = {
           conceptPrompt: { type: 'string', maxLength: 240 },
           cameraFraming: { type: 'string', enum: ['creator', 'hands_noface'] },
           kind:          { type: 'string', enum: ['product_action', 'product_closeup', 'concept'] },
+          shotIntent:    { type: 'string', enum: ['lips', 'product_demo', 'product_macro', 'mechanism3d', 'result_behavior', 'reaction', 'before_after', 'social_proof', 'offer', 'endorsement'] },
           reason:        { type: 'string', maxLength: 80 },
         },
         required: ['role', 'quote', 'durationSec'],
@@ -1085,11 +1109,28 @@ RULES:
   tu", "selepas itu") is NOT an after-state signal.
 - Universal: infer setting/usage from the product context; never hardcode a niche.${anchorHint}
 
+SHOT INTENT (set "shotIntent" on EVERY scene) — the ONE archetype that matches THIS line's
+meaning. Pick exactly one:
+  • "lips" — creator talking on camera (a lips cut).
+  • "product_demo" — the product being USED/held in its real setting (an action with it).
+  • "product_macro" — a clean close-up / texture / one spec detail of the product (no person).
+  • "mechanism3d" — a 3D animation of how an ACTIVE works INSIDE the body/skin/device.
+  • "result_behavior" — the creator DOING what the result enables (walking/cooking/relaxed/sleeping well) — a felt RESULT shown as behaviour, NOT holding the product.
+  • "reaction" — the creator's pure EMOTION to this beat (skeptic / craving / worry / delight), no product on screen.
+  • "before_after" — a split-screen transformation (only when the line states a visible after/result).
+  • "social_proof" — a crowd / sold-count / repeat / review line (renders as a card).
+  • "offer" — the deal/offer beat just before the close.
+  • "endorsement" — the FINAL CTA shot: creator holds the product up + thumbs-up.
+This must AGREE with the role/kind you chose (e.g. a feeling/result line → "result_behavior" or
+"reaction", NOT a product hold; a spec/ingredient line → "product_macro" or "mechanism3d"; the
+LAST buy line → "endorsement"). It is a LABEL of the line's meaning — be honest, do not default
+everything to "product_demo"/"endorsement".
+
 SCRIPT (cover all of it):
 ${scriptDump}
 
 OUTPUT strict JSON only (no markdown fences):
-{ "scenes": [ {"role":"lips","quote":"…","durationSec":4}, {"role":"broll","quote":"…","durationSec":5,"kind":"product_action","cameraFraming":"hands_noface","conceptPrompt":"…"} ], "stickers": [ {"style":"list","items":["…","…"],"quote":"…"} ] }`
+{ "scenes": [ {"role":"lips","quote":"…","durationSec":4,"shotIntent":"lips"}, {"role":"broll","quote":"…","durationSec":5,"kind":"product_action","cameraFraming":"hands_noface","conceptPrompt":"…","shotIntent":"product_demo"} ], "stickers": [ {"style":"list","items":["…","…"],"quote":"…"} ] }`
 
   const call = (schema = true, denserHint?: { have: number; want: number }) =>
     directGeminiText({
@@ -1223,7 +1264,7 @@ OUTPUT strict JSON only (no markdown fences):
 
 interface RawScene {
   role?: string; quote?: string; durationSec?: number
-  conceptPrompt?: string; cameraFraming?: string; kind?: string; reason?: string
+  conceptPrompt?: string; cameraFraming?: string; kind?: string; shotIntent?: string; reason?: string
 }
 interface RawSticker {
   style?: string; text?: string; items?: unknown; quote?: string; wordAnchor?: string
@@ -1326,6 +1367,8 @@ function sanitizeScenes(raw: RawScene[] | undefined): BrollScene[] {
       const onBody = APPLIES_PRODUCT_TO_BODY_RE.test(cp)
       scene.cameraFraming = wantsNoFace && role === 'broll' && scene.kind !== 'concept' && !onBody ? 'hands_noface' : 'creator'
     }
+    // P6m (P1) — capture Gemini's declared intent (display/observe only; no decision uses it yet).
+    if (SHOT_INTENTS.includes(r.shotIntent as ShotIntent)) scene.shotIntent = r.shotIntent as ShotIntent
     scene.reason = typeof r.reason === 'string' ? r.reason : undefined
     out.push(scene)
   }
