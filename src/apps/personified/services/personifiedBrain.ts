@@ -19,6 +19,7 @@ import {
 import {
   ARCHETYPES, ARCHETYPE_ORDER, HERO_TYPE_LABEL, CTA_STYLE_LABEL,
   LENGTH_SCENE_COUNT, LENGTH_TARGET_SEC, pickClipDuration, estimateSpeechSec,
+  ARCHETYPE_STRUCTURE, SHARED_CHAR_RULES, HERO_FORMFACTOR_RULE, SCENE_HAS_PRODUCT,
 } from '../constants'
 // Tái dùng KHO NGÔN NGỮ MÃ BẢN ĐỊA của Mode 1 (đã train: tiểu từ, code-switch,
 // blacklist Indonesia, slang lỗi thời) — pure data module, không coupling state.
@@ -159,7 +160,6 @@ const SCRIPT_SCHEMA = {
         type: 'object',
         properties: {
           sceneType: { type: 'string' },
-          hasProduct: { type: 'boolean' },
           speaker: { type: 'string' },
           dialoguePrimary: { type: 'string' },
           dialogueVi: { type: 'string' },
@@ -169,7 +169,7 @@ const SCRIPT_SCHEMA = {
           action: { type: 'string' },
           videoPromptEn: { type: 'string' },
         },
-        required: ['sceneType', 'hasProduct', 'speaker', 'dialoguePrimary', 'dialogueVi', 'emotion', 'camera', 'sfx', 'action', 'videoPromptEn'],
+        required: ['sceneType', 'speaker', 'dialoguePrimary', 'dialogueVi', 'emotion', 'camera', 'sfx', 'action', 'videoPromptEn'],
       },
     },
   },
@@ -177,7 +177,7 @@ const SCRIPT_SCHEMA = {
 } as const
 
 interface RawScene {
-  sceneType: string; hasProduct?: boolean; speaker: string; dialoguePrimary: string; dialogueVi: string
+  sceneType: string; speaker: string; dialoguePrimary: string; dialogueVi: string
   emotion: string; camera: string; sfx: string[]; action: string; videoPromptEn: string
 }
 
@@ -196,8 +196,7 @@ export async function generateScript(
   const langName = TARGET_MARKET_GEMINI_NAME[market]
   const isVN = market === 'VN'
 
-  // Word budget hint theo 4/8/12s (tiếng Việt ~3.3 từ/giây, chừa thở):
-  //   4s ≈ 10-14 từ · 8s ≈ 22-28 từ · 12s ≈ 34-42 từ.
+  // Word budget (tiếng Việt ~3.3 từ/giây): 4s ≈ 8-12 từ · 8s ≈ 16-22 từ (max 8s).
   const systemInstruction =
 `Bạn là biên kịch quảng cáo cho format video "NHÂN CÁCH HÓA VẤN ĐỀ" 3D (kiểu mụn-cóc-có-mặt,
 dạ-dày-công-nhân — viral VN/MY). Mục tiêu: BÁN HÀNG. Viết kịch bản theo đúng DNA format này.
@@ -209,8 +208,13 @@ CẤU HÌNH:
 - Sản phẩm-hiệp sĩ ra tay kiểu: ${HERO_TYPE_LABEL[config.heroType]}. Sản phẩm thật được NHÂN CÁCH HÓA (thêm MẮT biểu cảm + TAY nhỏ thành hiệp sĩ) NHƯNG GIỮ NGUYÊN bao bì/nhãn/màu/dáng thật để vẫn nhận ra đúng sản phẩm.
 - Cảnh "đồ thường thất bại" (FalseSolution): ${config.falseSolution ? 'CÓ — chèn 1 cảnh giải pháp thường thất bại / phản diện mạnh thêm trước HeroEntrance' : 'KHÔNG'}
 - Kiểu CTA cuối: ${CTA_STYLE_LABEL[config.ctaStyle]}
-- Số cảnh: ĐÚNG ${sceneCount} cảnh.
-- ⏱ ĐỘ DÀI: tổng video phải GẦN ${targetSec}s (KHÔNG vượt ${targetSec + 12}s). Mỗi cảnh chỉ render được 4/8/12s → viết thoại NGẮN để đa số cảnh rơi vào 4-8s; chỉ tối đa 1 cảnh giải thích dài (rootcause) được tới 12s. Video kiểu này thoại phải punchy, cộc, KHÔNG lê thê.
+- Số cảnh: ${sceneCount} cảnh (KB4 có thể +1-2 cảnh để khoe hoạt chất, tối đa ${sceneCount + 2}).
+- ⏱ ĐỘ DÀI: mỗi cảnh chỉ render 4s HOẶC 8s (KHÔNG có 12s). Tổng video GẦN ${targetSec}s. ƯU TIÊN 8s cho cảnh thoại thường, 4s cho hook/CTA-ngắn/reaction. Thoại punchy, cộc.
+
+🔒 KHUÔN CỨNG (BẮT BUỘC tuân thủ — đây là cấu trúc của kiểu kịch bản, không được tự ý đổi):
+${ARCHETYPE_STRUCTURE[config.archetype]}
+${SHARED_CHAR_RULES}
+${HERO_FORMFACTOR_RULE}
 
 INSIGHT (đã phân tích):
 - Sản phẩm: ${insight.productInsight}
@@ -222,7 +226,7 @@ ${buildProductContext(product)}
 🎯 SẢN PHẨM THẬT = HERO NHÂN CÁCH HÓA (đây là video BÁN HÀNG — KHÔNG phải nuôi kênh):
 - Sản phẩm CÓ THẬT (xem bao bì/nhãn ở [SẢN PHẨM]). Nhân vật role='hero' = CHÍNH sản phẩm thật được nhân cách hóa: thêm MẮT biểu cảm + TAY nhỏ thành hiệp sĩ, NHƯNG giữ nguyên bao bì/nhãn/màu/dáng thật (vẫn nhận ra đúng sản phẩm — KHÔNG bịa bao bì mới). appearance + imagePromptEn của hero phải mô tả đúng bao bì thật + chi tiết mắt/tay thêm vào.
 - Từ hero_entrance trở đi, sản phẩm-hiệp sĩ này là thứ diệt phản diện (tự tay xịt/đánh, hoặc tung hoạt chất).
-- Mọi video KẾT bằng cảnh cta: hiện packshot SẢN PHẨM THẬT + KÊU GỌI MUA/ĐẶT HÀNG + "bấm giỏ hàng / link dưới" + câu "hiệu quả tùy cơ địa". Hướng khách tới ĐẶT MUA, tuyệt đối KHÔNG "follow kênh".
+- Mọi video KẾT bằng cảnh cta: KÊU GỌI MUA/ĐẶT HÀNG. dialoguePrimary nói gọn 1 lời kêu mua + "bấm giỏ hàng / link dưới" + (tối đa 1 mức giá/ưu đãi CHÍNH, đừng đọc 3-4 bậc giá) + "hiệu quả tùy cơ địa". Hướng khách ĐẶT MUA, tuyệt đối KHÔNG "follow kênh". ⛔ videoPromptEn/action cảnh cta CHỈ tả packshot sản phẩm thật + tay chỉ xuống — KHÔNG bắt model render chữ/giá/nút (giá + nút "Add to Cart" sẽ chèn bằng caption ở bước sau).
 - hasProduct: mỗi cảnh đặt true nếu sản phẩm thật trong khung (thường hero_entrance/application/result/cta, đôi khi false_solution để so sánh), false nếu cảnh chỉ có phản diện/nỗi đau (challenger/rootcause/agitation).
 
 KHUNG CẢNH (chọn & sắp đúng thứ tự, bỏ cảnh tùy chọn nếu không hợp số lượng):
@@ -232,7 +236,7 @@ application(sản phẩm thật tác động; KB4 = mỗi hoạt chất 1 cảnh
 
 LUẬT VIẾT (bắt buộc):
 1. THOẠI NATIVE, KHÔNG DỊCH MÁY: ${arch.narratorVi}. Dùng slang đời thường ${isVN ? 'tiếng Việt' : 'tiếng Mã + chêm sức sống bản địa'} (vd VN: "xả lũ axit", "đình công", "bay màu", "tao cút đây").
-2. Thoại NGẮN GỌN, bám độ dài: ĐA SỐ cảnh 8-16 từ (≈4-6s); cảnh thường tối đa ~20 từ (8s); CHỈ 1 cảnh rootcause được tới ~32 từ (12s). Viết thoại quá dài = lỗi làm video phình giờ — đừng lê thê.
+2. Thoại NGẮN GỌN: cảnh 4s ≈ 8-12 từ; cảnh 8s ≈ 16-22 từ. TỐI ĐA ~22 từ/cảnh (không còn 12s). Punchy, cộc — đừng lê thê.
 3. COMPLIANCE (ngách sức khỏe/mỹ phẩm): dùng từ "hỗ trợ", KHÔNG hứa tuyệt đối/chữa khỏi. Cảnh CTA phải có ý "hiệu quả tùy cơ địa".
 4. dialoguePrimary = thoại bằng ${langName} (đưa vào giọng đọc). dialogueVi = ${isVN ? 'GIỐNG HỆT dialoguePrimary' : 'bản dịch NGHĨA sang tiếng Việt cho operator hiểu'}.
 5. videoPromptEn = 1 prompt image-to-video TIẾNG ANH: shot type + hành động cụ thể + bối cảnh (3D Pixar character trên nền cơ thể tả thực). KHÔNG bắt model render chữ.
@@ -255,14 +259,15 @@ XUẤT JSON: { characters:[...], scenes:[${sceneCount} cảnh đúng thứ tự]
     characters?: PersonifiedScript['characters']; scenes?: RawScene[]
   }
 
-  // Snap mỗi cảnh về 4/8/12 theo độ dài thoại (đo bằng word-count).
+  // Snap mỗi cảnh về 4 hoặc 8s theo độ dài thoại; hasProduct tính deterministic theo sceneType.
   const scenes: PersonifiedScene[] = (parsed.scenes ?? []).map((s, i): PersonifiedScene => {
     const speech = estimateSpeechSec(s.dialoguePrimary || s.dialogueVi || '')
+    const sceneType = VALID_SCENE_TYPES.has(s.sceneType) ? (s.sceneType as PersonifiedScene['sceneType']) : 'challenger'
     return {
       idx: i + 1,
-      sceneType: VALID_SCENE_TYPES.has(s.sceneType) ? (s.sceneType as PersonifiedScene['sceneType']) : 'challenger',
+      sceneType,
       clipDuration: pickClipDuration(speech),
-      hasProduct: !!s.hasProduct,
+      hasProduct: SCENE_HAS_PRODUCT.has(sceneType),  // deterministic — không để AI đoán
       speaker: s.speaker ?? '',
       dialoguePrimary: s.dialoguePrimary ?? '',
       dialogueVi: isVN ? (s.dialoguePrimary ?? s.dialogueVi ?? '') : (s.dialogueVi ?? ''),

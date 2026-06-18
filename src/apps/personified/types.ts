@@ -44,8 +44,8 @@ export type CtaStyle =
 
 export type VideoLength = 'short' | 'medium' | 'long' // 5 / 7 / 9 cảnh
 
-/** Seedance chỉ render 4/8/12s. Mọi cảnh phải snap về 1 trong 3 mức này. */
-export type ClipDuration = 4 | 8 | 12
+/** Mỗi cảnh chỉ 4s HOẶC 8s (bỏ 12s — phá nhịp punchy của format). */
+export type ClipDuration = 4 | 8
 
 export interface PersonifiedConfig {
   archetype: ArchetypeId

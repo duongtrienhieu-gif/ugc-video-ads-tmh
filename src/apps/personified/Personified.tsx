@@ -235,7 +235,7 @@ export default function Personified() {
             <div className="mt-4 grid items-start gap-3 md:grid-cols-2">
               <Picker label="Độ dài" value={config.length} options={Object.keys(LENGTH_LABEL) as VideoLength[]}
                 labels={LENGTH_LABEL} onChange={(v) => setConfig((c) => ({ ...c, length: v }))}
-                hint="Tổng giây thực tế hiện ở bước 3 (mỗi cảnh chỉ 4/8/12s nên có thể lệch nhẹ)." />
+                hint="Tổng giây thực tế hiện ở bước 3 (mỗi cảnh chỉ 4s hoặc 8s nên có thể lệch nhẹ)." />
               <Picker label="Sản phẩm thật ra tay kiểu gì?" value={config.heroType} options={Object.keys(HERO_TYPE_LABEL) as HeroType[]}
                 labels={HERO_TYPE_LABEL} onChange={(v) => setConfig((c) => ({ ...c, heroType: v }))}
                 hint={HERO_TYPE_DESC[config.heroType]} />

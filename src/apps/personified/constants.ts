@@ -75,6 +75,26 @@ export const ARCHETYPE_ORDER: ArchetypeId[] = [
   'KB1_invader', 'KB2_inner_demon', 'KB3_grumpy_organ', 'KB4_ingredient_battle',
 ]
 
+/** KHUÔN CỨNG mỗi KB — nhồi vào brain để khóa: ai dẫn chuyện, nhân vật nào
+ *  bắt buộc/cấm, ai làm CTA. Giải quyết gốc loạn-nhân-vật + pick-không-khóa. */
+export const ARCHETYPE_STRUCTURE: Record<ArchetypeId, string> = {
+  KB1_invader:
+    'KHUÔN KB1: Người dẫn = VILLAIN (quái vật NHÌN THẤY được). Nhân vật = villain + hero(sản phẩm). Tối đa 1 nhân vật phụ = bộ-phận-bị-hại (organ) HOẶC bỏ — TUYỆT ĐỐI KHÔNG vừa có người-nạn-nhân VỪA có organ. CTA do HERO tự chốt (hoặc villain lúc bỏ chạy). KHÔNG tạo nhân vật sidekick/trợ-lý riêng.',
+  KB2_inner_demon:
+    'KHUÔN KB2 (CHỈ cho vấn đề VÔ HÌNH — mất ngủ/lo âu/tự ti/stress/mệt mỏi): Người dẫn = VILLAIN (thực thể tâm lý trừu tượng). Nhân vật = villain + NGƯỜI THẬT (nạn nhân, ở gương/giường) + hero. KHÔNG tạo organ-bộ-phận. CTA do hero hoặc người-vừa-được-giải-thoát. KHÔNG sidekick riêng.',
+  KB3_grumpy_organ:
+    'KHUÔN KB3: Người dẫn = CHÍNH BỘ PHẬN CƠ THỂ (organ) — tự kể khổ + mắng CHỦ (chủ = người xem, KHÔNG hiện thành nhân vật). Nhân vật = organ + hero (+ tùy chọn 1 villain nhỏ = vấn đề nhân cách hóa, để cảnh tan rã đã mắt). KHÔNG tạo người-nạn-nhân riêng. CTA do CHÍNH organ tự chốt (mạch nhất) hoặc hero. KHÔNG sidekick riêng.',
+  KB4_ingredient_battle:
+    'KHUÔN KB4: Người dẫn = VILLAIN, phải KHAI TÊN từng hoạt chất ĐÚNG LÚC BỊ ĐÁNH/THUA (cảnh application/destruction) — KHÔNG khai ở rootcause. Nhân vật = villain + hero (tối đa 1 phụ). application = 1 cảnh/hoạt chất nhưng TỐI ĐA 3 cảnh hoạt chất (gộp 2 hoạt chất/cảnh nếu sản phẩm có >3). CTA do hero. KHÔNG sidekick riêng.',
+}
+
+/** Luật nhân vật + personify dùng chung mọi KB. */
+export const SHARED_CHAR_RULES =
+  'NHÂN VẬT (chung): TỐI ĐA 3 nhân vật có thoại. Mỗi nhân vật phải có ≥2 câu trong cả video — vai nào chỉ nói 1 câu thì GỘP vào nhân vật khác. KHÔNG đẻ nhân vật mới chỉ để đọc CTA.'
+
+export const HERO_FORMFACTOR_RULE =
+  'HERO theo DẠNG sản phẩm: dạng ĐỰNG (chai/tuýp/hũ/lọ/hộp/vỉ/gói/gel/serum/kem/viên) → nhân cách hóa thêm MẮT biểu cảm + TAY nhỏ (hiệp sĩ). Dạng ĐEO/THIẾT BỊ (đai/máy/miếng dán/belt) → KHÔNG ép mặt người; nhân cách hóa kiểu "khí cụ anh hùng" biến hình/phát sáng/bung cơ chế (tối đa thêm đôi mắt nhỏ nếu hợp). LUÔN giữ bao bì/nhãn/màu/dáng thật — vẫn nhận ra đúng sản phẩm.'
+
 // ── Module toggles ───────────────────────────────────────────────────────────
 export const HERO_TYPE_LABEL: Record<HeroType, string> = {
   product_knight:    'Sản phẩm hóa hiệp sĩ (mắt/tay)',
@@ -97,7 +117,7 @@ export const FALSE_SOLUTION_DESC =
 export const CTA_STYLE_LABEL: Record<CtaStyle, string> = {
   villain_flees:       'Phản diện thua → "đặt ngay, link dưới"',
   reverse_psych:       '"Đừng bấm giỏ hàng" (reverse-psych)',
-  sidekick_disclaimer: 'Sidekick chốt giỏ + disclaimer',
+  sidekick_disclaimer: 'Hero chốt giỏ + disclaimer',
 }
 
 export const LENGTH_LABEL: Record<VideoLength, string> = {
@@ -137,11 +157,15 @@ export const RENDER_TIER_LABEL: Record<RenderTier, string> = {
 const I2V_CR_PER_SEC: Record<RenderTier, number> = { seedance720: 3.5, grok480: 1.6 }
 const KEYFRAME_CR = 6                         // 1 ảnh keyframe gpt-4o-image ≈ 6cr
 
-/** Seedance chỉ đẻ 4/8/12s. Chọn mức NHỎ NHẤT đủ chứa lời thoại (chừa ~0.8s thở). */
+/** Mỗi cảnh chỉ 4s hoặc 8s (bỏ 12s). Thoại ngắn → 4s, còn lại 8s. */
 export function pickClipDuration(speechSec: number): ClipDuration {
-  const needed = Math.max(1, speechSec) + 0.8
-  return needed <= 4 ? 4 : needed <= 8 ? 8 : 12
+  return Math.max(1, speechSec) + 0.6 <= 4 ? 4 : 8
 }
+
+/** hasProduct được tính DETERMINISTIC theo sceneType (KHÔNG để AI đoán) — chỉ cảnh
+ *  có SẢN PHẨM THẬT mới true để P2 khóa fidelity. FalseSolution = hàng generic nên
+ *  KHÔNG tính (false). */
+export const SCENE_HAS_PRODUCT = new Set<SceneType>(['hero_entrance', 'application', 'result', 'cta'])
 
 /** Ước thời lượng nói (giây) từ số từ — tiếng Việt theatrical ~3.3 từ/giây. */
 export function estimateSpeechSec(text: string): number {
