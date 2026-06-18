@@ -48,7 +48,7 @@ OTHER NON-NEGOTIABLE RULES
 2. Use the product's REAL ingredient names — never invent, never "powerful formula".
 3. NEVER claim cure / treatment / guaranteed results. Hedged verbs ("giúp / hỗ trợ / cảm thấy").
 4. NEVER speak an invented price. Mention a deal ONLY if the brief states one; else close on urgency/FOMO.
-5. The 3 variations must FEEL DIFFERENT — different hook, energy, pacing, CTA — not reworded twins.
+5. The 4 variations must FEEL DIFFERENT — different hook, energy, pacing, CTA — not reworded twins.
 
 ═══════════════════════════════════════════════════════════════
 HOOK LIBRARY (line-1 scroll-stoppers — a different one per variation)
@@ -153,7 +153,7 @@ function buildLanguageSpec(langMode: LangMode): string {
   }
   lines.push(block.join('\n'))
   lines.push('')
-  lines.push('Repeat the SAME marker structure for <<<VARIATION 2>>> and <<<VARIATION 3>>>.')
+  lines.push('Repeat the SAME marker structure for <<<VARIATION 2>>>, <<<VARIATION 3>>> and <<<VARIATION 4>>>.')
   return lines.join('\n')
 }
 
@@ -222,7 +222,7 @@ function buildUserPrompt(params: AdsContentGenParams): string {
   lines.push(buildLanguageSpec(params.langMode))
 
   lines.push('')
-  lines.push('Generate EXACTLY 3 distinct variations. Each: a different hook from the library, different emotional energy, pacing, and CTA.')
+  lines.push('Generate EXACTLY 4 distinct variations. Each: a different hook from the library, different emotional energy, pacing, and CTA.')
 
   return lines.join('\n')
 }

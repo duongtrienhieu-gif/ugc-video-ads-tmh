@@ -19,7 +19,7 @@ export default function OutputPanel({ result, isGenerating, onRegenerate }: Outp
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
         <Loader2 className="h-8 w-8 animate-spin text-pink-500" />
-        <p className="text-sm font-medium text-gray-700">Đang viết 3 variations content...</p>
+        <p className="text-sm font-medium text-gray-700">Đang viết 4 variations content...</p>
         <p className="text-xs text-gray-400 max-w-sm">
           Gemini đang viết caption đa biến thể bằng VN + Bahasa Melayu cho post của bạn
         </p>
@@ -33,7 +33,7 @@ export default function OutputPanel({ result, isGenerating, onRegenerate }: Outp
         <Megaphone className="h-10 w-10 text-gray-200" strokeWidth={1.5} />
         <p className="text-sm text-gray-400">Chọn sản phẩm + preset rồi nhấn "Tạo content"</p>
         <p className="text-xs text-gray-300 max-w-sm">
-          3 variations caption với góc hook khác nhau, mỗi cái có VN + Bahasa Melayu, sẵn sàng paste vào Facebook / TikTok / IG ads
+          4 variations caption với góc hook khác nhau, mỗi cái có VN + Bahasa Melayu, sẵn sàng paste vào Facebook / TikTok / IG ads
         </p>
       </div>
     )
@@ -63,16 +63,18 @@ export default function OutputPanel({ result, isGenerating, onRegenerate }: Outp
         </div>
       </div>
 
-      {/* Variations + history grid */}
+      {/* Variations (2×2 grid on desktop) + history */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {result.variations.map((v, idx) => (
-          <VariationCard
-            key={v.id}
-            variation={v}
-            index={idx}
-            result={result}
-          />
-        ))}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {result.variations.map((v, idx) => (
+            <VariationCard
+              key={v.id}
+              variation={v}
+              index={idx}
+              result={result}
+            />
+          ))}
+        </div>
 
         {/* Footer actions */}
         <div className="flex flex-wrap gap-2 pt-2">
@@ -82,7 +84,7 @@ export default function OutputPanel({ result, isGenerating, onRegenerate }: Outp
             className="flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-medium text-gray-700 hover:bg-black/[0.04] disabled:opacity-40"
           >
             {isGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-            Tạo lại tất cả 3 variations
+            Tạo lại tất cả 4 variations
           </button>
         </div>
 
@@ -172,7 +174,7 @@ function VariationCard({
         </div>
       )}
 
-      <div className={`grid grid-cols-1 gap-3 p-3 ${variation.vietnamese && variation.malay ? 'lg:grid-cols-2' : ''}`}>
+      <div className="grid grid-cols-1 gap-3 p-3">
         {variation.vietnamese && (
           <CaptionBox
             flag="🇻🇳"
@@ -192,11 +194,11 @@ function VariationCard({
               onCopy={() => handleCopy('my')}
             />
             {variation.malayGlossVi && (
-              <div className="rounded-xl border border-dashed border-black/10 bg-gray-50/60 p-2.5">
-                <p className="mb-0.5 text-[9px] font-bold uppercase tracking-widest text-gray-400">
+              <div className="rounded-xl border border-sky-200 bg-sky-50 p-2.5">
+                <p className="mb-0.5 text-[9px] font-bold uppercase tracking-widest text-sky-700">
                   🇻🇳 Bản dịch VN (để bạn hiểu)
                 </p>
-                <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-gray-600">{variation.malayGlossVi}</p>
+                <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-gray-800">{variation.malayGlossVi}</p>
               </div>
             )}
           </div>

@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { Package, Loader2, Megaphone } from 'lucide-react'
 import type { Product } from '../../../stores/types'
-import type { AdsContentGenParams, LangMode, PlatformId } from '../types'
+import type { AdsContentGenParams, LangMode } from '../types'
 import { useBankStore } from '../../../stores/bankStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAppStore } from '../../../stores/appStore'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 import BankPicker from '../../../components/BankPicker'
-import { ADS_ANGLES, PLATFORM_OPTIONS } from '../services/presets'
+import { ADS_ANGLES } from '../services/presets'
 
 interface InputPanelProps {
   selectedProduct: Product | null
@@ -17,8 +17,6 @@ interface InputPanelProps {
   // Form state — owned by parent so it survives F5 via session persistence.
   presetId: string                      // holds an ADS_ANGLES id
   onPresetIdChange: (id: string) => void
-  platform: PlatformId
-  onPlatformChange: (p: PlatformId) => void
   langMode: LangMode
   onLangModeChange: (l: LangMode) => void
 }
@@ -32,7 +30,6 @@ const LANG_OPTIONS: { value: LangMode; label: string; glyph: string }[] = [
 export default function InputPanel({
   selectedProduct, onProductSelect, onGenerate, isGenerating,
   presetId, onPresetIdChange: setPresetId,
-  platform, onPlatformChange: setPlatform,
   langMode, onLangModeChange: setLangMode,
 }: InputPanelProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -56,7 +53,7 @@ export default function InputPanel({
     // engine — we pass harmless defaults here so the param shape stays intact.
     onGenerate({
       presetId,
-      platform,
+      platform: 'facebook-feed',   // FB by default — only FB needs long-form
       langMode,
       lengthMode: 'medium',
       toneIds: [],
@@ -146,29 +143,8 @@ export default function InputPanel({
           </div>
         </Section>
 
-        {/* STEP 3 — Platform */}
-        <Section step={3} title="Nền tảng ads">
-          <div className="grid grid-cols-5 gap-1.5">
-            {PLATFORM_OPTIONS.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setPlatform(p.id)}
-                title={p.hint}
-                className={`flex flex-col items-center gap-0.5 rounded-lg border py-2 text-[10px] transition-colors ${
-                  platform === p.id
-                    ? 'border-pink-400 bg-pink-50 text-pink-700'
-                    : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.03]'
-                }`}
-              >
-                <span className="text-base leading-none">{p.glyph}</span>
-                <span className="font-medium">{p.label.split(' ')[0]}</span>
-              </button>
-            ))}
-          </div>
-        </Section>
-
-        {/* STEP 4 — Language */}
-        <Section step={4} title="Ngôn ngữ output">
+        {/* STEP 3 — Language */}
+        <Section step={3} title="Ngôn ngữ output">
           <div className="grid grid-cols-3 gap-1.5">
             {LANG_OPTIONS.map((l) => (
               <button
@@ -204,7 +180,7 @@ export default function InputPanel({
           className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-pink-600 to-rose-600 px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-pink-700 hover:to-rose-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isGenerating ? (
-            <><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo 3 variations...</>
+            <><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo 4 variations...</>
           ) : (
             <><Megaphone className="h-4 w-4" /> Tạo content</>
           )}

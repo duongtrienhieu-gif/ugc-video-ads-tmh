@@ -4,7 +4,7 @@ import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
 import type {
-  AdsContentGenParams, AdsContentResult, LangMode, PlatformId,
+  AdsContentGenParams, AdsContentResult, LangMode,
 } from './types'
 import { generateAdsContent } from './services/generateAdsContent'
 import InputPanel from './components/InputPanel'
@@ -15,14 +15,12 @@ import { useSessionPersist } from '../../services/sessionPersistence'
 interface AdsContentSnapshot {
   selectedProductId: string | null
   presetId: string
-  platform: PlatformId
   langMode: LangMode
   result: AdsContentResult | null
   lastParams: Omit<AdsContentGenParams, 'productId'> | null
 }
 
 const DEFAULT_PRESET_ID = 'story'           // an ADS_ANGLES id
-const DEFAULT_PLATFORM: PlatformId = 'facebook-feed'
 const DEFAULT_LANG: LangMode = 'ms'          // MY-first per project default
 
 export default function AdsContent() {
@@ -31,9 +29,8 @@ export default function AdsContent() {
   const [isGenerating, setIsGenerating] = useState(false)
 
   // Form state lifted from InputPanel so it survives F5 via session persistence.
-  // Length / CTA / educational are derived from the chosen angle in the engine.
+  // Platform is fixed to Facebook; length/CTA/educational derive from the angle.
   const [presetId, setPresetId] = useState<string>(DEFAULT_PRESET_ID)
-  const [platform, setPlatform] = useState<PlatformId>(DEFAULT_PLATFORM)
   const [langMode, setLangMode] = useState<LangMode>(DEFAULT_LANG)
 
   const lastParamsRef = useRef<Omit<AdsContentGenParams, 'productId'> | null>(null)
@@ -46,11 +43,10 @@ export default function AdsContent() {
 
   const sessionApi = useSessionPersist<AdsContentSnapshot>({
     moduleId: 'ads-content',
-    version: 3, // bumped — simplified form state (angle + platform + langMode)
+    version: 4, // bumped — dropped platform (fixed to Facebook)
     snapshot: () => ({
       selectedProductId: selectedProduct?.id ?? null,
       presetId,
-      platform,
       langMode,
       result,
       lastParams: lastParamsRef.current,
@@ -61,7 +57,6 @@ export default function AdsContent() {
         if (p) setSelectedProduct(p)
       }
       if (data.presetId)  setPresetId(data.presetId)
-      if (data.platform)  setPlatform(data.platform)
       if (data.langMode)  setLangMode(data.langMode)
       if (data.result)    setResult(data.result)
       if (data.lastParams) lastParamsRef.current = data.lastParams
@@ -71,9 +66,8 @@ export default function AdsContent() {
     getProgressVi: () => (result ? 'Đã sinh content — sẵn sàng copy' : isGenerating ? 'Đang tạo content...' : selectedProduct ? 'Đã chọn sản phẩm — chưa tạo' : undefined),
     shouldPersist: () =>
       !!result || isGenerating || !!selectedProduct ||
-      presetId !== DEFAULT_PRESET_ID || platform !== DEFAULT_PLATFORM ||
-      langMode !== DEFAULT_LANG,
-    deps: [selectedProduct?.id, result, isGenerating, presetId, platform, langMode],
+      presetId !== DEFAULT_PRESET_ID || langMode !== DEFAULT_LANG,
+    deps: [selectedProduct?.id, result, isGenerating, presetId, langMode],
   })
 
   // Accept productId hand-off from other apps (e.g. Finder → Ads Content)
@@ -129,8 +123,6 @@ export default function AdsContent() {
           isGenerating={isGenerating}
           presetId={presetId}
           onPresetIdChange={setPresetId}
-          platform={platform}
-          onPlatformChange={setPlatform}
           langMode={langMode}
           onLangModeChange={setLangMode}
         />
