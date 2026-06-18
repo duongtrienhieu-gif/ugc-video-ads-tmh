@@ -143,6 +143,22 @@ export default function HybridExportPhase() {
     } finally { setIsGenThumbs(false) }
   }
 
+  // P6c — tạo lại MỘT thumbnail (re-render ảnh với hook hiện tại — GPT-4o cho ra
+  // biến thể mới). Cũng dùng để retry cái bị "Failed to fetch". ~6cr/ảnh.
+  const regenThumb = async (i: number) => {
+    const t = ev.aiThumbnails[i]
+    if (!t) return
+    if (!kieApiKey) { addToast('Thiếu KIE key', 'error'); return }
+    const langName = SCRIPT_LANG_GEMINI_NAME[state.scriptBrain.outputLang]
+    patchAiThumbnail(i, { status: 'rendering', error: undefined })
+    try {
+      const imageRef = await generateAiThumbnail({ kieApiKey, archetypeId: t.archetypeId, hook: t.hook, langName, avatar: state.inputs.avatar, product: state.inputs.product })
+      patchAiThumbnail(i, { imageRef, status: 'completed' })
+    } catch (err) {
+      patchAiThumbnail(i, { status: 'failed', error: (err instanceof Error ? err.message : String(err)).slice(0, 160) })
+    }
+  }
+
   return (
     <div className="h-full overflow-y-auto p-6">
       <div className="mx-auto max-w-3xl">
@@ -319,7 +335,7 @@ export default function HybridExportPhase() {
           <div className="mb-2 flex items-center justify-between gap-2">
             <div>
               <p className="text-sm font-bold text-gray-900">🖼 Ảnh thumbnail (cover)</p>
-              <p className="text-[11px] text-gray-500">4 kiểu hook — chọn 1 cái để tải làm ảnh bìa.</p>
+              <p className="text-[11px] text-gray-500">{THUMBNAIL_ARCHETYPE_ORDER.length} kiểu hook — chọn 1 cái để tải làm ảnh bìa.</p>
             </div>
             <div className="flex items-center gap-2">
               {pickedThumbUrl && (
@@ -331,7 +347,7 @@ export default function HybridExportPhase() {
               <button onClick={genThumbnails} disabled={ev.isGeneratingThumbnails}
                 className="flex items-center gap-1.5 rounded-full border border-violet-300 bg-white px-3 py-1.5 text-[11px] font-bold text-violet-700 hover:bg-violet-50 disabled:opacity-50">
                 {ev.isGeneratingThumbnails ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                {ev.aiThumbnails.length ? 'Tạo lại 4' : 'Tạo 4 thumbnail'} (~24cr)
+                {ev.aiThumbnails.length ? `Tạo lại ${THUMBNAIL_ARCHETYPE_ORDER.length}` : `Tạo ${THUMBNAIL_ARCHETYPE_ORDER.length} thumbnail`} (~{THUMBNAIL_ARCHETYPE_ORDER.length * 6}cr)
               </button>
             </div>
           </div>
@@ -342,7 +358,8 @@ export default function HybridExportPhase() {
               {ev.aiThumbnails.map((t, i) => (
                 <AiThumbCard key={i} thumb={t}
                   picked={!!t.imageRef && ev.pickedThumbnailRef === t.imageRef}
-                  onPick={() => t.imageRef && pickThumbnail(t.imageRef)} />
+                  onPick={() => t.imageRef && pickThumbnail(t.imageRef)}
+                  onRegen={() => regenThumb(i)} />
               ))}
             </div>
           )}
@@ -407,18 +424,26 @@ function BannerLivePreview({ presetId, text }: { presetId: BannerPresetId; text:
 }
 
 // ── AI thumbnail card (one archetype) — ported from mode-1 ExportPhase ────────
-function AiThumbCard({ thumb, picked, onPick }: { thumb: AiThumbnail; picked: boolean; onPick: () => void }) {
+function AiThumbCard({ thumb, picked, onPick, onRegen }: { thumb: AiThumbnail; picked: boolean; onPick: () => void; onRegen: () => void }) {
   const cfg = THUMBNAIL_ARCHETYPES[thumb.archetypeId]
   const url = useAssetUrl(thumb.imageRef ?? undefined)
+  const busy = thumb.status === 'rendering'
   return (
     <div className={`overflow-hidden rounded-lg border transition-all ${picked ? 'border-violet-500 ring-2 ring-violet-300' : 'border-gray-200'}`}>
       <button onClick={onPick} disabled={thumb.status !== 'completed'} className="block aspect-[9/16] w-full bg-gray-100">
-        {thumb.status === 'rendering' && <span className="flex h-full items-center justify-center text-[10px] text-gray-400"><Loader2 className="mr-1 h-3 w-3 animate-spin" /> Đang tạo...</span>}
+        {busy && <span className="flex h-full items-center justify-center text-[10px] text-gray-400"><Loader2 className="mr-1 h-3 w-3 animate-spin" /> Đang tạo...</span>}
         {thumb.status === 'failed' && <span className="flex h-full items-center justify-center px-1 text-center text-[9px] text-rose-500">Lỗi: {thumb.error?.slice(0, 40)}</span>}
         {thumb.status === 'completed' && url && <img src={url} alt={cfg.labelVi} className="h-full w-full object-cover" />}
       </button>
       <div className="p-1.5">
-        <p className="text-[10px] font-bold text-gray-800">{cfg.emoji} {cfg.labelVi}{picked && ' ✓'}</p>
+        <div className="flex items-center justify-between gap-1">
+          <p className="truncate text-[10px] font-bold text-gray-800">{cfg.emoji} {cfg.labelVi}{picked && ' ✓'}</p>
+          {/* P6c — tạo lại riêng ảnh này (ra biến thể mới / retry khi lỗi). ~6cr */}
+          <button onClick={onRegen} disabled={busy} title="Tạo lại ảnh này (~6cr)"
+            className="flex shrink-0 items-center gap-0.5 rounded border border-gray-200 bg-white px-1 py-0.5 text-[9px] font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+            <RotateCcw className="h-2.5 w-2.5" /> Tạo lại
+          </button>
+        </div>
         {thumb.hook && <p className="mt-0.5 truncate text-[9px] font-semibold text-violet-700">"{thumb.hook}"</p>}
       </div>
     </div>

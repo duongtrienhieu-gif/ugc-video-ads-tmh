@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LayoutGrid, User, Mic, PenLine, Settings, FlaskConical, RefreshCw, LogOut, Activity, Sparkles, Package, Megaphone, FolderOpen, Rocket, History as HistoryIcon, Palette, ShoppingBag, TrendingUp, MessageCircle } from 'lucide-react'
+import { LayoutGrid, User, Mic, PenLine, Settings, FlaskConical, RefreshCw, LogOut, Activity, Sparkles, Package, Megaphone, FolderOpen, Rocket, History as HistoryIcon, Palette, ShoppingBag, TrendingUp, MessageCircle, Ghost } from 'lucide-react'
 import SettingsModal from './SettingsModal'
 import Diagnostic from './Diagnostic'
 import DraftsPanel from './DraftsPanel'
@@ -45,6 +45,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: 'tiktok-shop',       label: 'TikTok Shop',    icon: ShoppingBag },
       { id: 'super-ladipage',    label: 'Super Ladipage', icon: Rocket },
       { id: 'video-builder',     label: 'UGC Builder',    icon: Sparkles },
+      { id: 'personified',       label: 'Nhân Vật Hoá',   icon: Ghost },
       { id: 'chat-bot',          label: 'Chat Bot',       icon: MessageCircle },
     ],
   },

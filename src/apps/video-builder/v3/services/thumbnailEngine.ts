@@ -308,8 +308,11 @@ export const THUMBNAIL_ARCHETYPES: Record<ThumbnailArchetypeId, ThumbnailArchety
   },
 }
 
+// P6c — user dropped Before/After (đụng hàng before/after video) + Sản phẩm+Ưu đãi
+// (badge giảm giá/giá tiền) → chỉ giữ 2 kiểu: Mặt phản ứng + Câu hỏi tò mò. Config map
+// vẫn giữ đủ 4 (Record cần đủ key); chỉ ORDER này điều khiển UI + số ảnh tạo.
 export const THUMBNAIL_ARCHETYPE_ORDER: ThumbnailArchetypeId[] = [
-  'reaction_face', 'before_after', 'product_hero', 'curiosity_text',
+  'reaction_face', 'curiosity_text',
 ]
 
 // Per-archetype composition prompt; the hook text is baked into the image so it

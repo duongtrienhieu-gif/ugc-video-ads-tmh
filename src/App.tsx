@@ -39,6 +39,7 @@ import StudioBrandKit from './apps/studio-brand-kit/StudioBrandKit'
 import TikTokShop from './apps/tiktok-shop/TikTokShop'
 import Research from './apps/research/Research'
 import ChatBot from './apps/chat-bot/ChatBot'
+import Personified from './apps/personified/Personified'
 
 const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'finder': Finder,
@@ -62,6 +63,7 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'tiktok-shop': TikTokShop,
   'research': Research,
   'chat-bot': ChatBot,
+  'personified': Personified,
 }
 
 /** VN label + cache keys used by the per-app ErrorBoundary fallback so the
@@ -86,6 +88,7 @@ const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> =
   'tiktok-shop':       { name: 'TikTok Shop',      resetKeys: [] },
   'research':          { name: 'Research',         resetKeys: [] },
   'chat-bot':          { name: 'Chat Bot',         resetKeys: ['chat-bot-configs-v1'] },
+  'personified':       { name: 'Nhân Vật Hoá',     resetKeys: [] },
 }
 
 export default function App() {
