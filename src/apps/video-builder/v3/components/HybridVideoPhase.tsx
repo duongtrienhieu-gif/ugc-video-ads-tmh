@@ -842,7 +842,7 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
                   className="flex items-center gap-0.5 rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[9px] font-bold text-gray-600 hover:bg-gray-50">
                   <X className="h-2.5 w-2.5" /> Huỷ
                 </button>
-                <button onClick={() => { onSavePrompt(draftPrompt.trim(), aiPlan ?? undefined); setEditing(false); setAiErr('') }}
+                <button onClick={() => { onSavePrompt(draftPrompt.trim(), aiPlan ?? undefined); setEditing(false); setAiErr(''); setAiPlan(null); setAiChips(new Set()); setAiNote('') }}
                   disabled={!promptDirty && !aiPlan}
                   className="flex items-center gap-0.5 rounded bg-violet-600 px-1.5 py-0.5 text-[9px] font-bold text-white hover:bg-violet-700 disabled:opacity-40">
                   <Save className="h-2.5 w-2.5" /> Lưu
@@ -859,7 +859,7 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
             // P6a — also carry the AI fixer's kind/cameraFraming so a not-yet-saved
             // AI fix re-renders with the right framing (not just the prompt text).
             if (promptDirty || aiPlan) onSavePrompt(draftPrompt.trim(), aiPlan ?? undefined)
-            if (editing) setEditing(false)
+            setEditing(false); setAiPlan(null); setAiErr('')
             onRender()
           }}
             className={`mt-auto flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-[10px] font-bold ${failed ? 'border-rose-300 bg-rose-50 text-rose-600 hover:bg-rose-100' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
