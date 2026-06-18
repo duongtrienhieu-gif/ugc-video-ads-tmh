@@ -7,7 +7,7 @@
 
 import { assembleHybridVideo, type HybridSceneClip, type HybridStickerPlacement, type HybridCaptionPlacement } from './hybridAssembler'
 import { renderStickerBlob, type StickerStyle } from './stickerRenderer'
-import { renderCaptionBlob, deriveCaptionHighlights } from './captionRenderer'
+import { renderCaptionBlob, deriveCaptionHighlights, ensureCaptionFonts } from './captionRenderer'
 import { renderBannerBlob, deriveBannerSlogan } from './bannerRenderer'
 import { BANNER_PRESETS, DEFAULT_BANNER_PRESET } from './bannerPresets'
 import { buildCaptionChunks } from './captionChunker'
@@ -111,37 +111,41 @@ async function buildCaptionPlacements(
 ): Promise<HybridCaptionPlacement[]> {
   const fallback = script.blocks.map((b) => b.text).join(' ')
   const chunks = buildCaptionChunks(alignment, fallback, realDur)
-  const out: HybridCaptionPlacement[] = []
+
+  // P6b/P6g — build the FULL frame list first (static = 1/chunk; karaoke = 1/word), then
+  // render with BOUNDED CONCURRENCY. The old per-word loop awaited font-ready + PNG-encode +
+  // IndexedDB save sequentially for 100+ word-frames → it saturated the main thread with no
+  // progress and looked frozen at "Tạo phụ đề… 0%" (the karaoke hang). Concurrency overlaps
+  // the encode/save waits so it finishes in a few seconds; `wi:-1` = static (no karaoke box).
+  // wi = the active-word index WITHIN the chunk to box (karaoke), or -1 for a static frame.
+  type CapTask = { text: string; wi: number; atSec: number; durationSec: number }
+  const tasks: CapTask[] = []
   for (const ch of chunks) {
     const text = ch.text.trim()
     if (!text) continue
-    // drop a chunk whose midpoint falls inside a social-proof card window
     const mid = (ch.startSec + ch.endSec) / 2
-    if (skipWindows.some((w) => mid >= w.startSec && mid < w.endSec)) continue
-    try {
-      if (karaoke && ch.words.length > 0) {
-        // One frame per word: same full-chunk text, the active word boxed. The words
-        // are gapless (chunker guarantees), so the chunk span is fully covered.
-        for (let wi = 0; wi < ch.words.length; wi++) {
-          const w = ch.words[wi]
-          const blob = await renderCaptionBlob(text, presetId, highlightTerms, wi)
-          out.push({
-            pngRef: await saveAsset(blob, 'image/png'),
-            atSec: w.startSec,
-            durationSec: Math.max(0.1, w.endSec - w.startSec),
-          })
-        }
-      } else {
-        const blob = await renderCaptionBlob(text, presetId, highlightTerms)
-        out.push({
-          pngRef: await saveAsset(blob, 'image/png'),
-          atSec: ch.startSec,
-          durationSec: Math.max(0.4, ch.endSec - ch.startSec),
-        })
-      }
-    } catch { /* skip a bad chunk — never break the assemble */ }
+    if (skipWindows.some((w) => mid >= w.startSec && mid < w.endSec)) continue   // skip social-proof card window
+    if (karaoke && ch.words.length > 0) {
+      ch.words.forEach((w, k) => tasks.push({ text, wi: k, atSec: w.startSec, durationSec: Math.max(0.1, w.endSec - w.startSec) }))
+    } else {
+      tasks.push({ text, wi: -1, atSec: ch.startSec, durationSec: Math.max(0.4, ch.endSec - ch.startSec) })
+    }
   }
-  return out
+
+  await ensureCaptionFonts()   // warm fonts ONCE, not per frame
+  const out: (HybridCaptionPlacement | null)[] = new Array(tasks.length).fill(null)
+  let next = 0
+  const worker = async (): Promise<void> => {
+    for (let my = next++; my < tasks.length; my = next++) {
+      const t = tasks[my]
+      try {
+        const blob = await renderCaptionBlob(t.text, presetId, highlightTerms, t.wi < 0 ? undefined : t.wi)
+        out[my] = { pngRef: await saveAsset(blob, 'image/png'), atSec: t.atSec, durationSec: t.durationSec }
+      } catch { /* skip a bad frame — never break the assemble */ }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(6, tasks.length) }, worker))
+  return out.filter((p): p is HybridCaptionPlacement => p !== null)
 }
 
 /** Assemble the final MP4 from the current hybrid state. Throws if not ready
