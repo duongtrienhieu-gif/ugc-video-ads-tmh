@@ -357,9 +357,12 @@ export default function HybridVideoPhase(_props: Props) {
     const restore: number[] = []
     for (const [idxStr, info] of Object.entries(persisted)) {
       const idx = Number(idxStr)
-      if (st.clips[idx]) { patchSceneRender(idx, null); continue }       // already finished
+      // P6u — check the LIVE-this-session lock FIRST: during a "Render lại" the OLD clip still
+      // exists while the new render runs; the old order treated that as "finished" and wiped the
+      // in-flight tracking. A live render must always be left to finish itself.
+      if (ACTIVE_RENDERS.has(idx)) { restore.push(idx); continue }       // SPA-nav: promise alive → it finishes itself
+      if (st.clips[idx]) { patchSceneRender(idx, null); continue }       // already finished (no live render) → clear
       if (now - info.startedAt > RENDER_STALE_MS) { patchSceneRender(idx, null); continue }  // abandoned
-      if (ACTIVE_RENDERS.has(idx)) { restore.push(idx); continue }       // SPA-nav: promise alive → show visual, it finishes itself
       if (info.taskId) { restore.push(idx); void resumeRender(idx, info.taskId); continue }  // F5 broll → re-poll paid job
       patchSceneRender(idx, null)                                        // F5 lips/mid-keyframe: can't resume → idle button
     }
@@ -410,12 +413,18 @@ export default function HybridVideoPhase(_props: Props) {
   const renderScene = (i: number) => {
     if (!hasAssets) { addToast('Bấm "Tạo giọng + mặt" trước', 'error'); return }
     if (!kieApiKey) { addToast('Thiếu KIE key', 'error'); return }
-    // A user-initiated "Render lại" must NEVER be silently blocked by a STALE lock.
-    // ACTIVE_RENDERS is a module-level Set (survives a tab-switch / remount) while
-    // renderingIdx is this-session truth. If a lock is set but this session isn't
-    // actually rendering `i` (a previous render died on a tab-switch / stuck poll),
-    // it's stale → clear it so runRender doesn't bail at `if (ACTIVE_RENDERS.has(i))`.
-    if (ACTIVE_RENDERS.has(i) && !renderingIdx.has(i)) ACTIVE_RENDERS.delete(i)
+    // P6u — a user "Render lại" is AUTHORITATIVE. Unless a render is genuinely LIVE this
+    // session (renderingIdx — the button is hidden then anyway), wipe every stale leftover
+    // for `i` BEFORE launching: the module lock (orphaned by a dead tab-switch promise), the
+    // persisted in-flight record (an OLD taskId here is exactly what the mount-resume re-polls
+    // and slaps the previous WRONG clip back — the "load 1 chút rồi trả cảnh cũ" bug), the
+    // failed flag, and any duplicate queue entry. Now nothing can resurrect the old clip.
+    if (!renderingIdx.has(i)) {
+      ACTIVE_RENDERS.delete(i)
+      patchSceneRender(i, null)
+      setFailedIdx((s) => { const n = new Set(s); n.delete(i); return n })
+      setQueue((q) => q.filter((x) => x !== i))
+    }
     // If a slot is free, launch directly.
     if (renderingIdx.size < MAX_CONCURRENT_RENDERS) {
       void runRender(i)
