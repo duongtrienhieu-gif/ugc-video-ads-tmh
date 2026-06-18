@@ -116,13 +116,42 @@ const GLOW_STRIP_RE = /\b(soft |gentle |warm |bright )?(glowing|glow|radiant|shi
 // Z98 — V1 outfit. Detect a quote that implies time has passed between scenes
 // ("sau N tuần / vài tuần / kết quả / before-after / CTA cuối"). Universal
 // across VN / MS / EN.
-const AFTER_TIME_RE = /\b(sau\s+(vài|\d+)\s+(tuần|ngày|tháng)|vài tuần|tuần dùng|kết quả|trẻ ra|rạng rỡ|tươi tắn|thử ngay|combo|ưu đãi|selepas\s+\d+\s+(minggu|hari|bulan)|hasil|kemerlangan|after\s+\d+\s+(weeks?|days?|months?)|results?|try (it )?now|order now)/i
-
 // Z98 #2 — detect a BEFORE/AFTER comparison scene (split-screen / side-by-side).
 // In these the SAME person appears twice in one frame and the two halves must
 // wear DIFFERENT outfits, else "time has passed" reads fake (looks like one
 // sitting with two expressions). Matched off the conceptPrompt, universal.
 const BEFORE_AFTER_RE = /\b(before[- ]?(and[- ]?)?after|before\s*\/\s*after|split[- ]?screen|side[- ]?by[- ]?side|trước\s*(và|\/|-)?\s*sau|sebelum\s*(dan|\/|-)?\s*selepas)\b/i
+
+// P6h — B-ROLL WARDROBE. The lips cuts use the Bước voice+frame keyframe = outfit A. EVERY
+// b-roll / insert cut must instead wear ONE shared outfit B that is DIFFERENT from A (top +
+// bottoms + headwear if any) and IDENTICAL across all b-roll (reads as a second filming
+// session), NOT a fresh outfit per cut. B is picked DETERMINISTICALLY from the product name →
+// stable within a video, varied across products, no vision call. The before/after split is
+// EXEMPT (its own conceptPrompt already dictates two contrasting outfits in one frame).
+const BROLL_WARDROBE_PALETTE = [
+  'a plain heather-grey crew-neck T-shirt with dark casual trousers, and — if they wear any headwear — a soft cream hijab/scarf',
+  'a soft beige knit top with relaxed denim jeans, and — if they wear any headwear — a dusty-rose hijab/scarf',
+  'a navy-blue casual button shirt with neutral chinos, and — if they wear any headwear — a light-grey hijab/scarf',
+  'an olive-green cotton tee with comfortable joggers, and — if they wear any headwear — a warm taupe hijab/scarf',
+  'a muted terracotta casual top with dark relaxed pants, and — if they wear any headwear — an off-white hijab/scarf',
+]
+function pickBrollWardrobe(seed: string): string {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (Math.imul(h, 31) + seed.charCodeAt(i)) >>> 0
+  return BROLL_WARDROBE_PALETTE[h % BROLL_WARDROBE_PALETTE.length]
+}
+/** The shared B-roll wardrobe instruction (outfit B), applied IDENTICALLY to every b-roll cut. */
+function brollWardrobeClause(product: Product | null, refIndex: number): string {
+  const B = pickBrollWardrobe((product?.productName ?? 'ugc').toLowerCase())
+  return (
+    `B-ROLL WARDROBE — the creator wears ${B}. This is a DIFFERENT outfit from the clothing in ` +
+    `reference image #${refIndex} (different top, different bottoms, and a different headwear ` +
+    `color/style if they wear any; if they wear NO headwear, keep the hair as in the reference). ` +
+    `Use this EXACT SAME outfit on EVERY b-roll cut (one consistent separate filming session) — ` +
+    `NEVER copy the reference's outfit and NEVER change the outfit between cuts. Keep ONLY the ` +
+    `FACE identical to the reference (that is the identity).`
+  )
+}
 
 function buildInsertKeyframePrompt(
   presetId: ActionPresetId,
@@ -132,7 +161,7 @@ function buildInsertKeyframePrompt(
   conceptPrompt?: string,
   renderMode?: InsertRenderMode,
   is3D = false,
-  quote?: string,
+  _quote?: string,   // P6h — was used by the removed "after-time wardrobe" branch; kept positionally
   noFace = false,
 ): string {
   const preset = ACTION_PRESETS[presetId]
@@ -158,11 +187,17 @@ function buildInsertKeyframePrompt(
     if (isEmotionPerson) {
       paragraphs.push(
         `IDENTITY LOCK: The person in this scene is the SAME person from reference ` +
-        `image #${personRefIndex} — preserve EXACTLY their face, hair, skin tone, ` +
+        `image #${personRefIndex} — preserve EXACTLY their FACE, skin tone, ` +
         `GENDER, age and build. This must read as the same creator who appears elsewhere ` +
         `in the video, NOT a different model and NEVER a different gender. The scene text ` +
         `only describes what they DO and the setting — their identity comes from this reference.`,
       )
+      // P6h — this concept cut is a B-ROLL → wear the shared outfit B (different from the
+      // lips/keyframe outfit, identical across b-roll). EXEMPT the before/after split, whose
+      // conceptPrompt already dictates two contrasting outfits in the one frame.
+      if (!BEFORE_AFTER_RE.test(safeConcept ?? '')) {
+        paragraphs.push(brollWardrobeClause(product, personRefIndex))
+      }
     }
     paragraphs.push(
       `SCENE: ${scene && scene.length > 0
@@ -285,49 +320,29 @@ function buildInsertKeyframePrompt(
     )
   }
   if (personRefIndex > 0) {
-    // Z98 V1 — identity vs wardrobe split. Bước 3 talking-head video keeps the
-    // EXACT outfit from the user's avatar; the Bước 2 insert scenes deliberately
-    // change outfit so the ad reads as filmed across multiple days, not 60s
-    // in a single sitting. "After-time" scenes (sau N tuần / kết quả / CTA cuối)
-    // get a 2nd distinct outfit so before/after looks plausible — three outfits
-    // total across the whole ad (Bước 1 + 2 in Bước 2).
-    const isAfterTime = !!quote && AFTER_TIME_RE.test(quote)
-    paragraphs.push(
-      `IDENTITY LOCK: Person from reference image #${personRefIndex}. ` +
-      `Preserve EXACTLY the face, skin tone, hair, AND — if they wear any HEADWEAR ` +
-      `(hijab, scarf, hat, headband, turban, cap) — its SAME color & style. The hijab/` +
-      `headwear color + the creator's signature look are part of WHO THEY ARE — keep them ` +
-      `the SAME across scenes (the ONE exception is a before/after split-screen — see its ` +
-      `wardrobe rule below). The SAME recognizable human being in every scene. Only the TOP / ` +
-      `garment may change, as noted below.`,
-    )
-    paragraphs.push(
-      isAfterTime
-        ? `WARDROBE (after-time / result scene): the creator may wear a DIFFERENT TOP from ` +
-          `the earlier scenes to imply days have passed (a "result update" filmed later), and ` +
-          `the look is a touch fresher / brighter. But KEEP the SAME face AND the SAME hijab/` +
-          `headwear color & style. Change ONLY the top/garment — nothing else. At most TWO ` +
-          `looks total across the whole ad; do NOT invent a brand-new outfit + new hijab color.`
-        : `WARDROBE: keep a CONSISTENT everyday outfit — the SAME general top AND the SAME ` +
-          `hijab/headwear color & style as the creator's signature look across scenes. Minor ` +
-          `natural variation is fine; a wholesale new outfit or a new hijab color each scene is ` +
-          `NOT — that reads as a different person. This is ONE creator filming, not many.`,
-    )
-    // Z98 #2 — inside a BEFORE/AFTER comparison the two halves are the SAME
-    // person at two points in time; they MUST wear different outfits or "time
-    // has passed" reads fake. Adds to (doesn't replace) the WARDROBE rule above.
+    // P6h — wardrobe policy. lips (the Bước voice+frame keyframe) = outfit A. EVERY b-roll /
+    // insert cut wears ONE shared outfit B (different from A, identical across all b-roll), so
+    // only the FACE is the identity — NOT the clothing. (Was: "keep the SAME outfit + hijab as
+    // the avatar's signature look", which made b-roll ≈ lips + varied per cut = the dup look.)
     const isBeforeAfter = presetId === 'BEFORE_AFTER_REACTION' ||
       (!!conceptPrompt && BEFORE_AFTER_RE.test(conceptPrompt))
+    paragraphs.push(
+      `IDENTITY LOCK: Person from reference image #${personRefIndex}. Preserve EXACTLY the FACE, ` +
+      `skin tone, gender, age and build — the SAME recognizable human being in every scene. The ` +
+      `CLOTHING changes per the wardrobe rule below; ONLY the FACE is the identity.`,
+    )
     if (isBeforeAfter) {
+      // before/after split — two contrasting outfits in ONE frame (EXEMPT from the shared B,
+      // its conceptPrompt already dictates the two looks).
       paragraphs.push(
-        `BEFORE/AFTER WARDROBE (OVERRIDES the hijab-color lock above, ONLY for this split): the ` +
-        `two halves are the SAME person on TWO DIFFERENT DAYS — they MUST wear a COMPLETELY ` +
-        `DIFFERENT outfit on each half: different top, different bottoms, AND different ` +
-        `headwear/hairstyle (if any — e.g. a different hijab color). The AFTER half looks ` +
-        `fresher / brighter. Keep ONLY the SAME ` +
-        `FACE (that is the identity) — everything WORN differs so it clearly reads as "before" ` +
-        `vs weeks later. NEVER the same outfit on both sides.`,
+        `BEFORE/AFTER WARDROBE: the two halves are the SAME person on TWO DIFFERENT DAYS — they ` +
+        `MUST wear a COMPLETELY DIFFERENT outfit on each half: different top, different bottoms, ` +
+        `AND different headwear/hairstyle (if any — e.g. a different hijab color). The AFTER half ` +
+        `looks fresher / brighter. Keep ONLY the SAME FACE — everything WORN differs so it reads ` +
+        `"before" vs weeks later. NEVER the same outfit on both sides.`,
       )
+    } else {
+      paragraphs.push(brollWardrobeClause(product, personRefIndex))
     }
   }
   // Z98 — REAL-WORLD SCALE lock. Universal anti-drift for any scene where the
