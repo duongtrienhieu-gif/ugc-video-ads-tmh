@@ -83,6 +83,18 @@ export const HERO_TYPE_LABEL: Record<HeroType, string> = {
   none:       'Không có hero (nuôi kênh)',
 }
 
+/** "Hero" = sản phẩm xuất hiện thế nào trong video để tiêu diệt phản diện. */
+export const HERO_TYPE_DESC: Record<HeroType, string> = {
+  mascot:     'Sản phẩm biến thành NHÂN VẬT có mắt/tay (kiểu hiệp sĩ) ra tay diệt phản diện — sống động nhất nhưng tốn thêm 1 nhân vật để dựng.',
+  voice_vfx:  'Sản phẩm xuất hiện dạng LUỒNG SÁNG / bọt / dòng nước + giọng thuyết minh, KHÔNG có mặt — rẻ & dễ render nhất.',
+  chibi_army: 'Một ĐÁM nhân vật nhỏ (lợi khuẩn, vitamin…) ùa ra dọn dẹp — hợp probiotic / collagen / sản phẩm nhiều "quân số".',
+  none:       'KHÔNG có nhân vật sản phẩm — chỉ phản diện/bộ phận tự kể chuyện. Hợp video nuôi kênh, không bán trực tiếp.',
+}
+
+/** Giải thích cảnh FalseSolution cho user. */
+export const FALSE_SOLUTION_DESC =
+  'Chèn 1 cảnh: cách chữa THƯỜNG (nước muối, kem thường, rửa bên ngoài…) tỏ ra VÔ DỤNG hoặc làm nặng thêm — rồi sản phẩm mới ra tay. Đòn tâm lý "đồ khác thua, chỉ cái này được".'
+
 export const CTA_STYLE_LABEL: Record<CtaStyle, string> = {
   villain_flees:       'Phản diện vác vali bỏ chạy',
   reverse_psych:       '"Tao cấm bấm giỏ hàng"',
@@ -91,11 +103,13 @@ export const CTA_STYLE_LABEL: Record<CtaStyle, string> = {
 }
 
 export const LENGTH_LABEL: Record<VideoLength, string> = {
-  short:  'Ngắn (~5 cảnh · ~35s)',
-  medium: 'Vừa (~7 cảnh · ~45s)',
-  long:   'Dài (~9 cảnh · ~55s)',
+  short:  'Ngắn (~5 cảnh · 28-40s)',
+  medium: 'Vừa (~7 cảnh · 42-58s)',
+  long:   'Dài (~9 cảnh · 55-72s)',
 }
 export const LENGTH_SCENE_COUNT: Record<VideoLength, number> = { short: 5, medium: 7, long: 9 }
+/** Target tổng giây để brain bám (viết thoại đủ ngắn) — mỗi cảnh ~6-7s trung bình. */
+export const LENGTH_TARGET_SEC: Record<VideoLength, number> = { short: 32, medium: 48, long: 60 }
 
 // ── Scene types ──────────────────────────────────────────────────────────────
 export const SCENE_TYPE_LABEL: Record<SceneType, string> = {

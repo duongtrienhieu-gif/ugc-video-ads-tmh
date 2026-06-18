@@ -18,7 +18,7 @@ import {
 } from '../types'
 import {
   ARCHETYPES, ARCHETYPE_ORDER, HERO_TYPE_LABEL, CTA_STYLE_LABEL,
-  LENGTH_SCENE_COUNT, pickClipDuration, estimateSpeechSec,
+  LENGTH_SCENE_COUNT, LENGTH_TARGET_SEC, pickClipDuration, estimateSpeechSec,
 } from '../constants'
 
 // ── Product context block (Mode 3 local — không phụ thuộc v3) ─────────────────
@@ -170,6 +170,7 @@ export async function generateScript(
 ): Promise<PersonifiedScript> {
   const arch = ARCHETYPES[config.archetype]
   const sceneCount = LENGTH_SCENE_COUNT[config.length]
+  const targetSec = LENGTH_TARGET_SEC[config.length]
   const langName = TARGET_MARKET_GEMINI_NAME[market]
   const isVN = market === 'VN'
 
@@ -187,6 +188,7 @@ CẤU HÌNH:
 - Cảnh "đồ thường thất bại" (FalseSolution): ${config.falseSolution ? 'CÓ — chèn 1 cảnh giải pháp thường thất bại / phản diện mạnh thêm trước HeroEntrance' : 'KHÔNG'}
 - Kiểu CTA cuối: ${CTA_STYLE_LABEL[config.ctaStyle]}
 - Số cảnh: ĐÚNG ${sceneCount} cảnh.
+- ⏱ ĐỘ DÀI: tổng video phải GẦN ${targetSec}s (KHÔNG vượt ${targetSec + 12}s). Mỗi cảnh chỉ render được 4/8/12s → viết thoại NGẮN để đa số cảnh rơi vào 4-8s; chỉ tối đa 1 cảnh giải thích dài (rootcause) được tới 12s. Video kiểu này thoại phải punchy, cộc, KHÔNG lê thê.
 
 INSIGHT (đã phân tích):
 - Sản phẩm: ${insight.productInsight}
@@ -202,7 +204,7 @@ application(tác động; KB4 = mỗi hoạt chất 1 cảnh) → destruction(ta
 
 LUẬT VIẾT (bắt buộc):
 1. THOẠI NATIVE, KHÔNG DỊCH MÁY: ${arch.narratorVi}. Dùng slang đời thường ${isVN ? 'tiếng Việt' : 'tiếng Mã + chêm sức sống bản địa'} (vd VN: "xả lũ axit", "đình công", "bay màu", "tao cút đây").
-2. Mỗi cảnh thoại phải VỪA clip: cảnh ~4s ≈ 10-14 từ · ~8s ≈ 22-28 từ · ~12s ≈ 34-42 từ. KHÔNG viết thoại dài hơn 42 từ/cảnh.
+2. Thoại NGẮN GỌN, bám độ dài: ĐA SỐ cảnh 8-16 từ (≈4-6s); cảnh thường tối đa ~20 từ (8s); CHỈ 1 cảnh rootcause được tới ~32 từ (12s). Viết thoại quá dài = lỗi làm video phình giờ — đừng lê thê.
 3. COMPLIANCE (ngách sức khỏe/mỹ phẩm): dùng từ "hỗ trợ", KHÔNG hứa tuyệt đối/chữa khỏi. Cảnh CTA phải có ý "hiệu quả tùy cơ địa".
 4. dialoguePrimary = thoại bằng ${langName} (đưa vào giọng đọc). dialogueVi = ${isVN ? 'GIỐNG HỆT dialoguePrimary' : 'bản dịch NGHĨA sang tiếng Việt cho operator hiểu'}.
 5. videoPromptEn = 1 prompt image-to-video TIẾNG ANH: shot type + hành động cụ thể + bối cảnh (3D Pixar character trên nền cơ thể tả thực). KHÔNG bắt model render chữ.

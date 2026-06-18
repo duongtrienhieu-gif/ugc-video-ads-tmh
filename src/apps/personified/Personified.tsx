@@ -11,8 +11,8 @@ import {
   TARGET_MARKET_LABEL,
 } from './types'
 import {
-  ARCHETYPES, ARCHETYPE_ORDER, HERO_TYPE_LABEL, CTA_STYLE_LABEL, LENGTH_LABEL,
-  SCENE_TYPE_LABEL, RENDER_TIER_LABEL, type RenderTier,
+  ARCHETYPES, ARCHETYPE_ORDER, HERO_TYPE_LABEL, HERO_TYPE_DESC, FALSE_SOLUTION_DESC,
+  CTA_STYLE_LABEL, LENGTH_LABEL, LENGTH_TARGET_SEC, SCENE_TYPE_LABEL, RENDER_TIER_LABEL, type RenderTier,
   estimateProjectCredits, formatCreditEstimate,
 } from './constants'
 import { analyzeInsight, generateScript } from './services/personifiedBrain'
@@ -174,18 +174,23 @@ export default function Personified() {
               })}
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="mt-4 grid items-start gap-3 md:grid-cols-2">
               <Picker label="Độ dài" value={config.length} options={Object.keys(LENGTH_LABEL) as VideoLength[]}
-                labels={LENGTH_LABEL} onChange={(v) => setConfig((c) => ({ ...c, length: v }))} />
-              <Picker label="Hero (sản phẩm)" value={config.heroType} options={Object.keys(HERO_TYPE_LABEL) as HeroType[]}
-                labels={HERO_TYPE_LABEL} onChange={(v) => setConfig((c) => ({ ...c, heroType: v }))} />
+                labels={LENGTH_LABEL} onChange={(v) => setConfig((c) => ({ ...c, length: v }))}
+                hint="Tổng giây thực tế hiện ở bước 3 (mỗi cảnh chỉ 4/8/12s nên có thể lệch nhẹ)." />
+              <Picker label="Hero — sản phẩm xuất hiện kiểu gì?" value={config.heroType} options={Object.keys(HERO_TYPE_LABEL) as HeroType[]}
+                labels={HERO_TYPE_LABEL} onChange={(v) => setConfig((c) => ({ ...c, heroType: v }))}
+                hint={HERO_TYPE_DESC[config.heroType]} />
               <Picker label="Kiểu CTA" value={config.ctaStyle} options={Object.keys(CTA_STYLE_LABEL) as CtaStyle[]}
                 labels={CTA_STYLE_LABEL} onChange={(v) => setConfig((c) => ({ ...c, ctaStyle: v }))} />
-              <label className="flex items-center gap-2 self-end pb-2 text-sm text-gray-700">
-                <input type="checkbox" checked={config.falseSolution}
-                  onChange={(e) => setConfig((c) => ({ ...c, falseSolution: e.target.checked }))} />
-                Cảnh "đồ thường thất bại" (khuyên bật)
-              </label>
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input type="checkbox" checked={config.falseSolution}
+                    onChange={(e) => setConfig((c) => ({ ...c, falseSolution: e.target.checked }))} />
+                  Cảnh "đồ thường thất bại" <span className="text-xs font-normal text-violet-600">(khuyên bật)</span>
+                </label>
+                <span className="mt-1 block text-[11px] leading-snug text-gray-400">{FALSE_SOLUTION_DESC}</span>
+              </div>
             </div>
 
             <button onClick={() => handleGenerate(0)} disabled={generating || noKey}
@@ -200,7 +205,7 @@ export default function Personified() {
         {script && (
           <Section step={3} title="Kịch bản — Storyboard + Full-text Voice Script">
             <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
-              <span className="rounded-full bg-gray-100 px-2 py-1 font-semibold text-gray-700">{script.scenes.length} cảnh · ~{script.totalSec}s</span>
+              <span className="rounded-full bg-gray-100 px-2 py-1 font-semibold text-gray-700">{script.scenes.length} cảnh · ~{script.totalSec}s <span className="font-normal text-gray-400">(mục tiêu ~{LENGTH_TARGET_SEC[config.length]}s)</span></span>
               <label className="flex items-center gap-1">
                 <span className="text-gray-500">Tier render:</span>
                 <select value={tier} onChange={(e) => setTier(e.target.value as RenderTier)}
@@ -222,7 +227,9 @@ export default function Personified() {
                   <div key={i} className="rounded-lg border border-black/10 bg-white p-3 text-xs">
                     <div className="font-bold text-gray-900">{ch.name} <span className="font-normal text-gray-400">· {ch.role}</span></div>
                     <div className="mt-0.5 text-gray-600">{ch.represents}</div>
-                    <div className="mt-1 text-[10px] text-gray-400">Giọng: {ch.voice.vungMien} · {ch.voice.gioiTinh} · {ch.voice.tuoi} · {ch.voice.texture}</div>
+                    {ch.voice.vungMien && !/không có/i.test(ch.voice.vungMien) && (
+                      <div className="mt-1 text-[10px] text-gray-400">Giọng: {ch.voice.vungMien} · {ch.voice.gioiTinh} · {ch.voice.tuoi} · {ch.voice.texture}</div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -288,8 +295,8 @@ function InsightRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function Picker<T extends string>({ label, value, options, labels, onChange }: {
-  label: string; value: T; options: T[]; labels: Record<T, string>; onChange: (v: T) => void
+function Picker<T extends string>({ label, value, options, labels, onChange, hint }: {
+  label: string; value: T; options: T[]; labels: Record<T, string>; onChange: (v: T) => void; hint?: string
 }) {
   return (
     <label className="block">
@@ -298,6 +305,7 @@ function Picker<T extends string>({ label, value, options, labels, onChange }: {
         className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm">
         {options.map((o) => <option key={o} value={o}>{labels[o]}</option>)}
       </select>
+      {hint && <span className="mt-1 block text-[11px] leading-snug text-gray-400">{hint}</span>}
     </label>
   )
 }
