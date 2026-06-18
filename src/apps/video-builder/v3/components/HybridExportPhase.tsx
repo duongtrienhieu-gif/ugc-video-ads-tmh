@@ -50,28 +50,33 @@ export default function HybridExportPhase() {
   const langName = SCRIPT_LANG_GEMINI_NAME[outputLang]
   const rawProductName = state.inputs.product?.productName ?? ''
   const scriptHookText = script?.blocks?.[0]?.text ?? ''
+  // P6n — banner hook reads the WHOLE script (key/anchor + every block), not just the opener,
+  // so it can pick the strongest sensational angle instead of riffing vaguely on line 1.
+  const scriptContext = script
+    ? [script.anchor ? `KEY: ${script.anchor}` : '', ...script.blocks.map((b) => b.text)].filter(Boolean).join('\n')
+    : scriptHookText
   const [bannerHook, setBannerHook] = useState('')
   const [bannerName, setBannerName] = useState(rawProductName)
   const [suggesting, setSuggesting] = useState(false)
   const [hookHistory, setHookHistory] = useState<string[]>([])
   useEffect(() => {
     let alive = true
-    if (scriptHookText) generateBannerHook(scriptHookText, langName, geminiKey).then((h) => { if (alive) setBannerHook(h) }).catch(() => {})
+    if (scriptContext) generateBannerHook(scriptContext, langName, geminiKey).then((h) => { if (alive) setBannerHook(h) }).catch(() => {})
     if (rawProductName) localizeProductName(rawProductName, langName, geminiKey).then((n) => { if (alive) setBannerName(n) }).catch(() => {})
     else setBannerName('')
     return () => { alive = false }
-  }, [scriptHookText, rawProductName, langName, geminiKey])
+  }, [scriptContext, rawProductName, langName, geminiKey])
   // effective text the video uses: user edit > AI hook > product-name fallback.
   const aiDefaultBanner = bannerHook || deriveBannerSlogan(bannerName || rawProductName, script?.anchor, scriptHookText)
   const bannerText = (hybrid.bannerText ?? '').trim().length > 0 ? hybrid.bannerText! : aiDefaultBanner
   const bannerPreviewText = bannerText || 'Hook gây tò mò'
   const suggestBanner = async () => {
-    if (!scriptHookText || !geminiKey) return
+    if (!scriptContext || !geminiKey) return
     setSuggesting(true)
     try {
       // pass everything shown so far so the AI diverges (fixes the "4 lần ra 3 lần y chang" laziness)
       const avoid = [...new Set([bannerText, ...hookHistory].filter(Boolean))].slice(-6)
-      const h = await generateBannerHook(scriptHookText, langName, geminiKey, true, avoid)
+      const h = await generateBannerHook(scriptContext, langName, geminiKey, true, avoid)
       if (h) { setHybridCaption({ bannerText: h }); setHookHistory((prev) => [...prev, h].slice(-6)) }
     } finally { setSuggesting(false) }
   }

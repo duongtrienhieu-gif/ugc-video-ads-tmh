@@ -81,30 +81,41 @@ const BANNER_ANGLES = [
   'a curiosity QUESTION', 'a CONTRARIAN / myth-busting take', 'a FOMO / "everyone\'s on it" angle',
   'a bold RESULT / transformation tease', 'an INSIDER-secret angle', 'a "stop scrolling" pattern-interrupt',
 ]
+// P6n — the banner hook now READS THE WHOLE script (anchor + all blocks), not just the
+// opening line, and is GROUNDED in the script's strongest angle → a sensational, scroll-
+// stopping line WITH substance (was: thin context = only the opening line + temp 1.0 + forced
+// "go in a CLEARLY different direction" → drifted into vague meaningless curiosity after a few
+// clicks). `scriptContext` = the full ad script (anchor + blocks joined). Universal vi/ms/en.
 export async function generateBannerHook(
-  scriptHook: string, langName: string, apiKey: string, fresh = false, avoid: string[] = [],
+  scriptContext: string, langName: string, apiKey: string, fresh = false, avoid: string[] = [],
 ): Promise<string> {
-  const src = (scriptHook ?? '').trim()
+  const src = (scriptContext ?? '').trim()
   if (!src || !apiKey) return ''
-  const key = `${langName}::${src}`
+  const key = `${langName}::${src.slice(0, 200)}`
   if (!fresh) {                       // fresh = the "Gợi ý" button wants a NEW variation
     const hit = hookCache.get(key)
     if (hit !== undefined) return hit
   }
-  // Rotate the angle by how many we've already shown so each click leans a new direction.
+  // A LIGHT angle nudge for re-roll variety (NOT a hard "must diverge" — that caused the drift).
   const angle = BANNER_ANGLES[avoid.length % BANNER_ANGLES.length]
   const avoidBlock = avoid.length
-    ? `\nDo NOT repeat or paraphrase any of these earlier hooks — go in a CLEARLY different direction:\n${avoid.map((a) => `- "${a}"`).join('\n')}`
+    ? `\nĐã hiện những câu này rồi — viết câu MỚI khác chúng (vẫn phải hay + bám kịch bản): ${avoid.map((a) => `"${a}"`).join(', ')}`
     : ''
   try {
     const out = await directGeminiText({
       apiKey,
       systemInstruction:
-        `Write ONE ultra-short BANNER hook for a TikTok ad, in ${langName}: a ≤6-word curiosity ` +
-        `line that makes a scroller instantly wonder what the video is about. Lean into ${angle}. ` +
-        `Do NOT use the product name, no price, no quotes. Punchy + native. Output ONLY the line.`,
-      prompt: `Video opening line: "${src}"${avoidBlock}\nBanner hook:`,
-      maxOutputTokens: 40, temperature: fresh ? 1.0 : 0.7, thinkingBudget: 0,
+        `You are a viral TikTok hook writer. READ THE WHOLE ad script below, then write ONE banner ` +
+        `hook (the bold line pinned on TOP of the video) in ${langName} that STOPS the scroll. ` +
+        `It MUST capture the script's STRONGEST angle — the shocking result, the bold claim, the ` +
+        `pain everyone feels, or the "wait… what?" twist. Lean toward ${angle}. ` +
+        `RULES: ≤6 words; natural ${langName} spoken register; punchy + sensational + a REAL ` +
+        `curiosity gap (it must MAKE SENSE — never vague filler like "is this it?" / "really?"). ` +
+        `You MAY name the TOPIC / problem / result (e.g. cholesterol, sleep, skin, energy) — that ` +
+        `concreteness is what grabs. NO brand/product name, NO price or %, NO quotes, no hashtag, ` +
+        `no emoji. Output ONLY the hook line.`,
+      prompt: `FULL AD SCRIPT:\n${src.slice(0, 1500)}${avoidBlock}\n\nBanner hook (${langName}, ≤6 words):`,
+      maxOutputTokens: 40, temperature: fresh ? 0.85 : 0.65, thinkingBudget: 0,
     })
     const cleaned = (out ?? '').split('\n')[0].replace(/^["'“”]+|["'“”.!]+$/g, '').trim().slice(0, 60)
     if (!fresh) hookCache.set(key, cleaned)   // don't cache fresh variations (always re-roll)
