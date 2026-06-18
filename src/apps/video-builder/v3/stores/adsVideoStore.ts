@@ -97,7 +97,7 @@ interface AdsVideoStoreState {
   /** Store the final assembled MP4. */
   setHybridFinal:         (videoRef: string) => void
   /** P5k — burned-caption settings (preset + on/off), applied at assemble. */
-  setHybridCaption:       (patch: { captionsOn?: boolean; captionPreset?: import('../services/captionPresets').CaptionPresetId; bannerOn?: boolean; bannerPreset?: import('../services/bannerPresets').BannerPresetId; bannerText?: string }) => void
+  setHybridCaption:       (patch: { captionsOn?: boolean; captionPreset?: import('../services/captionPresets').CaptionPresetId; captionKaraoke?: boolean; bannerOn?: boolean; bannerPreset?: import('../services/bannerPresets').BannerPresetId; bannerText?: string }) => void
   setHybridAssemble:      (patch: { assembling?: boolean; assembleRatio?: number; assembleStage?: string }) => void
   clearHybrid:            () => void
   /** Z32 — set/replace creator video config (setting + energy + preset + wardrobe + resolution) */

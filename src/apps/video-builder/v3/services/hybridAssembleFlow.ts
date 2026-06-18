@@ -105,6 +105,9 @@ async function buildCaptionPlacements(
   skipWindows: { startSec: number; endSec: number }[] = [],
   // P5y (ii) — script keywords (from the anchor) to colour-highlight inside any chunk.
   highlightTerms: string[] = [],
+  // P6b — karaoke: emit ONE placement per WORD (accent box behind the spoken word),
+  // timed to the per-word alignment, instead of one static placement per phrase chunk.
+  karaoke = false,
 ): Promise<HybridCaptionPlacement[]> {
   const fallback = script.blocks.map((b) => b.text).join(' ')
   const chunks = buildCaptionChunks(alignment, fallback, realDur)
@@ -116,12 +119,26 @@ async function buildCaptionPlacements(
     const mid = (ch.startSec + ch.endSec) / 2
     if (skipWindows.some((w) => mid >= w.startSec && mid < w.endSec)) continue
     try {
-      const blob = await renderCaptionBlob(text, presetId, highlightTerms)
-      out.push({
-        pngRef: await saveAsset(blob, 'image/png'),
-        atSec: ch.startSec,
-        durationSec: Math.max(0.4, ch.endSec - ch.startSec),
-      })
+      if (karaoke && ch.words.length > 0) {
+        // One frame per word: same full-chunk text, the active word boxed. The words
+        // are gapless (chunker guarantees), so the chunk span is fully covered.
+        for (let wi = 0; wi < ch.words.length; wi++) {
+          const w = ch.words[wi]
+          const blob = await renderCaptionBlob(text, presetId, highlightTerms, wi)
+          out.push({
+            pngRef: await saveAsset(blob, 'image/png'),
+            atSec: w.startSec,
+            durationSec: Math.max(0.1, w.endSec - w.startSec),
+          })
+        }
+      } else {
+        const blob = await renderCaptionBlob(text, presetId, highlightTerms)
+        out.push({
+          pngRef: await saveAsset(blob, 'image/png'),
+          atSec: ch.startSec,
+          durationSec: Math.max(0.4, ch.endSec - ch.startSec),
+        })
+      }
     } catch { /* skip a bad chunk — never break the assemble */ }
   }
   return out
@@ -161,7 +178,7 @@ export async function assembleFromHybridState(
   // P5y (ii) — caption keyword highlight: colour the script's KEY terms (from the anchor).
   const highlightTerms = deriveCaptionHighlights(script.anchor, script.blocks.map((b) => b.text).join(' '))
   const captions = captionsOn
-    ? await buildCaptionPlacements(hybrid.voiceAlignment, script, realDur, presetId, cardWindows, highlightTerms)
+    ? await buildCaptionPlacements(hybrid.voiceAlignment, script, realDur, presetId, cardWindows, highlightTerms, hybrid.captionKaraoke === true)
     : []
   // P5x — top hook banner: a short slogan from the script's KEY (anchor → hook fallback),
   // rendered as ONE PNG and held over every non-card segment. Default ON; 0 credit.

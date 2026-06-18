@@ -755,6 +755,10 @@ export interface HybridState {
    *  default preset, so existing projects get captions automatically. */
   captionsOn?: boolean
   captionPreset?: import('./services/captionPresets').CaptionPresetId
+  /** P6b — karaoke captions: highlight each word (accent background box) as the voice
+   *  reaches it, using the per-word timing from the voice alignment. Absent = OFF
+   *  (existing projects keep the static phrase caption). */
+  captionKaraoke?: boolean
   /** P5x — top hook banner (a short slogan from the script's anchor, applied at
    *  assemble, 0 credit). Absent = ON + default preset. Skipped on social-proof cards. */
   bannerOn?: boolean

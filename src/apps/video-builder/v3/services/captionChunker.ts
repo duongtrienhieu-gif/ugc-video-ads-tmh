@@ -13,10 +13,18 @@
 
 import type { VoiceAlignment } from '../types'
 
+export interface CaptionWord {
+  text: string
+  startSec: number
+  endSec: number
+}
 export interface CaptionChunk {
   text: string
   startSec: number
   endSec: number
+  /** P6b — per-word timing for karaoke (gapless: each word runs until the next starts,
+   *  the last until the chunk ends). Same order as the words joined in `text`. */
+  words: CaptionWord[]
 }
 
 const MAX_WORDS = 6        // close a chunk after this many words…
@@ -71,11 +79,13 @@ export function buildCaptionChunks(
       text: g.map((w) => w.text).join(' '),
       startSec: g[0].start,
       endSec: g[g.length - 1].end,
+      words: g.map((w) => ({ text: w.text, startSec: w.start, endSec: w.end })),
     }))
     // Make continuous: each chunk shows until the next begins (no blank gaps / flash).
     for (let i = 0; i < chunks.length; i++) {
       chunks[i].endSec = i + 1 < chunks.length ? chunks[i + 1].startSec : (dur || chunks[i].endSec)
       if (chunks[i].endSec <= chunks[i].startSec) chunks[i].endSec = chunks[i].startSec + 0.6
+      makeWordsContinuous(chunks[i])
     }
     return chunks
   }
@@ -92,6 +102,35 @@ export function buildCaptionChunks(
     const startSec = (acc / totalChars) * dur
     acc += gChars
     const endSec = (acc / totalChars) * dur
-    return { text: g.map((w) => w.text).join(' '), startSec, endSec }
+    // P6b — no real per-word timing in this path → spread the words evenly across the
+    // chunk by char length so karaoke still advances roughly with the voice (degrades
+    // gracefully; the alignment path above is the tight one).
+    const span = Math.max(0.001, endSec - startSec)
+    const chunkChars = gChars || 1
+    let wAcc = 0
+    const cwords: CaptionWord[] = g.map((w) => {
+      const wStart = startSec + (wAcc / chunkChars) * span
+      wAcc += w.text.length + 1
+      const wEnd = startSec + (wAcc / chunkChars) * span
+      return { text: w.text, startSec: wStart, endSec: wEnd }
+    })
+    return { text: g.map((w) => w.text).join(' '), startSec, endSec, words: cwords }
   })
+}
+
+/** P6b — make a chunk's word timings gapless + monotonic inside [chunk.start, chunk.end]:
+ *  each word shows until the NEXT word begins, the last until the chunk ends. Clamps any
+ *  noisy alignment value so karaoke never jumps backwards or leaves a gap. */
+function makeWordsContinuous(chunk: CaptionChunk): void {
+  const w = chunk.words
+  if (!w.length) return
+  let prev = chunk.startSec
+  for (let i = 0; i < w.length; i++) {
+    w[i].startSec = Math.min(Math.max(w[i].startSec, prev), chunk.endSec)
+    prev = w[i].startSec
+  }
+  for (let i = 0; i < w.length; i++) {
+    w[i].endSec = i + 1 < w.length ? w[i + 1].startSec : chunk.endSec
+    if (w[i].endSec <= w[i].startSec) w[i].endSec = w[i].startSec + 0.12
+  }
 }

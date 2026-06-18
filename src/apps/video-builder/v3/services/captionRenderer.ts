@@ -136,10 +136,28 @@ function phraseSpan(i: number, norm: string[]): [number, number] {
   return [i, i]
 }
 
+/** P6b — rounded rectangle path (karaoke highlight box behind the active word). */
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.min(r, w / 2, h / 2)
+  ctx.beginPath()
+  ctx.moveTo(x + rr, y)
+  ctx.arcTo(x + w, y, x + w, y + h, rr)
+  ctx.arcTo(x + w, y + h, x, y + h, rr)
+  ctx.arcTo(x, y + h, x, y, rr)
+  ctx.arcTo(x, y, x + w, y, rr)
+  ctx.closePath()
+}
+
 /** Render a caption chunk to a transparent canvas (text only, no background).
- *  `highlightTerms` = script keywords (from the anchor) to colour with the accent. */
+ *  `highlightTerms` = script keywords (from the anchor) to colour with the accent.
+ *  P6b — `activeWordIndex` ≥ 0 switches to KARAOKE mode: the keyword accent is
+ *  dropped and instead the word at that flat index (reading order across both lines)
+ *  gets an accent-colour BACKGROUND BOX + white text — the moving highlight. The text
+ *  LAYOUT is identical regardless of activeWordIndex, so a chunk's per-word frames
+ *  differ ONLY by which word is boxed (stable, no jitter). */
 export async function renderCaptionCanvas(
   text: string, presetId: CaptionPresetId, highlightTerms: string[] = [],
+  activeWordIndex?: number,
 ): Promise<HTMLCanvasElement> {
   await ensureCaptionFonts()
   const p = CAPTION_PRESETS[presetId] ?? CAPTION_PRESETS.clean_white
@@ -200,7 +218,10 @@ export async function renderCaptionCanvas(
     norm.forEach((n, i) => { if (n.length > bestLen && !HL_STOPWORDS.has(n)) { best = i; bestLen = n.length } })
     if (best >= 0) [accStart, accEnd] = phraseSpan(best, norm)
   }
-  const canAccent = !!p.accent && p.accent !== p.fill
+  // P6b — KARAOKE mode: a moving background box replaces the static keyword accent.
+  const karaoke = typeof activeWordIndex === 'number' && activeWordIndex >= 0
+  const canAccent = !karaoke && !!p.accent && p.accent !== p.fill
+  const boxColor = (p.accent && p.accent !== p.fill) ? p.accent : '#7C3AED'   // accent box; violet fallback
 
   let gi = 0
   lines.forEach((line, li) => {
@@ -211,7 +232,17 @@ export async function renderCaptionCanvas(
     for (let wi = 0; wi < words.length; wi++) {
       const word = words[wi]
       const ww = ctx.measureText(word).width
+      const isActive = karaoke && gi === activeWordIndex
       const isAccent = canAccent && gi >= accStart && gi <= accEnd
+      // Karaoke: draw the highlight BOX first so the word text sits on top of it.
+      if (isActive) {
+        const padX = FONT_PX * 0.16
+        ctx.save()
+        ctx.fillStyle = boxColor
+        roundRect(ctx, x - padX, y - FONT_PX * 0.07, ww + padX * 2, FONT_PX * 1.16, FONT_PX * 0.22)
+        ctx.fill()
+        ctx.restore()
+      }
       ctx.save()
       // Neon glow ONLY on the accent word in 'glow' presets (a colour bloom, no box).
       if (isAccent && accentMode === 'glow') {
@@ -223,7 +254,8 @@ export async function renderCaptionCanvas(
         ctx.strokeStyle = p.stroke
         ctx.strokeText(word, x, y)
       }
-      ctx.fillStyle = isAccent ? p.accent : p.fill
+      // Active karaoke word → white on the accent box; else accent (kw) or normal fill.
+      ctx.fillStyle = isActive ? '#FFFFFF' : isAccent ? p.accent : p.fill
       ctx.fillText(word, x, y)
       ctx.restore()
       // Underline the accent word in 'underline' presets (no background, just a bar).
@@ -241,9 +273,10 @@ export async function renderCaptionCanvas(
   return canvas
 }
 
-/** Render + export a transparent PNG blob (what the assembler / asset store want). */
-export async function renderCaptionBlob(text: string, presetId: CaptionPresetId, highlightTerms: string[] = []): Promise<Blob> {
-  const canvas = await renderCaptionCanvas(text, presetId, highlightTerms)
+/** Render + export a transparent PNG blob (what the assembler / asset store want).
+ *  P6b — pass `activeWordIndex` to render the karaoke frame with that word boxed. */
+export async function renderCaptionBlob(text: string, presetId: CaptionPresetId, highlightTerms: string[] = [], activeWordIndex?: number): Promise<Blob> {
+  const canvas = await renderCaptionCanvas(text, presetId, highlightTerms, activeWordIndex)
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('caption toBlob failed'))), 'image/png')
   })
