@@ -714,6 +714,14 @@ FOUR cut ROLES (set "role"):
            · gadget/tool → the relieved "finally, done in seconds" reaction
            · home/clean → stepping back to admire the spotless result
          Do NOT force the product into a beat that is purely about how it FEELS.
+         This ALSO covers the SETUP-side / TENSION feelings, not only the happy
+         payoff: a CRAVING / desire, a WORRY / fear, a HESITATION, a FRUSTRATION,
+         an OBJECTION, or the lived "before" struggle. Whenever a line says what the
+         person WANTS, FEARS, or HESITATES over, that is a "concept" creator beat —
+         show the human living that tension, NOT a product macro. E.g. "thèm đồ ngọt
+         mà sợ đường lên" / "nak makan manis tapi takut gula naik" = a craving-vs-fear
+         beat → the creator EYEING a tempting treat then pulling back, conflicted (no
+         product packaging needed). cameraFraming:"creator".
      • "cameraFraming": "hands_noface" — ONLY for a product used ON A SURFACE or held/
        operated IN-HAND (scoop from a jar, pour, snap, wipe a counter, operate a gadget),
        NO face. For any usage ON THE BODY (apply / wear / eat / drink — skin, face, hair,
@@ -1428,13 +1436,27 @@ const SPLIT_ANGLE_VARIANTS = [
 // video, face or no-face). The angle modifiers above only change the LENS (same subject) →
 // i2v still clones them. These change WHAT IS IN FRAME so a repeated/long idea becomes a
 // genuinely different shot. Applied by dedupeScenePrompts as the last word.
-const DISTINCT_SHOT_VARIANTS = [
+//
+// SPLIT BY FACE vs NO-FACE: the dedup rewrite must PRESERVE the cut's nature — a
+// creator-framed cut (a feeling / desire / fear / reaction beat) may NEVER be rewritten
+// into a faceless product macro (that destroyed the meaning of the "#3 craving" line), and
+// a no-face product cut must stay faceless. Selection keys off cameraFraming — the SAME
+// field the renderer uses to attach the avatar/face — so the rewritten prompt never fights
+// the framing (the trap the before/after fix hit). Each pool ≥4 so several deduped cuts of
+// the same nature still differ. The pools stay product-agnostic about PRESENCE (the beat +
+// the renderer's PRODUCT LOCK decide if the product is in frame); they only pin person vs
+// no-person, which must match cameraFraming.
+const DISTINCT_SHOT_VARIANTS_PERSON = [
+  "the creator's GENUINE face close-up REACTION — a real, unscripted expression living THIS exact beat",
+  'a candid WIDE shot of the creator in their real daily setting, body language + face carrying THIS beat',
+  'an over-the-shoulder / from-behind shot of the creator inside the situation of THIS beat',
+  'a handheld, selfie-distance shot of the creator caught in a real, unguarded moment of THIS beat, natural light',
+]
+const DISTINCT_SHOT_VARIANTS_PRODUCT = [
   'an EXTREME MACRO close-up of the product texture / one key detail (no person, no full packaging)',
-  "the creator's GENUINE REACTION — a face close-up with real emotion to this exact beat",
-  'a WIDE lifestyle shot — the product small inside the real daily setting, a candid real-life moment',
-  'a first-person POV of the hands USING / interacting with the product',
+  'a first-person POV of the hands USING / interacting with the product (no face in frame)',
   'a clean PRODUCT-HERO still resting on a real surface in its setting (no person)',
-  'an over-the-shoulder shot capturing a DIFFERENT step / angle of the same idea',
+  'a WIDE lifestyle still — the product small inside the real daily setting (no face), a candid real-life frame',
 ]
 const CTA_ENDORSE_RE = /thumbs-up to camera|genuine endorsement at the call to buy/i
 const CTA_OFFER_PROMPT =
@@ -1476,7 +1498,12 @@ function dedupeScenePrompts(timed: TimedBrollScene[]): TimedBrollScene[] {
       // the knee" contradicts itself and the model just re-renders the massage. Render the
       // distinct variant INSTEAD, anchored to this beat → a genuinely different image.
       const beat = (s.quote ?? '').slice(0, 50).replace(/"/g, '')
-      s.conceptPrompt = `DIFFERENT SHOT — must look NOTHING like any other cut. Render INSTEAD: ${DISTINCT_SHOT_VARIANTS[vi % DISTINCT_SHOT_VARIANTS.length]}. Same product + beat as "${beat}".`
+      // Pick the variant from the pool that MATCHES this cut's framing, so the rewrite
+      // never asks for "no person" on a creator cut (or a face on a no-face cut).
+      const isPerson = s.cameraFraming === 'creator'
+      const pool = isPerson ? DISTINCT_SHOT_VARIANTS_PERSON : DISTINCT_SHOT_VARIANTS_PRODUCT
+      const tail = isPerson ? `Stay on the SAME beat: "${beat}".` : `Same product + beat as "${beat}".`
+      s.conceptPrompt = `DIFFERENT SHOT — must look NOTHING like any other cut. Render INSTEAD: ${pool[vi % pool.length]}. ${tail}`
       vi++
       accepted.push(sigWords(s.conceptPrompt))
     } else {
