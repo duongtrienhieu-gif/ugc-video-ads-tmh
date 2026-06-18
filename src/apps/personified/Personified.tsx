@@ -18,7 +18,7 @@ import {
 import { analyzeInsight, generateScript } from './services/personifiedBrain'
 
 const DEFAULT_CONFIG: PersonifiedConfig = {
-  archetype: 'KB1_invader', length: 'medium', heroType: 'voice_vfx',
+  archetype: 'KB1_invader', length: 'medium', heroType: 'product_savior',
   falseSolution: true, ctaStyle: 'villain_flees',
 }
 
@@ -77,7 +77,15 @@ export default function Personified() {
           if (s.market) setMarket(s.market)
           if (s.problemHint) setProblemHint(s.problemHint)
           if (s.insight) setInsight(s.insight)
-          if (s.config) setConfig(s.config)
+          if (s.config) {
+            // Sanitize: cache cũ có thể chứa heroType/ctaStyle đã bỏ → rơi về default.
+            const c = s.config
+            setConfig({
+              ...DEFAULT_CONFIG, ...c,
+              heroType: HERO_TYPE_LABEL[c.heroType] ? c.heroType : DEFAULT_CONFIG.heroType,
+              ctaStyle: CTA_STYLE_LABEL[c.ctaStyle] ? c.ctaStyle : DEFAULT_CONFIG.ctaStyle,
+            })
+          }
           if (s.script) setScript(s.script)
           if (typeof s.variant === 'number') setVariant(s.variant)
           if (s.tier) setTier(s.tier)
@@ -228,7 +236,7 @@ export default function Personified() {
               <Picker label="Độ dài" value={config.length} options={Object.keys(LENGTH_LABEL) as VideoLength[]}
                 labels={LENGTH_LABEL} onChange={(v) => setConfig((c) => ({ ...c, length: v }))}
                 hint="Tổng giây thực tế hiện ở bước 3 (mỗi cảnh chỉ 4/8/12s nên có thể lệch nhẹ)." />
-              <Picker label="Hero — sản phẩm xuất hiện kiểu gì?" value={config.heroType} options={Object.keys(HERO_TYPE_LABEL) as HeroType[]}
+              <Picker label="Sản phẩm thật ra tay kiểu gì?" value={config.heroType} options={Object.keys(HERO_TYPE_LABEL) as HeroType[]}
                 labels={HERO_TYPE_LABEL} onChange={(v) => setConfig((c) => ({ ...c, heroType: v }))}
                 hint={HERO_TYPE_DESC[config.heroType]} />
               <Picker label="Kiểu CTA" value={config.ctaStyle} options={Object.keys(CTA_STYLE_LABEL) as CtaStyle[]}
@@ -295,6 +303,7 @@ export default function Personified() {
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-100 font-bold text-violet-700">{s.idx}</span>
                       <span className="rounded bg-gray-100 px-1.5 py-0.5 font-semibold text-gray-600">{SCENE_TYPE_LABEL[s.sceneType]}</span>
                       <span className="rounded bg-amber-50 px-1.5 py-0.5 font-bold text-amber-700">{s.clipDuration}s</span>
+                      {s.hasProduct && <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-bold text-emerald-700" title="Cảnh có sản phẩm thật — P2 sẽ khóa bằng 4 ảnh">📦 SP thật</span>}
                       <span className="text-gray-400">· {s.speaker}</span>
                     </div>
                     <div className="mt-2 text-sm font-medium text-gray-900">"{s.dialoguePrimary}"</div>

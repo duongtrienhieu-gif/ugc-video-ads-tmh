@@ -77,18 +77,17 @@ export const ARCHETYPE_ORDER: ArchetypeId[] = [
 
 // ── Module toggles ───────────────────────────────────────────────────────────
 export const HERO_TYPE_LABEL: Record<HeroType, string> = {
-  mascot:     'Tuýp/hộp có mặt',
-  voice_vfx:  'Chỉ giọng + hiệu ứng (rẻ)',
-  chibi_army: 'Đạo quân nhân vật nhỏ',
-  none:       'Không có hero (nuôi kênh)',
+  product_savior:   'Sản phẩm thật bay ra cứu nguy',
+  ingredient_burst: 'Hoạt chất bung ra từ sản phẩm',
+  helper_army:      'Đạo quân lợi khuẩn từ sản phẩm',
 }
 
-/** "Hero" = sản phẩm xuất hiện thế nào trong video để tiêu diệt phản diện. */
+/** SẢN PHẨM THẬT luôn là hero — trục này = cách sản phẩm thật RA TAY. Mọi kiểu GIỮ
+ *  NGUYÊN bao bì thật (khóa bằng 4 ảnh ở P2), không thêm mặt/tay. */
 export const HERO_TYPE_DESC: Record<HeroType, string> = {
-  mascot:     'Sản phẩm biến thành NHÂN VẬT có mắt/tay (kiểu hiệp sĩ) ra tay diệt phản diện — sống động nhất nhưng tốn thêm 1 nhân vật để dựng.',
-  voice_vfx:  'Sản phẩm xuất hiện dạng LUỒNG SÁNG / bọt / dòng nước + giọng thuyết minh, KHÔNG có mặt — rẻ & dễ render nhất.',
-  chibi_army: 'Một ĐÁM nhân vật nhỏ (lợi khuẩn, vitamin…) ùa ra dọn dẹp — hợp probiotic / collagen / sản phẩm nhiều "quân số".',
-  none:       'KHÔNG có nhân vật sản phẩm — chỉ phản diện/bộ phận tự kể chuyện. Hợp video nuôi kênh, không bán trực tiếp.',
+  product_savior:   'Tuýp/chai/hộp THẬT bay vào khung + hào quang/foam/tia phun ra diệt phản diện. Giữ y bao bì thật — an toàn, hợp đa số sản phẩm.',
+  ingredient_burst: 'Sản phẩm thật mở ra, HOẠT CHẤT (tia/luồng) bung ra thành "vũ khí" diệt phản diện — hợp serum / sản phẩm nhiều hoạt chất (đi cùng KB4).',
+  helper_army:      'Đám lợi khuẩn / vi hạt nhỏ ÙA RA TỪ sản phẩm thật để dọn dẹp — hợp probiotic / collagen / men vi sinh. Bao bì sản phẩm vẫn hiện thật.',
 }
 
 /** Giải thích cảnh FalseSolution cho user. */
@@ -96,10 +95,9 @@ export const FALSE_SOLUTION_DESC =
   'Chèn 1 cảnh: cách chữa THƯỜNG (nước muối, kem thường, rửa bên ngoài…) tỏ ra VÔ DỤNG hoặc làm nặng thêm — rồi sản phẩm mới ra tay. Đòn tâm lý "đồ khác thua, chỉ cái này được".'
 
 export const CTA_STYLE_LABEL: Record<CtaStyle, string> = {
-  villain_flees:       'Phản diện vác vali bỏ chạy',
-  reverse_psych:       '"Tao cấm bấm giỏ hàng"',
-  sidekick_disclaimer: 'Sidekick đọc disclaimer + chốt giỏ',
-  follow:              'Follow kênh',
+  villain_flees:       'Phản diện thua → "đặt ngay, link dưới"',
+  reverse_psych:       '"Đừng bấm giỏ hàng" (reverse-psych)',
+  sidekick_disclaimer: 'Sidekick chốt giỏ + disclaimer',
 }
 
 export const LENGTH_LABEL: Record<VideoLength, string> = {

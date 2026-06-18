@@ -27,18 +27,20 @@ export type ArchetypeId =
   | 'KB3_grumpy_organ'     // Bộ Phận Cằn Nhằn — organ tự kể, mắng chủ, ẩn dụ công sở
   | 'KB4_ingredient_battle'// Khoe Vũ Khí Hoạt Chất — mỗi hoạt chất 1 cảnh, villain tự khai
 
-/** Module toggle — lắp vào KB nào cũng được. */
+/** SẢN PHẨM THẬT LUÔN là hero (app bán hàng) — trục này = sản phẩm thật xuất hiện
+ *  KIỂU GÌ để diệt phản diện. Mọi lựa chọn GIỮ NGUYÊN bao bì thật (khóa bằng 4 ảnh
+ *  ở P2), KHÔNG thêm mặt/tay. */
 export type HeroType =
-  | 'mascot'      // tuýp/hộp có mặt
-  | 'voice_vfx'   // chỉ giọng + hiệu ứng (rẻ)
-  | 'chibi_army'  // đạo quân nhân vật nhỏ
-  | 'none'        // không có hero (nuôi kênh)
+  | 'product_savior'    // sản phẩm thật bay ra + hào quang/foam/tia (mặc định)
+  | 'ingredient_burst'  // hoạt chất/tia từ sản phẩm thật bung ra (serum/multi-ingredient)
+  | 'helper_army'       // đạo quân lợi khuẩn/vi hạt ùa ra TỪ sản phẩm thật (probiotic/collagen)
 
+/** Mọi CTA đều CHỐT ĐƠN (app bán hàng) — chỉ khác cách dẫn. Luôn kết bằng packshot
+ *  sản phẩm thật + kêu mua + giỏ/link dưới + disclaimer "tùy cơ địa". */
 export type CtaStyle =
-  | 'villain_flees'       // phản diện vác vali bỏ chạy
-  | 'reverse_psych'       // "tao cấm bấm giỏ hàng"
-  | 'sidekick_disclaimer' // sidekick đọc disclaimer + chốt giỏ
-  | 'follow'              // follow kênh (nuôi kênh)
+  | 'villain_flees'       // phản diện thua bỏ chạy → chốt "đặt ngay, link dưới"
+  | 'reverse_psych'       // "đừng bấm giỏ hàng" (reverse-psych, vẫn chốt đơn)
+  | 'sidekick_disclaimer' // sidekick chốt giỏ + disclaimer cơ địa
 
 export type VideoLength = 'short' | 'medium' | 'long' // 5 / 7 / 9 cảnh
 
@@ -85,6 +87,9 @@ export interface PersonifiedScene {
   idx: number
   sceneType: SceneType
   clipDuration: ClipDuration
+  /** Cảnh có SẢN PHẨM THẬT trong khung không → P2 render bằng gpt-4o-image + 4 ảnh
+   *  sản phẩm để khóa fidelity bao bì (đúng luật "preserve product" của repo). */
+  hasProduct: boolean
   speaker: string          // tên/role nhân vật nói
   dialoguePrimary: string  // thoại ngôn ngữ ĐÍCH (đưa vào TTS/render)
   dialogueVi: string       // bản dịch nghĩa VN (operator đọc; = primary nếu market VN)

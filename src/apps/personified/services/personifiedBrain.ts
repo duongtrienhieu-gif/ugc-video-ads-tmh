@@ -159,6 +159,7 @@ const SCRIPT_SCHEMA = {
         type: 'object',
         properties: {
           sceneType: { type: 'string' },
+          hasProduct: { type: 'boolean' },
           speaker: { type: 'string' },
           dialoguePrimary: { type: 'string' },
           dialogueVi: { type: 'string' },
@@ -168,7 +169,7 @@ const SCRIPT_SCHEMA = {
           action: { type: 'string' },
           videoPromptEn: { type: 'string' },
         },
-        required: ['sceneType', 'speaker', 'dialoguePrimary', 'dialogueVi', 'emotion', 'camera', 'sfx', 'action', 'videoPromptEn'],
+        required: ['sceneType', 'hasProduct', 'speaker', 'dialoguePrimary', 'dialogueVi', 'emotion', 'camera', 'sfx', 'action', 'videoPromptEn'],
       },
     },
   },
@@ -176,7 +177,7 @@ const SCRIPT_SCHEMA = {
 } as const
 
 interface RawScene {
-  sceneType: string; speaker: string; dialoguePrimary: string; dialogueVi: string
+  sceneType: string; hasProduct?: boolean; speaker: string; dialoguePrimary: string; dialogueVi: string
   emotion: string; camera: string; sfx: string[]; action: string; videoPromptEn: string
 }
 
@@ -205,7 +206,7 @@ KIỂU KỊCH BẢN = ${arch.labelVi}: ${arch.taglineVi}
 ${arch.brainHint}
 
 CẤU HÌNH:
-- Hero (sản phẩm): ${HERO_TYPE_LABEL[config.heroType]}
+- Sản phẩm thật RA TAY kiểu: ${HERO_TYPE_LABEL[config.heroType]} (GIỮ NGUYÊN bao bì/nhãn thật, KHÔNG thêm mặt/tay cho sản phẩm).
 - Cảnh "đồ thường thất bại" (FalseSolution): ${config.falseSolution ? 'CÓ — chèn 1 cảnh giải pháp thường thất bại / phản diện mạnh thêm trước HeroEntrance' : 'KHÔNG'}
 - Kiểu CTA cuối: ${CTA_STYLE_LABEL[config.ctaStyle]}
 - Số cảnh: ĐÚNG ${sceneCount} cảnh.
@@ -218,10 +219,15 @@ INSIGHT (đã phân tích):
 - Ẩn dụ: ${insight.metaphor}
 ${buildProductContext(product)}
 
+🎯 SẢN PHẨM THẬT = HERO (đây là video BÁN HÀNG — KHÔNG phải nuôi kênh):
+- Sản phẩm CÓ THẬT (xem bao bì/nhãn ở [SẢN PHẨM]). Từ hero_entrance trở đi, SẢN PHẨM THẬT phải xuất hiện và là thứ diệt phản diện — action/videoPromptEn mô tả ĐÚNG bao bì thật (đúng dạng tuýp/chai/hộp + tên nhãn), KHÔNG bịa bao bì mới, KHÔNG thêm mặt/tay cho sản phẩm.
+- Mọi video KẾT bằng cảnh cta: hiện packshot SẢN PHẨM THẬT + KÊU GỌI MUA/ĐẶT HÀNG + "bấm giỏ hàng / link dưới" + câu "hiệu quả tùy cơ địa". Hướng khách tới ĐẶT MUA, tuyệt đối KHÔNG "follow kênh".
+- hasProduct: mỗi cảnh đặt true nếu sản phẩm thật trong khung (thường hero_entrance/application/result/cta, đôi khi false_solution để so sánh), false nếu cảnh chỉ có phản diện/nỗi đau (challenger/rootcause/agitation).
+
 KHUNG CẢNH (chọn & sắp đúng thứ tự, bỏ cảnh tùy chọn nếu không hợp số lượng):
 challenger(hook khịa) → rootcause(khoe cách gây hại) → agitation(làm nặng thêm) →
-${config.falseSolution ? 'false_solution(đồ thường thất bại) → ' : ''}hero_entrance(SP xuất hiện) →
-application(tác động; KB4 = mỗi hoạt chất 1 cảnh) → destruction(tan rã) → result(sạch đẹp) → cta(chốt).
+${config.falseSolution ? 'false_solution(đồ thường thất bại) → ' : ''}hero_entrance(SẢN PHẨM THẬT xuất hiện cứu nguy) →
+application(sản phẩm thật tác động; KB4 = mỗi hoạt chất 1 cảnh) → destruction(phản diện tan rã) → result(bộ phận sạch đẹp + sản phẩm thật) → cta(packshot SP thật + chốt đơn mua hàng).
 
 LUẬT VIẾT (bắt buộc):
 1. THOẠI NATIVE, KHÔNG DỊCH MÁY: ${arch.narratorVi}. Dùng slang đời thường ${isVN ? 'tiếng Việt' : 'tiếng Mã + chêm sức sống bản địa'} (vd VN: "xả lũ axit", "đình công", "bay màu", "tao cút đây").
@@ -255,6 +261,7 @@ XUẤT JSON: { characters:[...], scenes:[${sceneCount} cảnh đúng thứ tự]
       idx: i + 1,
       sceneType: VALID_SCENE_TYPES.has(s.sceneType) ? (s.sceneType as PersonifiedScene['sceneType']) : 'challenger',
       clipDuration: pickClipDuration(speech),
+      hasProduct: !!s.hasProduct,
       speaker: s.speaker ?? '',
       dialoguePrimary: s.dialoguePrimary ?? '',
       dialogueVi: isVN ? (s.dialoguePrimary ?? s.dialogueVi ?? '') : (s.dialogueVi ?? ''),
