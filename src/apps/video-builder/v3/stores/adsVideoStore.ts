@@ -39,7 +39,7 @@ import {
   type ExportRenderStage,
 } from '../types'
 import { COST_MODE_CONFIG, DEFAULT_COST_MODE, defaultInsertRenderMode, DEFAULT_EXPORT_FORMAT, DEFAULT_EXPORT_QUALITY } from '../types'
-import type { BrollScene, TimedBrollScene, BrollSceneKind } from '../services/brollDirector'
+import type { BrollScene, TimedBrollScene, BrollSceneKind, ShotIntent } from '../services/brollDirector'
 import { CREATOR_PRESETS } from '../services/creatorPresets'
 import type { Model, Product } from '../../../../stores/types'
 
@@ -82,7 +82,7 @@ interface AdsVideoStoreState {
    *  fixer may also flip kind / cameraFraming (e.g. a product macro → a creator
    *  emotion shot); pass them together so the prompt never fights the framing.
    *  Both optional → the manual textarea edit (conceptPrompt only) is unchanged. */
-  setSceneConceptPrompt:  (idx: number, conceptPrompt: string, plan?: { kind?: BrollSceneKind; cameraFraming?: 'creator' | 'hands_noface' }) => void
+  setSceneConceptPrompt:  (idx: number, conceptPrompt: string, plan?: { kind?: BrollSceneKind; cameraFraming?: 'creator' | 'hands_noface'; shotIntent?: ShotIntent }) => void
   /** P3x — mark the creator-assets (giọng + mặt) generation in flight. Persisted
    *  so navigating away + back keeps the "đang tạo" lock (no double-charge).
    *  Pass a timestamp to start, undefined to clear. */
@@ -456,6 +456,7 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
         conceptPrompt,
         ...(plan?.kind ? { kind: plan.kind } : {}),
         ...(plan?.cameraFraming ? { cameraFraming: plan.cameraFraming } : {}),
+        ...(plan?.shotIntent ? { shotIntent: plan.shotIntent } : {}),   // P6t — keep the scene on the intent spine + tag truthful
       }
       return { ...s, hybrid: { ...s.hybrid, scenes } }
     }),

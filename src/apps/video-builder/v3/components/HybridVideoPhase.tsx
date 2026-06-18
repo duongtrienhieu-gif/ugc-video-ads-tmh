@@ -14,7 +14,7 @@ import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
-import { directBrollScenes, assignSceneTiming, groundOrphanScenes, type TimedBrollScene } from '../services/brollDirector'
+import { directBrollScenes, assignSceneTiming, groundOrphanScenes, type TimedBrollScene, type ShotIntent } from '../services/brollDirector'
 import { fixSceneConceptPrompt, type SceneFix } from '../services/sceneConceptFixer'
 import { ensureLocalizedName, applyLocalizedName } from '../services/localizeProductName'
 import { generateProductVisualBrief } from '../services/productVisionBrief'
@@ -536,9 +536,9 @@ export default function HybridVideoPhase(_props: Props) {
                 credit={sceneCredit(s)} hasAssets={hasAssets}
                 onRender={() => renderScene(i)}
                 onSavePrompt={(prompt, plan) => setSceneConceptPrompt(i, prompt, plan)}
-                onAiFix={(intent) => fixSceneConceptPrompt({
+                onAiFix={(intent, targetIntent) => fixSceneConceptPrompt({
                   geminiKey, scene: s, product: state.inputs.product,
-                  lang: state.scriptBrain.outputLang, fullScript: script, userIntent: intent,
+                  lang: state.scriptBrain.outputLang, fullScript: script, userIntent: intent, targetIntent,
                 })} />
             ))}
           </div>
@@ -606,15 +606,21 @@ function AssetsBar({ keyframeRef, voiceRef, voiceDurationSec, busy, onRegen }: {
 }
 
 // ── One scene = a 9:16 frame; render button ON the frame; clip plays in place ──
-// P6a — quick-intent chips for the AI scene-fixer. Label is shown to the user (VN);
-// `hint` is the precise English directive sent to the fixer (the system prompt is EN).
-const FIX_CHIPS: { key: string; label: string; hint: string }[] = [
-  { key: 'emotion',   label: '🧍 Cảnh cảm xúc / người thật', hint: 'This is an EMOTION / human-moment beat: show the creator (face visible) living the feeling — NOT a product macro.' },
-  { key: 'closeup',   label: '📦 Cận sản phẩm',             hint: 'Make this a clean product close-up / texture macro of the real product.' },
-  { key: 'noface',    label: '🙈 Bỏ mặt, chỉ tay dùng SP',  hint: 'Hands-only product-in-use shot, NO face in frame.' },
-  { key: 'face',      label: '😮 Cho mặt creator vào',      hint: 'Feature the creator (face visible) using or reacting with the product.' },
-  { key: 'different', label: '🔁 Trùng cảnh khác — đổi hẳn', hint: 'This looks too similar to another cut — make a COMPLETELY different shot.' },
-  { key: 'setting',   label: '🏠 Đổi bối cảnh',             hint: 'Change the setting / location to a more fitting real-world place.' },
+// P6t — AI scene-fixer ARCHETYPES (one compact dropdown). value maps to the director's own
+// `shotIntent` spine (intent), so a manual fix and the auto-director speak ONE language. The
+// optional `hint` is an extra English directive sent to the fixer ('ingredient' is a flavour
+// of product_macro that shows the named raw ingredients as hero). '' = let AI infer.
+const FIX_ARCHETYPES: { value: string; intent?: ShotIntent; label: string; hint?: string }[] = [
+  { value: '',                                              label: '✨ Để AI tự chọn (mặc định)' },
+  { value: 'reaction',        intent: 'reaction',           label: '🧍 Người thật / cảm xúc' },
+  { value: 'result_behavior', intent: 'result_behavior',    label: '🏃 Tận hưởng kết quả' },
+  { value: 'product_demo',    intent: 'product_demo',       label: '🧴 Đang dùng sản phẩm' },
+  { value: 'product_macro',   intent: 'product_macro',      label: '🔍 Cận sản phẩm / chi tiết' },
+  { value: 'ingredient',      intent: 'product_macro',      label: '🌿 Nguyên liệu / thành phần', hint: 'INGREDIENT SHOWCASE: arrange the REAL raw ingredients named in the line (herbs/fruit/roots/spices) around the product as the hero, natural flat-lay, no face.' },
+  { value: 'mechanism3d',     intent: 'mechanism3d',        label: '🧬 3D cơ chế' },
+  { value: 'before_after',    intent: 'before_after',       label: '🔁 Trước / sau' },
+  { value: 'social_proof',    intent: 'social_proof',       label: '🗯 Bằng chứng' },
+  { value: 'endorsement',     intent: 'endorsement',        label: '🛒 Ưu đãi / kêu gọi mua' },
 ]
 
 function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voiceUrl, credit, hasAssets, onRender, onSavePrompt, onAiFix }: {
@@ -622,8 +628,8 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
   progress?: { pollCount: number; elapsedSec: number }
   voiceUrl?: string
   credit: number; hasAssets: boolean; onRender: () => void
-  onSavePrompt: (prompt: string, plan?: { kind?: TimedBrollScene['kind']; cameraFraming?: 'creator' | 'hands_noface' }) => void
-  onAiFix: (intent: string) => Promise<SceneFix>
+  onSavePrompt: (prompt: string, plan?: { kind?: TimedBrollScene['kind']; cameraFraming?: 'creator' | 'hands_noface'; shotIntent?: ShotIntent }) => void
+  onAiFix: (intent: string, targetIntent?: ShotIntent) => Promise<SceneFix>
 }) {
   const url = useAssetUrl(clipRef ?? undefined)
   const badge = ROLE_BADGE[scene.role] ?? ROLE_BADGE.broll
@@ -652,28 +658,29 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
   // P6a — AI scene-fixer state. `aiPlan` holds the kind/cameraFraming the fixer
   // chose alongside the prompt, so saving applies all three together (the prompt
   // never fights the framing). Cleared on Huỷ. chips + note feed the fixer's intent.
-  const [aiChips, setAiChips] = useState<Set<string>>(new Set())
+  const [aiArch, setAiArch] = useState('')   // P6t — chosen archetype (maps to shotIntent)
   const [aiNote, setAiNote] = useState('')
   const [aiBusy, setAiBusy] = useState(false)
   const [aiErr, setAiErr] = useState('')
-  const [aiPlan, setAiPlan] = useState<{ kind?: TimedBrollScene['kind']; cameraFraming?: 'creator' | 'hands_noface' } | null>(null)
+  const [aiPlan, setAiPlan] = useState<{ kind?: TimedBrollScene['kind']; cameraFraming?: 'creator' | 'hands_noface'; shotIntent?: ShotIntent } | null>(null)
   const runAiFix = async () => {
     setAiBusy(true); setAiErr('')
     try {
+      const arch = FIX_ARCHETYPES.find((a) => a.value === aiArch)
       const intent = [
-        ...FIX_CHIPS.filter((c) => aiChips.has(c.key)).map((c) => c.hint),
+        arch?.hint ?? '',
         aiNote.trim() ? `User note: ${aiNote.trim()}` : '',
       ].filter(Boolean).join('\n')
-      const fix = await onAiFix(intent)
+      const fix = await onAiFix(intent, arch?.intent)
       setDraftPrompt(fix.conceptPrompt)
-      setAiPlan({ kind: fix.kind, cameraFraming: fix.cameraFraming })
+      setAiPlan({ kind: fix.kind, cameraFraming: fix.cameraFraming, shotIntent: fix.shotIntent })
     } catch (e) {
       setAiErr(e instanceof Error ? e.message : String(e))
     } finally { setAiBusy(false) }
   }
   const resetEdit = () => {
     setEditing(false); setDraftPrompt(scene.conceptPrompt ?? '')
-    setAiChips(new Set()); setAiNote(''); setAiErr(''); setAiPlan(null)
+    setAiArch(''); setAiNote(''); setAiErr(''); setAiPlan(null)
   }
   // P3t-D — custom video player without native audio controls. Click toggles play.
   // muted=true so the lipsync clip's embedded audio doesn't compete with the
@@ -801,30 +808,23 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
               <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-violet-700">
                 <Sparkles className="h-2.5 w-2.5" /> AI sửa cảnh sai
               </span>
-              <div className="flex flex-wrap gap-1">
-                {FIX_CHIPS.map((c) => {
-                  const on = aiChips.has(c.key)
-                  return (
-                    <button key={c.key} type="button" title={c.hint}
-                      onClick={() => setAiChips((prev) => { const n = new Set(prev); n.has(c.key) ? n.delete(c.key) : n.add(c.key); return n })}
-                      className={`rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${on ? 'border-violet-500 bg-violet-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
-                      {c.label}
-                    </button>
-                  )
-                })}
-              </div>
+              <select value={aiArch} onChange={(e) => setAiArch(e.target.value)}
+                title="Chọn kiểu cảnh đúng — AI sẽ dựng lại theo đúng kiểu này"
+                className="w-full rounded border border-violet-200 bg-white px-1.5 py-1 text-[10px] font-semibold text-gray-700 focus:border-violet-400 focus:outline-none">
+                {FIX_ARCHETYPES.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+              </select>
               <input value={aiNote} onChange={(e) => setAiNote(e.target.value)}
-                placeholder="Tả thêm ý muốn (vd: creator nhìn bánh thèm rồi rụt tay) — bỏ trống cũng được"
+                placeholder="Tả thêm ý muốn (vd: creator ngửi miếng dán rồi cười) — bỏ trống cũng được"
                 className="w-full rounded border border-violet-200 bg-white px-1.5 py-1 text-[10px] text-gray-700 focus:border-violet-400 focus:outline-none" />
               <div className="flex items-center justify-between gap-1">
-                <span className="text-[9px] text-gray-400">AI viết prompt → bấm Lưu → Render lại</span>
+                <span className="text-[9px] text-gray-400">Chọn kiểu → Nhờ AI sửa → Lưu → Render lại</span>
                 <button type="button" onClick={runAiFix} disabled={aiBusy}
                   className="flex items-center gap-0.5 rounded bg-violet-600 px-1.5 py-0.5 text-[9px] font-bold text-white hover:bg-violet-700 disabled:opacity-40">
                   {aiBusy ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Wand2 className="h-2.5 w-2.5" />} {aiBusy ? 'Đang sửa…' : 'Nhờ AI sửa'}
                 </button>
               </div>
               {aiErr && <span className="text-[9px] text-rose-600">⚠ {aiErr}</span>}
-              {aiPlan && !aiErr && <span className="text-[9px] text-emerald-600">✓ AI đã viết lại ({aiPlan.kind} · {aiPlan.cameraFraming}). Xem ô dưới, sửa thêm nếu cần rồi Lưu.</span>}
+              {aiPlan && !aiErr && <span className="text-[9px] text-emerald-600">✓ AI đã viết lại ({aiPlan.shotIntent} · {aiPlan.cameraFraming === 'creator' ? 'có mặt' : 'chỉ tay'}). Xem ô dưới, sửa thêm nếu cần rồi Lưu.</span>}
             </div>
             <textarea value={draftPrompt} onChange={(e) => setDraftPrompt(e.target.value)}
               rows={4} placeholder="Mô tả CỤ THỂ visual: action + sản phẩm + setting. Tránh từ trừu tượng."
@@ -836,7 +836,7 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
                   className="flex items-center gap-0.5 rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[9px] font-bold text-gray-600 hover:bg-gray-50">
                   <X className="h-2.5 w-2.5" /> Huỷ
                 </button>
-                <button onClick={() => { onSavePrompt(draftPrompt.trim(), aiPlan ?? undefined); setEditing(false); setAiErr(''); setAiPlan(null); setAiChips(new Set()); setAiNote('') }}
+                <button onClick={() => { onSavePrompt(draftPrompt.trim(), aiPlan ?? undefined); setEditing(false); setAiErr(''); setAiPlan(null); setAiArch(''); setAiNote('') }}
                   disabled={!promptDirty && !aiPlan}
                   className="flex items-center gap-0.5 rounded bg-violet-600 px-1.5 py-0.5 text-[9px] font-bold text-white hover:bg-violet-700 disabled:opacity-40">
                   <Save className="h-2.5 w-2.5" /> Lưu
