@@ -584,6 +584,29 @@ function enforceBeforeAfterSplit(scenes: BrollScene[], script: GeneratedScript):
     s.reason = 'before/after split (enforced)'
     made++
   }
+  // Deterministic backstop (the INVERSE of the rule above): the director (Gemini)
+  // sometimes emits a before/after split on a line that is NOT a transformation —
+  // a pure PAIN / problem line — and invents an "after" half the line never claimed
+  // (the user's "#2 đang nói vấn đề nhưng đạo diễn lại tạo before/after" bug). A split
+  // is only justified when the LINE ITSELF carries a result signal — the SAME bilingual
+  // gate (RESULT_TRANSFORM_RE) used to ADD splits above. Any split whose quote lacks
+  // that signal → strip it back to a SINGLE problem moment (the BEFORE only). Skips
+  // hook(0)/CTA(last); runs after the ADD loop so enforced splits (which DO match the
+  // gate) are never touched. Universal VN/MY/EN — keys off the line, not a niche.
+  for (let i = 1; i < scenes.length - 1; i++) {
+    const s = scenes[i]
+    if (!s.conceptPrompt || !SPLIT_ALREADY_RE.test(s.conceptPrompt)) continue
+    if (RESULT_TRANSFORM_RE.test(s.quote ?? '')) continue   // genuine transform line — keep the split
+    const problem = (s.quote ?? '').slice(0, 80).replace(/"/g, '')
+    s.kind = 'concept'
+    s.cameraFraming = 'creator'
+    s.conceptPrompt =
+      `A SINGLE candid UGC moment (NOT a split-screen, NO before/after) of the SAME creator ` +
+      `living the problem in "${problem}" — visibly experiencing the discomfort / struggle in a ` +
+      `concrete real-life moment, authentic iPhone footage, natural light. NO split-screen, NO ` +
+      `resolved / "after" half, no on-screen text.`
+    s.reason = 'before/after stripped — pain line, no result signal (single problem moment)'
+  }
 }
 
 // ── Public: plan a full-coverage hybrid shot list ───────────────────────────
@@ -978,6 +1001,13 @@ RULES:
   joint product; touching clear glowing skin for skincare; light + energetic for a supplement;
   full shiny hair for haircare; a confident bright smile for teeth — NEVER hardcode one niche).
   Only the FACE is identical across the two halves; everything worn differs. No on-screen text.
+  TRIGGER GUARD (critical — do NOT over-apply): use the split-screen ONLY when the LINE ITSELF
+  states a visible AFTER / result (an improvement you can SEE — "giờ thì…", "sau khi dùng", "lepas
+  pakai", "selepas N hari", "dah lega/hilang"). A pure PROBLEM / PAIN line that only describes the
+  struggle, symptom, or "before" state — with NO resolution stated in that SAME line — is NOT a
+  before/after: render it as a SINGLE problem moment (the BEFORE only, no split), and NEVER invent
+  an "after" half the line never claimed. A bare sequencing word ("lepas tu", "rồi", "then", "habis
+  tu", "selepas itu") is NOT an after-state signal.
 - Universal: infer setting/usage from the product context; never hardcode a niche.${anchorHint}
 
 SCRIPT (cover all of it):
