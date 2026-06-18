@@ -403,6 +403,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         script,
         voiceCategory,
         voiceId: pickedVoiceId,
+        lang: state.scriptBrain.outputLang,   // P6e — MY → TTS 1.15×, VN → 1.2×
       })
       setVoiceFirst({
         voiceRef: voice.voiceRef,

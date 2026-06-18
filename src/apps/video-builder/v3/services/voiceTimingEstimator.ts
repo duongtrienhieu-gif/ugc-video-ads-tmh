@@ -38,7 +38,10 @@ import { AD_STRUCTURES } from './adStructures'
 // estimate stayed permanently long, which STARVED the refit (it thought a 43s script was
 // already 60s and never expanded it → short, content-poor scripts). Each language now
 // has its own base rate + accept/clamp band so it converges to its real pace.
-const BASE_RATE: Record<ScriptLang, number> = { vi: 4.05, ms: 5.7, en: 5.3 }
+// P6e — MY TTS pace dropped 1.2× → 1.15× (lipsync drift + "như gió"), so Malay is read
+// ~4% SLOWER → fewer syllables/sec → the Bước-1 "~Xs" gợi ý must grow. Rate ∝ pace:
+// 5.7 × 1.15/1.2 ≈ 5.46. VN/EN unchanged (still 1.2×).
+const BASE_RATE: Record<ScriptLang, number> = { vi: 4.05, ms: 5.46, en: 5.3 }
 const RATE_BAND: Record<ScriptLang, [number, number]> = {
   vi: [3.6, 4.6],
   ms: [4.6, 7.2],
@@ -76,7 +79,10 @@ export function countSyllables(text: string, lang: ScriptLang = DEFAULT_SCRIPT_L
   return syl
 }
 
-const rateKey = (lang: ScriptLang) => `ugc-lab-syll-rate-${lang}`
+// P6e — bump ONLY the MS key so any value self-calibrated at the OLD 1.2× pace (~5.7) is
+// discarded → the new 1.15× base (5.46) takes effect immediately for the Bước-1 estimate;
+// it re-converges from real 1.15× runs. VN/EN keep their existing calibration untouched.
+const rateKey = (lang: ScriptLang) => `ugc-lab-syll-rate-${lang}${lang === 'ms' ? '-v2' : ''}`
 
 /** The (possibly self-calibrated) syllables/sec for a language. A stored value
  *  outside the language's band (e.g. an old MS rate clamped at 4.3) is ignored so we

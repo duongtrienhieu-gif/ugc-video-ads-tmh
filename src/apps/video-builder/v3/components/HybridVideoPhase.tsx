@@ -183,6 +183,7 @@ export default function HybridVideoPhase(_props: Props) {
         kieApiKey, elevenLabsApiKey: elevenLabsKey, config: state.creatorVideoConfig,
         // The PICKED voice (Bước 1) lives in inputs.voiceId — overrides the default.
         script, voiceCategory, voiceId: state.inputs.voiceId,
+        lang: state.scriptBrain.outputLang,   // P6e — MY → TTS 1.15×, VN → 1.2×
         avatar, product: state.inputs.product, onStageUpdate: () => {},
       })
       // P4m — record WHICH voice this was made with (the user's pick, '' = default)

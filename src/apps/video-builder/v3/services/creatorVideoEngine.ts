@@ -32,7 +32,7 @@ import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
 import { getFFmpeg } from './ffmpegLoader'
 import type { Model, Product } from '../../../../stores/types'
 import type {
-  CreatorVideoConfig, CreatorVideoStage, GeneratedScript, VoiceAlignment,
+  CreatorVideoConfig, CreatorVideoStage, GeneratedScript, VoiceAlignment, ScriptLang,
 } from '../types'
 import { VOICE_CATEGORIES } from './voiceCategories'
 import type { VoiceCategoryId } from '../types'
@@ -61,6 +61,15 @@ export const EXPRESSIVE_TTS = {
                      // the API speed param). Also matches the 215-wpm estimate,
                      // which was calibrated for ~1.2×.
 } as const
+
+// P6e — PER-LANGUAGE TTS pace. Malay at 1.2× read "như gió" / lipsync drifted, so MY
+// drops to 1.15×; VN (+ everything else) stays the natural-but-snappy 1.2×. This is the
+// atempo TARGET (applied post-TTS); the voice-timing estimator's MS rate is lowered to
+// match so the Bước-1 "~Xs" gợi ý stays accurate.
+const TTS_SPEED_BY_LANG: Partial<Record<ScriptLang, number>> = { ms: 1.15 }
+function ttsSpeedForLang(lang?: ScriptLang): number {
+  return (lang && TTS_SPEED_BY_LANG[lang]) || EXPRESSIVE_TTS.speed
+}
 
 // Z81 — time-stretch the TTS audio to a target pace (pitch-preserving) via
 // ffmpeg atempo. This is the ONLY reliable way to control pace because v3
@@ -100,6 +109,7 @@ async function synthVoice(args: {
   apiKey: string
   voiceId: string
   text: string
+  lang?: ScriptLang
   onModelUsed?: (model: string) => void
 }): Promise<ArrayBuffer> {
   const raw = await textToSpeech({
@@ -114,8 +124,8 @@ async function synthVoice(args: {
     outputFormat: 'mp3_44100_128',
     onModelUsed: args.onModelUsed,
   })
-  // Z81 — apply the snappy pace ourselves (v3 ignores the API speed param).
-  return (await applyTempo(raw, EXPRESSIVE_TTS.speed)).audio
+  // Z81 — apply the snappy pace ourselves (v3 ignores the API speed param). P6e — per-lang.
+  return (await applyTempo(raw, ttsSpeedForLang(args.lang))).audio
 }
 
 // Z98 (#6) — map raw ElevenLabs char timings onto the FINAL atempo'd audio.
@@ -146,8 +156,10 @@ async function synthVoiceTimed(args: {
   apiKey: string
   voiceId: string
   text: string
+  lang?: ScriptLang
   onModelUsed?: (model: string) => void
 }): Promise<{ audio: ArrayBuffer; alignment: VoiceAlignment | null }> {
+  const ttsSpeed = ttsSpeedForLang(args.lang)   // P6e — MY 1.15×, else 1.2×
   // Z98 — pre-warm ffmpeg.wasm IN PARALLEL with the TTS network call so it's
   // ready by the time applyTempo runs (atempo silently fell back to 1.0× when
   // ffmpeg wasn't loaded yet). Best-effort: applyTempo awaits the same singleton.
@@ -172,7 +184,7 @@ async function synthVoiceTimed(args: {
         // Z98 — build the alignment against the tempo ACTUALLY achieved, not the
         // requested 1.2×. If atempo silently fell back to 1.0×, tempoApplied=1 and
         // the word timings now match the real (un-sped) audio → no 20% desync.
-        const { audio, tempoApplied } = await applyTempo(res.buffer, EXPRESSIVE_TTS.speed)
+        const { audio, tempoApplied } = await applyTempo(res.buffer, ttsSpeed)
         return { audio, alignment: toVoiceAlignment(res.alignment, tempoApplied, model) }
       }
       // Audio came back but with no timing — remember it only if nothing better
@@ -186,7 +198,7 @@ async function synthVoiceTimed(args: {
   // No alignment from any model — use the best timing-less audio we captured…
   if (fallbackAudio) {
     args.onModelUsed?.(fallbackModel)
-    return { audio: (await applyTempo(fallbackAudio, EXPRESSIVE_TTS.speed)).audio, alignment: null }
+    return { audio: (await applyTempo(fallbackAudio, ttsSpeed)).audio, alignment: null }
   }
   // …or, if every timestamped call failed outright, the original plain path.
   console.warn('[TTS timed] all timestamped calls failed — plain TTS (no timing)')
@@ -203,17 +215,20 @@ export async function generateCreatorVoice(params: {
   script: GeneratedScript
   voiceCategory: VoiceCategoryId
   voiceId?: string | null
+  /** P6e — output language → picks the TTS pace (MY 1.15×, else 1.2×). */
+  lang?: ScriptLang
   signal?: AbortSignal
 }): Promise<{ voiceRef: string; voiceDurationSec: number; voiceId: string; voiceAlignment?: VoiceAlignment }> {
   if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
   const voiceCategory = VOICE_CATEGORIES[params.voiceCategory]
   const voiceId = params.voiceId?.trim() || voiceCategory.defaultVoiceId
   const fullScriptText = params.script.blocks.map((b) => b.text).join(' ')
-  console.log(`[VOICE-FIRST] TTS voice=${voiceId} chars=${fullScriptText.length}`)
+  console.log(`[VOICE-FIRST] TTS voice=${voiceId} lang=${params.lang ?? 'vi'} speed=${ttsSpeedForLang(params.lang)} chars=${fullScriptText.length}`)
   const { audio, alignment } = await synthVoiceTimed({
     apiKey: params.elevenLabsApiKey,
     voiceId,
     text: fullScriptText,
+    lang: params.lang,
     onModelUsed: (m) => console.log(`[VOICE-FIRST] TTS model=${m}`),
   })
   if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
@@ -305,6 +320,8 @@ export async function renderCreatorKeyframe(
     reuseVoiceDurationSec?: number
     reuseVoiceId?: string
     reuseVoiceAlignment?: VoiceAlignment
+    /** P6e — output language → TTS pace (MY 1.15×, else 1.2×). */
+    lang?: ScriptLang
   },
 ): Promise<RenderKeyframeResult> {
   if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
@@ -328,6 +345,7 @@ export async function renderCreatorKeyframe(
       script: params.script,
       voiceCategory: params.voiceCategory,
       voiceId: params.voiceId,
+      lang: params.lang,
       signal: params.signal,
     })
     voiceRef = voice.voiceRef

@@ -830,7 +830,9 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-bold text-gray-900">Giọng đọc</p>
               <p className="text-[11px] text-gray-500">
-                Tốc độ chuẩn TikTok creator (1.2×) — nhanh, tự nhiên, tiết kiệm credit lipsync.
+                {brain.outputLang === 'ms'
+                  ? 'Tốc độ chuẩn TikTok creator (Malay 1.15×) — chậm hơn chút cho khớp khẩu hình, tự nhiên.'
+                  : 'Tốc độ chuẩn TikTok creator (1.2×) — nhanh, tự nhiên, tiết kiệm credit lipsync.'}
               </p>
             </div>
           </div>
