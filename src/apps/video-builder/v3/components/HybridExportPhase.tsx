@@ -40,7 +40,6 @@ export default function HybridExportPhase() {
   const script = state.scriptBrain.script
   const captionsOn = hybrid.captionsOn !== false           // default ON
   const captionPreset = hybrid.captionPreset ?? DEFAULT_CAPTION_PRESET
-  const captionKaraoke = hybrid.captionKaraoke === true     // P6b — default OFF
   const bannerOn = hybrid.bannerOn !== false               // default ON
   const bannerPreset = hybrid.bannerPreset ?? DEFAULT_BANNER_PRESET
   // P5z2 — banner = an EDITABLE hook. AI drafts one curiosity line in the OUTPUT language
@@ -213,16 +212,8 @@ export default function HybridExportPhase() {
               ))}
             </div>
           )}
-          {captionsOn && (
-            <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-violet-200 bg-violet-50/60 p-2 text-[12px] text-gray-700">
-              <input type="checkbox" className="mt-0.5" checked={captionKaraoke}
-                onChange={(e) => setHybridCaption({ captionKaraoke: e.target.checked })} />
-              <span>
-                <span className="font-semibold">🎤 Chữ chạy theo giọng (karaoke)</span>
-                <span className="block text-[10px] text-gray-500">Mỗi chữ sáng lên (nền màu) đúng lúc đọc tới — theo nhịp giọng thật. Cần có dữ liệu giọng (alignment); thiếu thì tự chia đều.</span>
-              </span>
-            </label>
-          )}
+          {/* P6o — karaoke giờ MẶC ĐỊNH BẬT cho mọi video (ẩn toggle). Cờ ở assemble đọc
+              `captionKaraoke !== false` nên absent = ON. */}
         </div>
 
         {/* ── Banner hook (dải trên cùng) — applied at assemble, 0 credit ──────── */}

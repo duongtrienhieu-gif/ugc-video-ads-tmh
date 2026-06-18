@@ -182,7 +182,7 @@ export async function assembleFromHybridState(
   // P5y (ii) — caption keyword highlight: colour the script's KEY terms (from the anchor).
   const highlightTerms = deriveCaptionHighlights(script.anchor, script.blocks.map((b) => b.text).join(' '))
   const captions = captionsOn
-    ? await buildCaptionPlacements(hybrid.voiceAlignment, script, realDur, presetId, cardWindows, highlightTerms, hybrid.captionKaraoke === true)
+    ? await buildCaptionPlacements(hybrid.voiceAlignment, script, realDur, presetId, cardWindows, highlightTerms, hybrid.captionKaraoke !== false)
     : []
   // P5x — top hook banner: a short slogan from the script's KEY (anchor → hook fallback),
   // rendered as ONE PNG and held over every non-card segment. Default ON; 0 credit.
