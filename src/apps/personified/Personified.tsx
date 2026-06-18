@@ -1,7 +1,7 @@
 // ── Mode 3 — Xưởng Nhân Vật Hoá 3D — Simulator (P1, text-only) ────────────────
 // Pick sản phẩm → phân tích insight → chọn Kiểu kịch bản + cấu hình → sinh
 // Storyboard + Full-text Voice Script SONG NGỮ + ước credit. CHƯA render ảnh/video.
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Sparkles, Loader2, AlertCircle, RefreshCw, Wand2 } from 'lucide-react'
 import { useBankStore } from '../../stores/bankStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -20,6 +20,21 @@ import { analyzeInsight, generateScript } from './services/personifiedBrain'
 const DEFAULT_CONFIG: PersonifiedConfig = {
   archetype: 'KB1_invader', length: 'medium', heroType: 'voice_vfx',
   falseSolution: true, ctaStyle: 'villain_flees',
+}
+
+// Persist toàn bộ input + kết quả vào localStorage → chuyển tab mode (unmount) /
+// F5 không mất việc. KHÔNG lưu cờ loading (analyzing/generating) — chúng là transient.
+const CACHE_KEY = 'personified-state-v1'
+interface PersistedState {
+  v: 1
+  productId: string
+  market: TargetMarket
+  problemHint: string
+  insight: ProductInsight | null
+  config: PersonifiedConfig
+  script: PersonifiedScript | null
+  variant: number
+  tier: RenderTier
 }
 
 export default function Personified() {
@@ -49,6 +64,41 @@ export default function Personified() {
 
   const noKey = !geminiKey
   const isVN = market === 'VN'
+
+  // ── Persistence: restore once on mount ────────────────────────────────────
+  const hydrated = useRef(false)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY)
+      if (raw) {
+        const s = JSON.parse(raw) as Partial<PersistedState>
+        if (s.v === 1) {
+          if (s.productId) setProductId(s.productId)
+          if (s.market) setMarket(s.market)
+          if (s.problemHint) setProblemHint(s.problemHint)
+          if (s.insight) setInsight(s.insight)
+          if (s.config) setConfig(s.config)
+          if (s.script) setScript(s.script)
+          if (typeof s.variant === 'number') setVariant(s.variant)
+          if (s.tier) setTier(s.tier)
+        }
+      }
+    } catch { /* ignore corrupt cache */ }
+    hydrated.current = true
+  }, [])
+
+  // ── Persistence: save on meaningful change (skip until hydrated to avoid
+  //    overwriting the restore with the initial empty state) ─────────────────
+  useEffect(() => {
+    if (!hydrated.current) return
+    // Skip the initial empty commit (right after restore the closure still holds the
+    // pre-restore empty state) — never overwrite a good cache with nothing.
+    if (!productId && !insight && !script && !problemHint) return
+    try {
+      const s: PersistedState = { v: 1, productId, market, problemHint, insight, config, script, variant, tier }
+      localStorage.setItem(CACHE_KEY, JSON.stringify(s))
+    } catch { /* quota / serialization — non-fatal */ }
+  }, [productId, market, problemHint, insight, config, script, variant, tier])
 
   async function handleAnalyze() {
     if (!product || analyzing) return
