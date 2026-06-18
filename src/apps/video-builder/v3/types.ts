@@ -263,11 +263,16 @@ const I2V_CR_PER_SEC: Record<'480p' | '720p' | '1080p', number> = {
  *  enough source to fill the director's slot: inserts are sped up by ~INSERT_SPEED (1.5×)
  *  after a ~0.35s lead-in skip, so a slot of S seconds needs ≈ S×1.5 + 0.85s of footage.
  *  The renderer AND the credit estimate both call this, so the shown cost always matches the
- *  rendered length (no hard 8s fit; short cuts get the cheap 4s, long ones 12s).
- *  ⚠️ Keep the 1.5 in sync with INSERT_SPEED in hybridAssembler. */
+ *  rendered length (short cuts get the cheap 4s).
+ *  ⚠️ Keep the 1.5 in sync with INSERT_SPEED in hybridAssembler.
+ *  CAP at 8s (drop the 12s tier): hybridAssembler's INSERT_SOURCE_BUDGET_SEC hard-caps source
+ *  consumption at 8.0s (lead-in 0.35 + trimDur ≤ 7.65), so a 12s clip's last ~4s was ALWAYS
+ *  discarded — pure credit waste (~7cr/cut) with zero visual difference. An 8s clip supplies
+ *  exactly what the assembler uses. If INSERT_SOURCE_BUDGET_SEC is ever raised above 8, lift
+ *  this cap in sync so long slots can again pull 12s of source. */
 export function pickSeedanceDuration(slotDurSec: number): 4 | 8 | 12 {
-  const needed = Math.max(1, slotDurSec) * 1.5 + 0.85
-  return needed <= 4 ? 4 : needed <= 8 ? 8 : 12
+  const needed = Math.min(8, Math.max(1, slotDurSec) * 1.5 + 0.85)
+  return needed <= 4 ? 4 : 8
 }
 
 export function estimateInsertCredits(
