@@ -465,15 +465,24 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     if (!elevenLabsKey) { addToast('Thiếu ElevenLabs API key trong Settings', 'error'); return }
     setLoadingShared(true)
     try {
-      const voices = await listSharedVoices({
+      // P6k — ElevenLabs `language=ms` returns voices that SUPPORT Malay (multilingual),
+      // not voices NATIVE to that country → British/American/Russian/… leaked in. Fetch a
+      // bigger page (100, the max) so we don't miss native ones, then keep ONLY voices whose
+      // PRIMARY language matches the picked one (v.language === libLang) — that is the
+      // "đúng quốc gia" filter. Universal vi/ms/en. (Search overrides the lang filter so a
+      // name search across languages still works.)
+      const raw = await listSharedVoices({
         apiKey: elevenLabsKey,
         language: libLang || undefined,
         gender: libGender || undefined,
         search: libSearch.trim() || undefined,
-        pageSize: 30,
+        pageSize: 100,
       })
+      const voices = (libLang && !libSearch.trim())
+        ? raw.filter((v) => v.language === libLang)
+        : raw
       setSharedVoices(voices)
-      if (voices.length === 0) addToast('Không tìm thấy giọng phù hợp — đổi bộ lọc', 'info')
+      if (voices.length === 0) addToast('Không tìm thấy giọng bản địa phù hợp — đổi ngôn ngữ/giới tính hoặc tìm theo tên', 'info')
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Tìm giọng thất bại', 'error')
     } finally { setLoadingShared(false) }
