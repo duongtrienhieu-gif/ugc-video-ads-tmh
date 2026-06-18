@@ -20,6 +20,27 @@ import {
   ARCHETYPES, ARCHETYPE_ORDER, HERO_TYPE_LABEL, CTA_STYLE_LABEL,
   LENGTH_SCENE_COUNT, LENGTH_TARGET_SEC, pickClipDuration, estimateSpeechSec,
 } from '../constants'
+// Tái dùng KHO NGÔN NGỮ MÃ BẢN ĐỊA của Mode 1 (đã train: tiểu từ, code-switch,
+// blacklist Indonesia, slang lỗi thời) — pure data module, không coupling state.
+import {
+  MS_PARTICLES, MS_HYPE, MS_CODESWITCH_EN, MS_BLACKLIST_INDO, MS_FORBIDDEN_STYLE,
+} from '../../video-builder/v3/services/bodyPatternsMs'
+
+/** Block giọng Mã bản địa cho thoại nhân vật (villain/organ) — đóng khung lại từ
+ *  kho Mode 1, GIỮ cơ chế "nghe như người Malaysia thật" nhưng cho ngữ cảnh
+ *  nhân-cách-hóa (gắt/cằn nhằn), KHÔNG phải giọng creator-review bán hàng. */
+function buildMyNativeVoiceBlock(): string {
+  return `
+*** GIỌNG MÃ BẢN ĐỊA (tách "người Malaysia thật" khỏi BM dịch máy) — ÁP CHO dialoguePrimary ***
+- NHỊP = ~70% chất Mã: câu RẤT NGẮN (đa số 3-7 từ), cộc, dồn dập. KHÔNG câu sách giáo khoa dài.
+- TIỂU TỪ CUỐI CÂU (tell số 1): rải 2-3 lần TRONG CẢ video (không phải mỗi câu): ${MS_PARTICLES.join(', ')}. Vd "Tak boleh lari kot!", "Power weh!".
+- GIỮ NGUYÊN tiếng Anh (Malaysia code-switch tự nhiên, dịch ra là cứng): ${MS_CODESWITCH_EN.slice(0, 12).join(', ')}…
+- HYPE words đúng chỗ (không lạm): ${MS_HYPE.slice(0, 8).join(', ')}.
+- ĐẠI TỪ: villain hung hăng / organ cằn nhằn dùng "aku / kau / korang" (gắt, đời thường); audience matang (sức khỏe 30+) có thể "saya". TRÁNH formal "anda / saudara / kami selaku".
+- ⛔ TUYỆT ĐỐI KHÔNG dùng từ INDONESIA (lộ giả ngay lập tức): ${MS_BLACKLIST_INDO.join(', ')} — dùng Mã thay thế: tak, korang, je, dah, penat.
+- TRÁNH: ${MS_FORBIDDEN_STYLE.slice(0, 8).join('; ')}; cliché "viral satu Malaysia".
+Mục tiêu: nhân vật nói như người Malaysia THẬT đang gắt/khịa/cằn nhằn — KHÔNG phải BM dịch từ tiếng Việt.`
+}
 
 // ── Product context block (Mode 3 local — không phụ thuộc v3) ─────────────────
 function buildProductContext(p: Product): string {
@@ -209,7 +230,7 @@ LUẬT VIẾT (bắt buộc):
 4. dialoguePrimary = thoại bằng ${langName} (đưa vào giọng đọc). dialogueVi = ${isVN ? 'GIỐNG HỆT dialoguePrimary' : 'bản dịch NGHĨA sang tiếng Việt cho operator hiểu'}.
 5. videoPromptEn = 1 prompt image-to-video TIẾNG ANH: shot type + hành động cụ thể + bối cảnh (3D Pixar character trên nền cơ thể tả thực). KHÔNG bắt model render chữ.
 6. imagePromptEn cho mỗi nhân vật = prompt EN tạo ảnh nhân vật 3D (Pixar style, cinematic lighting, --ar 9:16).
-
+${market === 'MY' ? buildMyNativeVoiceBlock() : ''}
 XUẤT JSON: { characters:[...], scenes:[${sceneCount} cảnh đúng thứ tự] }. Không markdown.`
 
   const variantNudge = variant

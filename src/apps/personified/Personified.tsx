@@ -255,16 +255,18 @@ export default function Personified() {
                 ))}
               </div>
 
-              {/* Full-text voice script (song ngữ) */}
+              {/* Full-text voice script (song ngữ) — tự giãn full nội dung, không scroll */}
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-gray-600">Full-text Voice Script {!isVN && '(đích)'}</p>
-                <textarea readOnly value={script.fullVoiceScriptPrimary} rows={isVN ? 18 : 9}
-                  className="w-full resize-none rounded-lg border border-black/10 bg-white p-3 text-sm leading-relaxed text-gray-800" />
+                <div className="w-full whitespace-pre-wrap rounded-lg border border-black/10 bg-white p-3 text-sm leading-relaxed text-gray-800">
+                  {script.fullVoiceScriptPrimary}
+                </div>
                 {!isVN && (
                   <>
                     <p className="text-xs font-semibold text-gray-600">↳ Bản dịch nghĩa VN (duyệt)</p>
-                    <textarea readOnly value={script.fullVoiceScriptVi} rows={9}
-                      className="w-full resize-none rounded-lg border border-black/10 bg-gray-50 p-3 text-sm leading-relaxed text-gray-600" />
+                    <div className="w-full whitespace-pre-wrap rounded-lg border border-black/10 bg-gray-50 p-3 text-sm leading-relaxed text-gray-600">
+                      {script.fullVoiceScriptVi}
+                    </div>
                   </>
                 )}
               </div>
