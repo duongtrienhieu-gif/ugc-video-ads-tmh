@@ -221,7 +221,7 @@ OUTPUT exactly ${weak.length} lines, ONE conceptPrompt per line, SAME order, no 
   const prompt = `Write a conceptPrompt for each scene (write in English):\n${list}\n\nOutput ${weak.length} lines, one per line, same order.`
   try {
     const raw = await directGeminiText({
-      apiKey, systemInstruction, prompt, maxOutputTokens: 1536, temperature: 0.7, thinkingBudget: 0,
+      apiKey, systemInstruction, prompt, maxOutputTokens: 1536, temperature: 0.4, thinkingBudget: 0,   // P6s — 0.7→0.4: ổn định concept khi re-roll
     })
     const lines = raw.split('\n').map((l) => l.replace(/^\s*\d+[.)]\s*/, '').replace(/^["'“”\-•]+|["'“”]+$/g, '').trim()).filter(Boolean)
     weak.forEach(({ i }, n) => { if (lines[n] && !isWeakConceptPrompt(lines[n])) scenes[i].conceptPrompt = lines[n] })
@@ -280,7 +280,7 @@ no numbering, no quotes, no extra commentary.`
   const prompt = `Direct each line (output "TYPE | conceptPrompt", conceptPrompt in English):\n${list}\n\nOutput ${orphans.length} lines, same order.`
   try {
     const raw = await directGeminiText({
-      apiKey, systemInstruction, prompt, maxOutputTokens: 1536, temperature: 0.7, thinkingBudget: 0,
+      apiKey, systemInstruction, prompt, maxOutputTokens: 1536, temperature: 0.4, thinkingBudget: 0,   // P6s — 0.7→0.4: ổn định concept khi re-roll
     })
     const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean)
     let applied = 0
@@ -1104,7 +1104,12 @@ OUTPUT strict JSON only (no markdown fences):
         ? `Your last plan had only ${denserHint.have} cuts for a ${dur}s video — too sparse; a few ideas were merged into one long cut. Re-plan with about ${denserHint.want} cuts (a bit more is fine if it feels natural): give EACH distinct beat its own visual (new action / angle / detail grounded in that line). Keep the hook + callouts as fast 2-3s cuts; the main demo / reveal / CTA at 4-${MAX_BROLL_SEC.toFixed(0)}s. Cover every second. Return the JSON.`
         : 'Plan the full-coverage hybrid shot list now. Return the JSON.',
       maxOutputTokens: 4096,
-      temperature: 0.6,
+      // P6s — lowered 0.6 → 0.35 for STABILITY. At 0.6 every "Đạo diễn lại" re-carved the
+      // script wildly (scene count / quote boundaries / role / intent / concept all changed),
+      // so quality was a per-roll lottery and a fix's effect couldn't be judged from one run.
+      // 0.35 keeps re-rolls consistent (small variety, not a fresh gamble) → reproducible +
+      // testable. Raise again later if more creative variety per re-roll is wanted.
+      temperature: 0.35,
       thinkingBudget: 0,   // structured JSON — keep the whole list, no truncation
       responseMimeType: 'application/json',
       ...(schema ? { responseSchema: BROLL_RESPONSE_SCHEMA } : {}),
