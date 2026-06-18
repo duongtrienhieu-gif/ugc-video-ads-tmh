@@ -464,7 +464,11 @@ function isBadLipsCandidate(quote: string | undefined): boolean {
 //     which must be RESERVED for the CTA. Excludes the deliberate penult OFFER shot (which
 //     says "OFFER moment / tapping / pointing") so capEndorsement never re-routes the offer.
 const RESULT_BEHAVIOR_RE = /\b(walk|walking|climb|climbing|stair|strid|run|running|jog|bend|squat|lift|carr|danc|play(?:s|ing)?|cook|cooking|garden|reach(?:es|ing)?\s+up|moving freely|move(?:s)? freely|freely|effortless|pain-free|with ease|easily|relaxed)\b/i
-const ENDORSE_LOOK_RE = /thumbs[- ]?up|genuine endorsement|holds?\b[^.]{0,30}\bbeside (?:their|the) face|\brecommend/i
+// Catches the endorsement composition in ALL its phrasings — incl. the render-safe-hold
+// "holds … presenting it clearly to the camera with a warm, confident smile" (the gap that
+// left a present-to-camera shot on a non-CTA line). OFFER_LOOK_RE excludes the deliberate
+// penult OFFER shot ("…to camera and tapping/pointing… the OFFER moment").
+const ENDORSE_LOOK_RE = /thumbs[- ]?up|genuine endorsement|\brecommend|presenting\b[^.]{0,40}\bto (?:the )?camera|holds?\b[^.]{0,40}\bbeside (?:their|the) face/i
 const OFFER_LOOK_RE = /offer moment|the deal|tapping|pointing/i
 const isEndorsementLook = (cp: string): boolean => ENDORSE_LOOK_RE.test(cp) && !OFFER_LOOK_RE.test(cp)
 
@@ -557,7 +561,6 @@ const APPLIES_PRODUCT_TO_BODY_RE =
   /\b(?:neck|throat|nape|face|cheeks?|forehead|chin|jaw|lips?|mouth|teeth|gums?|tongue|hair|scalp|ears?|eyes?|eyelids?|nose|skin|chest|shoulders?|collar\s?bones?|d[ée]collet|back|waist|belly|stomach|tummy|arms?|elbows?|wrists?|knees?|legs?|thighs?|calf|calves|ankles?|foot|feet|nails?)\b|\b(?:wear|wears|wearing|worn|strap|straps|strapped|strapping|fasten(?:s|ed|ing)?|buckle[ds]?|wrap(?:s|ped|ping)?\s+around|eat|eats|eating|bite|bites|biting|chew|chews|chewing|drink|drinks|drinking|sip|sips|sipping|swallow|swallows|swallowing)\b/i
 function capSocialProof(scenes: BrollScene[]): void {
   const lastIdx = scenes.length - 1
-  let kept = 0
   const demote = (s: BrollScene) => {
     s.role = 'broll'; s.kind = 'product_action'; s.cameraFraming = 'hands_noface'; s.conceptPrompt = ''
   }
@@ -566,26 +569,29 @@ function capSocialProof(scenes: BrollScene[]): void {
   const promote = (s: BrollScene) => {
     s.role = 'social_proof'; s.kind = undefined; s.cameraFraming = undefined; s.conceptPrompt = undefined
   }
-  // Pass 1 — validate scenes Gemini already tagged social_proof (demote mis-tags / over-cap).
+  // P6j — AT MOST ONE social-proof card in the WHOLE video (user hard rule, every product/
+  // niche/market). Gather every valid proof candidate, keep the SINGLE STRONGEST (a line
+  // with clear THIRD-PARTY proof — %/people-count/repeat/reviews/stars), demote all the rest.
+  // Candidates: a Gemini-tagged social_proof whose quote has ANY proof cue, OR a plain broll
+  // whose quote has the STRICT third-party cue. Never the hook (0) or the CTA (last).
+  const valid: number[] = []
   for (let i = 0; i < scenes.length; i++) {
+    if (i === lastIdx) continue                              // CTA never a card
     const s = scenes[i]
-    if (s.role !== 'social_proof') continue
-    if (i === lastIdx) { demote(s); continue }              // CTA never a card
-    if (!SOCIAL_PROOF_CUE_RE.test(s.quote ?? '')) { demote(s); continue }  // mis-tagged
-    kept++
-    if (kept > 3) demote(s)                                 // cap 3
+    if (s.role === 'social_proof') {
+      if (i !== 0 && SOCIAL_PROOF_CUE_RE.test(s.quote ?? '')) valid.push(i)
+      else demote(s)                                         // mis-tagged / hook → demote now
+    } else if (s.role === 'broll' && i !== 0 && SOCIAL_PROOF_PROMOTE_RE.test(s.quote ?? '')) {
+      valid.push(i)                                          // a broll that COULD be the proof card
+    }
   }
-  // Pass 2 — PROMOTE: a plain broll scene whose LINE is clearly THIRD-PARTY proof (a %,
-  // a people-count, repeat buyers, reviews / stars) should be the cheap ~6cr FB-card image,
-  // not the 17-20cr product video the director mis-routed it to. Uses a STRICTER cue than the
-  // demote check — the broad SOCIAL_PROOF_CUE_RE matches lone "viral"/"popular" which leak
-  // into HOOKS (the user audited: the hook "tại sao ... viral" wrongly became a blank card).
-  // Never promotes the HOOK (scene 0) or the CTA (last), and respects the cap (3).
-  for (let i = 0; i < scenes.length && kept < 3; i++) {
-    const s = scenes[i]
-    if (i === 0 || i === lastIdx || s.role !== 'broll') continue   // never the hook / CTA
-    if (!SOCIAL_PROOF_PROMOTE_RE.test(s.quote ?? '')) continue
-    promote(s); kept++
+  if (valid.length === 0) return
+  // The ONE: prefer a STRICT third-party-proof line; else the first cue-valid one.
+  const chosen = valid.find((i) => SOCIAL_PROOF_PROMOTE_RE.test(scenes[i].quote ?? '')) ?? valid[0]
+  for (const i of valid) {
+    if (i === chosen) promote(scenes[i])
+    else if (scenes[i].role === 'social_proof') demote(scenes[i])   // extra cards → product broll
+    // a non-chosen plain-broll candidate just stays a normal broll (never was a card)
   }
 }
 
