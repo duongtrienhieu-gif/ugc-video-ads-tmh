@@ -76,21 +76,10 @@ export interface BrollScene {
   reason?: string
 }
 
-export interface BrollSticker {
-  style: string
-  /** single-line callout (when not a list) */
-  text?: string
-  /** LIST sticker — multiple stacked items (replaces the old multi-row overlay). */
-  items?: string[]
-  /** the spoken line this sticker rides on */
-  quote: string
-  /** the word within the quote to pop on */
-  wordAnchor?: string
-}
+// P6p — sticker feature removed from the Ads Video pipeline (director no longer emits them).
 
 export interface BrollDirectorResult {
   scenes: BrollScene[]
-  stickers: BrollSticker[]
 }
 
 export interface BrollDirectorParams {
@@ -155,20 +144,6 @@ const BROLL_RESPONSE_SCHEMA = {
           reason:        { type: 'string', maxLength: 80 },
         },
         required: ['role', 'quote', 'durationSec'],
-      },
-    },
-    stickers: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          style:      { type: 'string', enum: ['number', 'countdown', 'pill', 'flag', 'badge', 'warning', 'price', 'highlight', 'arrow', 'list'] },
-          text:       { type: 'string', maxLength: 24 },
-          items:      { type: 'array', items: { type: 'string', maxLength: 24 } },
-          quote:      { type: 'string', maxLength: 200 },
-          wordAnchor: { type: 'string', maxLength: 40 },
-        },
-        required: ['style', 'quote'],
       },
     },
   },
@@ -738,16 +713,7 @@ should look like a real Malaysian creator filmed it, NOT a generic Asian setting
 ` : ''
 
   // P4l — sticker register for Malaysia. The universal sticker rule says "no
-  // English" (right for VN), but Malaysian TikTok captions are bahasa ROJAK —
-  // light English mix ("Free", "Stok", "Best", "Combo") is NATURAL. This refines
-  // it for MS: rojak yes, Vietnamese NEVER. A JS validator below re-localizes any
-  // sticker that still leaked Vietnamese.
-  const msStickerHint = params.lang === 'ms' ? `
-STICKER LANGUAGE (Malaysia) — write stickers in natural Malaysian Bahasa ROJAK, the
-casual register a real MY TikTok seller types: a light English mix ("Free", "Stok",
-"Best", "Combo", "Free postage") is NATURAL — keep it. Use MY callout words: "Jimat
-50%", "Stok terhad", "Beli 1 Free 1", "Laris", "Murah gila", "RM59". NEVER write a
-sticker in Vietnamese — not a single word.` : ''
+  // P6p — sticker feature removed; msStickerHint deleted.
 
   const systemInstruction = `You are a senior UGC ad video DIRECTOR cutting a ${dur}-second TikTok ad written
 in ${langName}. There is NO continuous talking-head — you build the WHOLE video as
@@ -866,39 +832,7 @@ FOUR cut ROLES (set "role"):
    social-proof lines. NEVER for a product / benefit / demo / pain line (those stay
    broll/lips), and NEVER make the final CTA cut a social_proof card.
 
-STICKERS (separate array — 0-credit text pops that ride on a cut, REPLACING the
-old overlays). Be GENEROUS — stickers are FREE — BUT a sticker is a TAG that COMPRESSES
-HARD DATA, never a repeat of the spoken line. Pop one on every beat where the voice names
-a CONCRETE DATUM that shrinks to a short tag: a number, a spec, a measurement, a %, an
-ingredient / active, a time, a price, a discount, a free gift. A vague "benefit / it works
-great / result claim" is the CAPTION's job — do NOT sticker it. Cover MOST such data
-moments — a spec/feature-heavy product (gadget, tool, appliance) gets MANY; an emotional/
-abstract script gets fewer. Scale to what THIS script names — never pad, never leave a
-concrete number/spec bare.
-  • ⛔ NON-VERBATIM (critical) — a sticker COMPRESSES the point into a punchy TAG (a
-    number, %, price, ingredient, proof, offer, badge), it must NOT restate the spoken
-    sentence. That line is ALREADY burned on-screen as a CAPTION, so a sticker repeating
-    those same words is dead weight + clutter. E.g. line "mình hay ăn 1-2 thanh mỗi ngày"
-    → "1-2/ngày" (or no sticker), NOT "1-2 Thanh Mỗi Ngày"; line "giúp tỉnh táo hơn" → an
-    icon/skip, NOT "Tỉnh Táo Hơn". Prefer the hard stat/proof/offer the voice does NOT
-    say word-for-word (a %, a count, an ingredient name, "Mua 1 Tặng 1", "-50%").
-  • single callout → {style:"number"|"price"|"badge"|"countdown"|…, text:"2kg" /
-    "tự ngắt" / "mấy giây", quote, wordAnchor}. Prepend a fitting emoji to text.
-  • a line listing SEVERAL specs/claims (e.g. "20000mAh, 4 hours, 30 min", or
-    "tiết kiệm thời gian, không cần trạm xăng") → ONE {style:"list", items:["🔋
-    20000mAh","⏱ 4 tiếng","⚡ 30 phút"], quote} — a stacked card (each item may
-    start with its own emoji).
-  • MANDATORY: an INGREDIENT / NUTRIENT / ACTIVE / SPEC callout (vitamins, minerals,
-    actives, mAh, %, bar, mg…) MUST get a sticker — a "list" if it names several
-    (e.g. "giàu Kali, Magie, Vitamin C" → {style:"list", items:["Kali","Magie",
-    "Vitamin C"], quote}), a "pill"/"number" if it names one. NEVER leave an
-    ingredient/spec line bare — that is the proof the buyer screenshots.
-  Stickers carry the info the old hand-drawn overlays used to; do NOT make overlay
-  scenes. They pop ONE at a time, spaced ~3s apart (two within 3s collide and the
-  later one is dropped) — so cover the KEY callouts; don't stack many on one line.
-  ALL sticker text 100% in ${langName} — translate the idea INTO ${langName}; NEVER
-  leave or switch a word to English (write the ${langName} word, not the English one).
-${culturalSettingBlock}${msStickerHint}${shapeHint}
+${culturalSettingBlock}${shapeHint}
 RULES:
 - DIRECTOR'S BRAIN (the #0 rule — think like a real director, not a captioner):
   READ THE MEANING of each line, then PICTURE the real-life moment + the person's
@@ -1130,7 +1064,7 @@ SCRIPT (cover all of it):
 ${scriptDump}
 
 OUTPUT strict JSON only (no markdown fences):
-{ "scenes": [ {"role":"lips","quote":"…","durationSec":4,"shotIntent":"lips"}, {"role":"broll","quote":"…","durationSec":5,"kind":"product_action","cameraFraming":"hands_noface","conceptPrompt":"…","shotIntent":"product_demo"} ], "stickers": [ {"style":"list","items":["…","…"],"quote":"…"} ] }`
+{ "scenes": [ {"role":"lips","quote":"…","durationSec":4,"shotIntent":"lips"}, {"role":"broll","quote":"…","durationSec":5,"kind":"product_action","cameraFraming":"hands_noface","conceptPrompt":"…","shotIntent":"product_demo"} ] }`
 
   const call = (schema = true, denserHint?: { have: number; want: number }) =>
     directGeminiText({
@@ -1242,12 +1176,6 @@ OUTPUT strict JSON only (no markdown fences):
   // P6f Part B — reserve the endorsement look for the CTA (must run LAST, after the holds pass).
   capEndorsement(scenes)
 
-  const stickers = sanitizeStickers(parsed.stickers)
-  // P4l — MS sticker safety net: even with the rojak hint, Gemini sometimes leaks
-  // Vietnamese onto a sticker (the dev/source language). Re-localize any flagged
-  // sticker to Malay in ONE call. Only fires when ms AND a leak is actually found.
-  if (params.lang === 'ms') await localizeStickersToMs(stickers, params.geminiKey)
-
   const coveredSec = scenes.reduce((s, x) => s + x.durationSec, 0)
   const lipsScenes = scenes.filter((s) => s.role === 'lips')
   // eslint-disable-next-line no-console
@@ -1255,9 +1183,9 @@ OUTPUT strict JSON only (no markdown fences):
     `[BROLL_DIRECTOR] dur=${dur}s scenes=${scenes.length} covered≈${coveredSec.toFixed(0)}s ` +
     `lips=${lipsScenes.length}/${lipsCount} broll=${scenes.filter((s) => s.role === 'broll').length} ` +
     `3d=${scenes.filter((s) => s.role === 'mechanism3d').length} ` +
-    `noface=${scenes.filter((s) => s.cameraFraming === 'hands_noface').length} stickers=${stickers.length}`,
+    `noface=${scenes.filter((s) => s.cameraFraming === 'hands_noface').length}`,
   )
-  return { scenes, stickers }
+  return { scenes }
 }
 
 // ── Parse + sanitize ────────────────────────────────────────────────────────
@@ -1266,11 +1194,8 @@ interface RawScene {
   role?: string; quote?: string; durationSec?: number
   conceptPrompt?: string; cameraFraming?: string; kind?: string; shotIntent?: string; reason?: string
 }
-interface RawSticker {
-  style?: string; text?: string; items?: unknown; quote?: string; wordAnchor?: string
-}
 
-function tryParse(raw: string): { scenes?: RawScene[]; stickers?: RawSticker[] } | null {
+function tryParse(raw: string): { scenes?: RawScene[] } | null {
   let s = raw.trim()
   if (s.startsWith('```')) s = s.replace(/^```(?:json)?\s*/m, '').replace(/```\s*$/m, '').trim()
   try {
@@ -1715,78 +1640,5 @@ function enforceDensityFloor(scenes: TimedBrollScene[], minScenes: number): Time
   return out
 }
 
-// ── P4l — MS sticker localization (anti Vietnamese-leak) ─────────────────────
-// Malay (rojak) uses plain a-z + light English; it has NONE of Vietnamese's tone
-// marks / special vowels. So any of these characters on an MS sticker = leaked
-// Vietnamese → re-localize. Clean deterministic signal, zero false positives on
-// real Malay (which never carries these diacritics).
-const VN_DIACRITICS_RE = /[ăâđêôơưĂÂĐÊÔƠƯàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]/
-
-/** Re-localize any sticker that leaked Vietnamese into natural Malay rojak. ONE
- *  Gemini call, only when there IS a leak; mutates in place; graceful on failure
- *  (a stray VN sticker is better than a broken plan). Universal — no niche assumption. */
-async function localizeStickersToMs(stickers: BrollSticker[], apiKey: string): Promise<void> {
-  type Ptr = { si: number; kind: 'text' } | { si: number; kind: 'item'; ii: number }
-  const frags: string[] = []
-  const ptrs: Ptr[] = []
-  stickers.forEach((s, si) => {
-    if (s.text && VN_DIACRITICS_RE.test(s.text)) { frags.push(s.text); ptrs.push({ si, kind: 'text' }) }
-    ;(s.items ?? []).forEach((it, ii) => {
-      if (VN_DIACRITICS_RE.test(it)) { frags.push(it); ptrs.push({ si, kind: 'item', ii }) }
-    })
-  })
-  if (frags.length === 0) return
-  const numbered = frags.map((f, n) => `${n + 1}. ${f}`).join('\n')
-  const systemInstruction =
-`You localize short ad STICKER labels (numbers, prices, discounts, feature callouts)
-into natural Malaysian Bahasa ROJAK — the casual mixed register a real Malaysian
-TikTok seller types. Each label below LEAKED Vietnamese; rewrite it in Malaysian.
-RULES: keep any emoji; keep any number / price / unit (RM…, %, mAh, g…); keep it
-SHORT (≤24 chars); keep the MEANING. A light English mix is fine ("Free", "Stok",
-"Best", "Combo"); Malaysian callout words: "Jimat", "Stok terhad", "Beli 1 Free 1",
-"Laris", "Murah", "Free postage". NO Vietnamese left.
-OUTPUT exactly ${frags.length} lines, ONE label per line, SAME order, no numbering,
-no quotes, no commentary.`
-  const prompt = `Localize these ${frags.length} sticker labels to Malaysian (one per line, same order):\n${numbered}`
-  try {
-    const raw = await directGeminiText({
-      apiKey, systemInstruction, prompt, maxOutputTokens: 512, temperature: 0.5, thinkingBudget: 0,
-    })
-    const lines = raw.split('\n')
-      .map((l) => l.replace(/^\s*\d+[.)]\s*/, '').replace(/^["'“”\-•]+|["'“”]+$/g, '').trim())
-      .filter(Boolean)
-    ptrs.forEach((p, n) => {
-      const v = lines[n]
-      if (!v || VN_DIACRITICS_RE.test(v)) return   // skip if model still left VN
-      const s = stickers[p.si]
-      if (p.kind === 'text') s.text = v.slice(0, 24)
-      else if (s.items) s.items[p.ii] = v.slice(0, 24)
-    })
-    // eslint-disable-next-line no-console
-    console.log(`[BROLL_DIRECTOR] localize ${ptrs.length} sticker VN→MS`)
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn('[BROLL_DIRECTOR] localize sticker MS lỗi (giữ nguyên):', e)
-  }
-}
-
-function sanitizeStickers(raw: RawSticker[] | undefined): BrollSticker[] {
-  if (!Array.isArray(raw)) return []
-  const out: BrollSticker[] = []
-  for (const r of raw) {
-    const quote = typeof r.quote === 'string' ? r.quote.trim() : ''
-    if (!quote) continue
-    const items = Array.isArray(r.items)
-      ? (r.items as unknown[]).map((x) => String(x).trim()).filter((x) => x.length > 0 && x.length <= 24).slice(0, 4)
-      : []
-    const text = typeof r.text === 'string' ? r.text.trim() : ''
-    if (items.length === 0 && !text) continue
-    out.push({
-      style: typeof r.style === 'string' ? r.style : 'highlight',
-      ...(items.length > 0 ? { items } : { text }),
-      quote,
-      wordAnchor: typeof r.wordAnchor === 'string' ? r.wordAnchor.trim() : undefined,
-    })
-  }
-  return out
-}
+// P6p — sticker generation removed from the Ads Video director (localizeStickersToMs +
+// sanitizeStickers deleted). Legacy ActionInserts sticker mode is untouched (separate flow).

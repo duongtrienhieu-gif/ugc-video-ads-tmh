@@ -20,7 +20,7 @@ import type { Model, Product } from '../../../stores/types'
 import type { StickerStyle } from './services/stickerRenderer'
 // type-only (erased at runtime → no circular dependency) — the hybrid plan shapes
 // live in brollDirector; the store persists them as the `hybrid` slice.
-import type { BrollScene, TimedBrollScene, BrollSticker } from './services/brollDirector'
+import type { BrollScene, TimedBrollScene } from './services/brollDirector'
 
 // ── Top-level phase enum ────────────────────────────────────────────────────
 // Sequential workflow; each phase has its own view + persisted state.
@@ -719,8 +719,6 @@ export interface HybridState {
   rawScenes: BrollScene[]
   /** Director plan (timed scenes) — null until "Đạo diễn" runs. */
   scenes: TimedBrollScene[] | null
-  /** Director sticker callouts (rendered locally at assemble time). */
-  stickers: BrollSticker[]
   /** Rendered clip asset ref per scene INDEX (so a re-render replaces just one). */
   clips: Record<number, string>
   /** One creator keyframe + voice for the whole video (needed for lips + master TTS). */
@@ -776,7 +774,7 @@ export interface HybridState {
 }
 
 export function createEmptyHybridState(): HybridState {
-  return { rawScenes: [], scenes: null, stickers: [], clips: {} }
+  return { rawScenes: [], scenes: null, clips: {} }
 }
 
 export function createEmptyV3State(): V3PipelineState {

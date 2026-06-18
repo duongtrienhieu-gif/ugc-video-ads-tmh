@@ -29,16 +29,7 @@ export interface HybridSceneClip {
   videoRef: string
 }
 
-export interface HybridStickerPlacement {
-  /** Transparent PNG asset ref (rendered locally via stickerRenderer — 0 credit). */
-  pngRef: string
-  /** Absolute timeline second to pop on (from the voice word-alignment). */
-  atSec: number
-  /** How long it stays on screen (default ~1.8s). */
-  durationSec: number
-  /** Sticker height as a fraction of the frame (default 0.10). */
-  heightFraction?: number
-}
+// P6p — HybridStickerPlacement removed (sticker layer dropped from the Ads Video pipeline).
 
 export interface HybridCaptionPlacement {
   /** Transparent caption PNG (rendered locally via captionRenderer — 0 credit). */
@@ -56,9 +47,7 @@ export interface HybridAssembleParams {
   voiceRef: string
   /** Real measured voice length (for -shortest sanity / logging). */
   voiceDurationSec: number
-  /** 0-credit text pops, composited onto the segment they fall within. */
-  stickers?: HybridStickerPlacement[]
-  /** 0-credit burned captions (bottom-centre), composited like stickers. */
+  /** 0-credit burned captions (bottom-centre). */
   captions?: HybridCaptionPlacement[]
   /** P5x — one persistent top hook banner PNG, held over EVERY non-card segment.
    *  `fullWidth` = a ribbon flush to the top edge; false = a centred pill. */
@@ -115,8 +104,6 @@ export async function assembleHybridVideo(
   // better per bit than 'veryfast' for a small wasm-time cost.
   const crf = params.resolution === '1080p' ? '19' : '20'
   const preset_x264 = 'fast'
-  const MARGIN = 24                       // px from the frame edge (sticker)
-  const allStickers = params.stickers ?? []
   const allCaptions = params.captions ?? []
   // Caption: max width 92% (the rare over-long line shrinks to this), sat 12% above the
   // bottom so it clears the TikTok action bar. Consistent placement every chunk.
@@ -210,15 +197,10 @@ export async function assembleHybridVideo(
       // on the output then clamps to EXACTLY dur. Now segment length == slot, always.
       `tpad=stop_mode=clone:stop_duration=${dur.toFixed(3)}`
 
-    // P4d — a sticker rides on EVERY segment its display window overlaps, not
-    // just the one it pops in. Was: `s.atSec in [segStart,segEnd)` → a sticker
-    // popping near a scene cut got truncated at the boundary (the user audited
-    // "1.8s thay vì 2.7s"). Now: window [atSec, atSec+durationSec] overlaps the
-    // segment's output range → it carries into the next clip and shows its full
-    // duration. The enable window is recomputed per-segment in OUTPUT time below.
+    // A caption rides EVERY segment its display window overlaps (carries across a cut so it
+    // shows its full duration; enable window recomputed per-segment in OUTPUT time below).
     const overlapsSeg = (atSec: number, durationSec: number) =>
       atSec + durationSec > c.scene.startSec && atSec < c.scene.endSec
-    const segStickers = allStickers.filter((s) => overlapsSeg(s.atSec, s.durationSec))
     const segCaptions = allCaptions.filter((s) => overlapsSeg(s.atSec, s.durationSec))
     const overlayFiles: string[] = []
     const normFile = `hnorm_${i}.ts`
@@ -226,7 +208,7 @@ export async function assembleHybridVideo(
     // P5x — the top banner rides EVERY non-card segment (cards already `continue`d
     // above). It has no time window — it's held the whole segment.
     const segBanner = params.banner ?? null
-    if (segStickers.length === 0 && segCaptions.length === 0 && !segBanner) {
+    if (segCaptions.length === 0 && !segBanner) {
       await ffmpeg.exec([
         '-i', inFile,
         '-vf', baseChain,
@@ -237,17 +219,13 @@ export async function assembleHybridVideo(
         '-f', 'mpegts', '-y', normFile,
       ])
     } else {
-      // Build a filter_complex: base + one looped PNG input per overlay. Banner (top,
-      // whole segment) first, then stickers (corner, height-scaled — UNCHANGED), then
-      // captions (bottom-centre, box-fit). Sticker/caption use an OUTPUT-local enable
-      // window; the banner is always-on for the segment.
+      // Build a filter_complex: base + one looped PNG input per overlay. Banner (top, whole
+      // segment) first, then captions (bottom-centre, fixed-scale, OUTPUT-local enable window).
       type Overlay =
         | { mode: 'banner'; pngRef: string; fullWidth: boolean }
-        | { mode: 'sticker'; pngRef: string; atSec: number; durationSec: number; heightFraction?: number }
         | { mode: 'caption'; pngRef: string; atSec: number; durationSec: number }
       const overlays: Overlay[] = [
         ...(segBanner ? [{ mode: 'banner' as const, pngRef: segBanner.pngRef, fullWidth: segBanner.fullWidth }] : []),
-        ...segStickers.map((s) => ({ mode: 'sticker' as const, ...s })),
         ...segCaptions.map((s) => ({ mode: 'caption' as const, pngRef: s.pngRef, atSec: s.atSec, durationSec: s.durationSec })),
       ]
       const inputs: string[] = ['-i', inFile]
@@ -278,29 +256,16 @@ export async function assembleHybridVideo(
         }
         // P4d — enable window in OUTPUT-local time; a carried overlay shows only its
         // remaining time here (clamped to the segment), not a fresh full duration.
+        // P5y — CONSISTENT caption size: scale by a FIXED factor (not box-fit) so a SHORT
+        // chunk doesn't balloon. CAP_SCALE_K maps the glyph (160px) to ~4.8% of frame height;
+        // width clamped to CAP_MAXW for a rare over-long line. Bottom-centre, OUTPUT-local enable.
         const off = Math.max(0, s.atSec - c.scene.startSec)
         const endW = Math.min(dur, (s.atSec + s.durationSec) - c.scene.startSec)
-        if (s.mode === 'caption') {
-          // P5y — CONSISTENT caption size: scale by a FIXED factor (not box-fit), so a
-          // SHORT chunk no longer balloons to fill the width. CAP_SCALE_K maps the
-          // renderer's glyph (FONT_PX 80 × dpr 2 = 160px) to ~5.5% of frame height; the
-          // width is clamped to CAP_MAXW for the rare over-long line (single-quoted so the
-          // min() comma is literal, same as the enable filter below). Bottom-centre.
-          parts.push(`[${inIdx}:v]format=rgba,scale='min(iw*${CAP_SCALE_K.toFixed(4)},${CAP_MAXW})':-2,setsar=1[ov${j}]`)
-          parts.push(
-            `[${last}][ov${j}]overlay=x=(W-w)/2:y=H-h-${CAP_BOT_MARGIN}:` +
-            `enable='between(t,${off.toFixed(2)},${endW.toFixed(2)})'[${next}]`,
-          )
-        } else {
-          // mid-right, upper-middle (y≈60%) — raised from 72% so it clears the
-          // bottom-centre captions added in P5k (was colliding with the caption band).
-          const pipH = Math.round((evenH * (s.heightFraction ?? 0.10)) / 2) * 2
-          parts.push(`[${inIdx}:v]format=rgba,scale=-2:${pipH},setsar=1[ov${j}]`)
-          parts.push(
-            `[${last}][ov${j}]overlay=x=W-w-${MARGIN}:y=(H-h)*0.60:` +
-            `enable='between(t,${off.toFixed(2)},${endW.toFixed(2)})'[${next}]`,
-          )
-        }
+        parts.push(`[${inIdx}:v]format=rgba,scale='min(iw*${CAP_SCALE_K.toFixed(4)},${CAP_MAXW})':-2,setsar=1[ov${j}]`)
+        parts.push(
+          `[${last}][ov${j}]overlay=x=(W-w)/2:y=H-h-${CAP_BOT_MARGIN}:` +
+          `enable='between(t,${off.toFixed(2)},${endW.toFixed(2)})'[${next}]`,
+        )
         last = next
       }
       await ffmpeg.exec([

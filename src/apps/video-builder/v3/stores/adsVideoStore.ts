@@ -39,7 +39,7 @@ import {
   type ExportRenderStage,
 } from '../types'
 import { COST_MODE_CONFIG, DEFAULT_COST_MODE, defaultInsertRenderMode, DEFAULT_EXPORT_FORMAT, DEFAULT_EXPORT_QUALITY } from '../types'
-import type { BrollScene, TimedBrollScene, BrollSticker, BrollSceneKind } from '../services/brollDirector'
+import type { BrollScene, TimedBrollScene, BrollSceneKind } from '../services/brollDirector'
 import { CREATOR_PRESETS } from '../services/creatorPresets'
 import type { Model, Product } from '../../../../stores/types'
 
@@ -74,7 +74,7 @@ interface AdsVideoStoreState {
 
   // ── Hybrid (P3e) ──────────────────────────────────────────────────────────
   /** Store the director plan (resets clips + final — indices change on re-plan). */
-  setHybridPlan:          (scenes: TimedBrollScene[], stickers: BrollSticker[], rawScenes: BrollScene[]) => void
+  setHybridPlan:          (scenes: TimedBrollScene[], rawScenes: BrollScene[]) => void
   /** Cache a rendered clip for scene INDEX (a re-render replaces just that one). */
   setHybridClip:          (idx: number, videoRef: string) => void
   /** P3t — patch ONE scene's conceptPrompt without re-running the director.
@@ -426,12 +426,12 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
     commit(set, get, (s) => ({ ...s, voiceFirst: null })),
 
   // ── Hybrid (P3e) ──────────────────────────────────────────────────────────
-  setHybridPlan: (scenes, stickers, rawScenes) =>
+  setHybridPlan: (scenes, rawScenes) =>
     commit(set, get, (s) => ({
       ...s,
       // New plan → scene indices change, so old clips + final are stale. Keep the
       // creator keyframe/voice (not plan-dependent).
-      hybrid: { ...s.hybrid, rawScenes, scenes, stickers, clips: {}, finalVideoRef: undefined },
+      hybrid: { ...s.hybrid, rawScenes, scenes, clips: {}, finalVideoRef: undefined },
     })),
 
   setHybridClip: (idx, videoRef) =>

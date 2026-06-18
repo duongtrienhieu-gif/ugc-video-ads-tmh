@@ -164,7 +164,7 @@ export default function HybridVideoPhase(_props: Props) {
       // P4g — brain pass over the deterministic filler cuts (split/density) so a
       // spoken line never renders as a generic product shot. Mutates `timed`.
       await groundOrphanScenes(timed, product, geminiKey)
-      setHybridPlan(timed, res.stickers, res.scenes)
+      setHybridPlan(timed, res.scenes)
       setFailedIdx(new Set())
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e); setError(msg); addToast(`Đạo diễn lỗi: ${msg.slice(0, 120)}`, 'error')
@@ -536,19 +536,6 @@ export default function HybridVideoPhase(_props: Props) {
                   lang: state.scriptBrain.outputLang, fullScript: script, userIntent: intent,
                 })} />
             ))}
-          </div>
-        )}
-
-        {hybrid.stickers.length > 0 && (
-          <div className="mt-4">
-            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">Sticker ({hybrid.stickers.length})</p>
-            <div className="flex flex-wrap gap-1.5">
-              {hybrid.stickers.map((st, i) => (
-                <span key={i} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                  {st.items?.length ? st.items.join(' · ') : st.text}
-                </span>
-              ))}
-            </div>
           </div>
         )}
 
