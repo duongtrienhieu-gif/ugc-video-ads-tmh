@@ -187,10 +187,28 @@ export async function assembleHybridVideo(
       trimDur = Math.max(0.3, INSERT_SOURCE_BUDGET_SEC - leadIn)
       speed = trimDur / dur                      // output = trimDur / speed = dur
     }
+    // P6d — DRIFT FIX. Diagnose + guarantee segment length. The final video overlays
+    // ONE continuous master-TTS track; sync holds ONLY if every segment is EXACTLY its
+    // slot `dur`. The old chain just trimmed to `dur` with NO pad-up, so a source clip
+    // that came back SHORTER than the slot (Kling lips for a long Malay line; a ~5s
+    // Seedance broll asked for >5s) produced a SHORT segment → every later scene slid
+    // earlier vs the voice → cumulative lips-vs-voice drift (worst at the end, ~30-40%
+    // on MY). Probe the real clip length so the console shows the truth per cut.
+    const clipDur = await probeClipDurationSec(url)
+    if (clipDur > 0) {
+      const shortBy = dur - clipDur
+      console.log(
+        `[HYBRID_ASM] cảnh ${i} (${c.scene.role}) clipDur=${clipDur.toFixed(2)}s · slot=${dur.toFixed(2)}s` +
+        (shortBy > 0.15 ? ` · ⚠ NGẮN HƠN SLOT ${shortBy.toFixed(2)}s (${Math.round((shortBy / dur) * 100)}%)` : ''),
+      )
+    }
     const ptsExpr = `setpts=(PTS-STARTPTS)/${speed.toFixed(4)}`
     const baseChain =
       `scale=${evenW}:${evenH}:force_original_aspect_ratio=increase,` +
-      `crop=${evenW}:${evenH},trim=start=${leadIn.toFixed(3)}:duration=${trimDur.toFixed(3)},${ptsExpr}`
+      `crop=${evenW}:${evenH},trim=start=${leadIn.toFixed(3)}:duration=${trimDur.toFixed(3)},${ptsExpr},` +
+      // Pad-up by cloning the last frame so a SHORT clip still fills the slot; the `-t dur`
+      // on the output then clamps to EXACTLY dur. Now segment length == slot, always.
+      `tpad=stop_mode=clone:stop_duration=${dur.toFixed(3)}`
 
     // P4d — a sticker rides on EVERY segment its display window overlaps, not
     // just the one it pops in. Was: `s.atSec in [segStart,segEnd)` → a sticker
@@ -213,6 +231,7 @@ export async function assembleHybridVideo(
         '-i', inFile,
         '-vf', baseChain,
         '-an',                                 // strip clip audio — master TTS only
+        '-t', dur.toFixed(3),                  // P6d — clamp to EXACTLY the slot (with tpad pad-up) → no drift
         '-c:v', 'libx264', '-preset', preset_x264, '-crf', crf,
         '-pix_fmt', 'yuv420p', '-r', '30',
         '-f', 'mpegts', '-y', normFile,
@@ -289,6 +308,7 @@ export async function assembleHybridVideo(
         '-filter_complex', parts.join(';'),
         '-map', `[${last}]`,
         '-an',
+        '-t', dur.toFixed(3),                  // P6d — clamp to EXACTLY the slot (base padded via tpad) → no drift
         '-c:v', 'libx264', '-preset', preset_x264, '-crf', crf,
         '-pix_fmt', 'yuv420p', '-r', '30',
         '-f', 'mpegts', '-y', normFile,
@@ -354,3 +374,24 @@ export async function assembleHybridVideo(
 // Date.now wrapper — keeps react-hooks/purity lint quiet at call sites that import
 // this in components, mirroring the pattern used elsewhere in v3.
 function nowMs(): number { return Date.now() }
+
+// P6d — measure a clip's REAL duration (browser metadata only, no decode) to diagnose
+// the lips-drift bug: a Kling/Seedance clip shorter than its slot used to render a short
+// segment → master-TTS drifted. Best-effort; returns 0 on any failure (caller just skips
+// the diagnostic log — the tpad/`-t` lock fixes the drift regardless of this number).
+async function probeClipDurationSec(url: string): Promise<number> {
+  try {
+    if (typeof document === 'undefined') return 0
+    return await new Promise<number>((resolve) => {
+      const v = document.createElement('video')
+      v.preload = 'metadata'
+      v.muted = true
+      let settled = false
+      const done = (d: number) => { if (settled) return; settled = true; try { v.removeAttribute('src'); v.load() } catch { /* noop */ } resolve(Number.isFinite(d) && d > 0 ? d : 0) }
+      v.onloadedmetadata = () => done(v.duration)
+      v.onerror = () => done(0)
+      setTimeout(() => done(0), 8000)   // never hang the assemble on a stuck probe
+      v.src = url
+    })
+  } catch { return 0 }
+}
