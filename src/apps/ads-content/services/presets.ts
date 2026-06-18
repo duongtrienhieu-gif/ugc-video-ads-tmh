@@ -352,37 +352,37 @@ export const ADS_ANGLES: AdsAngle[] = [
   {
     id: 'hook-stop', label: 'Hook giật scroll', hint: 'Chặn lướt trong 1 giây',
     glyph: '🪝', educational: false, defaultLength: 'medium', defaultCta: 'balanced',
-    briefEn: 'Scroll-stopper. Line 1 is a polarizing / hyper-curious / pattern-interrupt opener that earns the "see more" tap, then a tight curiosity loop that only resolves later in the body. The hook is the whole job.',
+    briefEn: 'Scroll-stopper. Line 1 = a polarizing / pattern-interrupt / curiosity-loop opener. Then SHORT scannable beats that pay off the loop. STRUCTURE: hook line → 1-2 short agitate lines → a ✅/❌ contrast or 2-3 punchy bullet beats → CTA. Lots of white space. NOT a story paragraph.',
   },
   {
     id: 'story', label: 'Kể chuyện cảm xúc', hint: 'Hành trình struggle → kết quả',
     glyph: '📖', educational: false, defaultLength: 'long', defaultCta: 'soft',
-    briefEn: 'First-person emotional narrative arc: set the scene, build the struggle (identity-level frustration, not just a symptom), the turning point where the product is discovered, then the relief/result. Vulnerable, real, "I almost gave up" energy.',
+    briefEn: 'The ONE narrative angle: first-person emotional arc — scene → struggle (identity-level, not just a symptom) → turning point (product discovered) → relief/result. Flowing prose is allowed here, BUT still break into short 1-3 line paragraphs with blank lines and an emoji or two — never one dense block. End on a soft CTA.',
   },
   {
     id: 'soft-rec', label: 'Gợi ý kiểu bạn bè', hint: 'Bán mềm, như review thật',
     glyph: '🤝', educational: false, defaultLength: 'medium', defaultCta: 'soft',
-    briefEn: 'Low-pressure friend-to-friend recommendation / honest review voice. Share an experience casually, mention what you liked AND one small caveat (believable, not gushing). Stealth-ad feel, no hype, no urgency. Sounds organic.',
+    briefEn: 'Honest friend-to-friend recommendation / review. Casual, believable, mention what you liked + one tiny caveat. STRUCTURE: short conversational paragraphs (1-2 lines each), a quick ✅ "what I liked" mini-list, soft CTA. Light and scannable, not a long monologue.',
   },
   {
     id: 'social-proof', label: 'Bằng chứng đám đông', hint: 'Nhiều người dùng + testimonial',
     glyph: '👥', educational: false, defaultLength: 'medium', defaultCta: 'balanced',
-    briefEn: 'Lead with mass adoption + believable testimonial: number of users / repeat-buyer rate / ratings, plus a first-person timeline testimonial with a specific observable change. Bandwagon + FOMO, gratitude not hype. Use ONLY proof present in the brief — never invent numbers.',
+    briefEn: 'Bandwagon + believable testimonial. STRUCTURE: hook with the proof number → a ✅ bullet list of what users report → ONE short first-person testimonial line with a concrete change → CTA. Use ONLY proof present in the brief — never invent numbers. Scannable, not a story.',
   },
   {
     id: 'mechanism', label: 'Giải thích cơ chế', hint: 'Vì sao hiệu quả (ingredient)',
-    glyph: '🧪', educational: true, defaultLength: 'long', defaultCta: 'balanced',
-    briefEn: 'Educate around 1-2 hero ingredients: WHY the problem happens, HOW the ingredient works, WHY this is different from the category default — cause → effect → product role → result, each step short. Conversational analogies, NEVER medical-textbook, NEVER cure claims.',
+    glyph: '🧪', educational: true, defaultLength: 'medium', defaultCta: 'balanced',
+    briefEn: 'Explain WHY it works without lecturing. STRUCTURE: hook (a surprising "why") → cause → effect in 2-4 SHORT stepped lines (each ≤ 2 lines, can use 👉 or numbers) → a ✅ payoff of what the user feels → CTA. Plain-language analogies, NEVER medical-textbook, NEVER cure claims. Keep it tight — NOT a long essay.',
   },
   {
     id: 'comparison', label: 'So sánh / Trước-sau', hint: 'Upgrade rõ rệt, có timeline',
     glyph: '⚖️', educational: false, defaultLength: 'medium', defaultCta: 'balanced',
-    briefEn: 'Position as a clear upgrade: side-by-side vs what the reader currently uses, OR a before/after transformation with a specific timeline ("after 14 days…") and concrete observable differences. Make the reader feel they are upgrading.',
+    briefEn: 'Clear upgrade framing. STRUCTURE: hook → a tight ❌ (old way / what you used) vs ✅ (this product) contrast block, OR a before → after timeline ("after 14 days…") with concrete observable differences as bullets → CTA. The ❌/✅ contrast is the centerpiece — keep prose minimal.',
   },
   {
     id: 'hard-offer', label: 'Chốt mạnh + ưu đãi', hint: 'Urgency, CTA mạnh',
     glyph: '🚨', educational: false, defaultLength: 'short', defaultCta: 'hard',
-    briefEn: 'Direct-response speed-run for warm audiences: pain match → product as clean solution → strong urgency/scarcity (only if the brief states a real offer) → hard CTA. Punchy, fast, multiple micro-CTAs allowed. Never speak an invented price.',
+    briefEn: 'Fast direct-response for warm audiences. STRUCTURE: punchy hook → pain in 1 line → ✅ 2-3 benefit bullets → urgency/scarcity (ONLY if the brief states a real offer) → strong 👉 CTA. Ultra-scannable, short lines, no storytelling. Never speak an invented price.',
   },
 ]
 

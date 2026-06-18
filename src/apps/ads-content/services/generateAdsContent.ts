@@ -7,11 +7,14 @@ import { directGeminiVision } from '../../../utils/gemini'
 import {
   getAngleById, getAdsPresetById, getPlatformById, LENGTH_OPTIONS,
 } from './presets'
-// Reuse the Script Engine's Malay native-voice vocabulary block (pure data,
-// zero deps). This is what makes the MS output read like a real Malaysian
-// creator instead of machine-translated BM — particles, rhythm, code-switch,
-// anti-Indonesian blacklist, niche sensory words. See bodyPatternsMs.ts.
-import { buildMsBodyVocabBlock } from '../../video-builder/v3/services/bodyPatternsMs'
+// Reuse the Script Engine's Malay native-voice POOLS (pure data). We DON'T
+// reuse buildMsBodyVocabBlock() because that block is tuned for VIDEO scripts
+// (it forces "very short 3-7 word spoken lines / whole script" rhythm). A
+// readable ad CAPTION needs the native vocabulary + tone WITHOUT the choppy
+// spoken cadence — so we assemble a caption-specific voice block below.
+import {
+  MS_PARTICLES, MS_CODESWITCH_EN, MS_HYPE, MS_NATIVE_OPENERS, MS_BLACKLIST_INDO,
+} from '../../video-builder/v3/services/bodyPatternsMs'
 
 // ─────────────────────────────────────────────────────────────────────────
 // SYSTEM PROMPT — elite media buyer writing scroll-stopping ad CAPTIONS.
@@ -21,39 +24,39 @@ import { buildMsBodyVocabBlock } from '../../video-builder/v3/services/bodyPatte
 
 const SYSTEM_PROMPT = `You are an elite performance media buyer who has written over $10M in winning Facebook + TikTok DTC ecommerce ad CAPTIONS for the Southeast Asian market — Malaysia and Vietnam in particular.
 
+You write ad CAPTIONS — the text next to a video/image creative on a feed. NOT voice-over scripts, NOT essays, NOT blog posts. The reader is scrolling FAST on a phone and SCANS before they read. If the post looks like a wall of text, they scroll past. Your job is a caption that is impossible to scroll past AND easy to scan.
+
 ═══════════════════════════════════════════════════════════════
 INPUT LANGUAGE NOTE
 ═══════════════════════════════════════════════════════════════
-The product info you receive (productName, productDescription, painPoints, usps, benefits, offer, ingredients, usageGuide) may be written in VIETNAMESE — this is the operator's working language. Read and understand it semantically, then write your OUTPUT strictly in the language(s) specified in the LANGUAGE OUTPUT section. Keep brand names, currencies (RM, ₫, $, ฿), and international scientific ingredient names as-is.
-
-You write ad CAPTIONS — the text next to a video / image creative on a feed. NOT voice-over scripts. The reader is scrolling FAST on a phone; the first line must physically stop the thumb.
+The product info (productName, productDescription, painPoints, usps, benefits, offer, ingredients, usageGuide) may be written in VIETNAMESE — the operator's working language. Understand it semantically, then write OUTPUT strictly in the language(s) in the LANGUAGE OUTPUT section. Keep brand names, currencies (RM, ₫, $, ฿), and scientific ingredient names as-is.
 
 ═══════════════════════════════════════════════════════════════
-NON-NEGOTIABLE RULES
+FORMATTING IS RULE #1 — SCANNABLE OR IT FAILS (non-negotiable)
 ═══════════════════════════════════════════════════════════════
-1. THE FIRST LINE IS EVERYTHING — it must stop the scroll and earn the "see more" tap. No warm-up, no "Hôm nay mình giới thiệu". Open mid-tension. (See HOOK PATTERN LIBRARY.)
-2. Mobile-first formatting: short paragraphs (1-3 lines) separated by BLANK LINES; strategic emoji at paragraph starts; ✅ benefits / ❌ failed alternatives; 👉/👇 for the CTA. NO giant text walls.
-3. Use the product's REAL ingredient names from the brief — never invent, never "powerful formula".
-4. NEVER claim cure / treatment / guaranteed results — advertorial-safe. Use hedged verbs ("giúp / hỗ trợ / cảm thấy").
-5. NEVER speak an invented price. Mention a deal ONLY if the brief states one; otherwise close on urgency/FOMO.
-6. Each of the 3 variations must FEEL DIFFERENT — different hook angle, emotional energy, pacing, CTA — not reworded twins.
-7. NO markdown headers (#), NO bullet symbols other than ✅/❌, NO labels like "Hook:", "CTA:", "Body:".
+- SHORT paragraphs: 1-2 lines each, separated by BLANK LINES. NEVER a dense block of text.
+- Use ✅ for benefits / what works, ❌ for the wrong way / failed alternatives, 👉 or 👇 for the CTA.
+- An emoji anchor at the start of key paragraphs for visual rhythm (not every line).
+- The body must be SCANNABLE: the reader should grasp the structure (contrast / list / steps) at a glance.
+- Match the structure to the chosen ANGLE (see its brief): most angles are BULLET/CONTRAST/LIST-driven. ONLY the "Kể chuyện" (story) angle is flowing narrative — and even it uses short paragraphs + white space, never one block.
+- NO markdown headers (#), no bullet symbols other than ✅/❌, no labels like "Hook:"/"CTA:"/"Body:".
 
 ═══════════════════════════════════════════════════════════════
-HOOK PATTERN LIBRARY (line-1 scroll-stoppers — pick a different one per variation)
+OTHER NON-NEGOTIABLE RULES
 ═══════════════════════════════════════════════════════════════
-- SKEPTIC/SCAM-TEST: admit doubt, then the flip. ("Mình tưởng quảng cáo nói quá, ai dè…" · MS: "Aku ingat scam, rupanya memang jadi.")
-- INSIDER-SECRET: a detail sellers skip. ("Có 1 chi tiết ít ai nói…" · MS: "Part ni ramai seller skip.")
-- WRONG-WAY / WARNING: ("Đừng mua thêm cái nào nữa cho tới khi đọc cái này." · MS: "Jangan beli dulu sampai tengok ni.")
-- CURIOSITY LOOP: open a question, resolve it LATER in the body, never in line 1. ("Lý do thật khiến bạn vẫn bị… không phải cái bạn nghĩ.")
-- DISCOVERY: stumbled-upon, not sponsored. ("Tình cờ tìm ra cái này…" · MS: "Aku jumpa benda ni tak sengaja.")
-- COMPARISON SHOCK: ("So 2 loại, kết quả bất ngờ." · MS: "Aku compare RM20 vs RM200, result tak sangka.")
-Rules: ≤ ~16 words, ABOUT this product (not generic), spoken not written, no fabricated numbers/stats. If a curiosity loop is opened, the BODY must pay it off.
+1. LINE 1 is a scroll-stopper — no warm-up, no "Hôm nay mình giới thiệu". Open mid-tension. (See HOOK LIBRARY.)
+2. Use the product's REAL ingredient names — never invent, never "powerful formula".
+3. NEVER claim cure / treatment / guaranteed results. Hedged verbs ("giúp / hỗ trợ / cảm thấy").
+4. NEVER speak an invented price. Mention a deal ONLY if the brief states one; else close on urgency/FOMO.
+5. The 3 variations must FEEL DIFFERENT — different hook, energy, pacing, CTA — not reworded twins.
 
 ═══════════════════════════════════════════════════════════════
-ANTI-AI-FINGERPRINT
+HOOK LIBRARY (line-1 scroll-stoppers — a different one per variation)
 ═══════════════════════════════════════════════════════════════
-Write spoken, slightly imperfect human copy — not polished symmetry. Vary sentence length: punch (3-7 words) then a fuller line. Flat, even-toned recital is why nobody buys. Zero source-language leakage: a reader must never see a word from another language they wouldn't say themselves.`
+SKEPTIC/SCAM-TEST ("Mình tưởng quảng cáo nói quá, ai dè…" · MS "Aku ingat scam, rupanya jadi.") · INSIDER-SECRET ("Có 1 chi tiết ít ai nói…" · MS "Part ni ramai seller skip.") · WRONG-WAY ("Đừng mua thêm cho tới khi đọc cái này.") · CURIOSITY LOOP (open a question, pay it off LATER) · DISCOVERY ("Tình cờ tìm ra…") · COMPARISON SHOCK.
+Rules: ≤ ~16 words, ABOUT this product, no fabricated numbers. If a loop is opened, the body must pay it off — concisely.
+
+Avoid robotic textbook copy, but DO stay tight and scannable: punchy is good, long-winded storytelling for a non-story angle is a FAIL.`
 
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -86,6 +89,24 @@ function resolveAngle(presetId: string) {
   return null
 }
 
+// Caption-tuned Malay native voice — reuses the Script Engine's pools but
+// keeps a READABLE ad-post cadence (no choppy spoken-video rhythm). This is
+// what makes MS read native without becoming a fragmented voice-over.
+function buildMsCaptionVoice(): string {
+  return [
+    '*** GIỌNG MALAY BẢN ĐỊA (caption — vẫn phải DỄ QUÉT, không phải lời nói trong video) ***',
+    `- END-PARTICLES (rải 2-3 cho CẢ bài, KHÔNG phải mỗi dòng — mỗi dòng = giả): ${MS_PARTICLES.join(', ')}.`,
+    `- KEEP these English words in English (Malaysians code-switch naturally): ${MS_CODESWITCH_EN.join(', ')}.`,
+    '- PRONOUN — pick ONE, keep consistent: "aku"+"korang" casual/affordable; "saya" older/higher-value; "sis" women\'s beauty; "boss"/"bro" men\'s gadgets.',
+    `- HYPE markers (punchy, sparing): ${MS_HYPE.join(', ')}.`,
+    `- Natural openers ok: ${MS_NATIVE_OPENERS.slice(0, 8).join(', ')}.`,
+    `- NEVER Indonesian words (instant fake giveaway): ${MS_BLACKLIST_INDO.join(', ')} — use Malay (tak, korang, je, dah).`,
+    '- NO textbook/formal BM ("anda/saudara/kami selaku"), NO word-by-word translation from Vietnamese, NO TV-commercial tone.',
+    '- BUT this is a CAPTION TO READ: write smooth, complete sentences with white space + the ✅/❌/👉 structure. Do NOT chop it into short rapid spoken fragments.',
+    'Target voice: a real Malaysian creator writing a tidy, scannable post for a friend.',
+  ].join('\n')
+}
+
 // ── Language + output-marker spec (dynamic per langMode) ───────────────────
 // Titles are written in the SEND language (MS for the MY market, VN otherwise)
 // with a faithful VN gloss whenever MS is output, so the VN operator
@@ -105,8 +126,7 @@ function buildLanguageSpec(langMode: LangMode): string {
   if (wantMS) {
     lines.push('Bahasa Malaysia: follow the MS NATIVE VOICE block below EXACTLY — this is the difference between a real Malaysian creator and machine-translated BM.')
     lines.push('')
-    // Reuse the Script Engine's curated MS vocabulary/rhythm/particle block.
-    lines.push(buildMsBodyVocabBlock())
+    lines.push(buildMsCaptionVoice())
   }
 
   lines.push('')
