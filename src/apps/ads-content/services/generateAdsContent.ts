@@ -133,7 +133,8 @@ function buildLanguageSpec(langMode: LangMode): string {
   lines.push('═══════════════════════════════════════════════════════════════')
   lines.push('TITLES (headlines to post alongside the video)')
   lines.push('═══════════════════════════════════════════════════════════════')
-  lines.push('For EACH variation also write 2-3 SHORT scroll-stopping TITLES (≤ ~12 words each) — punchy headlines a creator pins above/with the video. Different angle each. No quotes, no numbering.')
+  lines.push('For EACH variation, write 5-6 BOLD scroll-stopping TITLES (each ~6-16 words) — sensational, high-shock / high-curiosity headlines a creator pins above the video to STOP the thumb dead. Make them provocative and emotionally charged: shock framing, bold call-out, a curiosity gap, "wait what" energy. Each title a DIFFERENT angle so they can be A/B tested. No quotes, no numbering.')
+  lines.push('HARD RULE — NEVER invent numbers, stats, percentages or rankings: use a number ONLY if it literally appears in the product brief; otherwise use NO number. No fake "#1", no made-up "10,000 users / 98%". Stay advertorial-safe — shocking in framing, but NO cure / guaranteed-result claims.')
   if (wantMS) {
     lines.push('Write the titles in Bahasa Malaysia. Format EACH title line as: <Malay title> :: <faithful Vietnamese meaning>  (the part after :: lets the VN operator understand it).')
   } else {
@@ -263,7 +264,7 @@ function parseTitles(block: string): { titles: string[]; glosses: string[] } {
       titles.push(line)
     }
   }
-  return { titles: titles.slice(0, 3), glosses: glosses.slice(0, 3) }
+  return { titles: titles.slice(0, 6), glosses: glosses.slice(0, 6) }
 }
 
 function parseVariations(raw: string, langMode: LangMode): AdsContentVariation[] {
