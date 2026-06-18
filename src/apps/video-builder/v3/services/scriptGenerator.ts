@@ -445,6 +445,14 @@ ${pronounRule(args.lang)}
   tự tin hơn / dễ chịu hơn" and the equivalent in any language) is too abstract to film ON
   ITS OWN. Keep the feeling ONLY if the same or the next clause carries the visible action /
   situation that proves it. Feeling = the WHY; the observable action = the SHOT.
+  This ALSO bans the empty PAYOFF / VERDICT line — a reaction or judgement carrying NO visible
+  change ("bất ngờ thật sự / đáng đồng tiền / không hối hận / như được hồi sinh / khác hẳn",
+  MS "memang berbaloi / takkan menyesal / terbaik", EN "I was amazed / so worth it / life-
+  changing"). Each MUST be rewritten as the VISIBLE result the verdict is about — e.g.
+  "đáng tiền" → "ăn sạch bát, cả nhà xúm vào đòi thêm"; "như được hồi sinh" → "soi gương thấy
+  da căng sáng bật hẳn lên so với tuần trước"; MS "takkan menyesal" → "naik tangga laju, lutut
+  takde bunyi krek dah". A verdict word may stay ONLY if its OWN clause already shows that
+  visible change.
   Mechanism may appear ONCE as the reason; the SELL is always the laddered felt result +
   fear. Use HEDGED support verbs ("hỗ trợ / giúp / cảm thấy") — never a cure ("chữa khỏi /
   hết hẳn") and never a cert (Halal/FDA/clinically proven); those are the money-losing lines
@@ -473,13 +481,19 @@ ${pronounRule(args.lang)}
   behaviour in it ("hồi đó 3 giờ chiều gục trên bàn ôm đầu / giờ 3 giờ chiều vẫn ngồi làm
   phăng phăng"). Anchoring to the concrete moment (not the bare feeling) keeps the echo
   filmable. Universal across niches.
-- POINT-OF-CONTACT — at least ONE sentence in pain / discovery is a very
-  CONCRETE everyday moment (a TIME of day / a PLACE / an ACTION / an inner
-  thought) the persona would silently nod at, not an abstract feeling. Example
-  upgrades:
-    bad:  "tôi hay mệt" → good: "3 giờ chiều ngồi máy tính, dạ dày kêu, cứ với tay
-                                  tìm gì đó nhâm nhi"
+- POINT-OF-CONTACT — EVERY pain / struggle / problem line (not just one) must be a
+  CONCRETE everyday moment a phone could FILM — a TIME of day / a PLACE / a visible
+  ACTION the persona DOES or a thing they SEE — never a bare feeling word. A pure
+  inner-state pain ("thấy nản / chán / mệt mỏi / tự ti / da xám xịt không sức sống",
+  MS "rasa penat / macam dah tua / tak bermaya / kulit kusam", and the like in any
+  language) gives the director NOTHING to shoot → it collapses into a generic sad
+  face. Keep the feeling ONLY if the SAME or next clause shows the visible moment
+  that proves it. Example upgrades:
+    bad:  "tôi hay mệt" → good: "3 giờ chiều ngồi máy tính, dạ dày kêu, cứ với tay tìm gì đó nhâm nhi"
     bad:  "lười skincare" → good: "tối thứ Sáu uể oải, chỉ kịp vỗ 2 giọt rồi đi ngủ"
+    bad:  "da xám xịt, không sức sống" → good: "sáng soi gương, kéo cổ áo xuống thấy vệt thâm sạm hai bên gò má"
+    bad:  "soi gương thấy nản" → good: "đứng trước gương, kéo da má lên rồi buông, nó chảy xệ xuống"
+    bad (MS): "rasa macam dah tua" → good: "bangun pagi, nak bangun dari katil pun lutut bunyi krek, kena pegang dinding"
   Read the brief to pick the moment that fits the persona — universal across niches.
 - MEMORY ANCHOR (P5 — the single most important line for an order that STAYS, not
   just one that's placed): pick the ONE most concrete, TRUE, memorable reason to
