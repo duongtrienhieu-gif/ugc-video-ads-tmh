@@ -4,7 +4,7 @@ import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
 import type {
-  AdsContentGenParams, AdsContentResult, CtaStrength, LengthMode, PlatformId, ToneId,
+  AdsContentGenParams, AdsContentResult, LangMode, PlatformId,
 } from './types'
 import { generateAdsContent } from './services/generateAdsContent'
 import InputPanel from './components/InputPanel'
@@ -16,31 +16,25 @@ interface AdsContentSnapshot {
   selectedProductId: string | null
   presetId: string
   platform: PlatformId
-  lengthMode: LengthMode
-  toneIds: ToneId[]
-  ctaStrength: CtaStrength
-  educationalMode: boolean
+  langMode: LangMode
   result: AdsContentResult | null
   lastParams: Omit<AdsContentGenParams, 'productId'> | null
 }
 
-const DEFAULT_PRESET_ID = 'storytelling'
+const DEFAULT_PRESET_ID = 'story'           // an ADS_ANGLES id
 const DEFAULT_PLATFORM: PlatformId = 'facebook-feed'
-const DEFAULT_LENGTH: LengthMode = 'medium'
-const DEFAULT_CTA: CtaStrength = 'balanced'
+const DEFAULT_LANG: LangMode = 'ms'          // MY-first per project default
 
 export default function AdsContent() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [result, setResult] = useState<AdsContentResult | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
 
-  // Form state lifted from InputPanel so it survives F5 via session persistence
+  // Form state lifted from InputPanel so it survives F5 via session persistence.
+  // Length / CTA / educational are derived from the chosen angle in the engine.
   const [presetId, setPresetId] = useState<string>(DEFAULT_PRESET_ID)
   const [platform, setPlatform] = useState<PlatformId>(DEFAULT_PLATFORM)
-  const [lengthMode, setLengthMode] = useState<LengthMode>(DEFAULT_LENGTH)
-  const [toneIds, setToneIds] = useState<ToneId[]>([])
-  const [ctaStrength, setCtaStrength] = useState<CtaStrength>(DEFAULT_CTA)
-  const [educationalMode, setEducationalMode] = useState(false)
+  const [langMode, setLangMode] = useState<LangMode>(DEFAULT_LANG)
 
   const lastParamsRef = useRef<Omit<AdsContentGenParams, 'productId'> | null>(null)
 
@@ -52,15 +46,12 @@ export default function AdsContent() {
 
   const sessionApi = useSessionPersist<AdsContentSnapshot>({
     moduleId: 'ads-content',
-    version: 2, // bumped — snapshot now includes form state
+    version: 3, // bumped — simplified form state (angle + platform + langMode)
     snapshot: () => ({
       selectedProductId: selectedProduct?.id ?? null,
       presetId,
       platform,
-      lengthMode,
-      toneIds,
-      ctaStrength,
-      educationalMode,
+      langMode,
       result,
       lastParams: lastParamsRef.current,
     }),
@@ -69,14 +60,11 @@ export default function AdsContent() {
         const p = getProductById(data.selectedProductId)
         if (p) setSelectedProduct(p)
       }
-      if (data.presetId)    setPresetId(data.presetId)
-      if (data.platform)    setPlatform(data.platform)
-      if (data.lengthMode)  setLengthMode(data.lengthMode)
-      if (Array.isArray(data.toneIds)) setToneIds(data.toneIds)
-      if (data.ctaStrength) setCtaStrength(data.ctaStrength)
-      if (typeof data.educationalMode === 'boolean') setEducationalMode(data.educationalMode)
-      if (data.result)      setResult(data.result)
-      if (data.lastParams)  lastParamsRef.current = data.lastParams
+      if (data.presetId)  setPresetId(data.presetId)
+      if (data.platform)  setPlatform(data.platform)
+      if (data.langMode)  setLangMode(data.langMode)
+      if (data.result)    setResult(data.result)
+      if (data.lastParams) lastParamsRef.current = data.lastParams
     },
     getStatus: () => (isGenerating ? 'in-progress' : result || selectedProduct ? 'paused' : 'completed'),
     getTitleVi: () => selectedProduct?.productName,
@@ -84,9 +72,8 @@ export default function AdsContent() {
     shouldPersist: () =>
       !!result || isGenerating || !!selectedProduct ||
       presetId !== DEFAULT_PRESET_ID || platform !== DEFAULT_PLATFORM ||
-      lengthMode !== DEFAULT_LENGTH || ctaStrength !== DEFAULT_CTA ||
-      toneIds.length > 0 || educationalMode,
-    deps: [selectedProduct?.id, result, isGenerating, presetId, platform, lengthMode, toneIds, ctaStrength, educationalMode],
+      langMode !== DEFAULT_LANG,
+    deps: [selectedProduct?.id, result, isGenerating, presetId, platform, langMode],
   })
 
   // Accept productId hand-off from other apps (e.g. Finder → Ads Content)
@@ -144,14 +131,8 @@ export default function AdsContent() {
           onPresetIdChange={setPresetId}
           platform={platform}
           onPlatformChange={setPlatform}
-          lengthMode={lengthMode}
-          onLengthModeChange={setLengthMode}
-          toneIds={toneIds}
-          onToneIdsChange={setToneIds}
-          ctaStrength={ctaStrength}
-          onCtaStrengthChange={setCtaStrength}
-          educationalMode={educationalMode}
-          onEducationalModeChange={setEducationalMode}
+          langMode={langMode}
+          onLangModeChange={setLangMode}
         />
       </div>
 

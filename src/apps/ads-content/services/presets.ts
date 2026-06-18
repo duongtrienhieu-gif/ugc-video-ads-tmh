@@ -1,5 +1,6 @@
 import type {
   AdsContentPreset, PlatformOption, LengthOption, ToneOption,
+  LengthMode, CtaStrength,
 } from '../types'
 
 // ──────────────────────────────────────────────────────────────────────
@@ -325,6 +326,68 @@ export const ADS_PRESETS: AdsContentPreset[] = [
 
 export function getAdsPresetById(id: string): AdsContentPreset | undefined {
   return ADS_PRESETS.find((p) => p.id === id)
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// ADS ANGLES — the simplified picker (replaces the 27-preset wall that
+// caused choice paralysis). 7 broad angles, each carrying its own briefEn
+// + smart length/CTA defaults so the user only picks ONE thing. The old
+// ADS_PRESETS stay exported for backward-compat with saved items.
+// ──────────────────────────────────────────────────────────────────────
+export interface AdsAngle {
+  id: string
+  label: string        // VN
+  hint: string         // VN one-liner
+  glyph: string
+  /** English brief injected into the Gemini prompt — defines the copy shape. */
+  briefEn: string
+  /** Auto-enable mechanism/education explanation for this angle. */
+  educational: boolean
+  /** Smart defaults so length/CTA don't need their own UI step. */
+  defaultLength: LengthMode
+  defaultCta: CtaStrength
+}
+
+export const ADS_ANGLES: AdsAngle[] = [
+  {
+    id: 'hook-stop', label: 'Hook giật scroll', hint: 'Chặn lướt trong 1 giây',
+    glyph: '🪝', educational: false, defaultLength: 'medium', defaultCta: 'balanced',
+    briefEn: 'Scroll-stopper. Line 1 is a polarizing / hyper-curious / pattern-interrupt opener that earns the "see more" tap, then a tight curiosity loop that only resolves later in the body. The hook is the whole job.',
+  },
+  {
+    id: 'story', label: 'Kể chuyện cảm xúc', hint: 'Hành trình struggle → kết quả',
+    glyph: '📖', educational: false, defaultLength: 'long', defaultCta: 'soft',
+    briefEn: 'First-person emotional narrative arc: set the scene, build the struggle (identity-level frustration, not just a symptom), the turning point where the product is discovered, then the relief/result. Vulnerable, real, "I almost gave up" energy.',
+  },
+  {
+    id: 'soft-rec', label: 'Gợi ý kiểu bạn bè', hint: 'Bán mềm, như review thật',
+    glyph: '🤝', educational: false, defaultLength: 'medium', defaultCta: 'soft',
+    briefEn: 'Low-pressure friend-to-friend recommendation / honest review voice. Share an experience casually, mention what you liked AND one small caveat (believable, not gushing). Stealth-ad feel, no hype, no urgency. Sounds organic.',
+  },
+  {
+    id: 'social-proof', label: 'Bằng chứng đám đông', hint: 'Nhiều người dùng + testimonial',
+    glyph: '👥', educational: false, defaultLength: 'medium', defaultCta: 'balanced',
+    briefEn: 'Lead with mass adoption + believable testimonial: number of users / repeat-buyer rate / ratings, plus a first-person timeline testimonial with a specific observable change. Bandwagon + FOMO, gratitude not hype. Use ONLY proof present in the brief — never invent numbers.',
+  },
+  {
+    id: 'mechanism', label: 'Giải thích cơ chế', hint: 'Vì sao hiệu quả (ingredient)',
+    glyph: '🧪', educational: true, defaultLength: 'long', defaultCta: 'balanced',
+    briefEn: 'Educate around 1-2 hero ingredients: WHY the problem happens, HOW the ingredient works, WHY this is different from the category default — cause → effect → product role → result, each step short. Conversational analogies, NEVER medical-textbook, NEVER cure claims.',
+  },
+  {
+    id: 'comparison', label: 'So sánh / Trước-sau', hint: 'Upgrade rõ rệt, có timeline',
+    glyph: '⚖️', educational: false, defaultLength: 'medium', defaultCta: 'balanced',
+    briefEn: 'Position as a clear upgrade: side-by-side vs what the reader currently uses, OR a before/after transformation with a specific timeline ("after 14 days…") and concrete observable differences. Make the reader feel they are upgrading.',
+  },
+  {
+    id: 'hard-offer', label: 'Chốt mạnh + ưu đãi', hint: 'Urgency, CTA mạnh',
+    glyph: '🚨', educational: false, defaultLength: 'short', defaultCta: 'hard',
+    briefEn: 'Direct-response speed-run for warm audiences: pain match → product as clean solution → strong urgency/scarcity (only if the brief states a real offer) → hard CTA. Punchy, fast, multiple micro-CTAs allowed. Never speak an invented price.',
+  },
+]
+
+export function getAngleById(id: string): AdsAngle | undefined {
+  return ADS_ANGLES.find((a) => a.id === id)
 }
 
 // ── Platforms ─────────────────────────────────────────────────────────────

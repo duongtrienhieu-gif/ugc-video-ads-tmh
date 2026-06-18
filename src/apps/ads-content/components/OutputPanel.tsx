@@ -158,21 +158,49 @@ function VariationCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 p-3 lg:grid-cols-2">
-        <CaptionBox
-          flag="🇻🇳"
-          label="Vietnamese"
-          text={variation.vietnamese}
-          copied={copied === 'vn'}
-          onCopy={() => handleCopy('vn')}
-        />
-        <CaptionBox
-          flag="🇲🇾"
-          label="Bahasa Melayu"
-          text={variation.malay}
-          copied={copied === 'my'}
-          onCopy={() => handleCopy('my')}
-        />
+      {/* Titles / headlines to post alongside the video */}
+      {variation.titles.length > 0 && (
+        <div className="border-b border-black/8 bg-amber-50/40 px-3 py-2.5">
+          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-amber-700">
+            ✍️ Tiêu đề đăng kèm video
+          </p>
+          <div className="space-y-1">
+            {variation.titles.map((t, i) => (
+              <TitleRow key={i} title={t} gloss={variation.titlesGlossVi?.[i]} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className={`grid grid-cols-1 gap-3 p-3 ${variation.vietnamese && variation.malay ? 'lg:grid-cols-2' : ''}`}>
+        {variation.vietnamese && (
+          <CaptionBox
+            flag="🇻🇳"
+            label="Vietnamese"
+            text={variation.vietnamese}
+            copied={copied === 'vn'}
+            onCopy={() => handleCopy('vn')}
+          />
+        )}
+        {variation.malay && (
+          <div className="flex flex-col gap-2">
+            <CaptionBox
+              flag="🇲🇾"
+              label="Bahasa Melayu"
+              text={variation.malay}
+              copied={copied === 'my'}
+              onCopy={() => handleCopy('my')}
+            />
+            {variation.malayGlossVi && (
+              <div className="rounded-xl border border-dashed border-black/10 bg-gray-50/60 p-2.5">
+                <p className="mb-0.5 text-[9px] font-bold uppercase tracking-widest text-gray-400">
+                  🇻🇳 Bản dịch VN (để bạn hiểu)
+                </p>
+                <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-gray-600">{variation.malayGlossVi}</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-2 border-t border-black/8 bg-gray-50/60 p-3 sm:flex-row sm:items-center">
@@ -195,6 +223,33 @@ function VariationCard({
         </button>
       </div>
     </div>
+  )
+}
+
+// ── Title row — one headline + optional VN gloss, click to copy ──────────
+
+function TitleRow({ title, gloss }: { title: string; gloss?: string }) {
+  const [copied, setCopied] = useState(false)
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(title)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch { /* silent */ }
+  }
+  return (
+    <button
+      onClick={onCopy}
+      className="group flex w-full items-start gap-2 rounded-lg border border-black/8 bg-white px-2.5 py-1.5 text-left hover:bg-amber-50"
+    >
+      {copied
+        ? <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
+        : <Copy className="mt-0.5 h-3 w-3 shrink-0 text-gray-300 group-hover:text-amber-600" />}
+      <span className="min-w-0 flex-1">
+        <span className="block text-[12px] font-semibold text-gray-800">{title}</span>
+        {gloss && <span className="block text-[10px] italic text-gray-400">{gloss}</span>}
+      </span>
+    </button>
   )
 }
 

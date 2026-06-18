@@ -48,6 +48,11 @@ export interface ToneOption {
 // ── CTA aggressiveness ────────────────────────────────────────────────────
 export type CtaStrength = 'soft' | 'balanced' | 'hard'
 
+// ── Output language mode ──────────────────────────────────────────────────
+// 'vi' = Vietnamese only · 'ms' = Bahasa Malaysia only (+ VN gloss for the
+// operator) · 'both' = both native captions side by side.
+export type LangMode = 'vi' | 'ms' | 'both'
+
 // ── Ads-Content preset (copy framework) ───────────────────────────────────
 export type PresetCategory = 'hook' | 'story' | 'social' | 'format' | 'mechanism'
 
@@ -71,12 +76,15 @@ export interface AdsContentPreset {
 // ── Generation params ─────────────────────────────────────────────────────
 export interface AdsContentGenParams {
   productId: string
+  /** Angle id (ADS_ANGLES) — the simplified replacement for the old 27 presets. */
   presetId: string
   platform: PlatformId
+  /** Which language(s) to output. */
+  langMode: LangMode
   lengthMode: LengthMode
   toneIds: ToneId[]
   ctaStrength: CtaStrength
-  /** Force educational mechanism explanation on classic presets. */
+  /** Force educational mechanism explanation. */
   educationalMode: boolean
 }
 
@@ -86,8 +94,16 @@ export interface AdsContentVariation {
   id: string
   /** Short English label describing this variation's hook angle (badge text). */
   hookLabel: string
+  /** 2-3 scroll-stopping headlines to post alongside the video/creative. */
+  titles: string[]
+  /** Faithful VN gloss of each title — present only when MS is an output language. */
+  titlesGlossVi?: string[]
+  /** Vietnamese caption — '' when langMode === 'ms'. */
   vietnamese: string
+  /** Bahasa Malaysia caption — '' when langMode === 'vi'. */
   malay: string
+  /** Faithful VN gloss of the Malay caption so the VN operator understands it. */
+  malayGlossVi?: string
 }
 
 export interface AdsContentResult {
@@ -97,6 +113,7 @@ export interface AdsContentResult {
   presetGlyph: string
   platform: PlatformId
   platformLabel: string
+  langMode: LangMode
   lengthMode: LengthMode
   toneIds: ToneId[]
   ctaStrength: CtaStrength

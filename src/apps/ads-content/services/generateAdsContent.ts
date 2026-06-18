@@ -1,18 +1,22 @@
 import type {
-  AdsContentGenParams, AdsContentResult, AdsContentVariation,
+  AdsContentGenParams, AdsContentResult, AdsContentVariation, LangMode,
 } from '../types'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useBankStore } from '../../../stores/bankStore'
 import { directGeminiVision } from '../../../utils/gemini'
 import {
-  getAdsPresetById, getPlatformById, LENGTH_OPTIONS, TONE_OPTIONS,
+  getAngleById, getAdsPresetById, getPlatformById, LENGTH_OPTIONS,
 } from './presets'
+// Reuse the Script Engine's Malay native-voice vocabulary block (pure data,
+// zero deps). This is what makes the MS output read like a real Malaysian
+// creator instead of machine-translated BM — particles, rhythm, code-switch,
+// anti-Indonesian blacklist, niche sensory words. See bodyPatternsMs.ts.
+import { buildMsBodyVocabBlock } from '../../video-builder/v3/services/bodyPatternsMs'
 
 // ─────────────────────────────────────────────────────────────────────────
-// SYSTEM PROMPT — briefed as an elite Facebook/TikTok media buyer who
-// writes CAPTIONS (text alongside the creative), not voice-over scripts.
-// Mobile-first formatting is non-negotiable: short paragraphs, blank line
-// breaks, strategic emojis, ✅/❌ lists, 👉/👇 for CTAs.
+// SYSTEM PROMPT — elite media buyer writing scroll-stopping ad CAPTIONS.
+// Timeless rules live here; the dynamic language/marker spec is built per
+// request in buildUserPrompt (because it depends on langMode).
 // ─────────────────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are an elite performance media buyer who has written over $10M in winning Facebook + TikTok DTC ecommerce ad CAPTIONS for the Southeast Asian market — Malaysia and Vietnam in particular.
@@ -20,69 +24,36 @@ const SYSTEM_PROMPT = `You are an elite performance media buyer who has written 
 ═══════════════════════════════════════════════════════════════
 INPUT LANGUAGE NOTE
 ═══════════════════════════════════════════════════════════════
-The product info you receive (productName, productDescription, painPoints, usps, benefits, offer, ingredients) may be written in VIETNAMESE — this is the operator's working language so they can review product data easily. Read and understand it semantically as native VN text, then write your OUTPUT strictly in the language(s) specified by the rest of this prompt. Keep brand names, currencies (RM, ₫, $, ฿), and international scientific ingredient names as-is.
+The product info you receive (productName, productDescription, painPoints, usps, benefits, offer, ingredients, usageGuide) may be written in VIETNAMESE — this is the operator's working language. Read and understand it semantically, then write your OUTPUT strictly in the language(s) specified in the LANGUAGE OUTPUT section. Keep brand names, currencies (RM, ₫, $, ฿), and international scientific ingredient names as-is.
 
-You write ad CAPTIONS — the text that appears next to a video / image creative on a feed. NOT voice-over scripts. Treat the output as something a person scrolling on their phone will READ.
+You write ad CAPTIONS — the text next to a video / image creative on a feed. NOT voice-over scripts. The reader is scrolling FAST on a phone; the first line must physically stop the thumb.
 
 ═══════════════════════════════════════════════════════════════
 NON-NEGOTIABLE RULES
 ═══════════════════════════════════════════════════════════════
-1. Mobile-first formatting:
-   • Short paragraphs (1-3 lines max) separated by BLANK LINES
-   • Strategic emoji at the START of paragraphs for visual rhythm
-   • ✅ for benefits, ❌ for failed alternatives
-   • 👉 / 👇 to point at CTAs at the end
-   • NO giant text walls
-2. The first line of the caption is the HOOK — it earns the "see more" tap
-3. Use the product's REAL ingredient names from the brief — never invent, never generic "powerful formula"
-4. Education when it helps trust: explain WHY the problem happens, HOW the ingredient works, WHY this is different — in conversational creator voice, NOT medical textbook
-5. NEVER claim cure / treatment / guaranteed results — keep tone advertorial-safe
-6. End with a clear CTA appropriate to the chosen CTA strength
-7. Make each variation FEEL DIFFERENT from the others — different hook angle, different emotional energy, different pacing, different CTA — not just reworded sentences
-8. NO markdown headers (#), NO bullet symbols other than ✅ / ❌, NO labels like "Hook:", "CTA:", "Body:"
+1. THE FIRST LINE IS EVERYTHING — it must stop the scroll and earn the "see more" tap. No warm-up, no "Hôm nay mình giới thiệu". Open mid-tension. (See HOOK PATTERN LIBRARY.)
+2. Mobile-first formatting: short paragraphs (1-3 lines) separated by BLANK LINES; strategic emoji at paragraph starts; ✅ benefits / ❌ failed alternatives; 👉/👇 for the CTA. NO giant text walls.
+3. Use the product's REAL ingredient names from the brief — never invent, never "powerful formula".
+4. NEVER claim cure / treatment / guaranteed results — advertorial-safe. Use hedged verbs ("giúp / hỗ trợ / cảm thấy").
+5. NEVER speak an invented price. Mention a deal ONLY if the brief states one; otherwise close on urgency/FOMO.
+6. Each of the 3 variations must FEEL DIFFERENT — different hook angle, emotional energy, pacing, CTA — not reworded twins.
+7. NO markdown headers (#), NO bullet symbols other than ✅/❌, NO labels like "Hook:", "CTA:", "Body:".
 
 ═══════════════════════════════════════════════════════════════
-LANGUAGE — both versions must read as native, not translated
+HOOK PATTERN LIBRARY (line-1 scroll-stoppers — pick a different one per variation)
 ═══════════════════════════════════════════════════════════════
-Vietnamese:
-- Natural Vietnamese ecommerce ad voice
-- Informal "mình/bạn" register
-- Vietnamese punctuation properly (… not ...)
-- Mobile-first paragraph rhythm
-- Local creator tone, not corporate
-
-Malaysian Malay:
-- Native Malaysian colloquial Bahasa Melayu — NOT formal textbook
-- Mix English where natural ("memang worth it", "serius gila", "I tak sangka", "tau tak")
-- Keep product NAME and INGREDIENT NAMES in English
-- Sound like a real Malaysian creator on TikTok / Facebook
+- SKEPTIC/SCAM-TEST: admit doubt, then the flip. ("Mình tưởng quảng cáo nói quá, ai dè…" · MS: "Aku ingat scam, rupanya memang jadi.")
+- INSIDER-SECRET: a detail sellers skip. ("Có 1 chi tiết ít ai nói…" · MS: "Part ni ramai seller skip.")
+- WRONG-WAY / WARNING: ("Đừng mua thêm cái nào nữa cho tới khi đọc cái này." · MS: "Jangan beli dulu sampai tengok ni.")
+- CURIOSITY LOOP: open a question, resolve it LATER in the body, never in line 1. ("Lý do thật khiến bạn vẫn bị… không phải cái bạn nghĩ.")
+- DISCOVERY: stumbled-upon, not sponsored. ("Tình cờ tìm ra cái này…" · MS: "Aku jumpa benda ni tak sengaja.")
+- COMPARISON SHOCK: ("So 2 loại, kết quả bất ngờ." · MS: "Aku compare RM20 vs RM200, result tak sangka.")
+Rules: ≤ ~16 words, ABOUT this product (not generic), spoken not written, no fabricated numbers/stats. If a curiosity loop is opened, the BODY must pay it off.
 
 ═══════════════════════════════════════════════════════════════
-OUTPUT FORMAT — exact markers, nothing else
+ANTI-AI-FINGERPRINT
 ═══════════════════════════════════════════════════════════════
-<<<VARIATION 1>>>
-<<<HOOK>>>
-[3-6 word English label describing this variation's hook angle, e.g. "Pain-led emotional opener" or "Insider-secret curiosity"]
-<<<VN>>>
-[Vietnamese caption — formatted with blank-line paragraph breaks and emoji rhythm]
-<<<MY>>>
-[Malaysian Malay caption — same formatting standard]
-
-<<<VARIATION 2>>>
-<<<HOOK>>>
-[different angle label]
-<<<VN>>>
-[different hook, different pacing]
-<<<MY>>>
-[matching Malay version]
-
-<<<VARIATION 3>>>
-<<<HOOK>>>
-[third angle label]
-<<<VN>>>
-[third distinct variation]
-<<<MY>>>
-[matching Malay version]`
+Write spoken, slightly imperfect human copy — not polished symmetry. Vary sentence length: punch (3-7 words) then a fuller line. Flat, even-toned recital is why nobody buys. Zero source-language leakage: a reader must never see a word from another language they wouldn't say themselves.`
 
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -94,35 +65,101 @@ function getGeminiKey(): string {
   return s.getGeminiApiKey()
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Build the user-message portion of the prompt.
+/** Normalised angle: prefer the new ADS_ANGLES, fall back to a legacy preset id. */
+function resolveAngle(presetId: string) {
+  const angle = getAngleById(presetId)
+  if (angle) {
+    return {
+      label: angle.label, glyph: angle.glyph, briefEn: angle.briefEn,
+      educational: angle.educational, defaultLength: angle.defaultLength,
+      defaultCta: angle.defaultCta,
+    }
+  }
+  const legacy = getAdsPresetById(presetId)
+  if (legacy) {
+    return {
+      label: legacy.label, glyph: legacy.glyph, briefEn: legacy.briefEn,
+      educational: legacy.category === 'mechanism',
+      defaultLength: 'medium' as const, defaultCta: 'balanced' as const,
+    }
+  }
+  return null
+}
+
+// ── Language + output-marker spec (dynamic per langMode) ───────────────────
+// Titles are written in the SEND language (MS for the MY market, VN otherwise)
+// with a faithful VN gloss whenever MS is output, so the VN operator
+// understands what they're posting.
+
+function buildLanguageSpec(langMode: LangMode): string {
+  const wantVN = langMode === 'vi' || langMode === 'both'
+  const wantMS = langMode === 'ms' || langMode === 'both'
+  const lines: string[] = []
+
+  lines.push('═══════════════════════════════════════════════════════════════')
+  lines.push('LANGUAGE OUTPUT')
+  lines.push('═══════════════════════════════════════════════════════════════')
+  if (wantVN) {
+    lines.push('Vietnamese: natural VN ecommerce ad voice, informal "mình/bạn", local creator tone (not corporate), proper VN punctuation (… not ...).')
+  }
+  if (wantMS) {
+    lines.push('Bahasa Malaysia: follow the MS NATIVE VOICE block below EXACTLY — this is the difference between a real Malaysian creator and machine-translated BM.')
+    lines.push('')
+    // Reuse the Script Engine's curated MS vocabulary/rhythm/particle block.
+    lines.push(buildMsBodyVocabBlock())
+  }
+
+  lines.push('')
+  lines.push('═══════════════════════════════════════════════════════════════')
+  lines.push('TITLES (headlines to post alongside the video)')
+  lines.push('═══════════════════════════════════════════════════════════════')
+  lines.push('For EACH variation also write 2-3 SHORT scroll-stopping TITLES (≤ ~12 words each) — punchy headlines a creator pins above/with the video. Different angle each. No quotes, no numbering.')
+  if (wantMS) {
+    lines.push('Write the titles in Bahasa Malaysia. Format EACH title line as: <Malay title> :: <faithful Vietnamese meaning>  (the part after :: lets the VN operator understand it).')
+  } else {
+    lines.push('Write the titles in Vietnamese.')
+  }
+
+  // Output markers
+  lines.push('')
+  lines.push('═══════════════════════════════════════════════════════════════')
+  lines.push('OUTPUT FORMAT — use these markers EXACTLY, nothing else')
+  lines.push('═══════════════════════════════════════════════════════════════')
+  const block: string[] = ['<<<VARIATION 1>>>', '<<<ANGLE>>>', '[3-6 word English label of this variation\'s hook angle]', '<<<TITLES>>>', '[2-3 title lines as specified above]']
+  if (wantVN) { block.push('<<<VN>>>', '[Vietnamese caption]') }
+  if (wantMS) {
+    block.push('<<<MY>>>', '[Bahasa Malaysia caption]')
+    block.push('<<<MY_GLOSS>>>', '[faithful Vietnamese translation of the MY caption — by meaning & vibe, NOT word-by-word; keep code-switched English; render slang naturally (e.g. "padu/power" → "đỉnh/xịn", "racun" → "gây nghiện"). For the VN operator to understand.]')
+  }
+  lines.push(block.join('\n'))
+  lines.push('')
+  lines.push('Repeat the SAME marker structure for <<<VARIATION 2>>> and <<<VARIATION 3>>>.')
+  return lines.join('\n')
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 
 function buildUserPrompt(params: AdsContentGenParams): string {
   const product = useBankStore.getState().getProductById(params.productId)
   if (!product) throw new Error('Không tìm thấy sản phẩm trong bank')
 
-  const preset = getAdsPresetById(params.presetId)
-  if (!preset) throw new Error(`Preset không tồn tại: ${params.presetId}`)
+  const angle = resolveAngle(params.presetId)
+  if (!angle) throw new Error(`Góc tiếp cận không tồn tại: ${params.presetId}`)
 
   const platform = getPlatformById(params.platform)
   if (!platform) throw new Error(`Platform không tồn tại: ${params.platform}`)
 
-  const lengthOpt = LENGTH_OPTIONS.find((l) => l.id === params.lengthMode) ?? LENGTH_OPTIONS[1]
-
-  const toneHints = TONE_OPTIONS
-    .filter((t) => params.toneIds.includes(t.id))
-    .map((t) => `- ${t.label}: ${t.promptHint}`)
-    .join('\n')
-
-  // Educational mode is implicit for mechanism-category presets, explicit for the rest
-  const educationalActive = params.educationalMode || preset.category === 'mechanism'
+  // Smart defaults from the angle (UI no longer asks for length/CTA/edu).
+  const effLength = angle.defaultLength
+  const lengthOpt = LENGTH_OPTIONS.find((l) => l.id === effLength) ?? LENGTH_OPTIONS[1]
+  const effCta = angle.defaultCta
+  const educationalActive = angle.educational || params.educationalMode
 
   const ctaBrief =
-    params.ctaStrength === 'soft'
-      ? 'CTA strength: SOFT — gentle invitation ("link in bio if curious"). No urgency, no pressure.'
-      : params.ctaStrength === 'hard'
-        ? 'CTA strength: HARD — direct, urgent, scarcity if applicable ("tap now, limited stock", "today only"). For warm audiences.'
+    effCta === 'soft'
+      ? 'CTA strength: SOFT — gentle invitation, no pressure ("link in bio kalau berminat").'
+      : effCta === 'hard'
+        ? 'CTA strength: HARD — direct, urgent, scarcity only if the brief states a real deal.'
         : 'CTA strength: BALANCED — confident, direct, no pressure tactics.'
 
   const lines: string[] = []
@@ -138,13 +175,13 @@ function buildUserPrompt(params: AdsContentGenParams): string {
   if (product.benefits)           lines.push(`Benefits: ${product.benefits}`)
   if (product.offer)              lines.push(`Offer: ${product.offer}`)
   if (product.ingredients)        lines.push(`★ Ingredients & mechanism (name specifically + how they work — never generic): ${product.ingredients}`)
-  if (product.usageGuide)         lines.push(`How to use (real usage — ground any how-to / demo angle in this, don't recite verbatim): ${product.usageGuide}`)
+  if (product.usageGuide)         lines.push(`How to use (ground any how-to/demo angle in this, don't recite verbatim): ${product.usageGuide}`)
 
   lines.push('')
   lines.push('═══════════════════════════════════════════════════════════════')
-  lines.push(`PRESET — ${preset.label} (${preset.category})`)
+  lines.push(`ANGLE — ${angle.label}`)
   lines.push('═══════════════════════════════════════════════════════════════')
-  lines.push(`Brief: ${preset.briefEn}`)
+  lines.push(angle.briefEn)
 
   lines.push('')
   lines.push('═══════════════════════════════════════════════════════════════')
@@ -153,49 +190,37 @@ function buildUserPrompt(params: AdsContentGenParams): string {
   lines.push(platform.promptHint)
 
   lines.push('')
-  lines.push('═══════════════════════════════════════════════════════════════')
-  lines.push('LENGTH + CTA + TONE')
-  lines.push('═══════════════════════════════════════════════════════════════')
-  lines.push(`Target length: ~${lengthOpt.targetWords} words per language version (${lengthOpt.label}).`)
+  lines.push(`Target length: ~${lengthOpt.targetWords} words per caption (${lengthOpt.label}).`)
   lines.push(ctaBrief)
-  if (toneHints) {
-    lines.push('')
-    lines.push('Tone modifiers (apply ALL):')
-    lines.push(toneHints)
-  }
 
   if (educationalActive) {
     lines.push('')
-    lines.push('═══════════════════════════════════════════════════════════════')
-    lines.push('EDUCATIONAL SELLING — ON')
-    lines.push('═══════════════════════════════════════════════════════════════')
-    lines.push('Build BELIEF, not just desire. The caption must explain:')
-    lines.push('- WHY the problem happens (mechanism, not just "X is bad")')
-    lines.push('- HOW one or two key ingredients work, named specifically')
-    lines.push('- WHY this product is different from the category default')
-    lines.push('Use conversational explanations — analogies, plain-language framing. NEVER medical-textbook tone. NEVER cure / treatment claims.')
+    lines.push('EDUCATIONAL SELLING — ON. Build BELIEF: WHY the problem happens, HOW 1-2 named ingredients work, WHY this differs from the category default. Conversational analogies, plain language. NEVER medical-textbook, NEVER cure claims.')
   }
 
   lines.push('')
-  lines.push('Generate EXACTLY 3 distinct variations. Each must differ in hook angle, emotional energy, pacing, and CTA style. Use the <<<VARIATION N>>> / <<<HOOK>>> / <<<VN>>> / <<<MY>>> markers EXACTLY.')
+  lines.push(buildLanguageSpec(params.langMode))
+
+  lines.push('')
+  lines.push('Generate EXACTLY 3 distinct variations. Each: a different hook from the library, different emotional energy, pacing, and CTA.')
 
   return lines.join('\n')
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Parse 3 variations out of the Gemini response. Tolerant of small marker
-// variance (whitespace, capitalization).
+// Parse variations. Tolerant of marker whitespace/case.
 // ─────────────────────────────────────────────────────────────────────────
 
-function extractMarkerBlock(text: string, marker: string, nextMarkers: string[]): string {
+const ALL_MARKERS = ['ANGLE', 'HOOK', 'TITLES', 'VN', 'MY', 'MY_GLOSS', 'VARIATION']
+
+function extractMarkerBlock(text: string, marker: string): string {
   const startRe = new RegExp(`<<<\\s*${marker}\\s*>>>`, 'i')
   const startMatch = startRe.exec(text)
   if (!startMatch) return ''
-
   const after = text.slice(startMatch.index + startMatch[0].length)
-  // Find the nearest next marker
   let nearest = after.length
-  for (const m of nextMarkers) {
+  for (const m of ALL_MARKERS) {
+    if (m === marker) continue
     const re = new RegExp(`<<<\\s*${m}\\s*>>>`, 'i')
     const found = re.exec(after)
     if (found && found.index < nearest) nearest = found.index
@@ -203,40 +228,64 @@ function extractMarkerBlock(text: string, marker: string, nextMarkers: string[])
   return after.slice(0, nearest).trim()
 }
 
-function parseVariations(raw: string): AdsContentVariation[] {
+/** Split the TITLES block into titles + optional VN gloss (split on " :: "). */
+function parseTitles(block: string): { titles: string[]; glosses: string[] } {
+  const titles: string[] = []
+  const glosses: string[] = []
+  for (const raw of block.split('\n')) {
+    const line = raw.replace(/^[\s\-*•\d.)]+/, '').trim()
+    if (!line) continue
+    const idx = line.indexOf('::')
+    if (idx >= 0) {
+      titles.push(line.slice(0, idx).trim())
+      glosses.push(line.slice(idx + 2).trim())
+    } else {
+      titles.push(line)
+    }
+  }
+  return { titles: titles.slice(0, 3), glosses: glosses.slice(0, 3) }
+}
+
+function parseVariations(raw: string, langMode: LangMode): AdsContentVariation[] {
   const variations: AdsContentVariation[] = []
-  // Split into variation chunks by <<<VARIATION N>>>
   const chunkRe = /<<<\s*VARIATION\s*(\d+)\s*>>>/gi
   const indices: number[] = []
   let m: RegExpExecArray | null
   while ((m = chunkRe.exec(raw))) indices.push(m.index)
-
   if (indices.length === 0) return variations
+
+  const wantVN = langMode === 'vi' || langMode === 'both'
+  const wantMS = langMode === 'ms' || langMode === 'both'
 
   for (let i = 0; i < indices.length; i++) {
     const start = indices[i]
     const end = i + 1 < indices.length ? indices[i + 1] : raw.length
     const chunk = raw.slice(start, end)
 
-    const hook = extractMarkerBlock(chunk, 'HOOK', ['VN', 'MY', 'VARIATION'])
-    const vn   = extractMarkerBlock(chunk, 'VN',   ['MY', 'HOOK', 'VARIATION'])
-    const my   = extractMarkerBlock(chunk, 'MY',   ['VN', 'HOOK', 'VARIATION'])
+    const angleLabel = extractMarkerBlock(chunk, 'ANGLE') || extractMarkerBlock(chunk, 'HOOK')
+    const { titles, glosses } = parseTitles(extractMarkerBlock(chunk, 'TITLES'))
+    const vn = wantVN ? extractMarkerBlock(chunk, 'VN') : ''
+    const my = wantMS ? extractMarkerBlock(chunk, 'MY') : ''
+    const myGloss = wantMS ? extractMarkerBlock(chunk, 'MY_GLOSS') : ''
 
-    if (vn && my) {
-      variations.push({
-        id: crypto.randomUUID(),
-        hookLabel: hook || `Variation ${i + 1}`,
-        vietnamese: vn,
-        malay: my,
-      })
-    }
+    // A variation is valid if at least one requested caption came through.
+    const ok = (wantVN ? !!vn : true) && (wantMS ? !!my : true) && (vn || my)
+    if (!ok) continue
+
+    variations.push({
+      id: crypto.randomUUID(),
+      hookLabel: angleLabel || `Variation ${i + 1}`,
+      titles: titles.length ? titles : [],
+      titlesGlossVi: glosses.length ? glosses : undefined,
+      vietnamese: vn,
+      malay: my,
+      malayGlossVi: myGloss || undefined,
+    })
   }
 
   return variations
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Main export.
 // ─────────────────────────────────────────────────────────────────────────
 
 export async function generateAdsContent(params: AdsContentGenParams): Promise<AdsContentResult> {
@@ -244,8 +293,8 @@ export async function generateAdsContent(params: AdsContentGenParams): Promise<A
   const product = useBankStore.getState().getProductById(params.productId)
   if (!product) throw new Error('Không tìm thấy sản phẩm — chọn lại từ Project')
 
-  const preset = getAdsPresetById(params.presetId)
-  if (!preset) throw new Error(`Preset không hợp lệ: ${params.presetId}`)
+  const angle = resolveAngle(params.presetId)
+  if (!angle) throw new Error(`Góc tiếp cận không hợp lệ: ${params.presetId}`)
   const platform = getPlatformById(params.platform)
   if (!platform) throw new Error(`Platform không hợp lệ: ${params.platform}`)
 
@@ -255,12 +304,10 @@ export async function generateAdsContent(params: AdsContentGenParams): Promise<A
     apiKey,
     parts: [{ text: userPrompt }],
     systemInstruction: SYSTEM_PROMPT,
-    // Ads content is longer-form than scripts — bump the token budget.
     maxOutputTokens: 8192,
   })
 
-  const variations = parseVariations(raw)
-
+  const variations = parseVariations(raw, params.langMode)
   if (variations.length === 0) {
     throw new Error('Gemini không trả về variation hợp lệ — thử lại')
   }
@@ -268,14 +315,15 @@ export async function generateAdsContent(params: AdsContentGenParams): Promise<A
   return {
     variations,
     presetId: params.presetId,
-    presetLabel: preset.label,
-    presetGlyph: preset.glyph,
+    presetLabel: angle.label,
+    presetGlyph: angle.glyph,
     platform: params.platform,
     platformLabel: platform.label,
-    lengthMode: params.lengthMode,
+    langMode: params.langMode,
+    lengthMode: angle.defaultLength,
     toneIds: params.toneIds,
-    ctaStrength: params.ctaStrength,
-    educationalMode: params.educationalMode || preset.category === 'mechanism',
+    ctaStrength: angle.defaultCta,
+    educationalMode: angle.educational || params.educationalMode,
     productId: params.productId,
     productName: product.productName,
     generatedAt: Date.now(),

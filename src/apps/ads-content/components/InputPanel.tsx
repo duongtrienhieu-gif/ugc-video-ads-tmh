@@ -1,18 +1,13 @@
 import { useState } from 'react'
-import { Package, Loader2, Megaphone, GraduationCap } from 'lucide-react'
+import { Package, Loader2, Megaphone } from 'lucide-react'
 import type { Product } from '../../../stores/types'
-import type {
-  AdsContentGenParams, CtaStrength, LengthMode, PlatformId, ToneId,
-} from '../types'
+import type { AdsContentGenParams, LangMode, PlatformId } from '../types'
 import { useBankStore } from '../../../stores/bankStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAppStore } from '../../../stores/appStore'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 import BankPicker from '../../../components/BankPicker'
-import {
-  ADS_PRESETS, PLATFORM_OPTIONS, LENGTH_OPTIONS, TONE_OPTIONS,
-  getAdsPresetById,
-} from '../services/presets'
+import { ADS_ANGLES, PLATFORM_OPTIONS } from '../services/presets'
 
 interface InputPanelProps {
   selectedProduct: Product | null
@@ -20,51 +15,33 @@ interface InputPanelProps {
   onGenerate: (params: Omit<AdsContentGenParams, 'productId'>) => void
   isGenerating: boolean
   // Form state — owned by parent so it survives F5 via session persistence.
-  presetId: string
+  presetId: string                      // holds an ADS_ANGLES id
   onPresetIdChange: (id: string) => void
   platform: PlatformId
   onPlatformChange: (p: PlatformId) => void
-  lengthMode: LengthMode
-  onLengthModeChange: (l: LengthMode) => void
-  toneIds: ToneId[]
-  onToneIdsChange: (next: ToneId[]) => void
-  ctaStrength: CtaStrength
-  onCtaStrengthChange: (c: CtaStrength) => void
-  educationalMode: boolean
-  onEducationalModeChange: (b: boolean) => void
+  langMode: LangMode
+  onLangModeChange: (l: LangMode) => void
 }
 
-const CTA_OPTIONS: { value: CtaStrength; label: string; color: string }[] = [
-  { value: 'soft',     label: 'Mềm',       color: 'emerald' },
-  { value: 'balanced', label: 'Cân bằng',  color: 'blue' },
-  { value: 'hard',     label: 'Mạnh',      color: 'rose' },
+const LANG_OPTIONS: { value: LangMode; label: string; glyph: string }[] = [
+  { value: 'ms',   label: 'Bahasa Malaysia', glyph: '🇲🇾' },
+  { value: 'vi',   label: 'Tiếng Việt',       glyph: '🇻🇳' },
+  { value: 'both', label: 'Cả hai',           glyph: '🌏' },
 ]
 
 export default function InputPanel({
   selectedProduct, onProductSelect, onGenerate, isGenerating,
   presetId, onPresetIdChange: setPresetId,
   platform, onPlatformChange: setPlatform,
-  lengthMode, onLengthModeChange: setLengthMode,
-  toneIds, onToneIdsChange: setToneIds,
-  ctaStrength, onCtaStrengthChange: setCtaStrength,
-  educationalMode, onEducationalModeChange: setEducationalMode,
+  langMode, onLangModeChange: setLangMode,
 }: InputPanelProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [showTones, setShowTones] = useState(false)
 
   const resolvedProductImage = useAssetUrl(selectedProduct?.productImage)
   const hasGeminiKey = useSettingsStore((s) => s.hasGeminiKey())
   const openApp = useAppStore((s) => s.openApp)
   const sendToApp = useAppStore((s) => s.sendToApp)
   const productCount = useBankStore((s) => s.products.length)
-
-  const preset = getAdsPresetById(presetId)
-  const isMechanismPreset = preset?.category === 'mechanism'
-  const effectiveEducational = educationalMode || isMechanismPreset
-
-  const toggleTone = (id: ToneId) => {
-    setToneIds(toneIds.includes(id) ? toneIds.filter((x) => x !== id) : [...toneIds, id])
-  }
 
   const handleOpenFinder = () => {
     sendToApp({ targetApp: 'finder', targetField: 'activeBank', data: 'products' })
@@ -75,23 +52,17 @@ export default function InputPanel({
 
   const handleClickGenerate = () => {
     if (!canGenerate) return
+    // Length / CTA / educational are derived from the chosen angle inside the
+    // engine — we pass harmless defaults here so the param shape stays intact.
     onGenerate({
       presetId,
       platform,
-      lengthMode,
-      toneIds,
-      ctaStrength,
-      educationalMode,
+      langMode,
+      lengthMode: 'medium',
+      toneIds: [],
+      ctaStrength: 'balanced',
+      educationalMode: false,
     })
-  }
-
-  // Group presets by category for visual organisation
-  const presetsByCategory = {
-    hook:      ADS_PRESETS.filter((p) => p.category === 'hook'),
-    story:     ADS_PRESETS.filter((p) => p.category === 'story'),
-    mechanism: ADS_PRESETS.filter((p) => p.category === 'mechanism'),
-    social:    ADS_PRESETS.filter((p) => p.category === 'social'),
-    format:    ADS_PRESETS.filter((p) => p.category === 'format'),
   }
 
   return (
@@ -103,7 +74,7 @@ export default function InputPanel({
           Ads Content — Caption thực chiến
         </h2>
         <p className="mt-0.5 text-[11px] text-gray-500">
-          Caption text cho Facebook / TikTok / Instagram ads — không phải voice-over.
+          Caption + tiêu đề cho Facebook / TikTok / IG ads — chọn 3 bước là xong.
         </p>
       </div>
 
@@ -148,13 +119,31 @@ export default function InputPanel({
           )}
         </Section>
 
-        {/* STEP 2 — Preset (grouped) */}
-        <Section step={2} title="Dạng content ads">
-          <CategoryGrid label="Hook / Attention" presets={presetsByCategory.hook} active={presetId} onSelect={setPresetId} />
-          <CategoryGrid label="Storytelling / Experience" presets={presetsByCategory.story} active={presetId} onSelect={setPresetId} />
-          <CategoryGrid label="Mechanism / Education" presets={presetsByCategory.mechanism} active={presetId} onSelect={setPresetId} accent="emerald" />
-          <CategoryGrid label="Social proof" presets={presetsByCategory.social} active={presetId} onSelect={setPresetId} />
-          <CategoryGrid label="Platform / Format" presets={presetsByCategory.format} active={presetId} onSelect={setPresetId} />
+        {/* STEP 2 — Angle */}
+        <Section step={2} title="Góc tiếp cận">
+          <div className="grid grid-cols-1 gap-1.5">
+            {ADS_ANGLES.map((a) => {
+              const isActive = presetId === a.id
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => setPresetId(a.id)}
+                  title={a.hint}
+                  className={`flex items-start gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors ${
+                    isActive ? 'border-pink-400 bg-pink-50' : 'border-black/10 bg-white hover:bg-black/[0.03]'
+                  }`}
+                >
+                  <span className="text-lg leading-none">{a.glyph}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-[12px] font-semibold ${isActive ? 'text-pink-800' : 'text-gray-800'}`}>
+                      {a.label}
+                    </p>
+                    <p className="text-[10px] text-gray-500">{a.hint}</p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
         </Section>
 
         {/* STEP 3 — Platform */}
@@ -178,99 +167,28 @@ export default function InputPanel({
           </div>
         </Section>
 
-        {/* STEP 4 — Length */}
-        <Section step={4} title="Độ dài content">
-          <div className="grid grid-cols-4 gap-1.5">
-            {LENGTH_OPTIONS.map((l) => (
+        {/* STEP 4 — Language */}
+        <Section step={4} title="Ngôn ngữ output">
+          <div className="grid grid-cols-3 gap-1.5">
+            {LANG_OPTIONS.map((l) => (
               <button
-                key={l.id}
-                onClick={() => setLengthMode(l.id)}
-                className={`flex flex-col items-center gap-0.5 rounded-lg border py-2 text-[10px] transition-colors ${
-                  lengthMode === l.id
-                    ? 'border-blue-400 bg-blue-50 text-blue-700'
+                key={l.value}
+                onClick={() => setLangMode(l.value)}
+                className={`flex flex-col items-center gap-0.5 rounded-lg border py-2.5 text-[10px] transition-colors ${
+                  langMode === l.value
+                    ? 'border-pink-400 bg-pink-50 text-pink-700'
                     : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.03]'
                 }`}
               >
                 <span className="text-base leading-none">{l.glyph}</span>
                 <span className="font-medium">{l.label}</span>
-                <span className="text-[9px] opacity-60">~{l.targetWords}w</span>
               </button>
             ))}
           </div>
-        </Section>
-
-        {/* STEP 5 — CTA strength */}
-        <Section step={5} title="Độ mạnh CTA">
-          <div className="grid grid-cols-3 gap-1.5">
-            {CTA_OPTIONS.map((c) => (
-              <button
-                key={c.value}
-                onClick={() => setCtaStrength(c.value)}
-                className={`rounded-lg border py-2 text-xs font-medium transition-colors ${
-                  ctaStrength === c.value
-                    ? c.color === 'rose'
-                      ? 'border-rose-400 bg-rose-50 text-rose-700'
-                      : c.color === 'emerald'
-                        ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
-                        : 'border-blue-400 bg-blue-50 text-blue-700'
-                    : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.03]'
-                }`}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-        </Section>
-
-        {/* STEP 6 — Educational mode */}
-        <Section step={6} title="Mechanism selling">
-          <label className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors ${
-            effectiveEducational ? 'border-emerald-300 bg-emerald-50' : 'border-black/10 bg-white hover:bg-black/[0.02]'
-          }`}>
-            <input
-              type="checkbox"
-              checked={effectiveEducational}
-              disabled={isMechanismPreset}
-              onChange={(e) => setEducationalMode(e.target.checked)}
-              className="mt-0.5 accent-emerald-600"
-            />
-            <div className="flex-1">
-              <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-900">
-                <GraduationCap className="h-3.5 w-3.5 text-emerald-600" />
-                Giải thích cơ chế sản phẩm
-                {isMechanismPreset && <span className="ml-1 text-[10px] font-normal text-emerald-700">(auto on)</span>}
-              </p>
-              <p className="mt-0.5 text-[10px] text-gray-500">
-                AI sẽ giải thích vì sao vấn đề xảy ra, cơ chế ingredient, vì sao sản phẩm khác — quan trọng cho health / supplement / skincare.
-              </p>
-            </div>
-          </label>
-        </Section>
-
-        {/* Advanced — tones */}
-        <Section step={7} title="Tone (nâng cao)">
-          <button
-            onClick={() => setShowTones((v) => !v)}
-            className="mb-2 text-[11px] text-pink-600 hover:underline"
-          >
-            {showTones ? '− Ẩn' : '+ Thêm tone modifiers'}
-          </button>
-          {showTones && (
-            <div className="flex flex-wrap gap-1.5">
-              {TONE_OPTIONS.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => toggleTone(t.id)}
-                  className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-                    toneIds.includes(t.id)
-                      ? 'border-pink-400 bg-pink-50 text-pink-700'
-                      : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.03]'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
+          {langMode === 'ms' && (
+            <p className="mt-1.5 text-[10px] text-gray-400">
+              Bản Malay sẽ kèm bản dịch VN sát nghĩa để bạn đọc hiểu.
+            </p>
           )}
         </Section>
       </div>
@@ -312,48 +230,6 @@ function Section({ step, title, children }: { step: number; title: string; child
         Bước {step} · {title}
       </p>
       <div className="space-y-1.5">{children}</div>
-    </div>
-  )
-}
-
-function CategoryGrid({
-  label, presets, active, onSelect, accent = 'pink',
-}: {
-  label: string
-  presets: typeof ADS_PRESETS
-  active: string
-  onSelect: (id: string) => void
-  accent?: 'pink' | 'emerald'
-}) {
-  if (presets.length === 0) return null
-  return (
-    <div className="mb-2">
-      <p className="mb-1.5 text-[9px] font-bold uppercase tracking-widest text-gray-400">{label}</p>
-      <div className="grid grid-cols-2 gap-1.5">
-        {presets.map((p) => {
-          const isActive = active === p.id
-          const activeBorder = accent === 'emerald' ? 'border-emerald-400 bg-emerald-50' : 'border-pink-400 bg-pink-50'
-          const activeText = accent === 'emerald' ? 'text-emerald-800' : 'text-pink-800'
-          return (
-            <button
-              key={p.id}
-              onClick={() => onSelect(p.id)}
-              title={`${p.label} — ${p.hint}`}
-              className={`flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${
-                isActive ? activeBorder : 'border-black/10 bg-white hover:bg-black/[0.03]'
-              }`}
-            >
-              <span className="text-base leading-none">{p.glyph}</span>
-              <div className="min-w-0 flex-1">
-                <p className={`truncate text-[11px] font-semibold ${isActive ? activeText : 'text-gray-800'}`}>
-                  {p.label}
-                </p>
-                <p className="truncate text-[10px] text-gray-500">{p.hint}</p>
-              </div>
-            </button>
-          )
-        })}
-      </div>
     </div>
   )
 }
