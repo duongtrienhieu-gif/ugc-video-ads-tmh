@@ -107,6 +107,31 @@ export function stripMoney(text: string): string {
   return out
 }
 
+// ── Tier-ladder strip (user rule: AT MOST "buy 1 free 1" — NEVER escalate) ────
+// The prompt nudge ("don't escalate to a tier ladder") is unreliable — Gemini still
+// emits "beli 2 dapat 2 free beli 3 dapat 3 free beli 4 dapat 4 free" (esp. MY, where the
+// VN-worded nudge didn't bite). DETERMINISTIC strip of every tier whose BUY count is ≥2,
+// keeping the single allowed "beli 1 / mua 1 / buy 1" offer (buy-count 1 → not matched).
+// Universal VN/MS/EN: mua…tặng · beli…dapat|percuma · buy…get|free.
+export function stripOfferLadder(text: string): string {
+  // ONE tier unit with buy-count ≥2 (+ optional trailing free/percuma + a leading connector).
+  const TIER =
+    '(?:beli|mua|buy)\\s*[2-9]\\d*\\s*(?:dapat|t[ặăaạằắ]ng|get|free|percuma|gratis|tabung)\\s*\\d+\\s*' +
+    '(?:free|percuma|gratis|mi[eễ]n\\s*ph[íi])?'
+  let out = text.replace(
+    new RegExp(`\\s*(?:,|;|/|\\+|\\b(?:atau|or|ho[ặa]c|dan|v[àa])\\b)?\\s*${TIER}`, 'gi'),
+    ' ',
+  )
+  out = out
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.!?…])/g, '$1')
+    .replace(/([,.!?…])\s*\1+/g, '$1')
+    .replace(/\s+,/g, ',')
+    .replace(/^[\s,;–-]+/, '')
+    .trim()
+  return out
+}
+
 // ── Tokenization helpers (VN-friendly) ───────────────────────────────────────
 
 // VN stopword list + `meaningfulTokens` helper removed in P3r — the literal-reuse

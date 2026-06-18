@@ -29,7 +29,7 @@ import {
 } from '../types'
 import { AD_STRUCTURES } from './adStructures'
 import { pickShapedViralHooks } from './hookViralPatterns'
-import { validateBody, validateShapeExecution, validateAnchor, spellFixVi, stripMoney, type BodyBlocks } from './scriptValidator'
+import { validateBody, validateShapeExecution, validateAnchor, spellFixVi, stripMoney, stripOfferLadder, type BodyBlocks } from './scriptValidator'
 import { buildMsBodyVocabBlock } from './bodyPatternsMs'
 import { buildShapeOverrideBlock } from './scriptShapes'
 import {
@@ -222,11 +222,16 @@ export async function generateScript(
       if (!refit) break
       blockMap = refit
     }
-    // HARD price guard (user rule: the CTA NEVER speaks a price). The prompt nudge is
-    // unreliable — the model still emits "RM59 je", "tak payah bayar sampai RM138", "chỉ 99k",
-    // "giảm 50%". Deterministically strip money + discount-% from the CTA block ONLY (the
-    // offer NAME like "mua 1 tặng 1" / "Beli 1 Percuma 1" survives — it carries no price number).
-    if (blockMap.cta) blockMap.cta = stripMoney(blockMap.cta)
+    // HARD guards (user rule, UNIVERSAL VN/MS/EN): the script NEVER speaks a PRICE, and the
+    // offer NEVER escalates past "buy 1 free 1". Prompt nudges are unreliable — esp. for MY,
+    // which still emitted "RM59 je" AND the tier ladder "beli 2 dapat 2 free beli 3 dapat 3
+    // free…". Strip BOTH deterministically from EVERY block (not CTA-only — price/ladder can
+    // land anywhere). The allowed offer NAME ("mua 1 tặng 1" / "Beli 1 Percuma 1") carries no
+    // price number + buy-count 1 → survives both strips. (Runs before the verbatim-hook
+    // re-set below, so a user-picked hook is never altered.)
+    for (const id of SCRIPT_BLOCK_IDS) {
+      if (blockMap[id]) blockMap[id] = stripOfferLadder(stripMoney(blockMap[id]))
+    }
     // Keep the user's picked hook verbatim through any refit.
     if ((params.chosenHook ?? '').trim()) blockMap.hook = params.chosenHook!.trim()
     parsed = { ...parsed, blocks: blockMap }
