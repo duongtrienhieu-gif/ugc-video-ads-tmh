@@ -361,13 +361,23 @@ function makeProductScene(s: BrollScene, framing: CameraFraming, product: Produc
 /** P4h — guarantee the product is established EARLY + shown on POINT-AT lines.
  *  Runs on the director's scenes BEFORE the CTA lock + backfill. Never touches
  *  the last cut (CTA, owned by the CTA lock) or 3D mechanism cuts. */
+// P2 — intents that are CREATOR-CENTRIC by Gemini's own declaration (talking / emotion /
+// showing-the-result / transformation). When Gemini explicitly tagged a line as one of
+// these, the establish backstop must NOT overwrite it into a product hold-up (the audited
+// "hook lips → cầm sản phẩm" flip). The product still gets established on a nearby NON-
+// creator-intent line instead. A scene with no declared intent (or a product/proof intent)
+// is still fair game for establishment, so coverage is preserved.
+const ESTABLISH_PRESERVE_INTENTS = new Set<ShotIntent>(['lips', 'reaction', 'result_behavior', 'before_after'])
+const preserveFromEstablish = (s: BrollScene): boolean =>
+  !!s.shotIntent && ESTABLISH_PRESERVE_INTENTS.has(s.shotIntent)
+
 function applyProductEstablishRules(scenes: BrollScene[], product: Product | null | undefined): void {
   if (scenes.length === 0 || !product?.productName) return
   const lastIdx = scenes.length - 1
 
   // Rule A — the OPENING establishes the product when the HOOK names it (face+product).
   const first = scenes[0]
-  if (first && lastIdx > 0 && !sceneShowsProduct(first) && quoteNamesProduct(first.quote, product)) {
+  if (first && lastIdx > 0 && !sceneShowsProduct(first) && quoteNamesProduct(first.quote, product) && !preserveFromEstablish(first)) {
     makeProductScene(first, 'creator', product)
   }
 
@@ -376,17 +386,20 @@ function applyProductEstablishRules(scenes: BrollScene[], product: Product | nul
     if (i === lastIdx) continue
     const s = scenes[i]
     if (s.role === 'mechanism3d') continue          // 3D internal animation — leave it
+    if (preserveFromEstablish(s)) continue          // P2 — honor a declared talking/reaction/result beat
     if (!sceneShowsProduct(s) && quoteHasProductDeictic(s.quote)) {
       makeProductScene(s, i === 0 ? 'creator' : 'hands_noface', product)
     }
   }
 
   // Rule C — establish within the FIRST THIRD (covers a LEAD / problem-first hook):
-  // if no early scene shows the product, force the first product-NAMING scene to.
+  // if no early scene shows the product, force the first product-NAMING scene to (skipping
+  // any scene Gemini tagged as a creator-centric beat — establish on the next namer instead).
   const third = Math.max(1, Math.ceil(scenes.length / 3))
   if (!scenes.slice(0, third).some(sceneShowsProduct)) {
     for (let i = 0; i < lastIdx; i++) {
       if (scenes[i].role === 'mechanism3d') continue
+      if (preserveFromEstablish(scenes[i])) continue
       if (quoteNamesProduct(scenes[i].quote, product)) {
         if (!sceneShowsProduct(scenes[i])) makeProductScene(scenes[i], i === 0 ? 'creator' : 'hands_noface', product)
         break
@@ -578,15 +591,20 @@ function capSocialProof(scenes: BrollScene[]): void {
     if (i === lastIdx) continue                              // CTA never a card
     const s = scenes[i]
     if (s.role === 'social_proof') {
-      if (i !== 0 && SOCIAL_PROOF_CUE_RE.test(s.quote ?? '')) valid.push(i)
+      // P2 — trust Gemini's declared intent: a scene tagged role=social_proof AND
+      // shotIntent=social_proof is a real proof beat even when the (rigid) cue regex
+      // misses the phrasing ("Beribu orang dah cuba" — proof, but "orang" isn't
+      // immediately followed by a verb so the cue failed and the line got wrongly demoted).
+      if (i !== 0 && (s.shotIntent === 'social_proof' || SOCIAL_PROOF_CUE_RE.test(s.quote ?? ''))) valid.push(i)
       else demote(s)                                         // mis-tagged / hook → demote now
     } else if (s.role === 'broll' && i !== 0 && SOCIAL_PROOF_PROMOTE_RE.test(s.quote ?? '')) {
       valid.push(i)                                          // a broll that COULD be the proof card
     }
   }
   if (valid.length === 0) return
-  // The ONE: prefer a STRICT third-party-proof line; else the first cue-valid one.
-  const chosen = valid.find((i) => SOCIAL_PROOF_PROMOTE_RE.test(scenes[i].quote ?? '')) ?? valid[0]
+  // The ONE: prefer clear THIRD-PARTY proof — Gemini's social_proof intent OR the strict
+  // regex; else the first cue-valid candidate.
+  const chosen = valid.find((i) => scenes[i].shotIntent === 'social_proof' || SOCIAL_PROOF_PROMOTE_RE.test(scenes[i].quote ?? '')) ?? valid[0]
   for (const i of valid) {
     if (i === chosen) promote(scenes[i])
     else if (scenes[i].role === 'social_proof') demote(scenes[i])   // extra cards → product broll
@@ -1272,18 +1290,15 @@ function sanitizeScenes(raw: RawScene[] | undefined): BrollScene[] {
     if (role !== 'lips' && role !== 'social_proof') {
       // No-face only makes sense for a real product-action cut; otherwise creator.
       scene.kind = SCENE_KINDS.includes(r.kind as BrollSceneKind) ? (r.kind as BrollSceneKind) : 'product_action'
-      // Backstop: the model sometimes returns an empty conceptPrompt for product
-      // cuts (assuming the product image is enough) → the render would collapse to a
-      // bland generic closeup. Fill a grounded default BY KIND so every cut keeps a
-      // real on-product visual direction (and product_action stays product_action).
-      let cp = typeof r.conceptPrompt === 'string' ? r.conceptPrompt.trim() : ''
-      if (!cp) {
-        cp = scene.kind === 'product_closeup'
-          ? 'A clean, well-lit close-up of the product — its texture and a key detail filling the frame.'
-          : scene.kind === 'concept'
-          ? 'A simple real-life moment that illustrates the spoken line (no product on screen).'
-          : 'Hands actively using and holding the product in its real everyday setting.'
-      }
+      // P2 — when the model returns NO conceptPrompt, leave it EMPTY (do NOT inject a
+      // generic by-kind template). The old templates ("a clean close-up of the product",
+      // "a simple real-life moment that illustrates the spoken line") passed the length
+      // check in isWeakConceptPrompt, so backfillWeakConcepts SKIPPED them and they
+      // rendered as line-blind boilerplate (the audited "weak-default" ≈17% of cuts). An
+      // empty prompt is correctly detected as weak → backfillWeakConcepts (Layer 2) writes
+      // a vivid prompt grounded in THIS line + product, and deriveConceptPrompt (Layer 3)
+      // is the role/kind-aware deterministic backstop at render if backfill is rate-limited.
+      const cp = typeof r.conceptPrompt === 'string' ? r.conceptPrompt.trim() : ''
       scene.conceptPrompt = cp
       // P5r2 — no-face veto: a product APPLIED / WORN / EATEN / DRUNK on the body (any
       // part) must show the CREATOR doing it (face visible) — never a head-less hands-only
@@ -1533,7 +1548,14 @@ function dedupeScenePrompts(timed: TimedBrollScene[]): TimedBrollScene[] {
     const base = stripMod((s.conceptPrompt ?? '').trim())
     if (!base) continue
     const w = sigWords(base)
-    const dup = i !== lastIdx && accepted.some((a) => jac(a, w) >= 0.55)   // never touch the locked CTA last cut
+    // P2 — intent-aware: NEVER rewrite a 3D mechanism cut or a deliberate OFFER/ENDORSEMENT
+    // close shot into a generic person/product pool variant. The blind rewrite destroyed the
+    // 3D animation (it became "POV hands using product") and the closing offer (it became an
+    // "over-the-shoulder/selfie" shot) — the audited dedup damage. We still SEED their
+    // signature (via the else-branch below) so every OTHER cut is forced to differ from them.
+    const protectedShot =
+      s.role === 'mechanism3d' || s.shotIntent === 'offer' || s.shotIntent === 'endorsement' || OFFER_LOOK_RE.test(base)
+    const dup = i !== lastIdx && !protectedShot && accepted.some((a) => jac(a, w) >= 0.55)   // never touch the locked CTA last cut
     if (dup) {
       // REPLACE (not append): appending "— DIFFERENT SHOT: macro" onto "creator massaging
       // the knee" contradicts itself and the model just re-renders the massage. Render the
