@@ -107,6 +107,11 @@ export default function HybridVideoPhase(_props: Props) {
   const [error, setError] = useState('')
 
   const sceneCredit = (s: TimedBrollScene): number => {
+    // social_proof = ONE GPT-4o FB-post card image (generateSocialProofImage), NOT an
+    // i2v clip — so it costs the keyframe image price (~6cr), not a Seedance video.
+    // Billing it as 'video' over-reported every proof card by ~14-21cr (the chip, the
+    // "Tạo tất cả" total, and the lost-credits banner were all inflated).
+    if (s.role === 'social_proof') return V3_CREDIT_COST.keyframe
     const dur = Math.max(1, s.endSec - s.startSec)
     return s.role === 'lips' ? Math.round(dur * LIPS_CR_PER_SEC) : estimateInsertCredits('video', resolution, dur)
   }
