@@ -1629,6 +1629,12 @@ const DISTINCT_SHOT_VARIANTS_PRODUCT = [
   'a clean PRODUCT-HERO still resting on a real surface in its setting (no person)',
   'a WIDE lifestyle still — the product small inside the real daily setting (no face), a candid real-life frame',
 ]
+// P6am — the NO-HANDS subset (drops the "hands USING" variant) for a product_closeup cut,
+// whose preset (PRODUCT_CLOSEUP) renders the product ALONE — a "hands using" variant would
+// contradict the no-hands preset (hands rotating a product is the drift the closeup fix kills).
+const DISTINCT_SHOT_VARIANTS_PRODUCT_NOHANDS = [
+  DISTINCT_SHOT_VARIANTS_PRODUCT[0], DISTINCT_SHOT_VARIANTS_PRODUCT[2], DISTINCT_SHOT_VARIANTS_PRODUCT[3],
+]
 // P6f — CTA_ENDORSE_RE / CTA_OFFER_PROMPT removed: the "earlier endorsement → OFFER shot"
 // pass is superseded by capEndorsement (Part B, plan-time), which re-routes ANY non-CTA
 // endorsement to a grounded result shot (not just collapses two into the offer).
@@ -1680,12 +1686,26 @@ function dedupeScenePrompts(timed: TimedBrollScene[]): TimedBrollScene[] {
       // the knee" contradicts itself and the model just re-renders the massage. Render the
       // distinct variant INSTEAD, anchored to this beat → a genuinely different image.
       const beat = (s.quote ?? '').slice(0, 50).replace(/"/g, '')
-      // Pick the variant from the pool that MATCHES this cut's framing, so the rewrite
-      // never asks for "no person" on a creator cut (or a face on a no-face cut).
-      const isPerson = s.cameraFraming === 'creator'
-      const pool = isPerson ? DISTINCT_SHOT_VARIANTS_PERSON : DISTINCT_SHOT_VARIANTS_PRODUCT
+      // P6am — pick the pool by what the cut SHOWS at render time (its preset is derived from
+      // `kind`), NOT just cameraFraming, AND re-align kind/role/framing to the chosen pool so
+      // the rewritten concept can NEVER contradict the preset. Audited bug (KB1 #6): a
+      // product_closeup macro got a "creator face REACTION" concept but stayed PRODUCT_CLOSEUP
+      // → the no-hands product preset fought a creator-face concept. Now: only a true `concept`
+      // cut (no product on screen) draws the PERSON pool; every product cut draws a faceless
+      // product variant (closeup uses the NO-HANDS subset, since PRODUCT_CLOSEUP shows no hands).
+      const isPerson = s.kind === 'concept'
+      const pool = isPerson
+        ? DISTINCT_SHOT_VARIANTS_PERSON
+        : (s.kind === 'product_closeup' || !s.kind) ? DISTINCT_SHOT_VARIANTS_PRODUCT_NOHANDS
+        : DISTINCT_SHOT_VARIANTS_PRODUCT
       const tail = isPerson ? `Stay on the SAME beat: "${beat}".` : `Same product + beat as "${beat}".`
       s.conceptPrompt = `DIFFERENT SHOT — must look NOTHING like any other cut. Render INSTEAD: ${pool[vi % pool.length]}. ${tail}`
+      if (isPerson) {
+        s.role = 'broll'; s.cameraFraming = 'creator'            // kind already 'concept' → CONCEPT_SCENE (person, no product)
+      } else {
+        if (!s.kind) s.kind = 'product_closeup'                  // a faceless product variant must render on a product preset
+        s.cameraFraming = 'hands_noface'                         // every product variant is faceless → never inject a stray face
+      }
       vi++
       accepted.push(sigWords(s.conceptPrompt))
     } else {
