@@ -188,8 +188,12 @@ export function deriveConceptPrompt(args: {
     return 'a real-world everyday moment that illustrates the idea, natural light, authentic UGC, no product packaging'
   }
   const name = args.product?.productName?.trim() || 'the product'
-  const usage = args.product ? detectProductNiche(args.product)?.usage : null
-  return `hands holding and naturally using ${name}${usage ? ` — ${usage}` : ''}, shown close-up in its real-world setting, authentic UGC iPhone footage, natural light`
+  // P6ad — prefer the REAL usage SEEN in the product photos (visualBrief.howUsed) over the
+  // generic keyword-bucket usage, so even this last-resort fallback is physically correct
+  // (e.g. "rub gel onto the knee" not a guessed "hold it"). Falls back to the niche usage.
+  const vbUsed = args.product?.visualBrief?.match(/how it is physically used[^:]*:\s*([^\n]+)/i)?.[1]?.trim()
+  const usage = vbUsed || (args.product ? detectProductNiche(args.product)?.usage : null)
+  return `hands naturally using ${name}${usage ? ` — ${usage}` : ''}, shown close-up in its real-world setting, authentic UGC iPhone footage, natural light`
 }
 
 /** Layer 2 — one targeted Gemini call to write a vivid conceptPrompt for every
@@ -211,7 +215,7 @@ async function backfillWeakConcepts(
 
 Each conceptPrompt MUST specify: SHOT TYPE (macro / wide / over-the-shoulder / POV-hands / top-down) + a concrete ACTION + WHICH PART of the subject + a real SETTING. Make each DISTINCT (no two the same shot).
 By role:
-- broll + product_action / product_closeup → the PRODUCT on screen doing a concrete action (break / pour / apply / hold up / use), in its real setting. The line tells you what to show.
+- broll + product_action / product_closeup → the PRODUCT on screen doing a concrete action, in its real setting. Use the SPECIFIC usage MOTION from the VISUAL BRIEF / product context — the real way THIS product is applied/used (e.g. squeeze gel & rub it in circles on the knee; tilt the head & drip 2-3 drops into the ear; peel the patch & press it onto the skin) — NEVER a generic "holding it up". The line tells you which moment to show.
 - broll + concept + creator → a PERSON with an authentic expression / reaction (NO product packaging).
 - broll + concept (no creator) → a real-world moment illustrating the line (NO product packaging).
 - mechanism3d → the internal mechanism as a clean 3D cross-section / macro (NO people, NO packaging).
