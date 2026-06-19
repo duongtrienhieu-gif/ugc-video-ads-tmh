@@ -814,7 +814,7 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
         </div>
         {/* P6x — VN gloss dưới câu Mã: CHỈ để hiểu, KHÔNG dùng cho audio/render */}
         {gloss && (
-          <p className="text-[10px] italic leading-tight text-gray-400 line-clamp-2" title="Dịch để hiểu — không dùng cho video">
+          <p className="text-[12px] font-medium leading-snug text-gray-600 line-clamp-3" title="Dịch để hiểu — không dùng cho video">
             🇻🇳 {gloss}
           </p>
         )}
