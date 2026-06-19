@@ -177,12 +177,16 @@ export interface GeminiSuggestParams {
 const NICHE_RULES: { niche: string; usage: string; cues: RegExp }[] = [
   { niche: 'dental',     usage: 'brushed on teeth with a toothbrush (topical, not swallowed)',
     cues: /\b(tooth|teeth|toothpaste|whiten|enamel|gum|plaque|dental|răng|men răng|kem đánh răng|mảng bám|nướu|gigi|pergigian)\b/i },
-  { niche: 'skincare',   usage: 'applied topically to skin (rubbed/patted/massaged)',
-    cues: /\b(skin|skincare|serum|cream|lotion|moisturiz|moisturis|cleanser|toner|mask|sunscreen|spf|acne|wrinkle|da|dưỡng da|kem dưỡng|tinh chất|mặt nạ|kulit|wajah)\b/i },
+  { niche: 'topical',    usage: 'rubbed / massaged onto the skin or the aching area with the fingers (topical) — NEVER worn like a brace, NEVER swallowed',
+    cues: /\b(skin|skincare|serum|cream|lotion|gel|balm|ointment|salve|moisturiz|moisturis|cleanser|toner|mask|sunscreen|spf|acne|wrinkle|da|dưỡng da|kem dưỡng|kem bôi|tinh chất|mặt nạ|sáp|dầu (?:xoa|nóng|gió)|thoa|bôi|sapu|gosok|kulit|wajah)\b/i },
   { niche: 'haircare',   usage: 'washed/applied into hair or scalp',
     cues: /\b(hair|shampoo|conditioner|scalp|tóc|gội|dầu gội|chân tóc|da đầu|rambut|kepala)\b/i },
-  { niche: 'joint',      usage: 'worn on / supports a body joint (knee, back, wrist…), not consumed',
-    cues: /\b(knee|joint|brace|back support|wrist|elbow|ankle|lưng|khớp|gối|đai|đeo|sendi|lutut|pinggang)\b/i },
+  // P6ab — ONLY an actual BRACE / support garment is "worn". A topical GEL/cream for joints
+  // (matched above as 'topical') is RUBBED ON, and a joint SUPPLEMENT is SWALLOWED — so this
+  // rule no longer matches bare body-part words (knee/khớp/gối/sendi/lutut) nor bare "support"
+  // (which wrongly caught e.g. "Supports Healthy Hearing"). It needs an explicit brace word.
+  { niche: 'support-brace', usage: 'worn / strapped onto a body joint as a support brace — never rubbed on, never swallowed',
+    cues: /\b(brace|knee (?:support|brace|sleeve)|back (?:support|brace|belt)|wrist (?:guard|support|brace)|elbow (?:support|brace)|ankle (?:support|brace)|compression sleeve|đai (?:lưng|g[ốo]i|c[ổo] tay|đeo)?|n[ẹe]p|b[ăa]ng (?:c[ốo] đ[ịi]nh|g[ốo]i|l[ưươ]ng))\b/i },
   { niche: 'supplement', usage: 'swallowed orally (pill / capsule / drink)',
     cues: /\b(supplement|vitamin|capsule|tablet|pill|gummies|thực phẩm chức năng|tpcn|viên uống|uống bổ|suplemen|vitamin)\b/i },
   { niche: 'beverage',   usage: 'sipped / drunk directly',

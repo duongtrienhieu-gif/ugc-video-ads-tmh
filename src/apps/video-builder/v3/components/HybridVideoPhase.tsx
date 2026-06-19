@@ -64,7 +64,11 @@ const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
 // shotIntent — so they can eyeball + "Nhờ AI sửa" if it's really wrong. It NEVER auto-changes
 // anything (we don't let a fuzzy judge rewrite the director). Conservative: only high-confidence
 // cues so it isn't noisy. Universal VN/MS/EN.
-const SP_FLAG_RE = /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|nhi[eề]u ng[ưu][ờo]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|mua l[aạ]i|5 sao|n[ăa]m sao|\breview\b|đ[áa]nh gi[áa]|ulasan|\bbintang\b|\bramai\b|terjual|repeat order|semua orang|orang (?:beli|guna|pakai|cuba)/i
+// P6ab — STRICT proof cue: a crowd noun is only "proof" when paired with a BUY/USE/RATE verb,
+// or it's an unambiguous proof phrase (sold-fast / repeat / star-rating). Bare "nhiều người" /
+// "ramai" / "review" / "đánh giá" alone is NOT proof (those sit in pain/audience/hook lines) —
+// the old loose cue over-flagged everything as "should be proof". Universal VN/MS.
+const SP_FLAG_RE = /b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|mua l[aạ]i|repeat order|terjual|terlaris|\blaku keras\b|\d+\s*sao|n[ăa]m sao|\d+\s*bintang|review to[àa]n|đ[áa]nh gi[áa] (?:to[àa]n|\d)|(?:ngh[ìi]n|ng[àa]n|nhi[eề]u|tri[ệe]u) ng[ưu][ờo]i (?:đ[ãa] )?(?:mua|đ[ặa]t|d[ùu]ng|tin|review|đ[áa]nh gi[áa])|ribuan orang|ramai(?: dah| yang| gila)* (?:beli|guna|pakai|cuba|membeli|order)|orang (?:dah |ramai )?(?:beli|guna|pakai|cuba)/i
 const CTA_FLAG_RE = /gi[ỏo] h[àa]ng|ch[ốo]t đơn|đ[ặa]t (?:hàng |mua )?ngay|link (?:b[êe]n d[ưươ][ớơ]i|mua)|h[ốo]t ngay|\bgrab\b|checkout|order ngay|jom (?:beli|order)|beli sekarang/i
 // MECHANISM cue — the line explains HOW it works INSIDE the body (absorption / regulating /
 // repairing tissue / stimulating). That begs a 3D internal-mechanism shot. Conservative: needs
