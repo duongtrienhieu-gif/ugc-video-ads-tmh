@@ -114,8 +114,13 @@ export async function renderOneHybridScene(
   const cameraFraming: typeof scene.cameraFraming =
     scene.cameraFraming ?? (scene.kind === 'product_closeup' ? 'hands_noface' : 'creator')
 
-  if (scene.role === 'mechanism3d' && !conceptPrompt.startsWith('3D MECHANISM ANIMATION')) {
-    conceptPrompt = `3D MECHANISM ANIMATION (no people): clean photorealistic 3D scientific/technical animation INSIDE the subject — ${conceptPrompt}. Cross-section or macro of the internal workings, studio 3D render, soft clinical light. NO people, NO hands, NO product packaging, NO text.`
+  if (scene.role === 'mechanism3d' && !conceptPrompt.startsWith('3D ')) {
+    // P6ae — 3D covers TWO modes: (1) a cross-section of the internal mechanism (how the active
+    // works inside the body), OR (2) an INGREDIENT-3D — the PRODUCT as hero in the centre with the
+    // active's molecules/particles orbiting it (for synthetic/abstract actives that have no real
+    // plant form). The conceptPrompt (written by the director per ingredient type) leads; we no
+    // longer force "INSIDE the subject / no packaging" so the molecules-around-product shot works.
+    conceptPrompt = `3D ANIMATION (no people, no hands, no on-screen text): clean photorealistic studio 3D render — ${conceptPrompt}. EITHER a cross-section / macro of the internal mechanism, OR the PRODUCT as hero in the centre with the active's glowing molecules / particles flowing and orbiting around it. Soft clinical light.`
   }
 
   const r = await renderInsert({

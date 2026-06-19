@@ -1052,11 +1052,14 @@ RULES:
       glucosamine → fine powder or a capsule. NEVER invent or show a fruit / food / plant /
       product that is NOT named in the brief — do NOT borrow a snack or fruit from another
       product (e.g. do NOT put "hawthorn / apricot / a snack fruit" on a joint gel).
-    • A SYNTHETIC / compound active with NO natural plant source (glucosamine, chondroitin, MSM,
-      collagen, peptide, hyaluronic acid, niacinamide, a lettered vitamin…) is shown as a CLEAN
-      studio macro of its REAL form — a small mound or spoon of fine powder, a clear capsule, gel
-      beads, or a single glistening drop — beside the product, NOT a guessed plant and NOT just a
-      packaging-with-text close-up. Only if the active is truly unknown → the product + its name.
+    • A SYNTHETIC / compound active with NO real plant form (glucosamine, chondroitin, MSM,
+      collagen, peptide, hyaluronic acid, niacinamide, a lettered vitamin…) is NOT a powder macro
+      (a spoon of white powder reads like flour — meaningless). Make it a 3D beat instead: set
+      role="mechanism3d", and write the conceptPrompt as the PRODUCT as hero in the centre with the
+      active's glowing molecules / particles flowing & orbiting around it (premium science look) —
+      NOT a flat powder, NOT inside a body. Only a NATURAL ingredient with a real visible form
+      (ginger, turmeric root, leaves, flowers, seeds, fruit, honey…) uses the real-ingredient MACRO
+      hero above.
     • Only an EDIBLE product (food / drink / snack) gets the "fresh, appetising, on a board" look.
       A NON-edible product (gel / cream / serum / device / supplement) shows the botanical SOURCE
       or the active in powder / oil / capsule form beside the product — NEVER an appetising food plate.
