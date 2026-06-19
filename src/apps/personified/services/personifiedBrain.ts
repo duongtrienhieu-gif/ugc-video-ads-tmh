@@ -20,6 +20,7 @@ import {
   ARCHETYPES, ARCHETYPE_ORDER, HERO_TYPE_LABEL, CTA_STYLE_LABEL,
   LENGTH_SCENE_COUNT, LENGTH_TARGET_SEC, pickClipDuration, estimateSpeechSec,
   ARCHETYPE_STRUCTURE, SHARED_CHAR_RULES, HERO_FORMFACTOR_RULE, SCENE_HAS_PRODUCT,
+  WORDS_PER_SEC, wordBudgetHint,
 } from '../constants'
 // Tái dùng KHO NGÔN NGỮ MÃ BẢN ĐỊA của Mode 1 (đã train: tiểu từ, code-switch,
 // blacklist Indonesia, slang lỗi thời) — pure data module, không coupling state.
@@ -209,7 +210,7 @@ CẤU HÌNH:
 - Cảnh "đồ thường thất bại" (FalseSolution): ${config.falseSolution ? 'CÓ — chèn 1 cảnh giải pháp thường thất bại / phản diện mạnh thêm trước HeroEntrance' : 'KHÔNG'}
 - Kiểu CTA cuối: ${CTA_STYLE_LABEL[config.ctaStyle]}
 - Số cảnh: ${sceneCount} cảnh (KB4 có thể +1-2 cảnh để khoe hoạt chất, tối đa ${sceneCount + 2}).
-- ⏱ ĐỘ DÀI: mỗi cảnh chỉ render 4s HOẶC 8s (KHÔNG có 12s). Tổng video GẦN ${targetSec}s. ƯU TIÊN 8s cho cảnh thoại thường, 4s cho hook/CTA-ngắn/reaction. Thoại punchy, cộc.
+- ⏱ ĐỘ DÀI: mỗi cảnh chỉ 4s HOẶC 8s — clip TỰ FIT theo độ dài thoại, KHÔNG kéo dài câu cho đầy clip. Tổng video co theo nội dung (quanh ${targetSec}s là đẹp; punchy ngắn hơn vẫn tốt — video format này 35-50s là chuẩn).
 
 🔒 KHUÔN CỨNG (BẮT BUỘC tuân thủ — đây là cấu trúc của kiểu kịch bản, không được tự ý đổi):
 ${ARCHETYPE_STRUCTURE[config.archetype]}
@@ -236,7 +237,7 @@ application(sản phẩm thật tác động; KB4 = mỗi hoạt chất 1 cảnh
 
 LUẬT VIẾT (bắt buộc):
 1. THOẠI NATIVE, KHÔNG DỊCH MÁY: ${arch.narratorVi}. Dùng slang đời thường ${isVN ? 'tiếng Việt' : 'tiếng Mã + chêm sức sống bản địa'} (vd VN: "xả lũ axit", "đình công", "bay màu", "tao cút đây").
-2. Thoại NGẮN GỌN: cảnh 4s ≈ 8-12 từ; cảnh 8s ≈ 16-22 từ. TỐI ĐA ~22 từ/cảnh (không còn 12s). Punchy, cộc — đừng lê thê.
+2. Thoại NGẮN GỌN theo độ dài TỰ NHIÊN của cảnh (đừng kéo dài cho đầy clip): ${wordBudgetHint(market)} Mỗi cảnh chỉ render 4s/8s — viết quá số từ trên sẽ bị CẮT CHỮ khi ghép. Punchy, cộc.
 3. COMPLIANCE (ngách sức khỏe/mỹ phẩm): dùng từ "hỗ trợ", KHÔNG hứa tuyệt đối/chữa khỏi. Cảnh CTA phải có ý "hiệu quả tùy cơ địa".
 4. dialoguePrimary = thoại bằng ${langName} (đưa vào giọng đọc). dialogueVi = ${isVN ? 'GIỐNG HỆT dialoguePrimary' : 'bản dịch NGHĨA sang tiếng Việt cho operator hiểu'}.
 5. videoPromptEn = 1 prompt image-to-video TIẾNG ANH: shot type + hành động cụ thể + bối cảnh (3D Pixar character trên nền cơ thể tả thực). KHÔNG bắt model render chữ.
@@ -261,7 +262,7 @@ XUẤT JSON: { characters:[...], scenes:[${sceneCount} cảnh đúng thứ tự]
 
   // Snap mỗi cảnh về 4 hoặc 8s theo độ dài thoại; hasProduct tính deterministic theo sceneType.
   const scenes: PersonifiedScene[] = (parsed.scenes ?? []).map((s, i): PersonifiedScene => {
-    const speech = estimateSpeechSec(s.dialoguePrimary || s.dialogueVi || '')
+    const speech = estimateSpeechSec(s.dialoguePrimary || s.dialogueVi || '', WORDS_PER_SEC[market])
     const sceneType = VALID_SCENE_TYPES.has(s.sceneType) ? (s.sceneType as PersonifiedScene['sceneType']) : 'challenger'
     return {
       idx: i + 1,

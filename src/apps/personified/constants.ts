@@ -1,7 +1,11 @@
 // ── Mode 3 — Personified Studio — Constants (KB library, scene labels, cost) ──
 import type {
-  ArchetypeId, HeroType, CtaStyle, VideoLength, SceneType, ClipDuration,
+  ArchetypeId, HeroType, CtaStyle, VideoLength, SceneType, ClipDuration, TargetMarket,
 } from './types'
+
+/** Nhịp nói theo thị trường: VN đơn-âm (~3.3 từ/s) đọc nhanh; MY đa-âm-tiết đọc
+ *  CHẬM hơn (~2.4 từ/s). Dùng 3.3 cho MY sẽ ước lượng hụt → cắt chữ ở cảnh 8s. */
+export const WORDS_PER_SEC: Record<TargetMarket, number> = { VN: 3.3, MY: 2.4 }
 
 // ── 4 Kiểu kịch bản (pickable) ───────────────────────────────────────────────
 export interface ArchetypeDef {
@@ -167,10 +171,17 @@ export function pickClipDuration(speechSec: number): ClipDuration {
  *  KHÔNG tính (false). */
 export const SCENE_HAS_PRODUCT = new Set<SceneType>(['hero_entrance', 'application', 'result', 'cta'])
 
-/** Ước thời lượng nói (giây) từ số từ — tiếng Việt theatrical ~3.3 từ/giây. */
-export function estimateSpeechSec(text: string): number {
+/** Ước thời lượng nói (giây) từ số từ, theo nhịp của thị trường (truyền WORDS_PER_SEC[market]). */
+export function estimateSpeechSec(text: string, wordsPerSec = 3.3): number {
   const words = text.trim().split(/\s+/).filter(Boolean).length
-  return Math.max(1, words / 3.3)
+  return Math.max(1, words / wordsPerSec)
+}
+
+/** Budget số từ/cảnh theo market — đệm an toàn ~1.5s ở cảnh 8s để khỏi cắt chữ. */
+export function wordBudgetHint(market: TargetMarket): string {
+  return market === 'MY'
+    ? 'cảnh 4s ≈ 5-8 từ · cảnh 8s ≈ 10-16 từ. TỐI ĐA ~16 từ/cảnh (tiếng Mã đa âm tiết đọc lâu — viết ngắn để khỏi CẮT CHỮ ở cuối).'
+    : 'cảnh 4s ≈ 6-11 từ · cảnh 8s ≈ 13-21 từ. TỐI ĐA ~21 từ/cảnh.'
 }
 
 export interface CreditEstimate { credits: number; usd: number; vnd: number }
