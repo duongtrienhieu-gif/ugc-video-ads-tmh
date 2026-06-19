@@ -66,12 +66,18 @@ const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
 // cues so it isn't noisy. Universal VN/MS/EN.
 const SP_FLAG_RE = /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|nhi[eề]u ng[ưu][ờo]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|mua l[aạ]i|5 sao|n[ăa]m sao|\breview\b|đ[áa]nh gi[áa]|ulasan|\bbintang\b|\bramai\b|terjual|repeat order|semua orang|orang (?:beli|guna|pakai|cuba)/i
 const CTA_FLAG_RE = /gi[ỏo] h[àa]ng|ch[ốo]t đơn|đ[ặa]t (?:hàng |mua )?ngay|link (?:b[êe]n d[ưươ][ớơ]i|mua)|h[ốo]t ngay|\bgrab\b|checkout|order ngay|jom (?:beli|order)|beli sekarang/i
+// MECHANISM cue — the line explains HOW it works INSIDE the body (absorption / regulating /
+// repairing tissue / stimulating). That begs a 3D internal-mechanism shot. Conservative: needs
+// explicit internal/absorption wording, so a plain ingredient LIST ("có Curcumin, Emu Oil") or a
+// generic benefit does NOT trip it (those are legitimately product_macro / a creator beat).
+const MECH_FLAG_RE = /th[ấa]m (?:s[âa]u|v[àa]o|nhanh|th[ẳa]ng)|h[ấa]p th[ụu]|\bserap\b|ph[ụu]c h[ồo]i (?:m[ôo]|kh[ớ]p|s[ụu]n|t[ếe] b[àa]o|da)|t[áa]i t[ạa]o|k[íi]ch (?:th[íi]ch|ho[ạa]t)|đi (?:th[ẳa]ng |s[âa]u )?v[àa]o (?:m[áa]u|kh[ớ]p|t[ếe] b[àa]o|c[ơ] th[ểe]|da)|\bregulate\b|rangsang|c[ơ] ch[ếe]/i
 function suspectMismatch(s: TimedBrollScene, isLast: boolean): string | null {
   const q = s.quote ?? ''
   const it = s.shotIntent
   if (!it) return null
   if (SP_FLAG_RE.test(q) && it !== 'social_proof') return 'Câu nghe như BẰNG CHỨNG (đám đông/review) — cảnh nên là thẻ bằng chứng?'
   if (!isLast && CTA_FLAG_RE.test(q) && it !== 'offer' && it !== 'endorsement') return 'Câu nghe như KÊU GỌI MUA — cảnh nên là ưu đãi/CTA?'
+  if (MECH_FLAG_RE.test(q) && it !== 'mechanism3d') return 'Câu tả CƠ CHẾ/hấp thụ bên trong — cân nhắc cảnh 3D cơ chế?'
   return null
 }
 
@@ -840,7 +846,7 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
         )}
         {/* P6z — "Cảnh quay gì" (dịch từ conceptPrompt cuối) để đối chiếu với thoại. Display-only. */}
         {conceptGloss && (
-          <p className="text-[12px] font-medium leading-snug text-sky-700 line-clamp-2" title="Cảnh sẽ quay (dịch từ prompt) — so với thoại ở trên xem có khớp không">
+          <p className="text-[12px] font-medium leading-snug text-sky-700" title="Cảnh sẽ quay (giải nghĩa từ prompt) — so với thoại ở trên xem có khớp không">
             🎬 {conceptGloss}
           </p>
         )}

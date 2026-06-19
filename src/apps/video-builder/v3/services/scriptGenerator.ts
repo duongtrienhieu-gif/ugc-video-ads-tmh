@@ -1387,12 +1387,20 @@ export async function glossScenesToVietnamese(
     .map((it, i) => `${i + 1}. THOAI(${fromName}): "${it.quote}" | CONCEPT(EN): "${it.concept?.trim() || '(none)'}"`)
     .join('\n')
   const sys =
-`You translate ad-video scene data into Vietnamese for a REVIEW panel (so the user can verify the
+`You convert ad-video scene data into Vietnamese for a REVIEW panel (so the user can verify the
 shot matches the spoken line). For EACH numbered scene return:
 - "voice": the spoken THOAI line in casual, natural spoken Vietnamese (faithful — same meaning).
-- "scene": a SHORT plain-Vietnamese phrase (≤ 14 words) of WHAT THE SHOT VISUALLY SHOWS, taken from
-  CONCEPT. Describe the action/subject in everyday words, NO camera jargon (no "shot/macro/POV/
-  framing"). If CONCEPT is "(none)" or empty → return "" (the visual is decided later at render time).
+- "scene": EXPLAIN in plain natural Vietnamese WHAT THE VIEWER WILL SEE in this shot — this is a
+  MEANING explanation, NOT a word-for-word translation of CONCEPT. Rules:
+    • IGNORE/strip all production meta-instructions in CONCEPT — do NOT translate these words:
+      "DIFFERENT SHOT", "must look NOTHING like any other cut", "Render INSTEAD", "Stay on the SAME
+      beat", "Same product + beat", "SHOT TYPE", and camera-jargon (macro / POV / POV-hands / wide /
+      close-up / over-the-shoulder / top-down / split-screen / framing). Keep ONLY the real content.
+    • Write ONE clear, complete Vietnamese sentence (length as needed — do NOT truncate) that a
+      non-filmmaker understands: who/what is on screen + what they do + the setting. For a
+      split-screen before/after, say it as "Cảnh chia đôi: bên trái lúc [vấn đề], bên phải lúc
+      [đã đỡ]".
+    • If CONCEPT is "(none)" or empty → return "" (the visual is decided later at render time).
 Return JSON {"items":[{"voice","scene"}]} with EXACTLY ${items.length} entries, SAME order.`
   try {
     const out = await directGeminiText({
