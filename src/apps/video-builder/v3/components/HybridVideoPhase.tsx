@@ -16,7 +16,7 @@ import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import { directBrollScenes, assignSceneTiming, groundOrphanScenes, type TimedBrollScene, type ShotIntent } from '../services/brollDirector'
 import { fixSceneConceptPrompt, type SceneFix } from '../services/sceneConceptFixer'
-import { translateHooksToVietnamese } from '../services/scriptGenerator'
+import { glossScenesToVietnamese } from '../services/scriptGenerator'
 import { ensureLocalizedName, applyLocalizedName } from '../services/localizeProductName'
 import { generateProductVisualBrief } from '../services/productVisionBrief'
 import { renderOneHybridScene, type HybridRenderContext } from '../services/hybridRenderer'
@@ -57,6 +57,22 @@ const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
   broll:        { label: '🎬 Cảnh', cls: 'bg-sky-600/90 text-white' },
   mechanism3d:  { label: '🧬 3D',   cls: 'bg-amber-500/90 text-white' },
   social_proof: { label: '🗯 Bằng chứng', cls: 'bg-emerald-600/90 text-white' },
+}
+
+// P6z — DETERMINISTIC mismatch flag (0 LLM, display-only). Flags a card for the user's
+// attention when the voice line carries a STRONG cue that clearly disagrees with the declared
+// shotIntent — so they can eyeball + "Nhờ AI sửa" if it's really wrong. It NEVER auto-changes
+// anything (we don't let a fuzzy judge rewrite the director). Conservative: only high-confidence
+// cues so it isn't noisy. Universal VN/MS/EN.
+const SP_FLAG_RE = /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|nhi[eề]u ng[ưu][ờo]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|mua l[aạ]i|5 sao|n[ăa]m sao|\breview\b|đ[áa]nh gi[áa]|ulasan|\bbintang\b|\bramai\b|terjual|repeat order|semua orang|orang (?:beli|guna|pakai|cuba)/i
+const CTA_FLAG_RE = /gi[ỏo] h[àa]ng|ch[ốo]t đơn|đ[ặa]t (?:hàng |mua )?ngay|link (?:b[êe]n d[ưươ][ớơ]i|mua)|h[ốo]t ngay|\bgrab\b|checkout|order ngay|jom (?:beli|order)|beli sekarang/i
+function suspectMismatch(s: TimedBrollScene, isLast: boolean): string | null {
+  const q = s.quote ?? ''
+  const it = s.shotIntent
+  if (!it) return null
+  if (SP_FLAG_RE.test(q) && it !== 'social_proof') return 'Câu nghe như BẰNG CHỨNG (đám đông/review) — cảnh nên là thẻ bằng chứng?'
+  if (!isLast && CTA_FLAG_RE.test(q) && it !== 'offer' && it !== 'endorsement') return 'Câu nghe như KÊU GỌI MUA — cảnh nên là ưu đãi/CTA?'
+  return null
 }
 
 interface Props { onContinue?: () => void }
@@ -109,7 +125,8 @@ export default function HybridVideoPhase(_props: Props) {
   // P6x — VN gloss per scene quote (DISPLAY-ONLY, never used for audio/render). When the script
   // is MS/EN, batch-translate every scene's spoken line ONCE so the user can read what each cut
   // says. The render + voice always use scene.quote — this map only feeds the grey caption under it.
-  const [sceneGloss, setSceneGloss] = useState<Record<number, string>>({})
+  const [sceneGloss, setSceneGloss] = useState<Record<number, string>>({})     // P6x — VN của THOẠI
+  const [conceptGloss, setConceptGloss] = useState<Record<number, string>>({}) // P6z — VN "cảnh quay gì" (từ conceptPrompt cuối)
   const glossSigRef = useRef('')
 
   const sceneCredit = (s: TimedBrollScene): number => {
@@ -267,19 +284,19 @@ export default function HybridVideoPhase(_props: Props) {
   // a re-direct (new quotes) refreshes it. Best-effort: Gemini down → no gloss, never blocks.
   useEffect(() => {
     const lang = state.scriptBrain.outputLang
-    if (lang === 'vi' || scenes.length === 0 || !geminiKey) { setSceneGloss({}); return }
-    const quotes = scenes.map((s) => s.quote ?? '')
-    const sig = `${lang}|${quotes.join('')}`
+    if (lang === 'vi' || scenes.length === 0 || !geminiKey) { setSceneGloss({}); setConceptGloss({}); return }
+    const items = scenes.map((s) => ({ quote: s.quote ?? '', concept: (s.role === 'lips' || s.role === 'social_proof') ? '' : (s.conceptPrompt ?? '') }))
+    const sig = `${lang}|${items.map((it) => it.quote + it.concept).join('')}`
     if (glossSigRef.current === sig) return
     glossSigRef.current = sig
     let cancelled = false
     void (async () => {
       try {
-        const vi = await translateHooksToVietnamese(geminiKey, quotes, lang)
-        if (cancelled || vi.length === 0) return
-        const map: Record<number, string> = {}
-        vi.forEach((t, i) => { if (t) map[i] = t })
-        setSceneGloss(map)
+        const res = await glossScenesToVietnamese(geminiKey, items, lang)
+        if (cancelled || res.length === 0) return
+        const vmap: Record<number, string> = {}, cmap: Record<number, string> = {}
+        res.forEach((r, i) => { if (r.voice) vmap[i] = r.voice; if (r.scene) cmap[i] = r.scene })
+        setSceneGloss(vmap); setConceptGloss(cmap)
       } catch { /* best-effort gloss — never block the UI */ }
     })()
     return () => { cancelled = true }
@@ -572,6 +589,7 @@ export default function HybridVideoPhase(_props: Props) {
               <SceneCard key={i} i={i} scene={s} clipRef={hybrid.clips[i]}
                 rendering={renderingIdx.has(i)} queued={queuedIdx.includes(i)} failed={failedIdx.has(i)}
                 progress={progressByIdx[i]} voiceUrl={masterVoiceUrl} gloss={sceneGloss[i]}
+                conceptGloss={conceptGloss[i]} mismatch={suspectMismatch(s, i === scenes.length - 1)}
                 credit={sceneCredit(s)} hasAssets={hasAssets}
                 onRender={() => renderScene(i)}
                 onSavePrompt={(prompt, plan) => setSceneConceptPrompt(i, prompt, plan)}
@@ -663,11 +681,13 @@ const FIX_ARCHETYPES: { value: string; intent?: ShotIntent; label: string; hint?
   { value: 'endorsement',     intent: 'endorsement',        label: '🛒 Ưu đãi / kêu gọi mua' },
 ]
 
-function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voiceUrl, gloss, credit, hasAssets, onRender, onSavePrompt, onAiFix }: {
+function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voiceUrl, gloss, conceptGloss, mismatch, credit, hasAssets, onRender, onSavePrompt, onAiFix }: {
   i: number; scene: TimedBrollScene; clipRef?: string; rendering: boolean; queued: boolean; failed: boolean
   progress?: { pollCount: number; elapsedSec: number }
   voiceUrl?: string
   gloss?: string   // P6x — VN translation of the quote (display-only, never rendered)
+  conceptGloss?: string   // P6z — VN "cảnh quay gì" (từ conceptPrompt cuối, display-only)
+  mismatch?: string | null   // P6z — cờ nghi lệch deterministic (display-only)
   credit: number; hasAssets: boolean; onRender: () => void
   onSavePrompt: (prompt: string, plan?: { kind?: TimedBrollScene['kind']; cameraFraming?: 'creator' | 'hands_noface'; shotIntent?: ShotIntent }) => void
   onAiFix: (intent: string, targetIntent?: ShotIntent) => Promise<SceneFix>
@@ -814,8 +834,20 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
         </div>
         {/* P6x — VN gloss dưới câu Mã: CHỈ để hiểu, KHÔNG dùng cho audio/render */}
         {gloss && (
-          <p className="text-[12px] font-medium leading-snug text-gray-600 line-clamp-3" title="Dịch để hiểu — không dùng cho video">
+          <p className="text-[12px] font-medium leading-snug text-gray-600 line-clamp-3" title="Dịch thoại để hiểu — không dùng cho video">
             🇻🇳 {gloss}
+          </p>
+        )}
+        {/* P6z — "Cảnh quay gì" (dịch từ conceptPrompt cuối) để đối chiếu với thoại. Display-only. */}
+        {conceptGloss && (
+          <p className="text-[12px] font-medium leading-snug text-sky-700 line-clamp-2" title="Cảnh sẽ quay (dịch từ prompt) — so với thoại ở trên xem có khớp không">
+            🎬 {conceptGloss}
+          </p>
+        )}
+        {/* P6z — cờ nghi lệch (heuristic, không tự sửa) → bấm "Nhờ AI sửa" nếu đúng là lệch. */}
+        {mismatch && (
+          <p className="rounded bg-amber-50 px-1.5 py-1 text-[11px] font-semibold leading-snug text-amber-700" title="Cảnh báo tự động — không tự sửa. Kiểm tra rồi bấm Nhờ AI sửa nếu lệch thật.">
+            ⚠ Nghi lệch: {mismatch}
           </p>
         )}
         {voiceUrl && (

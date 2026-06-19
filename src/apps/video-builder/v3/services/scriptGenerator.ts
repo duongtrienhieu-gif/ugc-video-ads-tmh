@@ -1371,6 +1371,50 @@ export async function translateHooksToVietnamese(
   }
 }
 
+// P6z — ONE Gemini call that glosses each scene into VN for the REVIEW panel (display-only):
+//   • voice  = the spoken line in casual VN (so the user reads what the cut says)
+//   • scene  = a SHORT VN phrase of WHAT THE SHOT SHOWS (from the English conceptPrompt) so the
+//              user can eyeball "câu thoại ↔ cảnh quay" and catch a mismatch. Empty concept → "".
+// Batched (voice + scene together) to spend ONE call, not two. Never feeds render/audio.
+export async function glossScenesToVietnamese(
+  apiKey: string,
+  items: { quote: string; concept: string }[],
+  fromLang: ScriptLang,
+): Promise<{ voice: string; scene: string }[]> {
+  if (fromLang === 'vi' || items.length === 0) return []
+  const fromName = SCRIPT_LANG_GEMINI_NAME[fromLang]
+  const numbered = items
+    .map((it, i) => `${i + 1}. THOAI(${fromName}): "${it.quote}" | CONCEPT(EN): "${it.concept?.trim() || '(none)'}"`)
+    .join('\n')
+  const sys =
+`You translate ad-video scene data into Vietnamese for a REVIEW panel (so the user can verify the
+shot matches the spoken line). For EACH numbered scene return:
+- "voice": the spoken THOAI line in casual, natural spoken Vietnamese (faithful — same meaning).
+- "scene": a SHORT plain-Vietnamese phrase (≤ 14 words) of WHAT THE SHOT VISUALLY SHOWS, taken from
+  CONCEPT. Describe the action/subject in everyday words, NO camera jargon (no "shot/macro/POV/
+  framing"). If CONCEPT is "(none)" or empty → return "" (the visual is decided later at render time).
+Return JSON {"items":[{"voice","scene"}]} with EXACTLY ${items.length} entries, SAME order.`
+  try {
+    const out = await directGeminiText({
+      apiKey, systemInstruction: sys, prompt: numbered,
+      maxOutputTokens: 3072, temperature: 0.3, thinkingBudget: 0,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'object',
+        properties: { items: { type: 'array', items: { type: 'object', properties: { voice: { type: 'string' }, scene: { type: 'string' } }, required: ['voice', 'scene'] } } },
+        required: ['items'],
+      },
+    })
+    const parsed = JSON.parse(out) as { items?: { voice?: string; scene?: string }[] }
+    const arr = Array.isArray(parsed.items) ? parsed.items : []
+    return items.map((_, i) => ({ voice: (arr[i]?.voice ?? '').trim(), scene: (arr[i]?.scene ?? '').trim() }))
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[glossScenesToVietnamese] failed, no gloss:', e)
+    return []
+  }
+}
+
 export async function translateScriptToVietnamese(
   apiKey: string, text: string, fromLang: ScriptLang,
 ): Promise<string> {
