@@ -543,10 +543,15 @@ ${pronounRule(args.lang)}
   "bán chạy bên Malaysia" in a Vietnamese script) — that is drift. PLACEMENT (matters — the
   video CARDS this exact line): put it in the DISCOVERY/BENEFIT proof stretch, BEFORE the
   CTA. Do NOT leave it as the final CTA line — a card can't be the closing buy-shot, so a
-  crowd beat stuck at the very end is wasted. GUARD (a MONEY rule, not morality): a
-  plausible crowd VIBE is encouraged, but NEVER invent a fake SPECIFIC exact number
-  ("740,128 hộp đã bán") and NEVER claim a certification (Halal/KKM/GMP/FDA/clinically
-  proven) — those trip ad-review / break trust. Don't go cartoonish ("cả thế giới dùng").
+  crowd beat stuck at the very end is wasted. GUARD (a MONEY rule, not morality): social
+  proof must be a QUALITATIVE VIBE only — NEVER a SPECIFIC number. This means BOTH: do not
+  INVENT a number ("740,128 hộp đã bán"), AND do not COPY a specific sold-count / rating-% /
+  review-count out of the PRODUCT BRIEF either — even if the brief field literally contains
+  "98% đánh giá 5 sao" / "780.000 đã bán", that exact figure is an unverifiable marketing stat
+  that reads FAKE and is checkable-at-the-door, so REPHRASE it as a vibe ("mấy trăm nghìn
+  người mua rồi", "review toàn 5 sao", "bán cháy hàng"), NEVER the digits / the percent. Also
+  NEVER claim a certification (Halal/KKM/GMP/FDA/clinically proven) — those trip ad-review /
+  break trust. Don't go cartoonish ("cả thế giới dùng").
 - BELIEVABLE PROOF — SHOW, don't just TELL (this is what makes a viewer BELIEVE, and a
   believed promise = an order that STAYS, not one refused at the door). A flat "xịn lắm,
   ai cũng khen" persuades nobody. Weave in ONE concrete proof beat — pick the move that
@@ -569,6 +574,10 @@ ${pronounRule(args.lang)}
   warning you / the person who had the problem) and let it colour the whole script; and
   VARY THE CLOSE — do NOT end every script with the same stock line. Rotate the CTA lever
   + wording each time.
+  CTA LÀ MỘT, KHÔNG NHỒI (P6w) — the CTA uses AT MOST 1–2 urgency/FOMO levers, never a pile.
+  Do NOT stack "đừng chần chừ + hàng có hạn + không nhanh tay là tiếc + đừng để mai hối hận +
+  game changer" in one close (the user audited this clutter). Pick the 1–2 punchiest that fit +
+  the offer (if any), say them once, stop. One clean push beats five tired clichés.
   AVOID THESE OVER-USED TEMPLATES (they make every ad sound the same — find a fresh line):
     • Opening clichés: "Mình đã mất rất nhiều tiền vì không biết đến … sớm hơn", "… đang
       thay đổi cách mọi người …", MS "No way … ni macam ni", "Aku rugi berbulan sebab …".

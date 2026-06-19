@@ -439,16 +439,33 @@ export function validateBody(
     }
   }
 
-  // 10. FABRICATED PRECISE RATING (P5z5) — a decimal star rating ("4.8/5 sao", "4.9 bintang")
-  //     is an invented exact stat. Social proof should be a plausible VIBE, not a fake precise
-  //     number. Vague "review toàn 5 sao" / "ulasan 5 bintang" (no decimal) is fine.
+  // 10. FABRICATED / COPIED PRECISE PROOF NUMBER (P5z5 → P6w) — HARD ban on a SPECIFIC numeric
+  //     social-proof stat, whether Gemini invents it OR copies it verbatim from a product-brief
+  //     field (the user's audit: "98% đánh giá 5 sao" + "780.000 sản phẩm đã bán" leaked because
+  //     the seller typed them in the input). Such an exact figure reads fake + is checkable at the
+  //     COD door. Force a qualitative VIBE instead ("review toàn 5 sao", "mấy trăm nghìn người mua",
+  //     "bán cháy hàng"). SCOPED to PROOF context only — a dosage / size / timeframe / ingredient %
+  //     ("2-3 giọt", "7 ngày", "8L", "Vitamin C 15%", "5000mg") has NO proof noun adjacent → never trips.
   {
     const allBody = `${blocks.discovery ?? ''} ${blocks.benefit ?? ''} ${blocks.cta ?? ''}`
-    const m = allBody.match(/\b\d+[.,]\d+\s*(?:\/\s*5\s*)?(sao|bintang|star)\b/i)
+    const checks: RegExp[] = [
+      // a) decimal star rating: "4.8/5 sao", "4.9 bintang"
+      /\b\d+[.,]\d+\s*(?:\/\s*5\s*)?(?:sao|bintang|star)\b/i,
+      // b) a percentage used as PROOF (a proof noun within ~16 chars on either side) — "98% đánh giá
+      //    5 sao", "95% người dùng hài lòng", "98% puas hati". NOT a bare ingredient/discount %.
+      /\d+\s*%[^.?!]{0,16}(?:đánh giá|đ[áa]nh gi[áa]|sao|bintang|review|ulasan|h[àa]i l[òo]ng|recommend|ng[ưu][ờo]i dùng|ng[ưu][ờo]i mua|kh[áa]ch|pengguna|puas|orang)/i,
+      /(?:đánh giá|đ[áa]nh gi[áa]|review|ulasan|h[àa]i l[òo]ng|ng[ưu][ờo]i dùng|kh[áa]ch|pengguna|puas)[^.?!]{0,16}\d+\s*%/i,
+      // c) a precise sold / order / people / review COUNT (thousand-separated, or 4+ bare digits)
+      //    next to a proof noun — "780.000 sản phẩm", "12000 đơn", "50000 đánh giá", "ribuan… 8000 orang".
+      /\b\d{1,3}(?:[.,]\d{3})+\s*(?:s[ảa]n ph[ẩa]m|sp|đơn|h[ộo]p|ng[ưu][ờo]i|kh[áa]ch|đánh giá|review|ulasan|orang|unit|terjual|sold)\b/i,
+      /\b\d{4,}\s*(?:s[ảa]n ph[ẩa]m|sp|đơn|h[ộo]p|ng[ưu][ờo]i|kh[áa]ch|đánh giá|review|ulasan|orang|unit|terjual|sold)\b/i,
+      /(?:đã bán|b[áa]n đư[ợo]c|terjual|đã có|sold)\s*\d{1,3}(?:[.,]\d{3})+\b/i,
+    ]
+    const m = checks.map((re) => allBody.match(re)).find(Boolean)
     if (m) {
       failures.push(
-        `Body invents a precise rating ("${m[0].trim()}"). Don't fabricate an exact stat — use a ` +
-        `plausible vibe instead ("review toàn 5 sao" / "ulasan 5 bintang", no decimal number).`,
+        `Body dùng SỐ proof cụ thể ("${m[0].trim()}") — số bán/đánh giá/% chính xác (kể cả lấy từ field sản phẩm) ` +
+        `đọc như bịa + khách kiểm được ở cửa. Đổi sang VIBE không số: "review toàn 5 sao", "mấy trăm nghìn người mua rồi", "bán cháy hàng".`,
       )
     }
   }
