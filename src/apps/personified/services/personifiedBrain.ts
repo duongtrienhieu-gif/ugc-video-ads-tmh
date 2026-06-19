@@ -20,7 +20,7 @@ import {
   ARCHETYPES, ARCHETYPE_ORDER, HERO_TYPE_LABEL, CTA_STYLE_LABEL,
   LENGTH_SCENE_COUNT, LENGTH_TARGET_SEC, pickClipDuration, estimateSpeechSec,
   ARCHETYPE_STRUCTURE, SHARED_CHAR_RULES, HERO_FORMFACTOR_RULE, SCENE_HAS_PRODUCT,
-  WORDS_PER_SEC, wordBudgetHint,
+  playbackWps, wordBudgetHint,
 } from '../constants'
 // Tái dùng KHO NGÔN NGỮ MÃ BẢN ĐỊA của Mode 1 (đã train: tiểu từ, code-switch,
 // blacklist Indonesia, slang lỗi thời) — pure data module, không coupling state.
@@ -262,7 +262,7 @@ XUẤT JSON: { characters:[...], scenes:[${sceneCount} cảnh đúng thứ tự]
 
   // Snap mỗi cảnh về 4 hoặc 8s theo độ dài thoại; hasProduct tính deterministic theo sceneType.
   const scenes: PersonifiedScene[] = (parsed.scenes ?? []).map((s, i): PersonifiedScene => {
-    const speech = estimateSpeechSec(s.dialoguePrimary || s.dialogueVi || '', WORDS_PER_SEC[market])
+    const speech = estimateSpeechSec(s.dialoguePrimary || s.dialogueVi || '', playbackWps(market))
     const sceneType = VALID_SCENE_TYPES.has(s.sceneType) ? (s.sceneType as PersonifiedScene['sceneType']) : 'challenger'
     return {
       idx: i + 1,

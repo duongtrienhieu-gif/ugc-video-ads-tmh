@@ -3,9 +3,19 @@ import type {
   ArchetypeId, HeroType, CtaStyle, VideoLength, SceneType, ClipDuration, TargetMarket,
 } from './types'
 
-/** Nhịp nói theo thị trường: VN đơn-âm (~3.3 từ/s) đọc nhanh; MY đa-âm-tiết đọc
- *  CHẬM hơn (~2.4 từ/s). Dùng 3.3 cho MY sẽ ước lượng hụt → cắt chữ ở cảnh 8s. */
+/** Nhịp đọc GỐC (1.0x) theo thị trường: VN đơn-âm (~3.3 từ/s); MY đa-âm-tiết
+ *  CHẬM hơn (~2.4 từ/s). */
 export const WORDS_PER_SEC: Record<TargetMarket, number> = { VN: 3.3, MY: 2.4 }
+
+/** Tốc độ phát giọng chuẩn = 1.2x (atempo — GIỮ cao độ, không "giọng chuột").
+ *  Cho phép kịch bản dày hơn ~20%/clip + nhịp năng động kiểu UGC. P3/P4 PHẢI
+ *  phát ở đúng tốc độ này để khớp ước lượng. Trần ~1.25x (quá là mất chất giọng). */
+export const EXPRESSIVE_SPEED = 1.2
+
+/** Nhịp HIỆU DỤNG (đã tính speed) — dùng cho cả ước lượng giây lẫn budget số từ. */
+export function playbackWps(market: TargetMarket): number {
+  return WORDS_PER_SEC[market] * EXPRESSIVE_SPEED
+}
 
 // ── 4 Kiểu kịch bản (pickable) ───────────────────────────────────────────────
 export interface ArchetypeDef {
@@ -177,11 +187,14 @@ export function estimateSpeechSec(text: string, wordsPerSec = 3.3): number {
   return Math.max(1, words / wordsPerSec)
 }
 
-/** Budget số từ/cảnh theo market — đệm an toàn ~1.5s ở cảnh 8s để khỏi cắt chữ. */
+/** Budget số từ/cảnh — tính từ nhịp hiệu dụng (đã gồm speed 1.2x). Đệm ~1.5s ở
+ *  cảnh 8s để khỏi cắt chữ. Tự đồng bộ khi đổi WORDS_PER_SEC / EXPRESSIVE_SPEED. */
 export function wordBudgetHint(market: TargetMarket): string {
-  return market === 'MY'
-    ? 'cảnh 4s ≈ 5-8 từ · cảnh 8s ≈ 10-16 từ. TỐI ĐA ~16 từ/cảnh (tiếng Mã đa âm tiết đọc lâu — viết ngắn để khỏi CẮT CHỮ ở cuối).'
-    : 'cảnh 4s ≈ 6-11 từ · cảnh 8s ≈ 13-21 từ. TỐI ĐA ~21 từ/cảnh.'
+  const w = playbackWps(market)
+  const max4 = Math.round(3.4 * w)   // cảnh 4s: nói ≤3.4s
+  const max8 = Math.round(6.5 * w)   // cảnh 8s: nói ≤6.5s (chừa ~1.5s đệm)
+  const tail = market === 'MY' ? ' (Mã đọc lâu hơn — đừng tràn)' : ''
+  return `cảnh 4s ≈ ${Math.round(max4 * 0.55)}-${max4} từ · cảnh 8s ≈ ${Math.round(max8 * 0.6)}-${max8} từ. TỐI ĐA ~${max8} từ/cảnh${tail}.`
 }
 
 export interface CreditEstimate { credits: number; usd: number; vnd: number }
