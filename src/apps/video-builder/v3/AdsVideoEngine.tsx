@@ -32,6 +32,7 @@ import { useAdsVideoStore } from './stores/adsVideoStore'
 import ScriptVoicePhase from './components/ScriptVoicePhase'
 import HybridVideoPhase from './components/HybridVideoPhase'
 import HybridExportPhase from './components/HybridExportPhase'
+import ExportedVideoLibrary from './components/ExportedVideoLibrary'
 import {
   V3_PHASE_LABEL_VI,
   type V3Phase,
@@ -129,6 +130,7 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
   const [showLegacy, setShowLegacy] = useState(false)
   const [restoreOpen, setRestoreOpen] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)   // P6y — exported-video library modal
 
   // Z98 — restore picker. The Library lives on the Export step, which locks if a
   // render is lost — so this top-bar entry makes saved projects ALWAYS
@@ -209,6 +211,13 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
               </>
             )}
             <button
+              onClick={() => setLibraryOpen(true)}
+              title="Thư viện video đã ghép hoàn chỉnh — tải lại 0 credit, còn kể cả sau Tạo lại từ đầu"
+              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
+            >
+              <Film className="h-3.5 w-3.5" /> Video đã xuất
+            </button>
+            <button
               onClick={() => setRestoreOpen(true)}
               title="Khôi phục một dự án đã lưu (dùng được kể cả khi các bước đang khoá)"
               className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
@@ -247,6 +256,9 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
           <HybridExportPhase />
         )}
       </div>
+
+      {/* P6y — Exported-video library (final MP4s only; survives "Tạo lại từ đầu"). */}
+      {libraryOpen && <ExportedVideoLibrary onClose={() => setLibraryOpen(false)} />}
 
       {/* Z98 — Restore picker — always-accessible Library load (works even when
           the wizard tabs are gated after a lost render). */}

@@ -11,6 +11,7 @@ import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { assembleFromHybridState } from '../services/hybridAssembleFlow'
+import { addExportedVideo } from '../services/exportedVideoLibrary'
 import { FINAL_RES } from '../services/hybridConstants'
 import { generateThumbnailHooks, generateAiThumbnail, THUMBNAIL_ARCHETYPES, THUMBNAIL_ARCHETYPE_ORDER } from '../services/thumbnailEngine'
 import { CAPTION_PRESETS, CAPTION_PRESET_ORDER, DEFAULT_CAPTION_PRESET, type CaptionPresetId } from '../services/captionPresets'
@@ -115,7 +116,15 @@ export default function HybridExportPhase() {
         bannerSlogan: bannerText,
       })
       setHybridFinal(videoRef)
-      addToast('✓ Đã tạo video', 'success')
+      // P6y — auto-save the FINAL into the standalone library (survives "Tạo lại từ đầu") so a
+      // forgotten download is always recoverable. Only the assembled MP4 — never broll/lips clips.
+      addExportedVideo({
+        assetRef: videoRef,
+        productName: state.inputs.product?.productName ?? 'Sản phẩm',
+        lang: state.scriptBrain.outputLang,
+        resolution,
+      })
+      addToast('✓ Đã tạo video (đã lưu vào Thư viện video đã xuất)', 'success')
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e); setError(msg); addToast(`Tạo video lỗi: ${msg.slice(0, 120)}`, 'error')
     } finally { setHybridAssemble({ assembling: false }) }
