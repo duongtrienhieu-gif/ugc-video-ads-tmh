@@ -1117,12 +1117,11 @@ OUTPUT strict JSON only (no markdown fences):
         ? `Your last plan had only ${denserHint.have} cuts for a ${dur}s video — too sparse; a few ideas were merged into one long cut. Re-plan with about ${denserHint.want} cuts (a bit more is fine if it feels natural): give EACH distinct beat its own visual (new action / angle / detail grounded in that line). Keep the hook + callouts as fast 2-3s cuts; the main demo / reveal / CTA at 4-${MAX_BROLL_SEC.toFixed(0)}s. Cover every second. Return the JSON.`
         : 'Plan the full-coverage hybrid shot list now. Return the JSON.',
       maxOutputTokens: 4096,
-      // P6s — lowered 0.6 → 0.35 for STABILITY. At 0.6 every "Đạo diễn lại" re-carved the
-      // script wildly (scene count / quote boundaries / role / intent / concept all changed),
-      // so quality was a per-roll lottery and a fix's effect couldn't be judged from one run.
-      // 0.35 keeps re-rolls consistent (small variety, not a fresh gamble) → reproducible +
-      // testable. Raise again later if more creative variety per re-roll is wanted.
-      temperature: 0.35,
+      // P6ac — back to 0.7 (user): testing phase done, now favour CREATIVE VARIETY — each
+      // "Đạo diễn lại" gives a genuinely different carve/concepts. Trade-off (known + accepted):
+      // less reproducible per re-roll. The intent-spine + deterministic layers still keep the
+      // result on the rails; only the surface variety widens.
+      temperature: 0.7,
       thinkingBudget: 0,   // structured JSON — keep the whole list, no truncation
       responseMimeType: 'application/json',
       ...(schema ? { responseSchema: BROLL_RESPONSE_SCHEMA } : {}),
