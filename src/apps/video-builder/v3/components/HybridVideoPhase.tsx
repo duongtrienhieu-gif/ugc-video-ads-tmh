@@ -16,6 +16,7 @@ import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import { directBrollScenes, assignSceneTiming, groundOrphanScenes, type TimedBrollScene, type ShotIntent } from '../services/brollDirector'
 import { fixSceneConceptPrompt, type SceneFix } from '../services/sceneConceptFixer'
+import { translateHooksToVietnamese } from '../services/scriptGenerator'
 import { ensureLocalizedName, applyLocalizedName } from '../services/localizeProductName'
 import { generateProductVisualBrief } from '../services/productVisionBrief'
 import { renderOneHybridScene, type HybridRenderContext } from '../services/hybridRenderer'
@@ -105,6 +106,11 @@ export default function HybridVideoPhase(_props: Props) {
   // card shows "đang render… poll #5 · 28s" instead of a blind spinner.
   const [progressByIdx, setProgressByIdx] = useState<Record<number, { pollCount: number; elapsedSec: number }>>({})
   const [error, setError] = useState('')
+  // P6x — VN gloss per scene quote (DISPLAY-ONLY, never used for audio/render). When the script
+  // is MS/EN, batch-translate every scene's spoken line ONCE so the user can read what each cut
+  // says. The render + voice always use scene.quote — this map only feeds the grey caption under it.
+  const [sceneGloss, setSceneGloss] = useState<Record<number, string>>({})
+  const glossSigRef = useRef('')
 
   const sceneCredit = (s: TimedBrollScene): number => {
     // social_proof = ONE GPT-4o FB-post card image (generateSocialProofImage), NOT an
@@ -255,6 +261,30 @@ export default function HybridVideoPhase(_props: Props) {
     avatar: state.inputs.avatar, creatorVideoConfig: state.creatorVideoConfig, resolution,
     lang: state.scriptBrain.outputLang,   // P5w — social-proof card text language
   })
+
+  // P6x — batch-translate scene quotes → VN gloss (display-only). Runs once per distinct set of
+  // quotes (sig guard) so a scene fix (changes conceptPrompt, not quote) never re-calls Gemini;
+  // a re-direct (new quotes) refreshes it. Best-effort: Gemini down → no gloss, never blocks.
+  useEffect(() => {
+    const lang = state.scriptBrain.outputLang
+    if (lang === 'vi' || scenes.length === 0 || !geminiKey) { setSceneGloss({}); return }
+    const quotes = scenes.map((s) => s.quote ?? '')
+    const sig = `${lang}|${quotes.join('')}`
+    if (glossSigRef.current === sig) return
+    glossSigRef.current = sig
+    let cancelled = false
+    void (async () => {
+      try {
+        const vi = await translateHooksToVietnamese(geminiKey, quotes, lang)
+        if (cancelled || vi.length === 0) return
+        const map: Record<number, string> = {}
+        vi.forEach((t, i) => { if (t) map[i] = t })
+        setSceneGloss(map)
+      } catch { /* best-effort gloss — never block the UI */ }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenes, state.scriptBrain.outputLang, geminiKey])
 
   // P3s — directly render a scene WITHOUT queue logic. Used internally by the
   // queue worker. Tracks lostCredits on failure so the user can see how much
@@ -541,7 +571,7 @@ export default function HybridVideoPhase(_props: Props) {
             {scenes.map((s, i) => (
               <SceneCard key={i} i={i} scene={s} clipRef={hybrid.clips[i]}
                 rendering={renderingIdx.has(i)} queued={queuedIdx.includes(i)} failed={failedIdx.has(i)}
-                progress={progressByIdx[i]} voiceUrl={masterVoiceUrl}
+                progress={progressByIdx[i]} voiceUrl={masterVoiceUrl} gloss={sceneGloss[i]}
                 credit={sceneCredit(s)} hasAssets={hasAssets}
                 onRender={() => renderScene(i)}
                 onSavePrompt={(prompt, plan) => setSceneConceptPrompt(i, prompt, plan)}
@@ -621,6 +651,7 @@ function AssetsBar({ keyframeRef, voiceRef, voiceDurationSec, busy, onRegen }: {
 // of product_macro that shows the named raw ingredients as hero). '' = let AI infer.
 const FIX_ARCHETYPES: { value: string; intent?: ShotIntent; label: string; hint?: string }[] = [
   { value: '',                                              label: '✨ Để AI tự chọn (mặc định)' },
+  { value: 'problem',         intent: 'reaction',           label: '😣 Cảnh vấn đề / nỗi đau', hint: 'PROBLEM moment: the creator living the PROBLEM/pain in ONE concrete real-life moment — visibly uncomfortable. NOT resolved, NO smile, NO before/after split, NO product. A single problem shot only.' },
   { value: 'reaction',        intent: 'reaction',           label: '🧍 Người thật / cảm xúc' },
   { value: 'result_behavior', intent: 'result_behavior',    label: '🏃 Tận hưởng kết quả' },
   { value: 'product_demo',    intent: 'product_demo',       label: '🧴 Đang dùng sản phẩm' },
@@ -632,10 +663,11 @@ const FIX_ARCHETYPES: { value: string; intent?: ShotIntent; label: string; hint?
   { value: 'endorsement',     intent: 'endorsement',        label: '🛒 Ưu đãi / kêu gọi mua' },
 ]
 
-function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voiceUrl, credit, hasAssets, onRender, onSavePrompt, onAiFix }: {
+function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voiceUrl, gloss, credit, hasAssets, onRender, onSavePrompt, onAiFix }: {
   i: number; scene: TimedBrollScene; clipRef?: string; rendering: boolean; queued: boolean; failed: boolean
   progress?: { pollCount: number; elapsedSec: number }
   voiceUrl?: string
+  gloss?: string   // P6x — VN translation of the quote (display-only, never rendered)
   credit: number; hasAssets: boolean; onRender: () => void
   onSavePrompt: (prompt: string, plan?: { kind?: TimedBrollScene['kind']; cameraFraming?: 'creator' | 'hands_noface'; shotIntent?: ShotIntent }) => void
   onAiFix: (intent: string, targetIntent?: ShotIntent) => Promise<SceneFix>
@@ -780,6 +812,12 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
             </button>
           )}
         </div>
+        {/* P6x — VN gloss dưới câu Mã: CHỈ để hiểu, KHÔNG dùng cho audio/render */}
+        {gloss && (
+          <p className="text-[10px] italic leading-tight text-gray-400 line-clamp-2" title="Dịch để hiểu — không dùng cho video">
+            🇻🇳 {gloss}
+          </p>
+        )}
         {voiceUrl && (
           <audio
             ref={voiceAudioRef}

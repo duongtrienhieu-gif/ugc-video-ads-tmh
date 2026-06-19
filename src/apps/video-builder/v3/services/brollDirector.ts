@@ -631,7 +631,21 @@ function capSocialProof(scenes: BrollScene[]): void {
 // BEFORE_AFTER detector keys off "split-screen"+"before/after" in the conceptPrompt, so we
 // just write that conceptPrompt here. Deterministic backstop on top of the prompt nudge;
 // caps at 2 so the ad doesn't become a wall of split-screens. Skips hook(0) + CTA(last).
-const RESULT_TRANSFORM_RE = /giờ thì|giờ đây|kết quả|đỡ hẳn|hết hẳn|khác hẳn|sau khi dùng|sau \d|sau mấy (ngày|tuần|tháng)|trước .{0,12}(giờ|nay)|lepas (guna|pakai|seminggu)|selepas|sekarang dah|dah tak|dah kurang|dah lega|dah hilang|before.{0,6}after|result|after \d/i
+// P6x — before/after is a CONTRAST (a REVERSAL of a problem), NOT a bare result and NOT a bare
+// problem. The old gate fired on ANY after/result token ("giờ thì", "sekarang dah", "sau 2 tuần",
+// "kết quả") → it split pure-problem lines ("lutut aku selalu sakit") AND pure-result lines
+// ("da sáng hơn sau 2 tuần") into a fake split (user audit: "mọi câu vấn đề thành before/after").
+// Now a split needs EITHER (a) an explicit TIME contrast — a "before" word AND an "after" word in
+// the SAME line, OR (b) a REVERSAL phrase — the problem stated as now-gone ("không còn / hết hẳn /
+// dah takde / tak … dah / hilang"). A pure result → result_behavior; a pure problem → one problem
+// moment. Universal VN / MS / EN.
+const BA_BEFORE_RE = /h[ồô]i (?:tr[ưươ][ớơ]c|đ[óo]|x[ưươ]a)|tr[ưươ][ớơ]c (?:đ[âa]y|kia|khi)|l[úu]c tr[ưươ][ớơ]c|ng[àa]y (?:tr[ưươ][ớơ]c|x[ưươ]a)|d[ạa]o tr[ưươ][ớơ]c|\bdulu\b|masa (?:tu|dulu)|sebelum (?:ni|guna|pakai|tu)|\bused to\b|\bbefore\b/i
+const BA_AFTER_RE = /gi[ờo] (?:th[ìi]|đ[âa]y|l[àa])|b[âa]y gi[ờo]|hi[ệe]n (?:t[ạa]i|gi[ờo])|\bnay\b|\bsekarang\b|\bkini\b|\bnow\b/i
+const BA_REVERSAL_RE = /kh[ôo]ng c[òo]n|ch[ẳa]ng c[òo]n|h[ếe]t h[ẳa]n|đ[ỡo] h[ẳa]n|kh[áa]c h[ẳa]n|h[ếe]t (?:đau|[ùu]|ng[ứư]a|m[ệe]t|nh[ứư]c|h[ôo]i|g[àa]u|kh[ôo]|r[áa]t)|dah (?:takde|tak|kurang|lega|hilang|ok|baik|sembuh)|takde dah|tak\s+\w+\s+dah|\bhilang\b|\bno more\b|\bgone\b/i
+const isBeforeAfterContrast = (q: string): boolean => {
+  const t = q ?? ''
+  return (BA_BEFORE_RE.test(t) && BA_AFTER_RE.test(t)) || BA_REVERSAL_RE.test(t)
+}
 const SPLIT_ALREADY_RE = /split[- ]?screen|before.{0,8}after/i
 
 function enforceBeforeAfterSplit(scenes: BrollScene[], script: GeneratedScript): void {
@@ -644,7 +658,7 @@ function enforceBeforeAfterSplit(scenes: BrollScene[], script: GeneratedScript):
   for (let i = 1; i < scenes.length - 1 && made < 2; i++) {   // never hook(0) / CTA(last)
     const s = scenes[i]
     if (s.role !== 'broll') continue                          // not lips / 3D / social_proof
-    if (!RESULT_TRANSFORM_RE.test(s.quote ?? '')) continue
+    if (!isBeforeAfterContrast(s.quote ?? '')) continue       // P6x — only a real before↔after reversal
     if (s.conceptPrompt && SPLIT_ALREADY_RE.test(s.conceptPrompt)) { made++; continue }  // director already split it
     s.kind = 'concept'
     s.cameraFraming = 'creator'
@@ -661,28 +675,21 @@ function enforceBeforeAfterSplit(scenes: BrollScene[], script: GeneratedScript):
     s.reason = 'before/after split (enforced)'
     made++
   }
-  // Deterministic backstop (the INVERSE of the rule above): the director (Gemini)
-  // sometimes emits a before/after split on a line that is NOT a transformation —
-  // a pure PAIN / problem line — and invents an "after" half the line never claimed
-  // (the user's "#2 đang nói vấn đề nhưng đạo diễn lại tạo before/after" bug). A split
-  // is only justified when the LINE ITSELF carries a result signal — the SAME bilingual
-  // gate (RESULT_TRANSFORM_RE) used to ADD splits above. Any split whose quote lacks
-  // that signal → strip it back to a SINGLE problem moment (the BEFORE only). Skips
-  // hook(0)/CTA(last); runs after the ADD loop so enforced splits (which DO match the
-  // gate) are never touched. Universal VN/MY/EN — keys off the line, not a niche.
+  // P6x — INVERSE backstop: Gemini sometimes splits a line that is NOT a real reversal — a bare
+  // PROBLEM line ("lutut aku selalu sakit") OR a bare RESULT line ("da sáng hơn sau 2 tuần") — and
+  // invents a contrast the line never claimed (the user's "mọi câu vấn đề bị ép before/after" bug).
+  // Any split whose quote is NOT a real before↔after contrast → DROP the split and leave the concept
+  // WEAK so backfillWeakConcepts (runs next) grounds ONE shot in the line's actual MEANING: a problem
+  // line → a problem moment; a result line → the creator doing the positive thing. (Hardcoding
+  // "living the problem" here was wrong — it made a positive result line render as suffering.)
   for (let i = 1; i < scenes.length - 1; i++) {
     const s = scenes[i]
     if (!s.conceptPrompt || !SPLIT_ALREADY_RE.test(s.conceptPrompt)) continue
-    if (RESULT_TRANSFORM_RE.test(s.quote ?? '')) continue   // genuine transform line — keep the split
-    const problem = (s.quote ?? '').slice(0, 80).replace(/"/g, '')
+    if (isBeforeAfterContrast(s.quote ?? '')) continue   // genuine reversal/contrast — keep the split
     s.kind = 'concept'
     s.cameraFraming = 'creator'
-    s.conceptPrompt =
-      `A SINGLE candid UGC moment (NOT a split-screen, NO before/after) of the SAME creator ` +
-      `living the problem in "${problem}" — visibly experiencing the discomfort / struggle in a ` +
-      `concrete real-life moment, authentic iPhone footage, natural light. NO split-screen, NO ` +
-      `resolved / "after" half, no on-screen text.`
-    s.reason = 'before/after stripped — pain line, no result signal (single problem moment)'
+    s.conceptPrompt = ''   // weak → grounded by meaning (problem vs result) in backfillWeakConcepts
+    s.reason = 'before/after stripped — not a real contrast (single moment, grounded by meaning)'
   }
 }
 
