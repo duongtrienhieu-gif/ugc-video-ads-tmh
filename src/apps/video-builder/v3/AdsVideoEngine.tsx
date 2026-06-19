@@ -25,7 +25,7 @@ import { useState, useEffect } from 'react'
 import {
   Sparkles, FlaskConical, UserRound, FileText,
   ChevronRight, ArrowLeft, RotateCcw, Lock, Zap, Star,
-  Film, Wand2, Download, Info, Settings, FolderOpen,
+  Film, Wand2, Download, Info, FolderOpen,
 } from 'lucide-react'
 import { useAppStore } from '../../../stores/appStore'
 import { useAdsVideoStore } from './stores/adsVideoStore'
@@ -120,7 +120,7 @@ function PhaseStepper({
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
+export default function AdsVideoEngine(_props: Props) {
   const state    = useAdsVideoStore((s) => s.state)
   const setPhase = useAdsVideoStore((s) => s.setPhase)
   const clearState  = useAdsVideoStore((s) => s.clearState)
@@ -128,8 +128,7 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
   const addToast    = useAppStore((s) => s.addToast)
 
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
-  const [showLegacy, setShowLegacy] = useState(false)
-  const [restoreOpen, setRestoreOpen] = useState(false)
+  const [restoreOpen, setRestoreOpen] = useState(false)   // P6y — "Khôi phục" nút đã ẩn; modal giữ lại (bật lại được)
   const [libraryOpen, setLibraryOpen] = useState(false)   // P6y — exported-video library modal
 
   // Z98 — restore picker. The Library lives on the Export step, which locks if a
@@ -186,30 +185,7 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
           {/* Z98 — action buttons sit right after the title (center-left) so the
               global Gemini/KIE-Credit badges (absolute top-right) can't cover them. */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Legacy escape hatch */}
-            <button
-              onClick={() => setShowLegacy((v) => !v)}
-              title="Switch tới legacy pipelines (v2 cinematic / v1 stable)"
-              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
-            >
-              <Settings className="h-3.5 w-3.5" /> Legacy
-            </button>
-            {showLegacy && (
-              <>
-                <button
-                  onClick={onSwitchToV2}
-                  className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
-                >
-                  v2 (Cinematic)
-                </button>
-                <button
-                  onClick={onSwitchToV1}
-                  className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
-                >
-                  v1 (Stable)
-                </button>
-              </>
-            )}
+            {/* P6y — "Legacy" (switch v1/v2 cũ) gỡ khỏi UID: app hiện tại chỉ dùng luồng hybrid v3. */}
             <button
               onClick={() => setLibraryOpen(true)}
               title="Thư viện video đã ghép hoàn chỉnh — tải lại 0 credit, còn kể cả sau Tạo lại từ đầu"
@@ -217,13 +193,7 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
             >
               <Film className="h-3.5 w-3.5" /> Video đã xuất
             </button>
-            <button
-              onClick={() => setRestoreOpen(true)}
-              title="Khôi phục một dự án đã lưu (dùng được kể cả khi các bước đang khoá)"
-              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
-            >
-              <FolderOpen className="h-3.5 w-3.5" /> Khôi phục
-            </button>
+            {/* P6y — "Khôi phục" ẩn khỏi top bar (giữ modal + projectLibrary để bật lại sau). */}
             <button
               onClick={() => setResetConfirmOpen(true)}
               title="Xoá toàn bộ tiến trình + bắt đầu lại từ bước 1"
