@@ -194,11 +194,11 @@ function VariationCard({
               onCopy={() => handleCopy('my')}
             />
             {variation.malayGlossVi && (
-              <div className="rounded-xl border border-sky-200 bg-sky-50 p-2.5">
-                <p className="mb-0.5 text-[9px] font-bold uppercase tracking-widest text-sky-700">
+              <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-sky-700">
                   🇻🇳 Bản dịch VN (để bạn hiểu)
                 </p>
-                <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-gray-800">{variation.malayGlossVi}</p>
+                <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-gray-900">{variation.malayGlossVi}</p>
               </div>
             )}
           </div>
@@ -248,8 +248,8 @@ function TitleRow({ title, gloss }: { title: string; gloss?: string }) {
         ? <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
         : <Copy className="mt-0.5 h-3 w-3 shrink-0 text-gray-300 group-hover:text-amber-600" />}
       <span className="min-w-0 flex-1">
-        <span className="block text-[12px] font-semibold text-gray-800">{title}</span>
-        {gloss && <span className="block text-[10px] italic text-gray-400">{gloss}</span>}
+        <span className="block text-[13px] font-semibold text-gray-900">{title}</span>
+        {gloss && <span className="block text-[12px] text-gray-600">{gloss}</span>}
       </span>
     </button>
   )

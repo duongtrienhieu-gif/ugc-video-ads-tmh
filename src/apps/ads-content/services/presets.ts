@@ -380,9 +380,9 @@ export const ADS_ANGLES: AdsAngle[] = [
     briefEn: 'Clear upgrade framing. STRUCTURE: hook → a tight ❌ (old way / what you used) vs ✅ (this product) contrast block, OR a before → after timeline ("after 14 days…") with concrete observable differences as bullets → CTA. The ❌/✅ contrast is the centerpiece — keep prose minimal.',
   },
   {
-    id: 'hard-offer', label: 'Chốt mạnh + ưu đãi', hint: 'Urgency, CTA mạnh',
-    glyph: '🚨', educational: false, defaultLength: 'short', defaultCta: 'hard',
-    briefEn: 'Fast direct-response for warm audiences. STRUCTURE: punchy hook → pain in 1 line → ✅ 2-3 benefit bullets → urgency/scarcity AND risk-reversal — ONLY using offer terms stated in the brief (deal, warranty, refund, "tukar jika rosak"); if the brief has NO offer, close on pure FOMO instead → strong 👉 CTA. Ultra-scannable, short lines, no storytelling, never an invented price.',
+    id: 'pas', label: 'Vấn đề → Khoét → Giải pháp', hint: 'PAS — đòn DR kinh điển',
+    glyph: '🎯', educational: false, defaultLength: 'medium', defaultCta: 'balanced',
+    briefEn: 'PAS (Problem-Agitate-Solution) — the DR workhorse. STRUCTURE: hook = name the EXACT problem the reader feels right now → AGITATE in 1-2 short lines (twist the knife: what it costs them daily, how it quietly gets worse) → pivot to the product as the clean solution → ✅ 2-3 quick benefit/proof bullets → a confident (not pushy) CTA. Tight and scannable, emotionally sharp on the agitation. NEVER write a price.',
   },
 ]
 

@@ -47,7 +47,7 @@ OTHER NON-NEGOTIABLE RULES
 1. LINE 1 is a scroll-stopper — no warm-up, no "Hôm nay mình giới thiệu". Open mid-tension. (See HOOK LIBRARY.)
 2. Use the product's REAL ingredient names — never invent, never "powerful formula".
 3. NEVER claim cure / treatment / guaranteed results. Hedged verbs ("giúp / hỗ trợ / cảm thấy").
-4. NEVER speak an invented price. Mention a deal ONLY if the brief states one; else close on urgency/FOMO.
+4. NEVER write ANY price or money amount — not even one that appears in the product brief. Banned: "RM29", "asal RM149", "99k", "₫299.000", "-50%", "giảm 50%", any figure with RM/₫/$/% attached to price. You MAY hint a promo exists in WORDS ONLY ("đang có ưu đãi", "promo terhad", "harga special") but NEVER the number. Close on value/urgency/FOMO, not a price.
 5. The 4 variations must FEEL DIFFERENT — different hook, energy, pacing, CTA — not reworded twins.
 
 ═══════════════════════════════════════════════════════════════
@@ -133,7 +133,7 @@ function buildLanguageSpec(langMode: LangMode): string {
   lines.push('═══════════════════════════════════════════════════════════════')
   lines.push('TITLES (headlines to post alongside the video)')
   lines.push('═══════════════════════════════════════════════════════════════')
-  lines.push('For EACH variation, write 5-6 BOLD scroll-stopping TITLES (each ~6-16 words) — sensational, high-shock / high-curiosity headlines a creator pins above the video to STOP the thumb dead. Make them provocative and emotionally charged: shock framing, bold call-out, a curiosity gap, "wait what" energy. Each title a DIFFERENT angle so they can be A/B tested. No quotes, no numbering.')
+  lines.push('For EACH variation, write EXACTLY 3 BOLD scroll-stopping TITLES (each ~6-16 words) — sensational, high-shock / high-curiosity headlines a creator pins above the video to STOP the thumb dead. Make them provocative and emotionally charged: shock framing, bold call-out, a curiosity gap, "wait what" energy. Each title a DIFFERENT angle. No quotes, no numbering.')
   lines.push('HARD RULE — NEVER invent numbers, stats, percentages or rankings: use a number ONLY if it literally appears in the product brief; otherwise use NO number. No fake "#1", no made-up "10,000 users / 98%". Stay advertorial-safe — shocking in framing, but NO cure / guaranteed-result claims.')
   if (wantMS) {
     lines.push('Write the titles in Bahasa Malaysia. Format EACH title line as: <Malay title> :: <faithful Vietnamese meaning>  (the part after :: lets the VN operator understand it).')
@@ -194,7 +194,7 @@ function buildUserPrompt(params: AdsContentGenParams): string {
   if (product.painPoints)         lines.push(`Pain points: ${product.painPoints}`)
   if (product.usps)               lines.push(`USPs: ${product.usps}`)
   if (product.benefits)           lines.push(`Benefits: ${product.benefits}`)
-  if (product.offer)              lines.push(`Offer: ${product.offer}`)
+  if (product.offer)              lines.push(`Offer (a promo EXISTS — but DO NOT write any price/amount/number/percentage from this in the output; only hint a deal exists in words): ${product.offer}`)
   if (product.ingredients)        lines.push(`★ Ingredients & mechanism (name specifically + how they work — never generic): ${product.ingredients}`)
   if (product.usageGuide)         lines.push(`How to use (ground any how-to/demo angle in this, don't recite verbatim): ${product.usageGuide}`)
 
@@ -264,7 +264,7 @@ function parseTitles(block: string): { titles: string[]; glosses: string[] } {
       titles.push(line)
     }
   }
-  return { titles: titles.slice(0, 6), glosses: glosses.slice(0, 6) }
+  return { titles: titles.slice(0, 3), glosses: glosses.slice(0, 3) }
 }
 
 function parseVariations(raw: string, langMode: LangMode): AdsContentVariation[] {
@@ -325,7 +325,12 @@ export async function generateAdsContent(params: AdsContentGenParams): Promise<A
     apiKey,
     parts: [{ text: userPrompt }],
     systemInstruction: SYSTEM_PROMPT,
-    maxOutputTokens: 8192,
+    // 4 variations × (caption + MS gloss + 3 titles) is long. Without
+    // thinkingBudget:0, gemini-2.5-flash spends the output budget on "thinking"
+    // and the response truncates at variation 2-3 (only 2 parsed). Disable
+    // thinking + raise the cap so all 4 come through in full.
+    maxOutputTokens: 16384,
+    thinkingBudget: 0,
   })
 
   const variations = parseVariations(raw, params.langMode)

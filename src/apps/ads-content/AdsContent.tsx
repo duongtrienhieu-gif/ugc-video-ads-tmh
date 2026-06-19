@@ -43,7 +43,7 @@ export default function AdsContent() {
 
   const sessionApi = useSessionPersist<AdsContentSnapshot>({
     moduleId: 'ads-content',
-    version: 5, // bumped — angle set changed (listicle replaces hook-stop), dropped 'both'
+    version: 6, // bumped — angle set changed (PAS replaces hard-offer)
     snapshot: () => ({
       selectedProductId: selectedProduct?.id ?? null,
       presetId,
