@@ -1051,9 +1051,12 @@ RULES:
       Ginkgo → ginkgo leaves; Emu / olive oil → oil drops or a small oil bottle; collagen /
       glucosamine → fine powder or a capsule. NEVER invent or show a fruit / food / plant /
       product that is NOT named in the brief — do NOT borrow a snack or fruit from another
-      product (e.g. do NOT put "hawthorn / apricot / a snack fruit" on a joint gel). If you don't
-      know what a named active looks like, show the PRODUCT itself with the ingredient name —
-      never a guessed item.
+      product (e.g. do NOT put "hawthorn / apricot / a snack fruit" on a joint gel).
+    • A SYNTHETIC / compound active with NO natural plant source (glucosamine, chondroitin, MSM,
+      collagen, peptide, hyaluronic acid, niacinamide, a lettered vitamin…) is shown as a CLEAN
+      studio macro of its REAL form — a small mound or spoon of fine powder, a clear capsule, gel
+      beads, or a single glistening drop — beside the product, NOT a guessed plant and NOT just a
+      packaging-with-text close-up. Only if the active is truly unknown → the product + its name.
     • Only an EDIBLE product (food / drink / snack) gets the "fresh, appetising, on a board" look.
       A NON-edible product (gel / cream / serum / device / supplement) shows the botanical SOURCE
       or the active in powder / oil / capsule form beside the product — NEVER an appetising food plate.
