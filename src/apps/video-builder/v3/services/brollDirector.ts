@@ -188,7 +188,13 @@ export function deriveConceptPrompt(args: {
     return 'a real-world everyday moment that illustrates the idea, natural light, authentic UGC, no product packaging'
   }
   const name = args.product?.productName?.trim() || 'the product'
-  // P6ad — prefer the REAL usage SEEN in the product photos (visualBrief.howUsed) over the
+  // P6af — product_closeup = a STATIC MACRO of the product detail (not a usage shot). The old
+  // fallback wrote "hands using…" for closeups too → a demo, contradicting the "cận chi tiết"
+  // intent. Now a closeup falls back to a clean macro; only product_action falls back to a usage shot.
+  if (args.kind === 'product_closeup') {
+    return `a clean MACRO close-up of ${name} — its real texture / label / one key detail filling the frame, resting on a simple real surface, soft studio light, no people`
+  }
+  // product_action — prefer the REAL usage SEEN in the photos (visualBrief.howUsed) over the
   // generic keyword-bucket usage, so even this last-resort fallback is physically correct
   // (e.g. "rub gel onto the knee" not a guessed "hold it"). Falls back to the niche usage.
   const vbUsed = args.product?.visualBrief?.match(/how it is physically used[^:]*:\s*([^\n]+)/i)?.[1]?.trim()
@@ -216,7 +222,12 @@ async function backfillWeakConcepts(
 Each conceptPrompt MUST specify: SHOT TYPE (macro / wide / over-the-shoulder / POV-hands / top-down) + a concrete ACTION + WHICH PART of the subject + a real SETTING. Make each DISTINCT (no two the same shot).
 By role:
 - broll + product_action / product_closeup → the PRODUCT on screen doing a concrete action, in its real setting. Use the SPECIFIC usage MOTION from the VISUAL BRIEF / product context — the real way THIS product is applied/used (e.g. squeeze gel & rub it in circles on the knee; tilt the head & drip 2-3 drops into the ear; peel the patch & press it onto the skin) — NEVER a generic "holding it up". The line tells you which moment to show.
-- broll + concept + creator → a PERSON with an authentic expression / reaction (NO product packaging).
+- broll + concept + creator → a PERSON living the beat (NO product packaging). MATCH THE EMOTION SHADE
+  of the line — do NOT write a generic face. Pain/discomfort → a grimace / wince / rubbing the sore
+  spot / slumping in a concrete situation; craving/desire → a longing look, reaching for it; skepticism →
+  a doubtful raised-brow / arms-crossed; relief/comfort → an exhale, shoulders dropping, a soft satisfied
+  look; delight/result → a genuine bright smile mid-action. Anchor it to the line's CONCRETE moment, not
+  a floating mood.
 - broll + concept (no creator) → a real-world moment illustrating the line (NO product packaging).
 - mechanism3d → the internal mechanism as a clean 3D cross-section / macro (NO people, NO packaging).
 UNIVERSAL — infer the action + setting from the product context; NEVER assume a niche.
@@ -528,7 +539,18 @@ function enforceProductHero(scenes: BrollScene[], product: Product | null | unde
     if (s.role !== 'broll' || s.kind !== 'concept') continue
     if (RESULT_BEHAVIOR_RE.test(s.conceptPrompt ?? '')) continue   // a "doing" concept → keep
     staticFaceKept++
-    if (staticFaceKept > 2) { s.kind = 'product_action'; s.cameraFraming = 'hands_noface'; s.conceptPrompt = '' }
+    if (staticFaceKept > 2) {
+      // P6af — over the static-face cap → DON'T force a product shot (that loses the emotion AND
+      // breaks the reaction intent → intent/render mismatch). Keep it HUMAN: turn the static face
+      // into an ACTIVE creator moment (a movement / gesture / real-life action acting out THIS
+      // beat), still creator-framed, no product. Cuts the talking-head wall without going product.
+      const beat = (s.quote ?? '').slice(0, 60).replace(/"/g, '')
+      s.kind = 'concept'; s.cameraFraming = 'creator'
+      s.conceptPrompt =
+        `The SAME creator in a candid real-life moment ACTING OUT "${beat}" through what they DO — ` +
+        `a concrete movement / gesture / everyday action in its real setting, body language carrying ` +
+        `the beat — NOT a static talking-head face, NO product. Authentic UGC iPhone footage, natural light.`
+    }
   }
 }
 
