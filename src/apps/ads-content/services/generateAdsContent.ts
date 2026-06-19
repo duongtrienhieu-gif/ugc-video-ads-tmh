@@ -36,7 +36,7 @@ FORMATTING IS RULE #1 — SCANNABLE OR IT FAILS (non-negotiable)
 ═══════════════════════════════════════════════════════════════
 - SHORT paragraphs: 1-2 lines each, separated by BLANK LINES. NEVER a dense block of text.
 - Use ✅ for benefits / what works, ❌ for the wrong way / failed alternatives, 👉 or 👇 for the CTA.
-- An emoji anchor at the start of key paragraphs for visual rhythm (not every line).
+- EMOJI — rich but PURPOSEFUL: open MOST paragraphs / beats with an emoji that MATCHES that line's meaning (pain 😣, ear/hearing 👂, heart 🫀❤️, natural/herbal 🌿, energy ⚡, sleep 😴, brain 🧠, warning ⚠️, money 💸, time ⏳, etc.). You may also drop a fitting emoji mid-sentence on a key word. Lively and visually scannable — but never random spam and not on literally every word. Keep ✅ benefits / ❌ wrong way / 👉 CTA as the structural anchors.
 - The body must be SCANNABLE: the reader should grasp the structure (contrast / list / steps) at a glance.
 - Match the structure to the chosen ANGLE (see its brief): most angles are BULLET/CONTRAST/LIST-driven. ONLY the "Kể chuyện" (story) angle is flowing narrative — and even it uses short paragraphs + white space, never one block.
 - NO markdown headers (#), no bullet symbols other than ✅/❌, no labels like "Hook:"/"CTA:"/"Body:".
@@ -133,7 +133,7 @@ function buildLanguageSpec(langMode: LangMode): string {
   lines.push('═══════════════════════════════════════════════════════════════')
   lines.push('TITLES (headlines to post alongside the video)')
   lines.push('═══════════════════════════════════════════════════════════════')
-  lines.push('For EACH variation, write EXACTLY 3 BOLD scroll-stopping TITLES (each ~6-16 words) — sensational, high-shock / high-curiosity headlines a creator pins above the video to STOP the thumb dead. Make them provocative and emotionally charged: shock framing, bold call-out, a curiosity gap, "wait what" energy. Each title a DIFFERENT angle. No quotes, no numbering.')
+  lines.push('For EACH variation, write EXACTLY 3 BOLD scroll-stopping TITLES (each ~6-16 words) — sensational, high-shock / high-curiosity headlines a creator pins above the video to STOP the thumb dead. Make them provocative and emotionally charged: shock framing, bold call-out, a curiosity gap, "wait what" energy. Each title a DIFFERENT angle. START EACH title with ONE emoji that fits its meaning/emotion (😱 shock · 🤫 secret · ⚠️ warning · ❤️🫀 heart · 👂 hearing · 🔥 hype · 🚫 stop · 👀 curiosity). NO markdown, NO ** bold asterisks **, no quotes, no numbering.')
   lines.push('HARD RULE — NEVER invent numbers, stats, percentages or rankings: use a number ONLY if it literally appears in the product brief; otherwise use NO number. No fake "#1", no made-up "10,000 users / 98%". Stay advertorial-safe — shocking in framing, but NO cure / guaranteed-result claims.')
   if (wantMS) {
     lines.push('Write the titles in Bahasa Malaysia. Format EACH title line as: <Malay title> :: <faithful Vietnamese meaning>  (the part after :: lets the VN operator understand it).')
@@ -253,15 +253,16 @@ function extractMarkerBlock(text: string, marker: string): string {
 function parseTitles(block: string): { titles: string[]; glosses: string[] } {
   const titles: string[] = []
   const glosses: string[] = []
+  const clean = (s: string) => s.replace(/\*+/g, '').replace(/\s+/g, ' ').trim()  // strip markdown bold/asterisks
   for (const raw of block.split('\n')) {
-    const line = raw.replace(/^[\s\-*•\d.)]+/, '').trim()
+    const line = raw.replace(/^[\s\-•\d.)]+/, '').trim()
     if (!line) continue
     const idx = line.indexOf('::')
     if (idx >= 0) {
-      titles.push(line.slice(0, idx).trim())
-      glosses.push(line.slice(idx + 2).trim())
+      titles.push(clean(line.slice(0, idx)))
+      glosses.push(clean(line.slice(idx + 2)))
     } else {
-      titles.push(line)
+      titles.push(clean(line))
     }
   }
   return { titles: titles.slice(0, 3), glosses: glosses.slice(0, 3) }
