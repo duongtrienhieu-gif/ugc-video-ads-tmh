@@ -1039,16 +1039,22 @@ RULES:
 - APPETITE (edible products): a taste / "ngon" / craving line → the creator taking a
   satisfied BITE + happy reaction (their OWN face in frame, creator-framing), or a close
   appetising macro of the food — never a static jar. The bite shot sells the craving.
-- RAW INGREDIENT HERO — when a line NAMES the real natural ingredients the product is MADE of
-  (nuts, fruit, seeds, grains, herbs, flowers, botanicals, roots, oils, tea, honey…), render
-  the ACTUAL ingredients themselves — fresh, real, appetising — as a macro hero shot beside /
-  tumbling around / being added to the product, NOT just a packaging close-up with text.
-  Universal (infer the real source from the brief): food → the nuts / dried fruit / seeds on a
-  board next to the product; skincare → the botanical source (chamomile flowers, green-tea
-  leaves, aloe, rice) beside the jar; supplement/health → the herb / root / fruit the active
-  comes from (ginger, turmeric, ginkgo leaf) beside the bottle. Keep the ingredient NAME as a
-  sticker. This is DISTINCT from a 3D cut (the ingredient ACTING inside the body) and from a
-  plain packaging close-up — here we SEE the real ingredients. cameraFraming:"hands_noface".
+- RAW INGREDIENT HERO — when a line NAMES the real ingredients the product is MADE of, show the
+  ACTUAL named ingredients as a macro hero beside / tumbling around / being added to the product,
+  NOT just a packaging close-up with text. STRICT GROUNDING (anti-hallucination — a content rule):
+    • Show ONLY the ingredients NAMED in THIS line or the PRODUCT BRIEF — map each to its REAL
+      visual source: Curcumin → turmeric root + golden powder; Arnica → arnica daisy flowers;
+      Ginkgo → ginkgo leaves; Emu / olive oil → oil drops or a small oil bottle; collagen /
+      glucosamine → fine powder or a capsule. NEVER invent or show a fruit / food / plant /
+      product that is NOT named in the brief — do NOT borrow a snack or fruit from another
+      product (e.g. do NOT put "hawthorn / apricot / a snack fruit" on a joint gel). If you don't
+      know what a named active looks like, show the PRODUCT itself with the ingredient name —
+      never a guessed item.
+    • Only an EDIBLE product (food / drink / snack) gets the "fresh, appetising, on a board" look.
+      A NON-edible product (gel / cream / serum / device / supplement) shows the botanical SOURCE
+      or the active in powder / oil / capsule form beside the product — NEVER an appetising food plate.
+  Keep the ingredient NAME as a sticker. DISTINCT from a 3D cut (the ingredient ACTING inside the
+  body) and from a plain packaging close-up — here we SEE the real ingredients. cameraFraming:"hands_noface".
 - STYLIZED ACTIVE (TPCN / cosmetics — the ingredient is an ABSTRACT substance with NO real-world
   object: peptide, collagen, hyaluronic acid, niacinamide, a vitamin/mineral complex, glucosamine,
   probiotics, zinc…): when such an active is just NAMED (NOT "acting inside the body" — that case
