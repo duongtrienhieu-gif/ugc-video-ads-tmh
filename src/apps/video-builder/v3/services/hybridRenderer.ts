@@ -120,7 +120,7 @@ export async function renderOneHybridScene(
     // active's molecules/particles orbiting it (for synthetic/abstract actives that have no real
     // plant form). The conceptPrompt (written by the director per ingredient type) leads; we no
     // longer force "INSIDE the subject / no packaging" so the molecules-around-product shot works.
-    conceptPrompt = `3D ANIMATION (no people, no hands, no on-screen text): clean photorealistic studio 3D render — ${conceptPrompt}. EITHER a cross-section / macro of the internal mechanism, OR the PRODUCT as hero in the centre with the active's glowing molecules / particles flowing and orbiting around it. Soft clinical light.`
+    conceptPrompt = `3D ANIMATION (no people, no hands, no on-screen text): clean photorealistic studio 3D render — ${conceptPrompt}. Keep the EXACT body site / subject named above — do NOT substitute a different or generic organ. EITHER a cross-section / macro of that internal mechanism, OR the PRODUCT as hero in the centre with the active's glowing molecules / particles flowing and orbiting around it. Soft clinical light.`
   }
 
   const r = await renderInsert({

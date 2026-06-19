@@ -859,12 +859,27 @@ FOUR cut ROLES (set "role"):
    signature "how it works inside" shot that sells an ingredient / mechanism product
    (supplement / skincare / health / any product with a real internal mechanism). Do NOT
    skip it for those products — it is their strongest differentiator. ***
-   Use 1-3 per video (lean toward more for an ingredient/mechanism-heavy product). Each 3D
-   cut MUST be a DISTINCT internal mechanism (Kali→mạch máu, Vitamin C→collagen dưới da,
-   chất xơ→đường ruột). Do NOT 3D a line that's just a NAMING/benefit/result ("giàu Kali" =
-   a product close-up + sticker, NOT 3D), and never exceed ~3 — don't turn it into a science
-   reel. ONLY skip 3D entirely when the product genuinely has NO internal mechanism (a simple
-   gadget / tool / apparel / accessory).
+   Use 1-3 per video (lean toward more for an ingredient/mechanism-heavy product). Each 3D cut
+   MUST show the CORRECT body SITE for THIS line's mechanism — DERIVE the site from the meaning,
+   NEVER a generic impressive organ (a beating HEART for a digestion/fibre line is WRONG → that's
+   the gut). SITE MAP (representative — infer the rest the same way; VN/MS/EN):
+     • tiêu hoá / chất xơ / nhuận tràng / lợi khuẩn / đầy hơi (pencernaan/serat/probiotik) → dạ dày + RUỘT
+     • huyết áp / tuần hoàn / cholesterol / Kali·Magnesium (tekanan darah/kolesterol) → MẠCH MÁU cắt ngang (tim CHỈ khi nói nhịp tim)
+     • da / collagen / nám / nếp nhăn / Vitamin C / dưỡng ẩm (kulit/kolagen/kedut) → LỚP DA (collagen, lỗ chân lông)
+     • khớp / sụn / xương / glucosamine (sendi/rawan/tulang) → KHỚP GỐI cắt ngang (sụn, dịch khớp)
+     • gan / giải độc / men gan (hati/detoks) → GAN · thận (buah pinggang) → THẬN
+     • mắt / thị lực (mata) → MẮT · tai / thính giác / ù tai (telinga/pendengaran) → ỐNG TAI + tai trong
+     • não / trí nhớ / tập trung / ginkgo (otak/ingatan) → NÃO (nơ-ron, máu lên não)
+     • miễn dịch / đề kháng (imun) → tế bào miễn dịch diệt mầm bệnh · năng lượng / chuyển hoá (tenaga) → tế bào sáng (ty thể)
+     • dạ dày / axit / trào ngược (gastrik) → niêm mạc dạ dày · đường huyết (gula darah) → tế bào hấp thu đường
+     • răng / nướu (gigi/gusi) → răng + men + nướu · tóc / nang tóc (rambut) → nang tóc + da đầu · phổi / xoang (paru) → đường thở
+   A SYNTHETIC active with NO body site (collagen/peptide/HA…) → the PRODUCT hero + its molecules orbiting (not an organ).
+   A NON-BODY product (device / appliance / cleaner / pest) is NOT anatomy — its "3D" is the DEVICE's internal working
+   (convection airflow in a fryer, suction path, EMS pulse + heat into the muscle layer, water through a filter) or a
+   surface action, NEVER an organ. SITE UNCLEAR → a neutral premium 3D (active particles + product hero), never a guessed organ.
+   Do NOT 3D a line that's just a NAMING/benefit/result ("giàu Kali" = a product close-up + sticker, NOT 3D), and never
+   exceed ~3 — don't turn it into a science reel. ONLY skip 3D entirely when the product genuinely has NO internal
+   mechanism (a simple gadget / tool / apparel / accessory).
 4. "social_proof" — ONLY for a genuine SOCIAL-PROOF line: a crowd/popularity, a sold
    count, repeat buyers, or reviews — "mấy nghìn người mua rồi", "ai dùng cũng quay lại",
    "review toàn 5 sao", "bán cháy hàng", "nhỏ bạn mình dùng cũng mê". Renders as a
