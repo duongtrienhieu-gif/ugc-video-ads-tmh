@@ -233,7 +233,9 @@ By role:
   spot / slumping in a concrete situation; craving/desire → a longing look, reaching for it; skepticism →
   a doubtful raised-brow / arms-crossed; relief/comfort → an exhale, shoulders dropping, a soft satisfied
   look; delight/result → a genuine bright smile mid-action. Anchor it to the line's CONCRETE moment, not
-  a floating mood.
+  a floating mood. CRITICAL for a PAIN/PROBLEM beat: keep it UNRESOLVED — show ONLY the discomfort, do
+  NOT sneak in relief, a smile, the product, or any "and then it got better" payoff. The pain scene
+  sells the problem; resolution belongs to a LATER beat.
 - broll + concept (no creator) → a real-world moment illustrating the line (NO product packaging).
 - mechanism3d → the internal mechanism as a clean 3D cross-section / macro (NO people, NO packaging).
 UNIVERSAL — infer the action + setting from the product context; NEVER assume a niche.
@@ -618,6 +620,21 @@ function capSocialProof(scenes: BrollScene[]): void {
   const promote = (s: BrollScene) => {
     s.role = 'social_proof'; s.kind = undefined; s.cameraFraming = undefined; s.conceptPrompt = undefined
   }
+  // P6al — the 2ND strong proof beat does NOT become a 2nd FB-card (hard rule: max ONE card)
+  // and is NOT wasted as a generic product shot. It becomes a "loved-by-many" CROWD broll: the
+  // SAME creator proudly showing the product as a popular, trusted pick, with a warm busy feel
+  // (a few blurred people around also enjoying it). We keep the single creator on purpose — a
+  // CONCEPT_SCENE video locks the avatar for identity, so leaning into ONE focal creator avoids
+  // a cloned-face montage. Universal VN / MS / EN (the render prompt is English).
+  const crowdBroll = (s: BrollScene) => {
+    s.role = 'broll'; s.kind = 'concept'; s.cameraFraming = 'creator'
+    s.conceptPrompt =
+      `The SAME creator, upbeat and proud, holding / showing THIS product to camera as a clearly ` +
+      `LOVED, popular pick — a warm sense that MANY people already use and trust it (a friendly, ` +
+      `busy everyday setting with a few softly-blurred people in the background also using/enjoying ` +
+      `it). Authentic UGC energy, candid not staged. NO on-screen text, NO fake logos/badges. The ` +
+      `product stays the recognisable hero — same packaging, do NOT redesign it.`
+  }
   // P6j — AT MOST ONE social-proof card in the WHOLE video (user hard rule, every product/
   // niche/market). Gather every valid proof candidate, keep the SINGLE STRONGEST (a line
   // with clear THIRD-PARTY proof — %/people-count/repeat/reviews/stars), demote all the rest.
@@ -649,8 +666,15 @@ function capSocialProof(scenes: BrollScene[]): void {
   const chosen = valid.find((i) => scenes[i].shotIntent === 'social_proof')
     ?? valid.find((i) => SOCIAL_PROOF_PROMOTE_RE.test(scenes[i].quote ?? ''))
     ?? valid[0]
+  // P6al — if there is a SECOND genuinely-strong proof beat (not just any valid candidate), it
+  // becomes the "loved-by-many" crowd broll instead of a 2nd card / a generic product shot. We
+  // require real proof phrasing so a weak line never gets forced into a crowd scene.
+  const second = valid.find((i) =>
+    i !== chosen && (scenes[i].shotIntent === 'social_proof' || SOCIAL_PROOF_PROMOTE_RE.test(scenes[i].quote ?? '')),
+  )
   for (const i of valid) {
     if (i === chosen) promote(scenes[i])
+    else if (i === second) crowdBroll(scenes[i])                    // 2nd strong proof → crowd broll
     else if (scenes[i].role === 'social_proof') demote(scenes[i])   // extra cards → product broll
     // a non-chosen plain-broll candidate just stays a normal broll (never was a card)
   }
@@ -695,7 +719,10 @@ function enforceBeforeAfterSplit(scenes: BrollScene[], script: GeneratedScript):
     s.kind = 'concept'
     s.cameraFraming = 'creator'
     s.conceptPrompt =
-      `Split-screen, the SAME creator (SAME face) on BOTH halves but a COMPLETELY DIFFERENT ` +
+      `Split-screen (LEFT | RIGHT). CRITICAL — it is ONE SINGLE person: the SAME face / same identity / ` +
+      `same individual on BOTH halves (a before-vs-after of the SAME person, NOT two different people, ` +
+      `NOT siblings) — they differ ONLY in outfit + state. ` +
+      `The SAME creator on BOTH halves but a COMPLETELY DIFFERENT ` +
       `outfit on each half — different top, different bottoms, and different headwear/hairstyle ` +
       `if any (two different days). LEFT = BEFORE: the problem in a concrete moment (the ` +
       `situation in "${painCue}") — visibly uncomfortable / the un-improved state. RIGHT = AFTER: ` +

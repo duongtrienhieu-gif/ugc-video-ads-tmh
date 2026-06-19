@@ -243,7 +243,9 @@ LAYOUT top→bottom:
 3) The PRODUCT PHOTO (from the reference image) as the post's attached image — a natural real-life snapshot, the product clearly recognisable and UNCHANGED.
 4) Reactions row: 👍❤️😍 + a like count (e.g. "${pickRand(['842', '1.2K', '967', '1.5K', '738'])}") + "${pickRand(['180', '248', '312', '156'])} ${commentWord}" + a few shares.
 5) A thin divider, then THREE (3) comments — use these EXACT names in bold, one per comment: "${commenters[0]}", "${commenters[1]}", "${commenters[2]}". Each comment: a small round avatar of a DIFFERENT person (vary gender + age so no two look alike) + a short enthusiastic praise in ${langName} + "Like · Reply · 2h" + a couple of likes.
-STYLE: authentic Facebook mobile screenshot, clean white UI, soft shadows, realistic. Make EVERY person look like a DIFFERENT real individual (different faces, ages, genders) so it never looks templated. Product: ${productName}.`
+STYLE: authentic Facebook mobile screenshot, clean white UI, soft shadows, realistic. Make EVERY person look like a DIFFERENT real individual (different faces, ages, genders) so it never looks templated. Product: ${productName}.
+SPELLING (critical): every single word of caption + comments + UI labels must be a REAL, CORRECTLY-SPELLED word in ${langName} — no gibberish, no invented or misspelled words, no random letters, no mixed-in foreign words. If unsure of a word, use a simpler correct one.
+NUMBERS: keep all numbers ROUND and believable (vibe figures, NOT precise) — like/comment/share counts as clean values like "842", "1.2K", "12K"; any star rating as ONE decimal only (e.g. "4.8★", never "4.93" or "4.857"). No long or odd decimals anywhere.`
 }
 
 /** Generate the social-proof card as a realistic FB-post image (GPT-4o). Returns an
