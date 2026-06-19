@@ -180,6 +180,20 @@ export const MS_BLACKLIST_INDO: string[] = [
   'biarin', 'malah',
 ]
 
+/** MS OVERUSED CRUTCHES (P6an) — hype/closer phrases that are FINE once but, piled
+ *  up, fingerprint a script as templated/AI across a catalog (the user audited
+ *  "gila weh + game changer + power gila + next level + berbaloi sangat + jangan
+ *  sampai menyesal" in nearly every MS script). NOT a hard ban (some live in
+ *  MS_HYPE / MS_CODESWITCH and ARE sanctioned in moderation) — scriptValidator
+ *  COUNTS total hits and only fails on a PILE (≥ cap), forcing Gemini to thin them
+ *  out + vary. Lowercase, substring-matched. Keep this the genuine offenders only. */
+export const MS_OVERUSED_CRUTCHES: string[] = [
+  'gila', 'game changer', 'next level', 'berbaloi', 'menyesal',
+  'grab cepat', 'stok terhad', 'jangan tunggu', 'must have', 'must-have',
+  'power gila', 'best gila', 'legit gila', 'tak masuk akal', 'no joke',
+  'speechless', 'memang padu', 'jangan main-main',
+]
+
 /** Pick a sensory bucket by rough product niche key. The body prompt passes the
  *  detected niche so Gemini gets the RELEVANT bucket inline, not all 4. */
 export function pickMsSensoryBucket(nicheHint: string | undefined): string[] {

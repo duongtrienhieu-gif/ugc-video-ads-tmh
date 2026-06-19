@@ -22,6 +22,7 @@ import {
   MS_BODY_ANTI_PATTERNS,
   MS_SYMPTOM_BANS_INSTANT,
   MS_BLACKLIST_INDO,
+  MS_OVERUSED_CRUTCHES,
 } from './bodyPatternsMs'
 
 // Indonesian-dialect words that instantly mark an MS script as fake. Built once
@@ -246,6 +247,52 @@ function extraSymptomBansForLang(lang?: string): string[] {
   return []
 }
 
+// ── B1 — OVERUSED-CRUTCH density (P6an) ──────────────────────────────────────
+// Hype/closer phrases that are fine once but, piled up, fingerprint a script as
+// templated. The body prompt already lists them under "AVOID" but Gemini ignores a
+// soft ban at scale (the user audited "gila weh / game changer / berbaloi / jangan
+// sampai menyesal / next level" in nearly EVERY MS script). We COUNT total hits and
+// only fail on a PILE (> cap) — a script using 1-2 naturally passes. Substring,
+// lowercase. VN / EN lists mirror the MS list (MS_OVERUSED_CRUTCHES) in spirit.
+const VN_OVERUSED_CRUTCHES: string[] = [
+  'game changer', 'đỉnh thật', 'đỉnh luôn', 'xịn dã man', 'đáng tiền lắm', 'đáng từng đồng',
+  'must have', 'must-have', 'chân ái', 'cực phẩm', 'không thể tin', 'đừng chần chừ',
+  'kẻo hết', 'nhanh tay kẻo lỡ', 'đừng để mai hối hận', 'hối hận', 'next level',
+]
+const EN_OVERUSED_CRUTCHES: string[] = [
+  'game changer', 'next level', 'must have', 'must-have', 'no joke', 'life changing',
+  'mind blowing', "don't sleep on", 'you need this', 'trust me', 'literally obsessed',
+  'worth every penny', 'dont wait', "don't wait", 'before it sells out',
+]
+function crutchesForLang(lang?: string): string[] {
+  if (lang === 'ms' || lang === 'Bahasa Malaysia') return MS_OVERUSED_CRUTCHES
+  if (lang === 'en' || lang === 'English') return EN_OVERUSED_CRUTCHES
+  return VN_OVERUSED_CRUTCHES
+}
+/** Allow up to this many crutch hits across the whole body; > cap = templated pile. */
+const CRUTCH_CAP = 3
+
+// ── B3 — DRUG-LEVEL OVERCLAIM (P6an) ─────────────────────────────────────────
+// Beyond the existing absolute-CURE ban, these are DRUG-procedure structural claims
+// (repair/regenerate damaged tissue, kill germs/virus/bacteria) that BOTH read fake
+// (kill believability) AND trip platform ad-review for supplements/cosmetics. The
+// user audited "pulihkan rawan sendi yang rosak" + "lawan/bunuh kuman". We flag ONLY
+// these clear drug claims → reframe to supportive/experiential. We deliberately do
+// NOT touch ordinary MECHANISM language (blood-flow, soothes, absorbs) — the director
+// turns that into the 3D mechanism shot, so removing it would hurt the video.
+const DRUG_OVERCLAIM_RE_MS = /\b(?:pulih(?:kan)?|baik(?:i|pulih)|perbaiki|membaiki|regenerat\w*|membina semula)\b[^.!?]{0,30}\b(?:rawan|sendi|tisu|sel|saraf|tulang)\b[^.!?]{0,20}\b(?:rosak|haus|cedera)\b|\b(?:bunuh|membunuh|hapus(?:kan)?|hancur(?:kan)?)\b[^.!?]{0,20}\b(?:kuman|bakteria|virus|patogen)\b/i
+const DRUG_OVERCLAIM_RE_VI = /\b(?:phục hồi|tái tạo|tái sinh|sửa chữa)\b[^.!?]{0,30}\b(?:sụn|khớp|mô|tế bào|dây thần kinh|xương)\b[^.!?]{0,20}\b(?:hư|hỏng|tổn thương|bị hư|rạn)\b|\b(?:diệt|tiêu diệt|giết)\b[^.!?]{0,16}\b(?:khuẩn|vi khuẩn|virus|vi rút|mầm bệnh)\b/i
+function drugOverclaimReForLang(lang?: string): RegExp | null {
+  if (lang === 'ms' || lang === 'Bahasa Malaysia') return DRUG_OVERCLAIM_RE_MS
+  if (lang === 'vi' || lang === 'Vietnamese') return DRUG_OVERCLAIM_RE_VI
+  return null   // EN: skip (no curated EN drug list yet) — avoid false positives
+}
+
+/** Longest run-on a single body sentence may be (whitespace words) before it's
+ *  flagged for splitting — a long run-on makes the scene director carve mid-clause
+ *  into intent-less fragments (audited). Lenient so real spoken lines pass. */
+const RUN_ON_WORD_CAP = 34
+
 export interface BodyBlocks {
   hook: string
   pain: string
@@ -466,6 +513,63 @@ export function validateBody(
       failures.push(
         `Body dùng SỐ proof cụ thể ("${m[0].trim()}") — số bán/đánh giá/% chính xác (kể cả lấy từ field sản phẩm) ` +
         `đọc như bịa + khách kiểm được ở cửa. Đổi sang VIBE không số: "review toàn 5 sao", "mấy trăm nghìn người mua rồi", "bán cháy hàng".`,
+      )
+    }
+  }
+
+  // 11. OVERUSED-CRUTCH DENSITY (B1) — count hype/closer crutches across the whole
+  //     body; > CRUTCH_CAP = a templated pile (the "gila weh + game changer + berbaloi
+  //     + jangan sampai menyesal" fingerprint). Forces Gemini to thin + vary.
+  {
+    const crutches = crutchesForLang(lang)
+    const allBodyLower = `${blocks.pain ?? ''} ${blocks.discovery ?? ''} ${blocks.benefit ?? ''} ${blocks.cta ?? ''}`.toLowerCase()
+    const hits: string[] = []
+    for (const c of crutches) {
+      // count every occurrence (global, escaped substring) so a thrice-repeated "gila" counts 3×.
+      const re = new RegExp(c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')
+      const n = (allBodyLower.match(re) ?? []).length
+      for (let k = 0; k < n; k++) hits.push(c)
+    }
+    if (hits.length > CRUTCH_CAP) {
+      const uniq = [...new Set(hits)].slice(0, 6).join('", "')
+      failures.push(
+        `Body lạm dụng ${hits.length} cụm hype/cliché lặp ("${uniq}"…) — chất đống làm mọi video giống nhau (fingerprint AI). ` +
+        `Giữ TỐI ĐA ${CRUTCH_CAP} cụm như vậy trong cả kịch bản; cắt bớt + thay bằng câu cảm thán TƯƠI/cụ thể khác nhau cho mỗi beat.`,
+      )
+    }
+  }
+
+  // 12. DRUG-LEVEL OVERCLAIM (B3) — repair-damaged-tissue / kill-germs structural
+  //     claims read fake + trip ad-review for supplements/cosmetics. Reframe to
+  //     supportive/experiential. (Ordinary mechanism language is left untouched.)
+  {
+    const re = drugOverclaimReForLang(lang)
+    if (re) {
+      const allBody = `${blocks.pain ?? ''} ${blocks.discovery ?? ''} ${blocks.benefit ?? ''} ${blocks.cta ?? ''}`
+      const m = allBody.match(re)
+      if (m) {
+        failures.push(
+          `Claim y khoa quá mạnh ("${m[0].trim()}") — kiểu "phục hồi sụn/mô hư" hoặc "diệt khuẩn/virus" đọc như thuốc + ` +
+          `dễ bị nền tảng tuýt còi cho TPCN/mỹ phẩm + làm khách nghi. Đổi sang HỖ TRỢ / TRẢI NGHIỆM: ` +
+          `"giúp khớp đỡ ê / cảm giác êm hơn", "rasa lebih selesa / lega" — đừng hứa chữa-sửa-diệt.`,
+        )
+      }
+    }
+  }
+
+  // 13. RUN-ON SENTENCE (B5) — a single body sentence past RUN_ON_WORD_CAP words makes
+  //     the scene director carve mid-clause into intent-less fragments. Flag the worst
+  //     so the rewrite breaks it into one-idea-per-sentence (cleaner Bước 2 scenes).
+  {
+    const allBody = `${blocks.pain ?? ''} ${blocks.discovery ?? ''} ${blocks.benefit ?? ''} ${blocks.cta ?? ''}`
+    const sentences = (allBody.match(/[^.!?…]+[.!?…]*/g) ?? []).map((s) => s.trim()).filter(Boolean)
+    const worst = sentences
+      .map((s) => ({ s, n: s.split(/\s+/).filter(Boolean).length }))
+      .sort((a, b) => b.n - a.n)[0]
+    if (worst && worst.n > RUN_ON_WORD_CAP) {
+      failures.push(
+        `Có câu quá dài (${worst.n} từ: "${worst.s.slice(0, 60)}…") — câu lê thê làm khâu dựng cảnh cắt giữa chừng ` +
+        `thành mảnh vụn vô nghĩa. Tách thành nhiều câu NGẮN, mỗi câu MỘT ý (≤ ~${RUN_ON_WORD_CAP} từ) để mỗi câu thành 1 cảnh quay được.`,
       )
     }
   }

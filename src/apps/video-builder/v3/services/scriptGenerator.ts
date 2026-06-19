@@ -1260,6 +1260,13 @@ reference to the product OR its core purpose / benefit / standout feature.
 HARD RULES:
 - The hook MUST now clearly connect to the product (its job, its benefit, or what it
   IS) — a viewer should sense what's being sold, not a blank "điều này".
+- REFER BY CATEGORY / BENEFIT, NOT THE BRAND (scroll-stop > ad): use the SHORT common
+  category or the pain/benefit it solves ("gel sendi ni", "pam mini ni", "titisan
+  telinga ni"), NOT the full brand/product name. A hook that front-loads a brand name
+  reads like an AD and gets scrolled; a hook that leads with the VIEWER'S pain / a
+  curiosity gap and only glances at the product reads like a real person. Prefer to
+  OPEN on the pain or the hook's shock device, and slot the product reference where it
+  falls naturally — it does NOT have to be the first words. Keep the skeleton's punch.
 - You MAY shorten the product name (e.g. "máy bơm mini" instead of the full long
   name). NEVER cram the full specs — a hook is a SCROLL-STOP, not a feature list.
 - LOCALIZE THE NAME (CRITICAL — every word of the name you say MUST be a real ${langName}
