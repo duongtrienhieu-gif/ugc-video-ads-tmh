@@ -367,8 +367,23 @@ function buildInsertKeyframePrompt(
   // 3. Action prompt — Z42: PRODUCT_IN_ACTION uses the director's free action
   // (conceptPrompt) instead of the fixed preset verb, while still keeping the
   // product lock above. The 12 fixed presets keep their hard-won stable prompt.
-  const freeAction = presetId === 'PRODUCT_IN_ACTION' ? safeConcept?.trim() : ''
+  // P6ag — PRODUCT_CLOSEUP also honours the free concept (so each macro shows a DIFFERENT detail,
+  // not the same fixed shot) — but it renders PRODUCT-ONLY (no hands; see block below).
+  const freeAction = (presetId === 'PRODUCT_IN_ACTION' || presetId === 'PRODUCT_CLOSEUP') ? safeConcept?.trim() : ''
   paragraphs.push(`ACTION: ${freeAction && freeAction.length > 0 ? freeAction : preset.promptPreset}`)
+
+  // P6ag — PRODUCT-ONLY framing for a macro/detail cut: NO hands, NO person, product static on a
+  // surface (NOT held, NOT rotated). Holding + rotating a product is the #1 cause of i2v packaging
+  // DRIFT/morph; keeping it untouched on a surface keeps the product locked to its reference.
+  if (presetId === 'PRODUCT_CLOSEUP') {
+    paragraphs.push(
+      'PRODUCT-ONLY FRAMING — NO hands, NO fingers, NO person, NO body part anywhere in frame. The ' +
+      'product sits ALONE, STATIC, on a clean real surface — it is NOT held and NOT rotated (a held / ' +
+      'rotating product makes the packaging morph). Clean macro / medium-close with only a gentle slow ' +
+      'camera push. The product stays EXACTLY as its reference image (same colour, shape, label). ' +
+      'Soft natural daylight on a real surface.',
+    )
+  }
 
   // Director upgrade — no-face hands-in-action shot. No avatar ref was sent, so
   // there is no IDENTITY LOCK; enforce hands-only + the real setting so the model

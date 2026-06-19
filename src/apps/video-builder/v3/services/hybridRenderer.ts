@@ -104,6 +104,11 @@ export async function renderOneHybridScene(
   const presetId: ActionPresetId =
     scene.role === 'mechanism3d' ? 'CONCEPT_SCENE'
     : scene.kind === 'concept' ? 'CONCEPT_SCENE'
+    // P6ag — "cận sản phẩm / chi tiết" (product_closeup) = product ALONE, NO hands. Hands
+    // holding + rotating a product is exactly what makes i2v DRIFT/morph the packaging, so a
+    // macro/detail cut goes to PRODUCT_CLOSEUP (no-hands preset), never PRODUCT_IN_ACTION (which
+    // adds hands). product_action (đang dùng) keeps PRODUCT_IN_ACTION — hands USING it is the point.
+    : scene.kind === 'product_closeup' ? 'PRODUCT_CLOSEUP'
     : emptyBroll ? 'PRODUCT_CLOSEUP'
     : 'PRODUCT_IN_ACTION'
   // P3v — a product B-roll must NOT randomly grow a face. PRODUCT_IN_ACTION only

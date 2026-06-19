@@ -192,7 +192,7 @@ export function deriveConceptPrompt(args: {
   // fallback wrote "hands using…" for closeups too → a demo, contradicting the "cận chi tiết"
   // intent. Now a closeup falls back to a clean macro; only product_action falls back to a usage shot.
   if (args.kind === 'product_closeup') {
-    return `a clean MACRO close-up of ${name} — its real texture / label / one key detail filling the frame, resting on a simple real surface, soft studio light, no people`
+    return `a clean MACRO close-up of ${name} ALONE — its real texture / label / one key detail filling the frame, resting STATIC on a simple real surface, gentle slow push, soft studio light. NO hands, NO person, NOT held, NOT rotated.`
   }
   // product_action — prefer the REAL usage SEEN in the photos (visualBrief.howUsed) over the
   // generic keyword-bucket usage, so even this last-resort fallback is physically correct
@@ -221,7 +221,13 @@ async function backfillWeakConcepts(
 
 Each conceptPrompt MUST specify: SHOT TYPE (macro / wide / over-the-shoulder / POV-hands / top-down) + a concrete ACTION + WHICH PART of the subject + a real SETTING. Make each DISTINCT (no two the same shot).
 By role:
-- broll + product_action / product_closeup → the PRODUCT on screen doing a concrete action, in its real setting. Use the SPECIFIC usage MOTION from the VISUAL BRIEF / product context — the real way THIS product is applied/used (e.g. squeeze gel & rub it in circles on the knee; tilt the head & drip 2-3 drops into the ear; peel the patch & press it onto the skin) — NEVER a generic "holding it up". The line tells you which moment to show.
+- broll + product_action ("đang dùng") → the PRODUCT being USED, in its real setting. Use the SPECIFIC
+  usage MOTION from the VISUAL BRIEF / product context — the real way THIS product is applied/used (e.g.
+  squeeze gel & rub it in circles on the knee; tilt the head & drip 2-3 drops into the ear; peel the patch
+  & press it onto the skin) — NEVER a generic "holding it up". The line tells which moment to show.
+- broll + product_closeup ("cận sản phẩm / chi tiết") → the PRODUCT ALONE — a clean static macro of one
+  real detail (texture / label / a key part) on a surface. NO hands, NO person, NOT held, NOT rotated
+  (a held + rotating product makes the render morph). Just the product, gentle push.
 - broll + concept + creator → a PERSON living the beat (NO product packaging). MATCH THE EMOTION SHADE
   of the line — do NOT write a generic face. Pain/discomfort → a grimace / wince / rubbing the sore
   spot / slumping in a concrete situation; craving/desire → a longing look, reaching for it; skepticism →
