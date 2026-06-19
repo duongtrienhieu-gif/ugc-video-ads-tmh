@@ -26,6 +26,7 @@
 import { textToSpeech, textToSpeechWithTimestamps, type TtsTimestamps } from '../../../../utils/elevenlabs'
 import {
   generateGpt4oImageFast,
+  generateNanoBanana2,
   generateLipSync, pollLipSyncUntilDone,
 } from '../../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
@@ -383,16 +384,34 @@ export async function renderCreatorKeyframe(
     productRefIndex,
   })
   console.log(`[CREATOR_VIDEO Stage 2] keyframe prompt len=${keyframePromptUsed.length}`)
-  const keyframeRemoteUrl = await generateGpt4oImageFast({
-    apiKey: params.kieApiKey,
-    prompt: keyframePromptUsed,
-    filesUrl: refUrls,
-    size: '2:3',
-    softTimeoutMs: 60_000,
-    attemptTimeoutMs: 90_000,
-    maxAttempts: 2,
-    signal: params.signal,
-  })
+  // P6aa — keyframe (khuôn mặt) generation with a MODEL FALLBACK. Primary = gpt-4o-image (strong
+  // ref-preservation). When KIE's gpt-4o-image endpoint is STUCK/overloaded (the "stuck queue —
+  // quá 90s" timeout the user hit repeatedly), DON'T just fail — fall back to nano-banana-2 (a
+  // DIFFERENT KIE endpoint, also ref-preserving per CLAUDE.md, same avatar/product refs + portrait
+  // ratio) so a single-endpoint outage no longer blocks the whole video.
+  let keyframeRemoteUrl: string
+  try {
+    keyframeRemoteUrl = await generateGpt4oImageFast({
+      apiKey: params.kieApiKey,
+      prompt: keyframePromptUsed,
+      filesUrl: refUrls,
+      size: '2:3',
+      softTimeoutMs: 60_000,
+      attemptTimeoutMs: 90_000,
+      maxAttempts: 2,
+      signal: params.signal,
+    })
+  } catch (e) {
+    console.warn('[CREATOR_VIDEO Stage 2] gpt-4o-image kẹt → fallback nano-banana-2:', e)
+    keyframeRemoteUrl = await generateNanoBanana2({
+      apiKey: params.kieApiKey,
+      prompt: keyframePromptUsed,
+      imageInput: refUrls,
+      aspectRatio: '2:3',
+      resolution: '1K',
+      signal: params.signal,
+    })
+  }
   const keyframeBlob = await fetch(keyframeRemoteUrl).then((r) => r.blob())
   const keyframeRef = await saveAsset(keyframeBlob, keyframeBlob.type || 'image/png')
 
