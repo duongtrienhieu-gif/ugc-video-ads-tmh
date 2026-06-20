@@ -713,6 +713,12 @@ export interface V3PipelineState {
    *  assets + final MP4). Persisted so F5 / step-nav never loses rendered work. */
   hybrid: HybridState
 
+  /** P6au — id of the SavedProject this active state is currently editing (set when the
+   *  user opens a project from the library, or after the first "Lưu project"). Lets a
+   *  re-save / auto-save UPDATE the same library slot instead of creating duplicates.
+   *  undefined = an unsaved scratch project. */
+  activeProjectId?: string
+
   /** Timestamp this state was last saved (informational) */
   updatedAt: number
 }
@@ -1490,6 +1496,11 @@ export interface SavedProject {
     creatorVideo: CreatorVideoClip | null
     inserts: ActionInsertClip[]
     autoEdit: AutoEditState
+    /** P6au — the CURRENT "Tạo Video" hybrid pipeline (scenes + rendered clips + voice +
+     *  caption/banner config + final MP4). Durable fields only — transient render flags
+     *  (renderingScenes / queuedScenes / assembling / assetsGenStartedAt) are stripped on save.
+     *  Optional so legacy projects (saved before P6au) still load. */
+    hybrid?: HybridState
   }
   thumbRef?: string
   tags: string[]

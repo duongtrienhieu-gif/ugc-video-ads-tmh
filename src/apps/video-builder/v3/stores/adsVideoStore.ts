@@ -100,6 +100,8 @@ interface AdsVideoStoreState {
   setHybridCaption:       (patch: { captionsOn?: boolean; captionPreset?: import('../services/captionPresets').CaptionPresetId; captionKaraoke?: boolean; bannerOn?: boolean; bannerPreset?: import('../services/bannerPresets').BannerPresetId; bannerText?: string }) => void
   setHybridAssemble:      (patch: { assembling?: boolean; assembleRatio?: number; assembleStage?: string }) => void
   clearHybrid:            () => void
+  /** P6au — track which SavedProject the active state is editing (for save/auto-save). */
+  setActiveProjectId:     (id: string | undefined) => void
   /** Z32 — set/replace creator video config (setting + energy + preset + wardrobe + resolution) */
   setCreatorVideoConfig: (config: CreatorVideoConfig) => void
   /** Z32 — apply a preset (writes setting + energy + wardrobeNote in one go) */
@@ -497,6 +499,9 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
 
   clearHybrid: () =>
     commit(set, get, (s) => ({ ...s, hybrid: createEmptyHybridState() })),
+
+  setActiveProjectId: (id) =>
+    commit(set, get, (s) => ({ ...s, activeProjectId: id })),
 
   patchCreatorVideo: (patch) =>
     commit(set, get, (s) => ({

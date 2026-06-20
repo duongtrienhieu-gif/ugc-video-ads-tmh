@@ -25,7 +25,7 @@ import { useState, useEffect } from 'react'
 import {
   Sparkles, FlaskConical, UserRound, FileText,
   ChevronRight, ArrowLeft, RotateCcw, Lock, Zap, Star,
-  Film, Wand2, Download, Info, FolderOpen,
+  Film, Wand2, Download, Info, FolderOpen, Save, Plus, Pencil, Trash2,
 } from 'lucide-react'
 import { useAppStore } from '../../../stores/appStore'
 import { useAdsVideoStore } from './stores/adsVideoStore'
@@ -38,7 +38,10 @@ import {
   type V3Phase,
   type SavedProject,
 } from './types'
-import { getAllProjects, hydrateProjectAsState } from './services/projectLibrary'
+import {
+  getAllProjects, hydrateProjectAsState, saveCurrentAsProject, updateProject,
+  renameProject, deleteProject,
+} from './services/projectLibrary'
 
 interface Props {
   /** Switch to legacy v2 (cinematic coverage pipeline). */
@@ -127,24 +130,79 @@ export default function AdsVideoEngine(_props: Props) {
   const hydrateFromSnapshot = useAdsVideoStore((s) => s.hydrateFromSnapshot)
   const addToast    = useAppStore((s) => s.addToast)
 
-  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
-  const [restoreOpen, setRestoreOpen] = useState(false)   // P6y — "Khôi phục" nút đã ẩn; modal giữ lại (bật lại được)
-  const [libraryOpen, setLibraryOpen] = useState(false)   // P6y — exported-video library modal
+  const setActiveProjectId = useAdsVideoStore((s) => s.setActiveProjectId)
 
-  // Z98 — restore picker. The Library lives on the Export step, which locks if a
-  // render is lost — so this top-bar entry makes saved projects ALWAYS
-  // restorable, even when the wizard tabs are gated.
-  const savedProjects = restoreOpen ? getAllProjects() : []
-  const handleRestore = (proj: SavedProject) => {
-    hydrateFromSnapshot(hydrateProjectAsState(proj))
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
+  const [restoreOpen, setRestoreOpen] = useState(false)   // P6au — "Dự án của tôi" modal (lưu/mở/đổi tên/xoá)
+  const [libraryOpen, setLibraryOpen] = useState(false)   // P6y — exported-video library modal
+  const [projects, setProjects] = useState<SavedProject[]>([])
+  const refreshProjects = () => setProjects(getAllProjects())
+
+  // P6au — does the current state have any real work worth saving?
+  const hasWork = !!(state.scriptBrain.script || state.hybrid.scenes?.length || state.hybrid.finalVideoRef)
+
+  // P6au — SAVE the current project: update the open slot, else create a new one.
+  const saveActiveProject = (): string | null => {
+    if (!hasWork) { addToast('Chưa có gì để lưu — tạo kịch bản hoặc render cảnh trước', 'info'); return null }
+    const cur = useAdsVideoStore.getState().state
+    if (cur.activeProjectId && updateProject(cur.activeProjectId, cur)) {
+      addToast('Đã lưu project (cập nhật)', 'success')
+      refreshProjects()
+      return cur.activeProjectId
+    }
+    const saved = saveCurrentAsProject(cur)
+    setActiveProjectId(saved.id)
+    addToast(`Đã lưu project "${saved.name}"`, 'success')
+    refreshProjects()
+    return saved.id
+  }
+
+  // P6au — OPEN a saved project into the active state (incl. the hybrid scenes/clips/voice),
+  // route to the right step, and mark it active so further edits save back to it.
+  const handleOpen = (proj: SavedProject) => {
+    hydrateFromSnapshot(hydrateProjectAsState(proj))   // sets activeProjectId = proj.id (see projectLibrary)
     const snap = proj.snapshot
-    // Hybrid restore: a script → "Tạo Video"; else Input. (The hybrid render state
-    // lives in the main store, not the Library snapshot, so we land on Tạo Video.)
-    const target: V3Phase = snap.scriptBrain?.script ? 'action-inserts' : 'input'
+    const target: V3Phase = snap.hybrid?.finalVideoRef ? 'export'
+      : (snap.hybrid?.scenes?.length || snap.scriptBrain?.script) ? 'action-inserts'
+      : 'input'
     setPhase(target)
     setRestoreOpen(false)
-    addToast(`Đã khôi phục "${proj.name}"`, 'success')
+    addToast(`Đã mở "${proj.name}" — sửa thoải mái, tự lưu lại project này`, 'success')
   }
+
+  // P6au — NEW project: offer to save the current one first, then start fresh.
+  const handleNewProject = () => {
+    if (hasWork && state.activeProjectId == null) saveActiveProject()   // unsaved scratch → keep it in the library
+    else if (hasWork && state.activeProjectId) saveActiveProject()      // persist latest edits before leaving
+    clearState()
+    setActiveProjectId(undefined)
+    setRestoreOpen(false)
+    addToast('Đã lưu project cũ + mở project MỚI', 'success')
+  }
+
+  const handleRename = (p: SavedProject) => {
+    const name = window.prompt('Tên mới cho project:', p.name)?.trim()
+    if (name) { renameProject(p.id, name); refreshProjects() }
+  }
+  const handleDelete = (p: SavedProject) => {
+    if (!window.confirm(`Xoá project "${p.name}"? (không xoá clip đã render — chỉ xoá bản lưu)`)) return
+    deleteProject(p.id)
+    if (state.activeProjectId === p.id) setActiveProjectId(undefined)
+    refreshProjects()
+  }
+
+  // P6au — AUTO-SAVE: while a project is open, debounce-write edits back to its library slot
+  // so "vào sửa video cũ" always persists without remembering to click Lưu. Only the active
+  // (opened/saved) project auto-saves; a fresh scratch project waits for an explicit Lưu.
+  useEffect(() => {
+    if (!state.activeProjectId) return
+    const id = state.activeProjectId
+    const t = setTimeout(() => {
+      const cur = useAdsVideoStore.getState().state
+      if (cur.activeProjectId === id) updateProject(id, cur)
+    }, 2500)
+    return () => clearTimeout(t)
+  }, [state])
 
   // Migration: map retired phases onto the hybrid flow. 'script-voice' (Z37 merge)
   // and the mode-1 'creator-video' / 'auto-edit' steps → the merged screens.
@@ -185,7 +243,29 @@ export default function AdsVideoEngine(_props: Props) {
           {/* Z98 — action buttons sit right after the title (center-left) so the
               global Gemini/KIE-Credit badges (absolute top-right) can't cover them. */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* P6y — "Legacy" (switch v1/v2 cũ) gỡ khỏi UID: app hiện tại chỉ dùng luồng hybrid v3. */}
+            {/* P6au — multi-project: Lưu / Dự án (mở-sửa) / Mới. */}
+            <button
+              onClick={saveActiveProject}
+              disabled={!hasWork}
+              title="Lưu project video hiện tại (kịch bản + cảnh + clip đã render + giọng). Mở lại sửa được."
+              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25 disabled:opacity-40"
+            >
+              <Save className="h-3.5 w-3.5" /> Lưu project
+            </button>
+            <button
+              onClick={() => { refreshProjects(); setRestoreOpen(true) }}
+              title="Mở / sửa các project video đã lưu (đồng bộ trên cloud)"
+              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
+            >
+              <FolderOpen className="h-3.5 w-3.5" /> Dự án của tôi
+            </button>
+            <button
+              onClick={handleNewProject}
+              title="Lưu project hiện tại rồi mở một project MỚI (trống)"
+              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
+            >
+              <Plus className="h-3.5 w-3.5" /> Project mới
+            </button>
             <button
               onClick={() => setLibraryOpen(true)}
               title="Thư viện video đã ghép hoàn chỉnh — tải lại 0 credit, còn kể cả sau Tạo lại từ đầu"
@@ -193,10 +273,9 @@ export default function AdsVideoEngine(_props: Props) {
             >
               <Film className="h-3.5 w-3.5" /> Video đã xuất
             </button>
-            {/* P6y — "Khôi phục" ẩn khỏi top bar (giữ modal + projectLibrary để bật lại sau). */}
             <button
               onClick={() => setResetConfirmOpen(true)}
-              title="Xoá toàn bộ tiến trình + bắt đầu lại từ bước 1"
+              title="Xoá sạch tiến trình ĐANG mở + bắt đầu lại từ bước 1 (KHÔNG đụng các project đã lưu)"
               className="flex items-center gap-1.5 rounded-lg border border-white/30 bg-red-500/30 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm transition-colors hover:bg-red-500/50"
             >
               <RotateCcw className="h-3.5 w-3.5" /> Tạo lại từ đầu
@@ -239,39 +318,57 @@ export default function AdsVideoEngine(_props: Props) {
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-100">
                 <FolderOpen className="h-5 w-5 text-violet-600" />
               </div>
-              <div>
-                <h3 className="text-base font-bold text-gray-900">Khôi phục dự án đã lưu</h3>
+              <div className="flex-1">
+                <h3 className="text-base font-bold text-gray-900">Dự án của tôi</h3>
                 <p className="text-xs text-gray-500">
-                  Gồm cả bản tự-lưu sau mỗi lần render video. Khôi phục sẽ thay thế tiến trình hiện tại.
+                  Mở để sửa tiếp (giữ kịch bản + cảnh + clip đã render + giọng). Đồng bộ trên cloud — đổi máy vẫn thấy.
                 </p>
               </div>
+              <button
+                onClick={() => { saveActiveProject(); }}
+                disabled={!hasWork}
+                className="flex shrink-0 items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-40"
+              >
+                <Save className="h-3.5 w-3.5" /> Lưu hiện tại
+              </button>
             </div>
-            {savedProjects.length === 0 ? (
+            {projects.length === 0 ? (
               <p className="py-8 text-center text-sm text-gray-400">
-                Chưa có dự án nào được lưu trong máy này.
+                Chưa có project nào. Bấm "Lưu hiện tại" để lưu video đang làm.
               </p>
             ) : (
               <div className="-mx-1 flex-1 overflow-y-auto px-1">
-                {savedProjects.map((p) => {
-                  const hasVideo = !!p.snapshot.creatorVideo?.videoRef
-                  const hasPlan = !!p.snapshot.autoEdit?.plan
+                {projects.map((p) => {
+                  const sceneCount = p.snapshot.hybrid?.scenes?.length ?? 0
+                  const clipCount = Object.keys(p.snapshot.hybrid?.clips ?? {}).length
+                  const hasFinal = !!p.snapshot.hybrid?.finalVideoRef
+                  const isActive = p.id === state.activeProjectId
                   return (
-                    <button
+                    <div
                       key={p.id}
-                      onClick={() => handleRestore(p)}
-                      className="mb-2 flex w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-left transition-colors hover:border-violet-300 hover:bg-violet-50"
+                      className={`mb-2 flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 ${isActive ? 'border-violet-400 bg-violet-50' : 'border-gray-200 bg-gray-50'}`}
                     >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-gray-900">{p.name}</div>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
-                          <span>{new Date(p.lastEditedAt).toLocaleString('vi-VN')}</span>
-                          {hasVideo && <span className="rounded bg-green-100 px-1.5 py-0.5 font-semibold text-green-700">có video</span>}
-                          {hasPlan && <span className="rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-700">có plan</span>}
-                          <span>· {p.snapshot.inserts?.length ?? 0} insert</span>
+                      <button onClick={() => handleOpen(p)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 truncate text-sm font-semibold text-gray-900">
+                            {p.isWinner && <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" />}
+                            {p.name}
+                            {isActive && <span className="rounded bg-violet-200 px-1.5 py-0.5 text-[9px] font-bold text-violet-700">ĐANG MỞ</span>}
+                          </div>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
+                            <span>{new Date(p.lastEditedAt).toLocaleString('vi-VN')}</span>
+                            {sceneCount > 0 && <span className="rounded bg-sky-100 px-1.5 py-0.5 font-semibold text-sky-700">{sceneCount} cảnh</span>}
+                            {clipCount > 0 && <span className="rounded bg-green-100 px-1.5 py-0.5 font-semibold text-green-700">{clipCount} clip</span>}
+                            {hasFinal && <span className="rounded bg-fuchsia-100 px-1.5 py-0.5 font-semibold text-fuchsia-700">có video</span>}
+                          </div>
                         </div>
+                      </button>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button onClick={() => handleOpen(p)} title="Mở để sửa" className="rounded-lg bg-violet-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-violet-700">Mở</button>
+                        <button onClick={() => handleRename(p)} title="Đổi tên" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700"><Pencil className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => handleDelete(p)} title="Xoá bản lưu" className="rounded-lg p-1.5 text-gray-400 hover:bg-rose-100 hover:text-rose-600"><Trash2 className="h-3.5 w-3.5" /></button>
                       </div>
-                      <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
-                    </button>
+                    </div>
                   )
                 })}
               </div>

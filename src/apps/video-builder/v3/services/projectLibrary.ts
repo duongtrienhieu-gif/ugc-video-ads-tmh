@@ -16,10 +16,37 @@
 import type {
   V3PipelineState, SavedProject,
   ScriptBrain, CreatorVideoConfig, CreatorVideoClip,
-  ActionInsertClip, AutoEditState,
+  ActionInsertClip, AutoEditState, HybridState,
 } from '../types'
-import { createEmptyScriptBrain, createEmptyAutoEditState } from '../types'
+import { createEmptyScriptBrain, createEmptyAutoEditState, createEmptyHybridState } from '../types'
 import { supabase } from '../../../../lib/supabase'
+
+// P6au — snapshot ONLY the durable hybrid fields (scenes + rendered clip refs + voice +
+// caption/banner config + final). Strip the transient render flags so a saved project never
+// re-opens "stuck rendering" / "đang ghép". Returns undefined when there's nothing built yet.
+function cleanHybridForSnapshot(h: HybridState | undefined): HybridState | undefined {
+  if (!h) return undefined
+  const hasWork = (h.scenes?.length ?? 0) > 0 || !!h.voiceRef || !!h.keyframeRef || !!h.finalVideoRef
+  if (!hasWork) return undefined
+  return {
+    rawScenes: h.rawScenes ?? [],
+    scenes: h.scenes ?? null,
+    clips: h.clips ?? {},
+    keyframeRef: h.keyframeRef,
+    voiceRef: h.voiceRef,
+    voiceDurationSec: h.voiceDurationSec,
+    voiceAlignment: h.voiceAlignment,
+    voiceId: h.voiceId,
+    finalVideoRef: h.finalVideoRef,
+    captionsOn: h.captionsOn,
+    captionPreset: h.captionPreset,
+    captionKaraoke: h.captionKaraoke,
+    bannerOn: h.bannerOn,
+    bannerPreset: h.bannerPreset,
+    bannerText: h.bannerText,
+    // transient (omitted): assetsGenStartedAt, renderingScenes, queuedScenes, assembling, assembleRatio, assembleStage
+  }
+}
 
 const STORAGE_KEY = 'ugc-lab-v3-project-library'
 const SCHEMA_VERSION = 1
@@ -236,8 +263,9 @@ export function saveCurrentAsProject(
       creatorVideo: state.creatorVideo ? { ...state.creatorVideo } : null,
       inserts: state.inserts.map((it) => ({ ...it })),
       autoEdit: { ...state.autoEdit },
+      hybrid: cleanHybridForSnapshot(state.hybrid),   // P6au — the "Tạo Video" hybrid project
     },
-    thumbRef: opts?.thumbRef,
+    thumbRef: opts?.thumbRef ?? state.hybrid?.keyframeRef,
     tags: opts?.tags ?? [],
     isWinner: false,
     createdAt: now,
@@ -290,7 +318,9 @@ export function updateProject(id: string, state: V3PipelineState): SavedProject 
       creatorVideo: state.creatorVideo ? { ...state.creatorVideo } : null,
       inserts: state.inserts.map((it) => ({ ...it })),
       autoEdit: { ...state.autoEdit },
+      hybrid: cleanHybridForSnapshot(state.hybrid),   // P6au
     },
+    thumbRef: projects[idx].thumbRef ?? state.hybrid?.keyframeRef,
     lastEditedAt: Date.now(),
   }
   projects[idx] = updated
@@ -381,6 +411,9 @@ export function duplicateProject(
     autoEdit: opts.resetAutoEdit
       ? createEmptyAutoEditState()
       : { ...src.snapshot.autoEdit } as AutoEditState,
+    // P6au — duplicate REUSES the rendered hybrid clips (the cost-saving point); a fresh
+    // "Tạo lại từ đầu" on the copy is the user's choice afterward.
+    hybrid: cleanHybridForSnapshot(src.snapshot.hybrid),
   }
 
   const dup: SavedProject = {
@@ -416,6 +449,14 @@ export function hydrateProjectAsState(project: SavedProject): Partial<V3Pipeline
     creatorVideo: project.snapshot.creatorVideo ? { ...project.snapshot.creatorVideo } : null,
     inserts: project.snapshot.inserts.map((it) => ({ ...it })),
     autoEdit: { ...project.snapshot.autoEdit },
+    // P6au — restore the hybrid "Tạo Video" project (scenes + clips + voice + config); a legacy
+    // project (saved before P6au) has none → start its hybrid empty. Transient render flags are
+    // reset so a re-opened project never shows "đang render / đang ghép".
+    hybrid: project.snapshot.hybrid
+      ? { ...project.snapshot.hybrid, renderingScenes: {}, queuedScenes: [], assetsGenStartedAt: undefined, assembling: false, assembleRatio: undefined, assembleStage: undefined }
+      : createEmptyHybridState(),
+    // P6au — mark this as the active project so "Lưu" / auto-save UPDATE this slot.
+    activeProjectId: project.id,
   }
 }
 
