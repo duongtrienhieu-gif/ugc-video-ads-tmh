@@ -1,7 +1,12 @@
 import { supabase } from '../lib/supabase'
 
-// In-session signed URL cache (signed URLs valid 1 hour)
-const urlCache = new Map<string, string>()
+// P6as — signed-URL cache. The OLD cache kept the FIRST 1h-signed URL FOREVER, so after ~1h
+// of a session every consumer got an EXPIRED URL → KIE render "Image fetch failed" + ffmpeg
+// fetched an error body → "FS error". Now: mint a 6h URL and store its mint time; getUrl
+// re-mints once the cached one is within 5 min of expiry, so a handed-out URL is always fresh.
+const SIGNED_URL_TTL_SEC = 6 * 60 * 60                              // 6h signed URL
+const URL_CACHE_SAFE_MS = (SIGNED_URL_TTL_SEC - 5 * 60) * 1000      // re-mint 5 min before expiry
+const urlCache = new Map<string, { url: string; mintedAt: number }>()
 
 export function isAssetRef(value: string | undefined | null): boolean {
   return typeof value === 'string' && value.startsWith('asset-')
@@ -171,15 +176,17 @@ export async function getBlob(assetId: string): Promise<Blob | null> {
 export async function getUrl(assetId: string): Promise<string | null> {
   if (!isAssetRef(assetId)) return assetId
 
+  // P6as — serve from cache ONLY while the signed URL still has comfortable life left;
+  // otherwise re-mint a fresh one (the stale-URL bug fix).
   const cached = urlCache.get(assetId)
-  if (cached) return cached
+  if (cached && Date.now() - cached.mintedAt < URL_CACHE_SAFE_MS) return cached.url
 
   const path = await resolvePath(assetId)
   if (!path) return null
 
-  const { data } = await supabase.storage.from('assets').createSignedUrl(path, 3600)
+  const { data } = await supabase.storage.from('assets').createSignedUrl(path, SIGNED_URL_TTL_SEC)
   if (data?.signedUrl) {
-    urlCache.set(assetId, data.signedUrl)
+    urlCache.set(assetId, { url: data.signedUrl, mintedAt: Date.now() })
     return data.signedUrl
   }
   return null
