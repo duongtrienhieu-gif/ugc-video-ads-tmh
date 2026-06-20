@@ -144,3 +144,20 @@ export function warmUpFFmpeg(opts: LoadFfmpegOptions = {}): void {
 export function isFFmpegLoaded(): boolean {
   return singleton?.loaded === true
 }
+
+/** P6ar — HARD reset the singleton: terminate the (possibly CRASHED) wasm worker and
+ *  drop the cached instance so the NEXT getFFmpeg() builds a fresh one. Critical for
+ *  recovery: when a worker dies mid-assemble (OOM / a corrupt clip) it throws
+ *  "ErrnoError: FS error", but the singleton stays loaded=true → EVERY later assemble
+ *  FS-errors forever until a full page reload. Calling this between assemble attempts
+ *  (see assembleFromHybridState) lets a retry run on a clean worker. Best-effort —
+ *  terminate() on an already-dead worker is swallowed. */
+export async function resetFFmpeg(): Promise<void> {
+  const inst = singleton?.instance
+  singleton = null
+  loadingPromise = null
+  execLock = Promise.resolve()   // drop any chained-onto-a-dead-worker exec promise
+  if (inst) {
+    try { inst.terminate() } catch { /* worker already gone — noop */ }
+  }
+}

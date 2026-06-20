@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { assembleHybridVideo, type HybridSceneClip, type HybridCaptionPlacement } from './hybridAssembler'
+import { resetFFmpeg } from './ffmpegLoader'
 import { renderCaptionBlob, deriveCaptionHighlights, ensureCaptionFonts } from './captionRenderer'
 import { renderBannerBlob, deriveBannerSlogan } from './bannerRenderer'
 import { BANNER_PRESETS, DEFAULT_BANNER_PRESET } from './bannerPresets'
@@ -124,11 +125,31 @@ export async function assembleFromHybridState(
       } catch { /* a bad banner never breaks the assemble */ }
     }
   }
-  const r = await assembleHybridVideo({
-    clips, voiceRef: hybrid.voiceRef, voiceDurationSec: realDur, resolution,
-    captions, banner,
-    onProgress: opts?.onProgress,
-    onStage: opts?.onStage,
-  })
-  return r.videoRef
+  // P6ar — assemble with ONE retry on a FRESH ffmpeg worker. A wasm worker can die
+  // mid-export (OOM after a long session, or a corrupt/expired clip) → "ErrnoError:
+  // FS error", and the dead singleton then fails EVERY later attempt until a page
+  // reload. Resetting between tries lets a transient crash recover automatically; the
+  // captions/banner/clips are all assetStore refs (already built) so the retry is cheap.
+  let lastErr: unknown
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const r = await assembleHybridVideo({
+        clips, voiceRef: hybrid.voiceRef, voiceDurationSec: realDur, resolution,
+        captions, banner,
+        onProgress: opts?.onProgress,
+        onStage: opts?.onStage,
+      })
+      return r.videoRef
+    } catch (e) {
+      lastErr = e
+      console.warn(`[HYBRID_ASM] ghép lần ${attempt}/2 lỗi:`, e)
+      await resetFFmpeg()   // kill the (possibly crashed/stuck) worker so the retry runs clean
+      if (attempt < 2) opts?.onStage?.('Ffmpeg lỗi — thử lại trên tiến trình mới…')
+    }
+  }
+  const detail = lastErr instanceof Error ? lastErr.message : String(lastErr)
+  throw new Error(
+    `Ghép video thất bại sau 2 lần (ffmpeg). Thường do MỘT cảnh lỗi/clip hỏng. ` +
+    `Thử: vào "Sửa cảnh" render lại cảnh nghi lỗi rồi bấm Ghép lại; nếu vẫn lỗi, tải lại trang. (Chi tiết: ${detail.slice(0, 120)})`,
+  )
 }

@@ -81,6 +81,18 @@ const INSERT_SPEED = 1.5
 const INSERT_LEAD_IN_SEC = 0.35
 const INSERT_SOURCE_BUDGET_SEC = 8.0
 
+// P6ar — a FATAL ffmpeg error means the wasm WORKER itself died (OOM / abort / a
+// corrupt input crashed it / it was terminated) — every later FS call then throws
+// "ErrnoError: FS error". When we see one mid-loop there's no point skipping more
+// clips on a dead worker; bubble it up so assembleFromHybridState can resetFFmpeg()
+// + retry the whole assemble on a FRESH worker. A NON-fatal exec error (one bad clip,
+// worker still alive) is skipped instead.
+function isFatalFfmpegError(err: unknown): boolean {
+  const m = (err instanceof Error ? err.message : String(err)).toLowerCase()
+  return m.includes('fs error') || m.includes('abort') || m.includes('terminate') ||
+    m.includes('out of memory') || m.includes('oom') || m.includes('memory access')
+}
+
 export async function assembleHybridVideo(
   params: HybridAssembleParams,
 ): Promise<HybridAssembleResult> {
@@ -136,10 +148,27 @@ export async function assembleHybridVideo(
 
     const isCard = c.scene.role === 'social_proof'   // P5w — a static FB-post IMAGE, not a video
     const inFile = isCard ? `hin_${i}.png` : `hin_${i}.mp4`
+    // P6ar — fetch FIRST + validate bytes. An EXPIRED Supabase signed URL (the assemble
+    // can run >10 min) or a transient 4xx returns a tiny error body, not a video; feeding
+    // that to ffmpeg.exec is what crashes the wasm worker (→ "FS error" that nukes the whole
+    // export). Skip a too-small/empty payload as a failed clip instead of poisoning ffmpeg.
+    let bytes: Uint8Array
     try {
-      await ffmpeg.writeFile(inFile, await fetchFile(url))
+      bytes = await fetchFile(url)
     } catch (err) {
       console.warn(`[HYBRID_ASM] cảnh ${i} fetch lỗi — bỏ qua`, err)
+      failedIdx.push(i)
+      continue
+    }
+    if (!bytes || bytes.byteLength < 512) {
+      console.warn(`[HYBRID_ASM] cảnh ${i} dữ liệu rỗng/hỏng (${bytes?.byteLength ?? 0}B — URL hết hạn?) — bỏ qua`)
+      failedIdx.push(i)
+      continue
+    }
+    try {
+      await ffmpeg.writeFile(inFile, bytes)
+    } catch (err) {
+      console.warn(`[HYBRID_ASM] cảnh ${i} writeFile lỗi — bỏ qua`, err)
       failedIdx.push(i)
       continue
     }
@@ -152,12 +181,20 @@ export async function assembleHybridVideo(
     // skipped for this window in buildCaptionPlacements).
     if (isCard) {
       const normFile = `hnorm_${i}.ts`
-      await ffmpeg.exec([
-        '-loop', '1', '-t', dur.toFixed(3), '-i', inFile,
-        '-vf', `scale=${evenW}:${evenH}:force_original_aspect_ratio=decrease,pad=${evenW}:${evenH}:(ow-iw)/2:(oh-ih)/2:color=0xEEF1F7,setsar=1`,
-        '-an', '-c:v', 'libx264', '-preset', preset_x264, '-crf', crf,
-        '-pix_fmt', 'yuv420p', '-r', '30', '-f', 'mpegts', '-y', normFile,
-      ])
+      try {
+        await ffmpeg.exec([
+          '-loop', '1', '-t', dur.toFixed(3), '-i', inFile,
+          '-vf', `scale=${evenW}:${evenH}:force_original_aspect_ratio=decrease,pad=${evenW}:${evenH}:(ow-iw)/2:(oh-ih)/2:color=0xEEF1F7,setsar=1`,
+          '-an', '-c:v', 'libx264', '-preset', preset_x264, '-crf', crf,
+          '-pix_fmt', 'yuv420p', '-r', '30', '-f', 'mpegts', '-y', normFile,
+        ])
+      } catch (err) {
+        console.warn(`[HYBRID_ASM] cảnh ${i} (card) exec lỗi — bỏ qua`, err)
+        failedIdx.push(i)
+        await ffmpeg.deleteFile(inFile).catch(() => {})
+        if (isFatalFfmpegError(err)) throw err   // worker chết → để flow reset + retry
+        continue
+      }
       normFiles.push(normFile)
       await ffmpeg.deleteFile(inFile).catch(() => {})
       continue
@@ -208,6 +245,7 @@ export async function assembleHybridVideo(
     // P5x — the top banner rides EVERY non-card segment (cards already `continue`d
     // above). It has no time window — it's held the whole segment.
     const segBanner = params.banner ?? null
+    try {
     if (segCaptions.length === 0 && !segBanner) {
       await ffmpeg.exec([
         '-i', inFile,
@@ -280,6 +318,14 @@ export async function assembleHybridVideo(
       ])
     }
 
+    } catch (err) {
+      console.warn(`[HYBRID_ASM] cảnh ${i} (insert) exec lỗi — bỏ qua`, err)
+      failedIdx.push(i)
+      await ffmpeg.deleteFile(inFile).catch(() => {})
+      for (const f of overlayFiles) await ffmpeg.deleteFile(f).catch(() => {})
+      if (isFatalFfmpegError(err)) throw err   // worker chết → để flow reset + retry
+      continue
+    }
     normFiles.push(normFile)
     await ffmpeg.deleteFile(inFile).catch(() => {})
     for (const f of overlayFiles) await ffmpeg.deleteFile(f).catch(() => {})
