@@ -330,16 +330,24 @@ function buildArchetypePrompt(archetype: ThumbnailArchetypeId, hook: string, lan
     : ''
   const base =
     `Design a scroll-stopping VERTICAL 9:16 TikTok ad THUMBNAIL. ` +
-    `Use the SAME PERSON from the avatar reference (identical face) as the creator, and the EXACT product ` +
-    `from the product reference (same packaging, colour, label — do NOT redesign it). ` +
+    `REFERENCE IMAGES: most show the PRODUCT (from several angles); ONE shows the CREATOR (a human face). ` +
+    `PRODUCT FIDELITY IS CRITICAL (non-negotiable): replicate the product EXACTLY as in its reference — the SAME ` +
+    `physical TYPE / FORM (box, adhesive PATCH, sachet, bottle, tube, jar, sheet — whatever the reference actually ` +
+    `IS), same packaging, colour, label and text. Do NOT redesign it, do NOT swap it for a different or generic ` +
+    `product, and NEVER invent a product the hook/topic might suggest (e.g. if the reference is a PATCH/BOX, do ` +
+    `NOT turn it into a generic oil or supplement BOTTLE). If space is tight, show it SMALLER but still the EXACT ` +
+    `product, clearly recognisable — never a look-alike or a re-imagined version. ` +
+    `Use the SAME PERSON from the creator/face reference (identical face) as the creator. ` +
     `Render the hook text "${hook}" as BIG, BOLD, perfectly-spelled ${langName} text with a heavy contrasting ` +
     `outline so it is readable on a small phone. Authentic UGC look (real iPhone photo, natural light), NOT stock. ` +
     msCulture
   switch (archetype) {
     case 'reaction_face':
       return base +
-        `COMPOSITION: extreme close-up of the creator's face with a strong shocked / curious / amazed expression ` +
-        `filling most of the frame. Hook text across the TOP third. Product small in a bottom corner. High-contrast, emotional.`
+        `COMPOSITION: close-up of the creator's face with a strong shocked / curious / amazed expression in the upper ` +
+        `frame. Hook text across the TOP third. The product sits in the lower third / a bottom corner, held or placed so ` +
+        `it is CLEARLY RECOGNISABLE as the exact reference product (sharp, well-lit — NOT blurred, NOT shrunk past ` +
+        `recognition, NOT a different product). High-contrast, emotional.`
     case 'before_after':
       return base +
         `COMPOSITION: a clear vertical SPLIT-SCREEN. LEFT half = the BEFORE problem state (dull / before using). ` +
@@ -352,7 +360,8 @@ function buildArchetypePrompt(archetype: ThumbnailArchetypeId, hook: string, lan
     case 'curiosity_text':
       return base +
         `COMPOSITION: the hook QUESTION text DOMINATES the frame (very large, ~half the image, bold with a bright highlight). ` +
-        `The creator's face smaller to one side with a curious expression; the product small in a corner. Maximum curiosity-gap.`
+        `The creator's face smaller to one side with a curious expression; the product in a corner but CLEARLY RECOGNISABLE ` +
+        `as the exact reference product (sharp, well-lit — NOT blurred, NOT a different/generic product). Maximum curiosity-gap.`
   }
 }
 
@@ -440,13 +449,24 @@ export async function generateAiThumbnail(params: {
   avatar: Model | null
   product: Product | null
 }): Promise<string> {
+  // P6aq — PRODUCT fidelity is the priority (the user audited SEVERE product drift: a
+  // medicated PATCH rendered as a generic oil bottle). Anchor the product FIRST and with
+  // MULTIPLE reference angles (up to 3) so gpt-4o-image locks its real type/form; the avatar
+  // (1 ref) still locks the face via the prompt's content-based role assignment. Was: avatar
+  // first + a SINGLE product ref → the lone secondary product ref got overridden by the hook
+  // topic and drifted to a stereotypical product.
   const filesUrl: string[] = []
-  if (params.avatar?.characterImage) {
-    const u = isAssetRef(params.avatar.characterImage) ? await getUrl(params.avatar.characterImage) : params.avatar.characterImage
+  const productImgs = (params.product?.productImages?.length
+    ? params.product.productImages
+    : [params.product?.productImage])
+    .filter((x): x is string => !!x)
+    .slice(0, 3)
+  for (const img of productImgs) {
+    const u = isAssetRef(img) ? await getUrl(img) : img
     if (u) filesUrl.push(u)
   }
-  if (params.product?.productImage) {
-    const u = isAssetRef(params.product.productImage) ? await getUrl(params.product.productImage) : params.product.productImage
+  if (params.avatar?.characterImage) {
+    const u = isAssetRef(params.avatar.characterImage) ? await getUrl(params.avatar.characterImage) : params.avatar.characterImage
     if (u) filesUrl.push(u)
   }
   const prompt = buildArchetypePrompt(params.archetypeId, params.hook, params.langName)
