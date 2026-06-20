@@ -447,12 +447,23 @@ export default function HybridVideoPhase(_props: Props) {
   // stops "rendering" once it has a clip, or once it's neither active nor persisted.
   useEffect(() => {
     const rs = hybrid.renderingScenes ?? {}
+    const now = Date.now()
     setRenderingIdx((set) => {
       let changed = false
       const n = new Set(set)
-      // A scene is still rendering iff this session owns it (ACTIVE_RENDERS) OR the
-      // store says so (renderingScenes). NOT keyed on clips — an old clip lingers
-      // during a "Render lại", and clearing on it would kill the spinner mid-render.
+      // P6ao — RECONCILE BOTH WAYS (was: prune-only, which was the root of two bugs).
+      // ADD any scene that is GENUINELY in-flight but missing from local state — either
+      // this session owns the promise (ACTIVE_RENDERS) or a FRESH persisted record exists
+      // (renderingScenes, e.g. a render owned by an OLD/other closure after a tab-switch).
+      // Without this ADD, a render driven by a non-current closure showed NO spinner +
+      // kept the STALE old clip on screen ("chạy ẩn, preview sai, không load").
+      for (const i of ACTIVE_RENDERS) if (!n.has(i)) { n.add(i); changed = true }
+      for (const [k, info] of Object.entries(rs)) {
+        const idx = Number(k)
+        if (!n.has(idx) && now - info.startedAt < RENDER_STALE_MS) { n.add(idx); changed = true }
+      }
+      // PRUNE any scene the UI thinks is rendering but is neither live nor persisted
+      // (a dead/ghost entry — these inflated the concurrency count + blocked new clicks).
       for (const i of set) if (!ACTIVE_RENDERS.has(i) && !rs[i]) { n.delete(i); changed = true }
       return changed ? n : set
     })
@@ -476,14 +487,19 @@ export default function HybridVideoPhase(_props: Props) {
     // persisted in-flight record (an OLD taskId here is exactly what the mount-resume re-polls
     // and slaps the previous WRONG clip back — the "load 1 chút rồi trả cảnh cũ" bug), the
     // failed flag, and any duplicate queue entry. Now nothing can resurrect the old clip.
-    if (!renderingIdx.has(i)) {
+    // P6ao — "genuinely LIVE" = THIS session owns the promise (ACTIVE_RENDERS), the module
+    // truth — NOT the local renderingIdx, which could be a stale ghost. If it's not truly live,
+    // wipe every leftover (module lock, persisted taskId that the mount-resume would re-poll +
+    // slap the OLD clip back, failed flag, dup queue entry) BEFORE launching.
+    if (!ACTIVE_RENDERS.has(i)) {
       ACTIVE_RENDERS.delete(i)
       patchSceneRender(i, null)
       setFailedIdx((s) => { const n = new Set(s); n.delete(i); return n })
       setQueue((q) => q.filter((x) => x !== i))
     }
-    // If a slot is free, launch directly.
-    if (renderingIdx.size < MAX_CONCURRENT_RENDERS) {
+    // P6ao — gate on the REAL live count (ACTIVE_RENDERS, the module truth) not renderingIdx
+    // (local state that drifts). A ghost in renderingIdx must never block a genuine click.
+    if (ACTIVE_RENDERS.size < MAX_CONCURRENT_RENDERS) {
       void runRender(i)
       return
     }
@@ -498,7 +514,8 @@ export default function HybridVideoPhase(_props: Props) {
     if (pending.length === 0) { addToast('Không còn cảnh chờ render', 'info'); return }
     addToast(`🎬 Render ${pending.length} cảnh (${MAX_CONCURRENT_RENDERS} song song)…`, 'info')
     // Fill the slots; queue the rest. The runRender finalizer drains the queue.
-    const slots = Math.max(0, MAX_CONCURRENT_RENDERS - renderingIdx.size)
+    // P6ao — slots from the REAL live count (ACTIVE_RENDERS), not the drift-prone local state.
+    const slots = Math.max(0, MAX_CONCURRENT_RENDERS - ACTIVE_RENDERS.size)
     const immediate = pending.slice(0, slots)
     const queued = pending.slice(slots)
     if (queued.length) setQueue((q) => [...q, ...queued])
