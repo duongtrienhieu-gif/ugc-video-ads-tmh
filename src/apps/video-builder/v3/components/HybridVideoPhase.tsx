@@ -15,7 +15,7 @@ import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import { directBrollScenes, assignSceneTiming, groundOrphanScenes, type TimedBrollScene, type ShotIntent } from '../services/brollDirector'
-import { fixSceneConceptPrompt, type SceneFix } from '../services/sceneConceptFixer'
+import { fixSceneConceptPrompt, planForIntent, type SceneFix } from '../services/sceneConceptFixer'
 import { glossScenesToVietnamese } from '../services/scriptGenerator'
 import { ensureLocalizedName, applyLocalizedName } from '../services/localizeProductName'
 import { generateProductVisualBrief } from '../services/productVisionBrief'
@@ -914,8 +914,18 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
               <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-violet-700">
                 <Sparkles className="h-2.5 w-2.5" /> AI sửa cảnh sai
               </span>
-              <select value={aiArch} onChange={(e) => setAiArch(e.target.value)}
-                title="Chọn kiểu cảnh đúng — AI sẽ dựng lại theo đúng kiểu này"
+              <select value={aiArch} onChange={(e) => {
+                  const v = e.target.value
+                  setAiArch(v)
+                  // P6ap — apply the archetype's LOCK (kind + face/no-face framing) to the scene
+                  // IMMEDIATELY on pick, even before "Nhờ AI sửa" — so the choice has effect right
+                  // away (🔍 cận/🌿 nguyên liệu/🧬 3D → no creator; 🧍 cảm xúc/🏃 kết quả/🔁 trước-sau →
+                  // có creator). Keeps the current conceptPrompt; the user can still run AI fix to
+                  // rewrite the text to match. '' (để AI tự chọn) applies no lock.
+                  const arch = FIX_ARCHETYPES.find((a) => a.value === v)
+                  if (arch?.intent) onSavePrompt(scene.conceptPrompt ?? '', { ...planForIntent(arch.intent), shotIntent: arch.intent })
+                }}
+                title="Chọn kiểu cảnh đúng — khoá mặt/sản phẩm áp dụng NGAY; bấm Nhờ AI sửa để AI viết lại prompt cho khớp"
                 className="w-full rounded border border-violet-200 bg-white px-1.5 py-1 text-[10px] font-semibold text-gray-700 focus:border-violet-400 focus:outline-none">
                 {FIX_ARCHETYPES.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
               </select>
@@ -923,7 +933,7 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
                 placeholder="Tả thêm ý muốn (vd: creator ngửi miếng dán rồi cười) — bỏ trống cũng được"
                 className="w-full rounded border border-violet-200 bg-white px-1.5 py-1 text-[10px] text-gray-700 focus:border-violet-400 focus:outline-none" />
               <div className="flex items-center justify-between gap-1">
-                <span className="text-[9px] text-gray-400">Chọn kiểu → Nhờ AI sửa → Lưu → Render lại</span>
+                <span className="text-[9px] text-gray-400">Chọn kiểu (khoá mặt/SP áp ngay) → Nhờ AI sửa (viết lại prompt) → Lưu → Render lại</span>
                 <button type="button" onClick={runAiFix} disabled={aiBusy}
                   className="flex items-center gap-0.5 rounded bg-violet-600 px-1.5 py-0.5 text-[9px] font-bold text-white hover:bg-violet-700 disabled:opacity-40">
                   {aiBusy ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Wand2 className="h-2.5 w-2.5" />} {aiBusy ? 'Đang sửa…' : 'Nhờ AI sửa'}

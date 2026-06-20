@@ -47,6 +47,20 @@ const FORCE_NOFACE = new Set<ShotIntent>(['product_macro', 'mechanism3d'])
 // Archetypes that MUST show the person living the beat.
 const FORCE_CREATOR = new Set<ShotIntent>(['lips', 'reaction', 'result_behavior', 'before_after'])
 
+/** P6ap — the DEFAULT render LOCK (kind + face/no-face framing) for an archetype, applying the
+ *  same INTENT_DEFAULT + FORCE rules the AI fixer snaps to. Exported so the UI can apply the lock
+ *  the MOMENT the user picks an archetype in the dropdown (closeup → no creator, emotion → creator)
+ *  — without waiting for an AI call — so the pick has immediate effect on the scene. ONE source of
+ *  truth: a manual pick and an AI fix land the same face/product lock. */
+export function planForIntent(intent: ShotIntent): { kind: BrollSceneKind; cameraFraming: 'creator' | 'hands_noface' } {
+  const def = INTENT_DEFAULT[intent]
+  let kind: BrollSceneKind = def.kind
+  let cameraFraming: 'creator' | 'hands_noface' = def.cameraFraming
+  if (FORCE_NOFACE.has(intent)) cameraFraming = 'hands_noface'
+  if (FORCE_CREATOR.has(intent)) { cameraFraming = 'creator'; kind = 'concept' }
+  return { kind, cameraFraming }
+}
+
 const FIX_SCHEMA = {
   type: 'object',
   properties: {
