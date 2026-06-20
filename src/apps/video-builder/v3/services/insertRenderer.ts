@@ -122,34 +122,22 @@ const GLOW_STRIP_RE = /\b(soft |gentle |warm |bright )?(glowing|glow|radiant|shi
 // sitting with two expressions). Matched off the conceptPrompt, universal.
 const BEFORE_AFTER_RE = /\b(before[- ]?(and[- ]?)?after|before\s*\/\s*after|split[- ]?screen|side[- ]?by[- ]?side|trước\s*(và|\/|-)?\s*sau|sebelum\s*(dan|\/|-)?\s*selepas)\b/i
 
-// P6h — B-ROLL WARDROBE. The lips cuts use the Bước voice+frame keyframe = outfit A. EVERY
-// b-roll / insert cut must instead wear ONE shared outfit B that is DIFFERENT from A (top +
-// bottoms + headwear if any) and IDENTICAL across all b-roll (reads as a second filming
-// session), NOT a fresh outfit per cut. B is picked DETERMINISTICALLY from the product name →
-// stable within a video, varied across products, no vision call. The before/after split is
-// EXEMPT (its own conceptPrompt already dictates two contrasting outfits in one frame).
-const BROLL_WARDROBE_PALETTE = [
-  'a plain heather-grey crew-neck T-shirt with dark casual trousers, and — if they wear any headwear — a soft cream hijab/scarf',
-  'a soft beige knit top with relaxed denim jeans, and — if they wear any headwear — a dusty-rose hijab/scarf',
-  'a navy-blue casual button shirt with neutral chinos, and — if they wear any headwear — a light-grey hijab/scarf',
-  'an olive-green cotton tee with comfortable joggers, and — if they wear any headwear — a warm taupe hijab/scarf',
-  'a muted terracotta casual top with dark relaxed pants, and — if they wear any headwear — an off-white hijab/scarf',
-]
-function pickBrollWardrobe(seed: string): string {
-  let h = 0
-  for (let i = 0; i < seed.length; i++) h = (Math.imul(h, 31) + seed.charCodeAt(i)) >>> 0
-  return BROLL_WARDROBE_PALETTE[h % BROLL_WARDROBE_PALETTE.length]
-}
-/** The shared B-roll wardrobe instruction (outfit B), applied IDENTICALLY to every b-roll cut. */
-function brollWardrobeClause(product: Product | null, refIndex: number): string {
-  const B = pickBrollWardrobe((product?.productName ?? 'ugc').toLowerCase())
+// P6at — WARDROBE = SAME as the reference (identity fix). The old P6h rule forced a DIFFERENT
+// "outfit B" on every b-roll cut for a "multi-day filming" feel — but the b-roll engine
+// (gpt-4o-image + Seedance) can't hold the FACE tightly across an outfit + hijab-colour change,
+// so the lips cuts (Kling, outfit A, exact face) vs the b-roll cuts (outfit B + slightly drifted
+// face) read as TWO DIFFERENT PEOPLE (user audited: "broll mặt khác lips, 2 người khác nhau").
+// Same-person consistency matters far more than the multi-day look, so the b-roll creator now
+// wears the EXACT SAME outfit + hijab as the keyframe → face AND clothing match → one creator.
+// before/after is still EXEMPT (it deliberately dictates two contrasting outfits in one frame).
+/** Wardrobe instruction: keep the creator's outfit IDENTICAL to the reference keyframe. */
+function brollWardrobeClause(_product: Product | null, refIndex: number): string {
   return (
-    `B-ROLL WARDROBE — the creator wears ${B}. This is a DIFFERENT outfit from the clothing in ` +
-    `reference image #${refIndex} (different top, different bottoms, and a different headwear ` +
-    `color/style if they wear any; if they wear NO headwear, keep the hair as in the reference). ` +
-    `Use this EXACT SAME outfit on EVERY b-roll cut (one consistent separate filming session) — ` +
-    `NEVER copy the reference's outfit and NEVER change the outfit between cuts. Keep ONLY the ` +
-    `FACE identical to the reference (that is the identity).`
+    `WARDROBE — the creator wears the EXACT SAME outfit, top and headwear as reference image ` +
+    `#${refIndex}: the SAME clothing, the SAME hijab/scarf COLOUR and style (or the SAME hair if ` +
+    `they wear none). Do NOT change the outfit or the hijab colour — SAME person, SAME outfit ` +
+    `across the WHOLE video, so every cut is unmistakably the same creator. Only the pose / action ` +
+    `/ setting / facial expression changes between cuts.`
   )
 }
 
@@ -320,16 +308,15 @@ function buildInsertKeyframePrompt(
     )
   }
   if (personRefIndex > 0) {
-    // P6h — wardrobe policy. lips (the Bước voice+frame keyframe) = outfit A. EVERY b-roll /
-    // insert cut wears ONE shared outfit B (different from A, identical across all b-roll), so
-    // only the FACE is the identity — NOT the clothing. (Was: "keep the SAME outfit + hijab as
-    // the avatar's signature look", which made b-roll ≈ lips + varied per cut = the dup look.)
+    // P6at — wardrobe policy = SAME outfit as the keyframe (identity fix; see brollWardrobeClause).
+    // FACE *and* CLOTHING both match the reference so b-roll reads as the same creator as the lips
+    // cuts. before/after stays exempt (two contrasting outfits in one frame).
     const isBeforeAfter = presetId === 'BEFORE_AFTER_REACTION' ||
       (!!conceptPrompt && BEFORE_AFTER_RE.test(conceptPrompt))
     paragraphs.push(
       `IDENTITY LOCK: Person from reference image #${personRefIndex}. Preserve EXACTLY the FACE, ` +
-      `skin tone, gender, age and build — the SAME recognizable human being in every scene. The ` +
-      `CLOTHING changes per the wardrobe rule below; ONLY the FACE is the identity.`,
+      `skin tone, gender, age and build — the SAME recognizable human being in every scene — AND ` +
+      `keep the SAME clothing + headwear as the reference (see the wardrobe rule below).`,
     )
     if (isBeforeAfter) {
       // before/after split — two contrasting outfits in ONE frame (EXEMPT from the shared B,
