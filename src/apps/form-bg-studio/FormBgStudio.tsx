@@ -32,7 +32,7 @@ function AssetImg({ refId, alt }: { refId: string | undefined | null; alt: strin
   return <img src={url} alt={alt} className="h-full w-full object-cover" />
 }
 
-export default function FormBgStudio() {
+export default function FormBgStudio({ embedded = false }: { embedded?: boolean }) {
   const {
     draft, images, direction, isAnalyzing,
     setProductId, setGiftImageRef, setPreset, setLang,
@@ -159,13 +159,15 @@ export default function FormBgStudio() {
 
   return (
     <div className="flex h-full flex-col bg-[#F6F6F8]">
-      <div className="flex items-center gap-2 border-b border-black/10 bg-white px-5 py-3">
-        <LayoutTemplate className="h-5 w-5 text-indigo-500" />
-        <h1 className="text-base font-bold text-gray-900">Xưởng Nền Form Đặt Hàng</h1>
-        <span className="ml-2 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-600">
-          {FORM_BG_VARIANTS} biến thể · ~{FORM_BG_TOTAL_CREDITS} credit
-        </span>
-      </div>
+      {!embedded && (
+        <div className="flex items-center gap-2 border-b border-black/10 bg-white px-5 py-3">
+          <LayoutTemplate className="h-5 w-5 text-indigo-500" />
+          <h1 className="text-base font-bold text-gray-900">Xưởng Nền Form Đặt Hàng</h1>
+          <span className="ml-2 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-600">
+            {FORM_BG_VARIANTS} biến thể · ~{FORM_BG_TOTAL_CREDITS} credit
+          </span>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5 lg:flex-row">
         {/* Input panel */}
