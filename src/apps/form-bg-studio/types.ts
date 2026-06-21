@@ -38,13 +38,20 @@ export const FORM_BG_PRESETS: PresetMeta[] = [
 /** Xuất 2 biến thể mỗi lần (user chốt). */
 export const FORM_BG_VARIANTS = 2
 
+/** Mỗi biến thể gồm 2 DẢI rời: header (trên) + footer (dưới). Giữa để màu
+ *  nền phẳng (palette.bg) cho user đè form — form dài bao nhiêu cũng vừa. */
+export type StripKind = 'header' | 'footer'
+export const STRIP_KINDS: StripKind[] = ['header', 'footer']
+
 export type FormBgStatus = 'idle' | 'generating' | 'completed' | 'failed'
 
 export interface FormBgImage {
   index: number
   status: FormBgStatus
-  assetRef?: string
-  prompt?: string
+  /** asset:xxx dải header. */
+  headerRef?: string
+  /** asset:xxx dải footer. */
+  footerRef?: string
   error?: string
 }
 
@@ -105,4 +112,5 @@ export function defaultPalette(preset: FormBgPreset): FormBgPalette {
 }
 
 export const FORM_BG_CREDITS_PER_IMAGE = 6
-export const FORM_BG_TOTAL_CREDITS = FORM_BG_CREDITS_PER_IMAGE * FORM_BG_VARIANTS
+export const FORM_BG_STRIPS = STRIP_KINDS.length
+export const FORM_BG_TOTAL_CREDITS = FORM_BG_CREDITS_PER_IMAGE * FORM_BG_STRIPS * FORM_BG_VARIANTS
