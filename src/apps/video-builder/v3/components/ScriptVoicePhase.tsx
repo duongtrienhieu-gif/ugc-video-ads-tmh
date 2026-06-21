@@ -20,11 +20,12 @@ import { useMemo, useEffect, useState, useRef } from 'react'
 import {
   Loader2, Sparkles, RefreshCw, ChevronRight, AlertCircle,
   Clock, Mic2, Lightbulb, Globe, Package, UserRound,
-  Library, UserCircle2, Search, Check, Play, Plus, X, Upload,
+  Library, UserCircle2, Search, Check, Play, Plus, X, Upload, Gift,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
+import { saveAsset } from '../../../../utils/assetStore'
 import BankPicker from '../../../../components/BankPicker'
 import type { Model, Product } from '../../../../stores/types'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
@@ -37,6 +38,7 @@ import { AD_STRUCTURES, AD_STRUCTURES_BY_GROUP } from '../services/adStructures'
 import { SHAPE_CONFIGS, SCRIPT_SHAPE_ORDER } from '../services/scriptShapes'
 import { recomputeBlockDurations, estimateReadDurationForVoice } from '../services/voiceTimingEstimator'
 import { generateScript, generateHooks, translateScriptToVietnamese, detectCertClaims } from '../services/scriptGenerator'
+import { giftBenefitForVideo } from '../services/giftBenefitForVideo'
 import {
   listVoices, listSharedVoices, addSharedVoice, cloneVoice, textToSpeech,
   type ElevenLabsVoice, type SharedVoice,
@@ -83,6 +85,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const state    = useAdsVideoStore((s) => s.state)
   const setAvatar  = useAdsVideoStore((s) => s.setAvatar)
   const setProduct = useAdsVideoStore((s) => s.setProduct)
+  const setGift    = useAdsVideoStore((s) => s.setGift)
   const setAdStructure = useAdsVideoStore((s) => s.setAdStructure)
   const setAdShape = useAdsVideoStore((s) => s.setAdShape)
   const setTargetDurationSec = useAdsVideoStore((s) => s.setTargetDurationSec)
@@ -114,6 +117,9 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   // #6 — Tab A "⚡ Tạo nhanh" (AI viết, default) vs Tab B "📝 Dán" (own script).
   const [genTab, setGenTab] = useState<'quick' | 'own'>('quick')
   const [isGeneratingHooks, setIsGeneratingHooks] = useState(false)
+  // Phase A — gift input transient flags.
+  const [giftUploading, setGiftUploading] = useState(false)
+  const [giftSuggesting, setGiftSuggesting] = useState(false)
   // #6 — Vietnamese translation for DISPLAY only (target lang ≠ vi). Never written
   // into state.inputs.script — the real script stays in the target language.
   const [viTranslation, setViTranslation] = useState<string | null>(null)
@@ -222,6 +228,70 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     return { productName: p?.productName ?? 'Product', productPitch, creatorDescription }
   }
 
+  // ── Phase A — resolve the OPTIONAL gift into the {name, benefitLine} the script
+  // CTA needs. Vision-reads ONLY the gift image to localise the name + derive a
+  // benefit (unless the user typed their own). Returns undefined when gift is off
+  // → generateScript behaves exactly as before. Never throws (giftBenefitForVideo
+  // is graceful); on any miss it still passes the raw name so the CTA gets the gift. */
+  const resolveGiftForScript = async (productName: string): Promise<{ name: string; benefitLine: string } | undefined> => {
+    const g = state.gift
+    if (!g?.enabled || !g.name.trim()) return undefined
+    const typed = (g.benefitHint ?? '').trim()
+    if (g.imageRef && geminiKey) {
+      const r = await giftBenefitForVideo({
+        apiKey: geminiKey,
+        giftImageRef: g.imageRef,
+        giftName: g.name,
+        productName,
+        lang: brain.outputLang,
+      })
+      return { name: r.localizedGiftName, benefitLine: typed || r.benefitLine }
+    }
+    // No image / no key → still carry the gift (raw name + whatever the user typed).
+    return { name: g.name.trim(), benefitLine: typed }
+  }
+
+  // Phase A — upload the gift image (→ asset ref stored on gift.imageRef).
+  const handleGiftUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''   // allow re-uploading the same file
+    if (!file) return
+    setGiftUploading(true)
+    try {
+      const ref = await saveAsset(file, file.type)
+      setGift({ imageRef: ref })
+    } catch (err) {
+      addToast(`Tải ảnh quà thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error')
+    } finally {
+      setGiftUploading(false)
+    }
+  }
+
+  // Phase A — "✨ AI gợi ý" — vision-reads ONLY the gift image → fills the benefit hint.
+  const handleSuggestGiftBenefit = async () => {
+    const g = state.gift
+    if (!geminiKey) { addToast('Chưa có Gemini API key trong Settings', 'error'); return }
+    if (!g?.imageRef) { addToast('Tải ảnh quà trước khi gợi ý', 'error'); return }
+    if (!g.name.trim()) { addToast('Nhập tên quà trước', 'error'); return }
+    setGiftSuggesting(true)
+    try {
+      const brief = buildProductBrief()
+      const r = await giftBenefitForVideo({
+        apiKey: geminiKey,
+        giftImageRef: g.imageRef,
+        giftName: g.name,
+        productName: brief.productName,
+        lang: brain.outputLang,
+      })
+      setGift({ benefitHint: r.benefitLine })
+      addToast(r.benefitLine ? '✓ Đã gợi ý lợi ích quà' : 'AI chưa nghĩ ra câu lợi ích — thử lại', r.benefitLine ? 'success' : 'info')
+    } catch (err) {
+      addToast(`Gợi ý lợi ích lỗi: ${err instanceof Error ? err.message : String(err)}`, 'error')
+    } finally {
+      setGiftSuggesting(false)
+    }
+  }
+
   // ── #6 hook layer — generate 6 hooks (one per archetype) for the user to pick ─
   const handleGenerateHooks = async () => {
     if (!geminiKey) { addToast('Chưa có Gemini API key trong Settings', 'error'); return }
@@ -283,6 +353,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     setScriptBrainError(null)
     try {
       const brief = buildProductBrief(ep)
+      const gift = await resolveGiftForScript(brief.productName)
       const result = await generateScript({
         geminiKey,
         structure: brain.structure,
@@ -296,6 +367,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         useOwnScript: !isQuick && hasScriptText,
         ownScriptText: state.inputs.script,
         chosenHook,
+        gift,
       })
 
       // Quick mode: DON'T jump to the next step. Drop the generated script into the
@@ -357,6 +429,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
       const ep = await ensureLocalizedName(state.inputs.product, brain.outputLang, geminiKey)
       if (ep !== state.inputs.product) setProduct(ep)
       const brief = buildProductBrief(ep)
+      const gift = await resolveGiftForScript(brief.productName)
       const result = await generateScript({
         geminiKey,
         structure: brain.structure,
@@ -370,6 +443,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         useOwnScript: false,
         chosenHook,
         previousScript: state.inputs.script,   // diverge from the current version
+        gift,
       })
       const draft = result.script.blocks
         .map((b) => b.text.trim().replace(/\s+/g, ' '))
@@ -564,6 +638,67 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
             onPick={() => setPickerMode('avatar')}
             onClear={() => setAvatar(null)}
           />
+        </div>
+
+        {/* ── Quà tặng kèm (tùy chọn) — Phase A ─────────────────────────────── */}
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/40 p-3">
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={!!state.gift?.enabled}
+              onChange={(e) => setGift({ enabled: e.target.checked })}
+              className="h-4 w-4 accent-amber-600"
+            />
+            <Gift className="h-4 w-4 text-amber-600" />
+            <span className="text-[13px] font-bold text-amber-800">Quà tặng kèm</span>
+            <span className="text-[10px] font-medium text-amber-600">(tùy chọn — chỉ xuất hiện ở CTA)</span>
+          </label>
+
+          {state.gift?.enabled && (
+            <div className="mt-3 space-y-2.5">
+              <input
+                type="text"
+                value={state.gift?.name ?? ''}
+                onChange={(e) => setGift({ name: e.target.value })}
+                placeholder="Tên quà (gõ tiếng Việt — AI tự dịch sang ngôn ngữ đích)"
+                className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-amber-400"
+              />
+
+              <div className="flex items-center gap-2.5">
+                <label className={`flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-[12px] font-semibold transition-colors ${giftUploading ? 'border-amber-300 text-amber-400' : 'border-amber-300 text-amber-700 hover:bg-amber-100'}`}>
+                  {giftUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                  {state.gift?.imageRef ? 'Đổi ảnh quà' : 'Tải ảnh quà *'}
+                  <input type="file" accept="image/*" onChange={handleGiftUpload} className="hidden" disabled={giftUploading} />
+                </label>
+                {state.gift?.imageRef && <GiftThumb refStr={state.gift.imageRef} onClear={() => setGift({ imageRef: undefined })} />}
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold text-amber-700">Câu lợi ích quà</span>
+                  <button
+                    onClick={handleSuggestGiftBenefit}
+                    disabled={giftSuggesting || !state.gift?.imageRef || !state.gift?.name.trim()}
+                    className="flex items-center gap-1 rounded-md bg-amber-600 px-2 py-1 text-[11px] font-bold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {giftSuggesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                    AI gợi ý
+                  </button>
+                </div>
+                <textarea
+                  value={state.gift?.benefitHint ?? ''}
+                  onChange={(e) => setGift({ benefitHint: e.target.value })}
+                  placeholder="Để trống → AI tự viết khi tạo kịch bản (đọc ảnh quà). Hoặc tự gõ / bấm 'AI gợi ý'."
+                  rows={2}
+                  className="w-full resize-none rounded-lg border border-amber-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <p className="text-[10px] leading-relaxed text-amber-700">
+                Chỉ nhập <b>TÊN quà</b> — đừng ghi giá / giá trị (video không hiển thị tiền). Quà sẽ vào câu CTA + 2 cảnh đóng (áp chót khoe sản phẩm + quà, cảnh cuối creator cầm cả hai).
+              </p>
+            </div>
+          )}
         </div>
 
         {/* ── Kịch bản — Tab ⚡ Tạo nhanh (AI viết) / 📝 Dán ────────────────── */}
@@ -1184,6 +1319,26 @@ function AssetTile({
         )}
       </button>
       <p className="text-[10px] text-gray-400">{hint}</p>
+    </div>
+  )
+}
+
+// ── Phase A — gift image thumbnail (resolves asset ref → signed URL) ─────────
+function GiftThumb({ refStr, onClear }: { refStr: string; onClear: () => void }) {
+  const url = useAssetUrl(refStr)
+  const display = refStr.startsWith('http') ? refStr : url
+  return (
+    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-amber-200 bg-white">
+      {display
+        ? <img src={display} alt="Quà" className="h-full w-full object-cover" />
+        : <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-4 w-4 animate-spin text-amber-300" /></div>}
+      <button
+        onClick={onClear}
+        className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-bl bg-black/50 text-white hover:bg-red-500"
+        title="Bỏ ảnh quà"
+      >
+        <X className="h-2.5 w-2.5" />
+      </button>
     </div>
   )
 }

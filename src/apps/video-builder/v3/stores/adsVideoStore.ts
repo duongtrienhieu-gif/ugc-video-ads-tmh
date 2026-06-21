@@ -25,6 +25,7 @@ import {
   type ScriptLang,
   type GeneratedScript, type HookVariant, type VoiceCategoryId,
   type VoiceRecord,
+  type VideoGift,
   // Z32 — Creator Video Engine
   type CreatorPresetId, type CreatorVideoConfig,
   // Z33 — Action Inserts
@@ -63,6 +64,8 @@ interface AdsVideoStoreState {
   setProduct: (product: Product | null) => void
   setScript:  (script: string) => void
   setVoiceId: (voiceId: string | null) => void
+  /** Phase A — patch the optional bundled-gift config (CTA-only feature). */
+  setGift:    (patch: Partial<VideoGift>) => void
 
   // ── Creator video ───────────────────────────────────────────────────────
 
@@ -419,6 +422,12 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
 
   setVoiceId: (voiceId) =>
     commit(set, get, (s) => ({ ...s, inputs: { ...s.inputs, voiceId } })),
+
+  setGift: (patch) =>
+    commit(set, get, (s) => ({
+      ...s,
+      gift: { ...(s.gift ?? { enabled: false, name: '' }), ...patch },
+    })),
 
   setCreatorVideo: (clip) =>
     commit(set, get, (s) => ({ ...s, creatorVideo: clip, autoEdit: invalidatePlan(s.autoEdit) })),

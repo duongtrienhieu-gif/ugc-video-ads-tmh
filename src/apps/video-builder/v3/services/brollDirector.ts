@@ -76,6 +76,12 @@ export interface BrollScene {
    *  creator HOLDING the product) instead of the plain talking-head KF-A. At most one lips per
    *  video carries this (set by assignLipsProductKeyframe). */
   lipsHoldsProduct?: boolean
+  /** Phase A — asset:xxx of a bundled GIFT image to send as an EXTRA render
+   *  reference (alongside the product) for this cut. Set ONLY on the two closing
+   *  cuts when a gift is enabled (penult product+gift hero; final creator holding
+   *  BOTH). The renderer hard-locks the product + renders the gift as a distinct
+   *  second object. Absent on every other cut. */
+  giftRef?: string
   /** one short phrase explaining the choice (debug / UI). */
   reason?: string
 }
@@ -98,6 +104,9 @@ export interface BrollDirectorParams {
    *  scene types (split-screen, date stamps, numbered closeups) match the body.
    *  Omit → 'narrative' (no hint). */
   shape?: import('../types').ScriptShape
+  /** Phase A — OPTIONAL bundled gift (already resolved: localised name + image
+   *  ref). When enabled, the two closing cuts show the gift. undefined → no-op. */
+  gift?: import('../types').VideoGift
 }
 
 // ── Lips count ladder (user spec — NOT a niche hardcode) ────────────────────
@@ -1279,12 +1288,21 @@ OUTPUT strict JSON only (no markdown fences):
   // CTA visual guarantee — the LAST cut is the buy line; lock it to the standard
   // product endorsement (creator + product + thumbs-up) so the call-to-buy always
   // shows the product, regardless of what the model wrote for that scene.
+  const giftOn = !!(params.gift?.enabled && params.gift.imageRef)
   const lastScene = scenes[scenes.length - 1]
   if (lastScene && lastScene.role === 'broll') {
     lastScene.kind = 'product_action'
     lastScene.cameraFraming = 'creator'
-    lastScene.conceptPrompt =
-      'The creator holds the product up beside their face and gives an enthusiastic thumbs-up to camera, smiling — a genuine endorsement at the call to buy.'
+    if (giftOn) {
+      // Phase A (option C) — creator holds the PRODUCT and the GIFT, one in each hand,
+      // both presented to camera. HARD product lock — two SEPARATE objects, never merged.
+      lastScene.giftRef = params.gift!.imageRef
+      lastScene.conceptPrompt =
+        'The creator holds the PRODUCT in one hand and the FREE GIFT in the other, presenting BOTH up to camera with a warm smile and a nod — a genuine endorsement at the call to buy. CRITICAL: the product and the gift are TWO SEPARATE, DISTINCT objects held apart — do NOT merge, blend, swap, or restyle either one; keep each exactly as in its reference. No on-screen price or numbers.'
+    } else {
+      lastScene.conceptPrompt =
+        'The creator holds the product up beside their face and gives an enthusiastic thumbs-up to camera, smiling — a genuine endorsement at the call to buy.'
+    }
   }
 
   // P5o — when the CTA spans the LAST TWO scenes (two buy/offer lines), the single
@@ -1305,9 +1323,17 @@ OUTPUT strict JSON only (no markdown fences):
     penult.cameraFraming = 'hands_noface'
     penult.shotIntent = 'offer'
     const hasOffer = !!(params.product?.offer && params.product.offer.trim())
-    penult.conceptPrompt = hasOffer
-      ? 'PRODUCT-HERO shot — NO person, NO face: the product is the clear HERO, centred + premium on a clean surface in good light, presented as a special DEAL / offer moment (a hand may place or point at it). Make it look worth grabbing. No on-screen price or numbers.'
-      : 'PRODUCT-HERO shot — NO person, NO face: the product is the clear HERO on a shelf / surface, a hand quickly REACHING in to grab it — a "selling fast, last one, get it now" urgency feel. Clean, premium light. No on-screen text.'
+    if (giftOn) {
+      // Phase A (option A) — the gift IS the offer beat: product + free gift, NO person.
+      // Takes priority over the deal / urgency flavours. Two distinct objects, hard product lock.
+      penult.giftRef = params.gift!.imageRef
+      penult.conceptPrompt =
+        'PRODUCT-HERO shot — NO person, NO face: the PRODUCT and the FREE GIFT sit side by side on a clean premium surface in good light — a "buy now, get this free too" bundle that looks worth grabbing. CRITICAL: product and gift are TWO SEPARATE, DISTINCT objects placed apart — do NOT merge, blend, swap, or restyle either one; keep each exactly as in its reference. No on-screen price or numbers.'
+    } else {
+      penult.conceptPrompt = hasOffer
+        ? 'PRODUCT-HERO shot — NO person, NO face: the product is the clear HERO, centred + premium on a clean surface in good light, presented as a special DEAL / offer moment (a hand may place or point at it). Make it look worth grabbing. No on-screen price or numbers.'
+        : 'PRODUCT-HERO shot — NO person, NO face: the product is the clear HERO on a shelf / surface, a hand quickly REACHING in to grab it — a "selling fast, last one, get it now" urgency feel. Clean, premium light. No on-screen text.'
+    }
   }
 
   // P4e Layer 2 — fill any scene the director left with an empty / vague

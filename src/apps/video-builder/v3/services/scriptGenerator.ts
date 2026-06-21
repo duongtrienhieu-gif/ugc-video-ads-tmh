@@ -79,6 +79,11 @@ export interface GenerateScriptParams {
    *  so the new version is genuinely different (not a lazy near-duplicate), while the
    *  fixed hook + product facts + shape stay the same. */
   previousScript?: string
+  /** Phase A — OPTIONAL bundled gift. Already RESOLVED by the caller (name
+   *  localised to the output lang + a benefit line — via giftBenefitForVideo).
+   *  When present, the AI weaves "tặng kèm {name} — {benefitLine}" into the CTA
+   *  block ONLY; the 4 hero blocks are untouched. No price ever (guard strips it). */
+  gift?: { name: string; benefitLine: string }
 }
 
 export interface GenerateScriptResult {
@@ -142,6 +147,7 @@ export async function generateScript(
         structureLabel: structure.labelVi,
         angleLabel: angle.labelVi,
         lang,
+        gift: params.gift,
       }),
     })
   } else {
@@ -166,6 +172,7 @@ export async function generateScript(
       structureLabel: structure.labelVi,
       angleLabel: angle.labelVi,
       lang,
+      gift: params.gift,
     })
 
     // Z31-fix: schema-constrained decoding + auto-retry on parse failure.
@@ -642,9 +649,19 @@ function buildUserPrompt(args: {
   structureLabel: string
   angleLabel: string
   lang: string
+  gift?: { name: string; benefitLine: string }
 }): string {
   const creatorLine = args.creatorDescription
     ? `\nCREATOR PROFILE (write in this voice):\n${args.creatorDescription}\n`
+    : ''
+  // Phase A — gift directive scoped to the CTA block ONLY. The name is already
+  // localised; the benefit line is given. The 4 hero blocks must NOT mention it.
+  const giftLine = args.gift && args.gift.name.trim()
+    ? `\nBUNDLED GIFT — applies to the CTA BLOCK ONLY (do NOT touch hook/pain/discovery/benefit):
+- When ordering TODAY, the buyer gets a FREE bonus gift: "${args.gift.name.trim()}"${args.gift.benefitLine.trim() ? ` — ${args.gift.benefitLine.trim()}` : ''}.
+- Weave this naturally into the call-to-action as an extra reason to buy NOW. Keep it short.
+- ABSOLUTELY NO price / money / value-in-RM / discount % for the gift — just the gift + its benefit.
+- The 4 hero blocks stay 100% about the main product — the gift exists only at the CTA.\n`
     : ''
   return `Write a ${args.targetDurationSec}-second TikTok ad in ${args.lang} for the product below.
 
@@ -692,7 +709,7 @@ ECONOMICAL, write tight from the start, every line earns its place):
   laddered. Laddering replaces the mechanism phrase, it must not lengthen the script.
 Do NOT sacrifice the anchor, the proof beat, the social-proof crowd line, or the CTA to
 cram in more benefits.
-
+${giftLine}
 Generate the JSON now.`
 }
 

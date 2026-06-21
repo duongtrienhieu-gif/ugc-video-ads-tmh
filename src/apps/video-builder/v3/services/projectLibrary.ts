@@ -18,7 +18,7 @@ import type {
   ScriptBrain, CreatorVideoConfig, CreatorVideoClip,
   ActionInsertClip, AutoEditState, HybridState,
 } from '../types'
-import { createEmptyScriptBrain, createEmptyAutoEditState, createEmptyHybridState } from '../types'
+import { createEmptyScriptBrain, createEmptyAutoEditState, createEmptyHybridState, createEmptyVideoGift } from '../types'
 import { supabase } from '../../../../lib/supabase'
 
 // P6au — snapshot ONLY the durable hybrid fields (scenes + rendered clip refs + voice +
@@ -261,6 +261,7 @@ export function saveCurrentAsProject(
     snapshot: {
       inputs: { ...state.inputs },
       scriptBrain: { ...state.scriptBrain },
+      gift: state.gift ? { ...state.gift } : undefined,   // Phase A — bundled gift config
       creatorVideoConfig: { ...state.creatorVideoConfig },
       creatorVideo: state.creatorVideo ? { ...state.creatorVideo } : null,
       inserts: state.inserts.map((it) => ({ ...it })),
@@ -316,6 +317,7 @@ export function updateProject(id: string, state: V3PipelineState): SavedProject 
     snapshot: {
       inputs: { ...state.inputs },
       scriptBrain: { ...state.scriptBrain },
+      gift: state.gift ? { ...state.gift } : undefined,   // Phase A — bundled gift config
       creatorVideoConfig: { ...state.creatorVideoConfig },
       creatorVideo: state.creatorVideo ? { ...state.creatorVideo } : null,
       inserts: state.inserts.map((it) => ({ ...it })),
@@ -401,6 +403,8 @@ export function duplicateProject(
       : opts.resetHookVariants
         ? { ...src.snapshot.scriptBrain, hookVariants: [], pickedHookIdx: -1 } as ScriptBrain
         : { ...src.snapshot.scriptBrain } as ScriptBrain,
+    // Gift is reusable config — carried over; a fresh script on the copy re-uses it.
+    gift: src.snapshot.gift ? { ...src.snapshot.gift } : undefined,
     creatorVideoConfig: { ...src.snapshot.creatorVideoConfig } as CreatorVideoConfig,
     creatorVideo: opts.resetCreatorVideo
       ? null
@@ -447,6 +451,7 @@ export function hydrateProjectAsState(project: SavedProject): Partial<V3Pipeline
   return {
     inputs: { ...project.snapshot.inputs },
     scriptBrain: { ...project.snapshot.scriptBrain },
+    gift: project.snapshot.gift ? { ...project.snapshot.gift } : createEmptyVideoGift(),
     creatorVideoConfig: { ...project.snapshot.creatorVideoConfig },
     creatorVideo: project.snapshot.creatorVideo ? { ...project.snapshot.creatorVideo } : null,
     inserts: project.snapshot.inserts.map((it) => ({ ...it })),

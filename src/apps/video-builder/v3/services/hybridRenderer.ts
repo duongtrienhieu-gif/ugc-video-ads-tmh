@@ -146,6 +146,8 @@ export async function renderOneHybridScene(
     durationSec: scene.endSec - scene.startSec,
     cameraFraming,   // P3v — defaulted above so product shots don't grow a face.
     quote: scene.quote,
+    giftRef: scene.giftRef,   // Phase A — extra gift reference on the two closing cuts
+
     onStageUpdate: (u) => {
       onStage?.(u.stage)
       // P3z — surface the Grok video taskId so the caller can persist it for resume.

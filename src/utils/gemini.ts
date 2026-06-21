@@ -131,6 +131,8 @@ export async function directGeminiVision(params: {
   maxOutputTokens?: number
   responseMimeType?: 'application/json' | 'text/plain'
   responseSchema?: Record<string, unknown>
+  /** Sampling temperature. Default 0.4 (unchanged for existing callers). */
+  temperature?: number
   /** Pass 0 to DISABLE gemini-2.5-flash internal "thinking" on a structured-JSON
    *  task. Without it, the model can spend its whole output-token budget on
    *  thinking and return a TRUNCATED JSON body (callers then hit "JSON parse
@@ -146,7 +148,7 @@ export async function directGeminiVision(params: {
     const body: Record<string, unknown> = {
       contents: [{ role: 'user', parts: params.parts }],
       generationConfig: {
-        temperature: 0.4,
+        temperature: params.temperature ?? 0.4,
         maxOutputTokens: params.maxOutputTokens ?? 4096,
         ...(params.responseMimeType && { responseMimeType: params.responseMimeType }),
         ...(params.responseSchema  && { responseSchema:  params.responseSchema  }),

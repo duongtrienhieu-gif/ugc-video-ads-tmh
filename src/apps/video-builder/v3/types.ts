@@ -662,6 +662,32 @@ export interface VoiceFirstSlot {
   scriptSig: string
 }
 
+// ── Quà tặng kèm (Phase A — video) ──────────────────────────────────────────
+// OPTIONAL bundled-gift layer. Lives ONLY at the CTA: when enabled, the script
+// AI rewrites the `cta` block to weave in the gift, and Bước 2's two closing
+// cuts (penult product-hero + final creator-endorse) show the gift. Disabled →
+// the whole pipeline behaves exactly as before (every branch guards on enabled).
+// Lean by design — video gift carries NO price/value (the guard strips money);
+// only a NAME + a short benefit line + an image (vision ref for the AI).
+export interface VideoGift {
+  /** Master on/off. false / undefined → no-op everywhere. */
+  enabled: boolean
+  /** Gift name as the user typed it (may be Vietnamese) — auto-localised to the
+   *  output language before it enters the script. */
+  name: string
+  /** Short benefit line. User-typed OR filled by the "AI gợi ý" button. Empty →
+   *  generateScript derives one (vision-reads the gift image) at script time. */
+  benefitHint?: string
+  /** asset:xxx of the uploaded gift image — the ONLY image the gift AI vision
+   *  reads (never the main product image, to avoid blending), and the render
+   *  reference for the two closing cuts. */
+  imageRef?: string
+}
+
+export function createEmptyVideoGift(): VideoGift {
+  return { enabled: false, name: '' }
+}
+
 // ── Top-level pipeline state ────────────────────────────────────────────────
 
 export interface V3PipelineState {
@@ -687,6 +713,9 @@ export interface V3PipelineState {
 
   /** Z31 Ad Brain — structure + angle + script + voice + master timeline */
   scriptBrain: ScriptBrain
+
+  /** Phase A — OPTIONAL bundled gift (CTA-only). undefined / disabled → no-op. */
+  gift?: VideoGift
 
   /** Z32 — user's creator-video picks BEFORE rendering. Survives across
    *  edits even when creatorVideo (the render output) is null. */
@@ -808,6 +837,7 @@ export function createEmptyV3State(): V3PipelineState {
       voiceId: null,
     },
     scriptBrain: createEmptyScriptBrain(),
+    gift: createEmptyVideoGift(),
     creatorVideoConfig: createDefaultCreatorVideoConfig(),
     creatorVideo: null,
     voiceFirst: null,
@@ -1498,6 +1528,8 @@ export interface SavedProject {
   snapshot: {
     inputs: V3PipelineState['inputs']
     scriptBrain: ScriptBrain
+    /** Phase A — bundled gift config. Optional so legacy projects still load. */
+    gift?: VideoGift
     creatorVideoConfig: CreatorVideoConfig
     creatorVideo: CreatorVideoClip | null
     inserts: ActionInsertClip[]

@@ -85,6 +85,11 @@ export interface RenderInsertParams {
    *  pick the BEST product image(s) for THIS insert's action instead of always
    *  reusing image #1. Optional: falls back to the single image when absent. */
   visualBrief?: ProductVisualBrief
+  /** Phase A — asset:xxx (or URL) of a bundled GIFT image. When present, the
+   *  renderer HARD-LOCKS the product to ONE clean hero ref + adds the gift as a
+   *  SEPARATE reference object (two distinct objects, never merged). Set only on
+   *  the two closing cuts; absent on every other insert. */
+  giftRef?: string
   /** Per-stage status callback */
   onStageUpdate: (update: InsertStageUpdate) => void
   /** P3t — KIE poll progress fan-out so the UI can show "đang render…
@@ -151,6 +156,7 @@ function buildInsertKeyframePrompt(
   is3D = false,
   _quote?: string,   // P6h — was used by the removed "after-time wardrobe" branch; kept positionally
   noFace = false,
+  giftRefIndex = 0,   // Phase A — >0 means a bundled gift image rides as ref #giftRefIndex
 ): string {
   const preset = ACTION_PRESETS[presetId]
   const paragraphs: string[] = []
@@ -307,6 +313,20 @@ function buildInsertKeyframePrompt(
       `liquid or water. Match the reference's color AND material-state, including inside the jar.`,
     )
   }
+  // Phase A — GIFT LOCK. A bundled free gift rides as a SEPARATE reference object. Keep the
+  // product (#productRefIndex) and the gift (#giftRefIndex) as TWO distinct objects — never
+  // merge / blend / swap / restyle one into the other. This is the hard product lock the
+  // closing cuts (product+gift hero; creator holding both) depend on.
+  if (giftRefIndex > 0) {
+    paragraphs.push(
+      `GIFT LOCK: reference image #${giftRefIndex} is a SEPARATE FREE BONUS GIFT — a DIFFERENT ` +
+      `object from the product. Render it exactly as in that reference (its own form, color, ` +
+      `label, material). The PRODUCT (#${productRefIndex || 1}) and the GIFT (#${giftRefIndex}) ` +
+      `appear TOGETHER in the frame but are TWO SEPARATE items, clearly apart — NEVER merge, ` +
+      `blend, fuse, swap, or restyle one into the other, and do NOT turn the product into the ` +
+      `gift or the gift into the product. Two distinct objects, each faithful to its own reference.`,
+    )
+  }
   if (personRefIndex > 0) {
     // P6at — wardrobe policy = SAME outfit as the keyframe (identity fix; see brollWardrobeClause).
     // FACE *and* CLOTHING both match the reference so b-roll reads as the same creator as the lips
@@ -454,10 +474,15 @@ async function resolveRefs(
   conceptPrompt?: string,
   noFace = false,
   cameraFraming?: CameraFraming,
-): Promise<{ refs: string[]; productRefIndex: number; personRefIndex: number }> {
+  giftRef?: string,
+): Promise<{ refs: string[]; productRefIndex: number; personRefIndex: number; giftRefIndex: number }> {
   const refs: string[] = []
   let productRefIndex = 0
   let personRefIndex = 0
+  let giftRefIndex = 0
+  // Phase A — when a gift rides along, HARD-LOCK the product to ONE clean hero ref
+  // so the model doesn't blend the gift into a second product shot.
+  const hasGift = !!(giftRef && giftRef.trim())
   // Z98 — a 3D mechanism animation shows no product + no person.
   if (preset.needsProduct && product && !is3D) {
     // P4b — pick which of the product's 4 images fit THIS insert (hero + a
@@ -469,11 +494,18 @@ async function resolveRefs(
     if (imgs.length > 0) {
       const picked = pickProductRefIndexes(visualBrief, preset.id, quote, conceptPrompt)
         .filter((i) => i >= 0 && i < imgs.length)
-      const chosen = picked.length ? [...picked] : [0]
-      // Guarantee ≥2 product refs when ≥2 images exist (anti-lazy), even if the
-      // brief was missing and the picker returned a single index.
-      for (let i = 0; chosen.length < Math.min(2, imgs.length) && i < imgs.length; i++) {
-        if (!chosen.includes(i)) chosen.push(i)
+      // Phase A — with a gift in frame, use ONLY the hero (1 ref) so the model
+      // has a single clean product to preserve next to the gift. Otherwise the
+      // usual hero + scene-match + diversity pick.
+      const chosen = hasGift
+        ? [picked.length ? picked[0] : 0]
+        : picked.length ? [...picked] : [0]
+      // Guarantee ≥2 product refs when ≥2 images exist (anti-lazy) — SKIPPED when a
+      // gift rides along (we deliberately keep the product to a single hero ref).
+      if (!hasGift) {
+        for (let i = 0; chosen.length < Math.min(2, imgs.length) && i < imgs.length; i++) {
+          if (!chosen.includes(i)) chosen.push(i)
+        }
       }
       for (const i of chosen) {
         const ref = imgs[i]
@@ -485,6 +517,12 @@ async function resolveRefs(
       }
     }
   }
+  // Phase A — the gift reference goes right AFTER the product, BEFORE the person,
+  // so its "#N" is stable for the GIFT LOCK paragraph in the keyframe prompt.
+  if (hasGift && !is3D) {
+    const url = isAssetRef(giftRef!) ? await getUrl(giftRef!) : giftRef!
+    if (url) { refs.push(url); giftRefIndex = refs.length }
+  }
   if (!noFace && usesAvatarRef(preset.id, renderMode, is3D, cameraFraming)) {
     // Director upgrade — a 'hands_noface' shot deliberately omits the avatar so
     // no face appears; personRefIndex stays 0 → no IDENTITY LOCK in the prompt.
@@ -495,7 +533,7 @@ async function resolveRefs(
       if (url) { refs.push(url); personRefIndex = refs.length }
     }
   }
-  return { refs, productRefIndex, personRefIndex }
+  return { refs, productRefIndex, personRefIndex, giftRefIndex }
 }
 
 // P6as — the image model (gpt-4o-image) HARD-rejects medical/anatomical/graphic prompts with
@@ -554,9 +592,9 @@ export async function renderInsert(
   // face appears, keep the product + setting. Only ever a real PRODUCT_IN_ACTION
   // scene (never CTA/3D — guarded both in the director parse and here).
   const noFace = params.cameraFraming === 'hands_noface' && !is3D && params.presetId === 'PRODUCT_IN_ACTION'
-  const { refs: filesUrl, productRefIndex, personRefIndex } = await resolveRefs(
+  const { refs: filesUrl, productRefIndex, personRefIndex, giftRefIndex } = await resolveRefs(
     preset, params.product, params.avatar, params.creatorKeyframeRef, params.renderMode, is3D,
-    params.visualBrief, params.quote, params.conceptPrompt, noFace, params.cameraFraming,
+    params.visualBrief, params.quote, params.conceptPrompt, noFace, params.cameraFraming, params.giftRef,
   )
 
   // Z37 — the scene verb that drives the Kling motion prompts (Stage 2/3).
@@ -579,7 +617,7 @@ export async function renderInsert(
 
   const keyframePromptUsed = buildInsertKeyframePrompt(
     params.presetId, params.product, productRefIndex, personRefIndex,
-    params.conceptPrompt, params.renderMode, is3D, params.quote, noFace,
+    params.conceptPrompt, params.renderMode, is3D, params.quote, noFace, giftRefIndex,
   )
   console.log(`[INSERT ${params.presetId}] Stage 1 keyframe prompt len=${keyframePromptUsed.length}, refs=${filesUrl.length}`)
 
