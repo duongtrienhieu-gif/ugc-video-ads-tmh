@@ -324,20 +324,15 @@ function buildInsertKeyframePrompt(
   if (giftRefIndex > 0) {
     paragraphs.push(
       `GIFT LOCK: reference image #${giftRefIndex} is a SEPARATE FREE BONUS GIFT — a DIFFERENT ` +
-      `object from the product. Render it exactly as in that reference (its own form, color, ` +
-      `label, material). The PRODUCT (#${productRefIndex || 1}) and the GIFT (#${giftRefIndex}) ` +
-      `appear TOGETHER in the frame but are TWO SEPARATE items, clearly apart — NEVER merge, ` +
-      `blend, fuse, swap, or restyle one into the other, and do NOT turn the product into the ` +
-      `gift or the gift into the product. Two distinct objects, each faithful to its own reference.`,
-    )
-    // FIX5 — anti-invent-packaging for the gift (the model dreamed up a fake box + garbled label
-    // "Sandr Berb / Suitable for blood pressure" over a loose snack). Mirror the product LOOSE rule.
-    paragraphs.push(
-      `GIFT FIDELITY: reproduce the gift EXACTLY as in reference #${giftRefIndex} and NOTHING more. ` +
-      `Do NOT invent a box / pack / wrapper / label / logo / sticker / any text or words that are ` +
-      `NOT visible in that reference. If the gift in the reference is LOOSE / has NO packaging (e.g. ` +
-      `loose food, fruit, an unpackaged item), keep it LOOSE exactly as shown — never wrap it in a ` +
-      `made-up package. Any text already on the gift must be copied verbatim, not re-spelled.`,
+      `object from the product. The PRODUCT (#${productRefIndex || 1}) and the GIFT (#${giftRefIndex}) ` +
+      `appear TOGETHER in the frame but are TWO SEPARATE items, clearly apart — NEVER merge, blend, ` +
+      `fuse, swap, or restyle one into the other; do NOT turn the product into the gift or vice-versa. ` +
+      // FIX5 (merged in place) — anti-invent-packaging: the model dreamed up a fake box + garbled
+      // label ("Sandr Berb / Suitable for blood pressure") over a loose snack. Mirror the LOOSE rule.
+      `Reproduce the gift EXACTLY as in reference #${giftRefIndex} and NOTHING more: do NOT invent a ` +
+      `box / pack / wrapper / label / logo / sticker / any text or words NOT visible in that reference. ` +
+      `If the gift reference is LOOSE / has NO packaging (loose food, fruit, an unpackaged item), keep ` +
+      `it LOOSE exactly as shown — never wrap it in a made-up package; copy any existing text verbatim.`,
     )
   }
   if (personRefIndex > 0) {
@@ -396,12 +391,16 @@ function buildInsertKeyframePrompt(
   // surface (NOT held, NOT rotated). Holding + rotating a product is the #1 cause of i2v packaging
   // DRIFT/morph; keeping it untouched on a surface keeps the product locked to its reference.
   if (presetId === 'PRODUCT_CLOSEUP') {
+    // FIX2 — gift/quantity-aware: drop the "sits ALONE / product alone" wording (it contradicted a
+    // gift-bundle or multi-unit offer cut). Keep the real intent: NO hands / NO person / STATIC.
+    const subject = giftRefIndex > 0
+      ? 'The product and the free gift sit STATIC together'
+      : 'The product (or the product units) sit STATIC'
     paragraphs.push(
-      'PRODUCT-ONLY FRAMING — NO hands, NO fingers, NO person, NO body part anywhere in frame. The ' +
-      'product sits ALONE, STATIC, on a clean real surface — it is NOT held and NOT rotated (a held / ' +
-      'rotating product makes the packaging morph). Clean macro / medium-close with only a gentle slow ' +
-      'camera push. The product stays EXACTLY as its reference image (same colour, shape, label). ' +
-      'Soft natural daylight on a real surface.',
+      'PRODUCT-ONLY FRAMING — NO hands, NO fingers, NO person, NO body part anywhere in frame. ' +
+      `${subject} on a clean real surface — NOT held and NOT rotated (a held / rotating product makes ` +
+      'the packaging morph). Clean macro / medium-close with only a gentle slow camera push. Everything ' +
+      'stays EXACTLY as its reference image (same colour, shape, label). Soft natural daylight on a real surface.',
     )
   }
 
