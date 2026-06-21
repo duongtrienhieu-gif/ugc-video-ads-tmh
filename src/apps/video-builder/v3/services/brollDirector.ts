@@ -1293,13 +1293,21 @@ OUTPUT strict JSON only (no markdown fences):
   // (product hero + the deal called out) so the close reads OFFER → ENDORSE, not two
   // identical thumbs-ups. Only fires when that scene is a broll AND its quote is a
   // buy/offer line (a CTA-block line), so a normal benefit penultimate is untouched.
+  // P6aw — the penult CTA cut = a PRODUCT-HERO shot (NO creator), so the close reads
+  // PRODUCT → CREATOR-ENDORSE (two visually DISTINCT shots) instead of two near-identical
+  // "creator presenting the product" cuts (the "CTA luôn dính 2 scene giống nhau" the user
+  // audited). With an offer in the brief → a special-deal flavour; otherwise → a sold-fast
+  // urgency flavour matching the buy-push line. No face, no on-screen price.
   const penult = scenes[scenes.length - 2]
   const ctaCue = /(mua|ch[oố]t|gi[oỏ] h[aà]ng|link|[uư]u đãi|t[aặ]ng|sale|h[eế]t h[aà]ng|h[oố]t|s[oở] h[uữ]u|grab|beli|checkout|order|jom|cart)/i
   if (penult && penult.role === 'broll' && ctaCue.test(penult.quote ?? '')) {
     penult.kind = 'product_action'
-    penult.cameraFraming = 'creator'
-    penult.conceptPrompt =
-      'Close-up of the creator presenting the product to camera and tapping / pointing at it excitedly as the deal is announced — the OFFER moment, the product the hero in frame (NOT a thumbs-up beside the face).'
+    penult.cameraFraming = 'hands_noface'
+    penult.shotIntent = 'offer'
+    const hasOffer = !!(params.product?.offer && params.product.offer.trim())
+    penult.conceptPrompt = hasOffer
+      ? 'PRODUCT-HERO shot — NO person, NO face: the product is the clear HERO, centred + premium on a clean surface in good light, presented as a special DEAL / offer moment (a hand may place or point at it). Make it look worth grabbing. No on-screen price or numbers.'
+      : 'PRODUCT-HERO shot — NO person, NO face: the product is the clear HERO on a shelf / surface, a hand quickly REACHING in to grab it — a "selling fast, last one, get it now" urgency feel. Clean, premium light. No on-screen text.'
   }
 
   // P4e Layer 2 — fill any scene the director left with an empty / vague
