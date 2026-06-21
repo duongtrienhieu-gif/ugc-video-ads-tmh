@@ -239,6 +239,14 @@ export async function generateScript(
     for (const id of SCRIPT_BLOCK_IDS) {
       if (blockMap[id]) blockMap[id] = stripOfferLadder(stripMoney(blockMap[id]))
     }
+    // Phase A — DETERMINISTIC gift-CTA ordering. The prompt asks the model to end on the
+    // urgency buy-push with the gift just before it, but Gemini often appends the gift as
+    // the LAST sentence (burying the close — the user audited this). Force the order:
+    // [...other CTA sentences] → [gift] → [urgency LAST]. No-op when gift is off or it
+    // can't confidently find both a gift + an urgency sentence (never mangles a normal CTA).
+    if (params.gift?.name?.trim() && blockMap.cta) {
+      blockMap.cta = reorderGiftBeforeFinalCta(blockMap.cta, params.gift.name)
+    }
     // Keep the user's picked hook verbatim through any refit.
     if ((params.chosenHook ?? '').trim()) blockMap.hook = params.chosenHook!.trim()
     parsed = { ...parsed, blocks: blockMap }
@@ -277,6 +285,43 @@ export async function generateScript(
 const SCRIPT_BLOCK_IDS: ScriptBlockId[] = [
   'hook', 'pain', 'discovery', 'benefit', 'cta',
 ]
+
+// Phase A — urgency / buy-push cue (universal VN / MS / EN) used to find the line the
+// CTA must END on. Mirrors the director's ctaCue but tuned for closing-push verbs.
+const GIFT_CTA_URGENCY_RE =
+  /\b(mua|ch[oố]t|hốt|nhanh tay|kẻo|hết hàng|s[oở] h[uữ]u|đặt\s*(ngay|li[eề]n|hàng)|grab|beli|jom|order|checkout|cart|sekarang|cepat|jangan\s*lepas|stok)\b/i
+
+function stripDiacriticsLower(s: string): string {
+  return (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+
+/** Reorder the CTA block so the LAST spoken sentence is the urgency buy-push, with the
+ *  gift announced JUST BEFORE it. Returns the text UNCHANGED unless it confidently finds
+ *  BOTH a gift sentence (contains the gift name) AND a separate urgency sentence — so a
+ *  normal CTA is never mangled. Universal across VN / MS / EN. */
+function reorderGiftBeforeFinalCta(cta: string, giftName: string): string {
+  const text = (cta ?? '').trim()
+  const name = (giftName ?? '').trim()
+  if (!text || !name) return cta
+  const sentences = (text.match(/[^.!?…]+[.!?…]*/g) ?? [text]).map((s) => s.trim()).filter(Boolean)
+  if (sentences.length < 2) return cta
+  const nName = stripDiacriticsLower(name)
+  const giftIdx = sentences.findIndex((s) => stripDiacriticsLower(s).includes(nName))
+  if (giftIdx < 0) return cta   // gift not found in the CTA → leave as-is
+  // The urgency line = the LAST non-gift sentence carrying a buy/urgency cue.
+  let urgencyIdx = -1
+  for (let i = sentences.length - 1; i >= 0; i--) {
+    if (i === giftIdx) continue
+    if (GIFT_CTA_URGENCY_RE.test(sentences[i])) { urgencyIdx = i; break }
+  }
+  if (urgencyIdx < 0) return cta   // nothing to end on → don't risk reordering
+  // Already correct (gift immediately before urgency, urgency last) → no-op.
+  if (urgencyIdx === sentences.length - 1 && giftIdx === urgencyIdx - 1) return cta
+  const gift = sentences[giftIdx]
+  const urgency = sentences[urgencyIdx]
+  const rest = sentences.filter((_, i) => i !== giftIdx && i !== urgencyIdx)
+  return [...rest, gift, urgency].join(' ')
+}
 
 const HOOK_STYLES: HookStyle[] = ['emotional', 'shock', 'curiosity']
 
@@ -658,8 +703,9 @@ function buildUserPrompt(args: {
   // localised; the benefit line is given. The 4 hero blocks must NOT mention it.
   const giftLine = args.gift && args.gift.name.trim()
     ? `\nBUNDLED GIFT — applies to the CTA BLOCK ONLY (do NOT touch hook/pain/discovery/benefit):
-- When ordering TODAY, the buyer gets a FREE bonus gift: "${args.gift.name.trim()}"${args.gift.benefitLine.trim() ? ` — ${args.gift.benefitLine.trim()}` : ''}.
-- Weave this naturally into the call-to-action as an extra reason to buy NOW. Keep it short.
+- A FREE bonus gift comes with the order: "${args.gift.name.trim()}"${args.gift.benefitLine.trim() ? ` — ${args.gift.benefitLine.trim()}` : ''}.
+- Frame it as something SPECIAL and FOMO-worthy yet BELIEVABLE — an exclusive / limited bonus that makes buying NOW feel like a great deal. Make it punchy + native. Do NOT open it with a flat "today / hôm nay / hari ni" — find a more compelling, natural way to introduce the gift.
+- ORDER (CRITICAL): announce the gift JUST BEFORE the final push. The VERY LAST sentence of the whole script MUST be the strongest urgency call-to-buy (buy now / grab it before it's gone) — NOT the gift line.
 - ABSOLUTELY NO price / money / value-in-RM / discount % for the gift — just the gift + its benefit.
 - The 4 hero blocks stay 100% about the main product — the gift exists only at the CTA.\n`
     : ''
