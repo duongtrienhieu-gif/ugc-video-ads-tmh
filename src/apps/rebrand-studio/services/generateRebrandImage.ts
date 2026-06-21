@@ -4,9 +4,9 @@
 //   • product / set            : ảnh bán giữ form, thay nhãn brand mới.
 // Giữ FORM gốc + palette gốc, thay brand sang tên mới. Có retry transient.
 
-import { generateGpt4oImage, type ImageStatus, type Gpt4oSize } from '../../../utils/kieai'
+import { generateGpt4oImage, generateNanoBanana2, type ImageStatus, type Gpt4oSize } from '../../../utils/kieai'
 import { getUrl, saveAsset } from '../../../utils/assetStore'
-import { type RebrandIdentity, type RebrandImageKind, type PackagingType, labelLangName } from '../types'
+import { type RebrandIdentity, type RebrandImageKind, type PackagingType, type LabelModel, labelLangName } from '../types'
 
 export interface GenerateRebrandImageParams {
   apiKey: string
@@ -19,6 +19,8 @@ export interface GenerateRebrandImageParams {
   heightCm?: number | null
   /** Kiểu dán nhãn (flat = 1 mặt · round = quấn tròn). */
   packagingType?: PackagingType
+  /** Model render nhãn (chỉ áp cho kind 'label'). */
+  labelModel?: LabelModel
   /** asset:xxx nhãn front đã sinh — dùng cho product/set để pouch mặc ĐÚNG nhãn. */
   labelRef?: string | null
   onStatus?: (status: ImageStatus) => void
@@ -133,10 +135,17 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
     console.log(`[rebrand] ${kind} size=${size} name="${chosenName}" promptLen=${prompt.length} refs=${refUrls.length}`)
   }
 
-  const kieImageUrl = await withRetry(() => generateGpt4oImage({
-    apiKey: params.apiKey, prompt, filesUrl: refUrls, size,
-    onStatusChange: params.onStatus, timeoutMs: TIMEOUT_MS, signal: params.signal,
-  }))
+  // Nhãn + nano4k → nano-banana-2 4K (PNG, bám ref). Còn lại → gpt-4o-image.
+  const useNano = kind === 'label' && params.labelModel === 'nano4k'
+  const kieImageUrl = await withRetry(() => useNano
+    ? generateNanoBanana2({
+        apiKey: params.apiKey, prompt, imageInput: refUrls, aspectRatio: size, resolution: '4K', outputFormat: 'png',
+        onStatusChange: params.onStatus, timeoutMs: TIMEOUT_MS, signal: params.signal,
+      })
+    : generateGpt4oImage({
+        apiKey: params.apiKey, prompt, filesUrl: refUrls, size,
+        onStatusChange: params.onStatus, timeoutMs: TIMEOUT_MS, signal: params.signal,
+      }))
   const blob = await withRetry(async () => {
     const resp = await fetch(kieImageUrl)
     if (!resp.ok) throw new Error(`Tải ảnh AI thất bại (HTTP ${resp.status}).`)
@@ -151,7 +160,7 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
     try { outBlob = await cropBlobToRatio(blob, params.widthCm / params.heightCm) } catch { outBlob = blob }
   }
 
-  const assetRef = await saveAsset(outBlob, 'image/jpeg')
+  const assetRef = await saveAsset(outBlob, outBlob.type || 'image/jpeg')
   return { assetRef, prompt }
 }
 
@@ -176,7 +185,7 @@ async function cropBlobToRatio(blob: Blob, ratio: number): Promise<Blob> {
     canvas.width = sw; canvas.height = sh
     const ctx = canvas.getContext('2d')!
     ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh)
-    return await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('crop'))), 'image/jpeg', 0.95))
+    return await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('crop'))), 'image/png'))
   } finally {
     URL.revokeObjectURL(url)
   }

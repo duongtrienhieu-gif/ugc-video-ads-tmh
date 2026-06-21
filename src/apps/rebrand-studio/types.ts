@@ -24,6 +24,9 @@ export const REBRAND_IMAGE_KINDS: RebrandImageKind[] = ['label', 'product', 'set
  *  round = quấn quanh lọ/hộp tròn: nhãn dài [front · gap giữa · back]. */
 export type PackagingType = 'flat' | 'round'
 
+/** Model render NHÃN: gpt4o (1K, bám ref tốt, look quen) / nano4k (4K nét, để in). */
+export type LabelModel = 'gpt4o' | 'nano4k'
+
 export type RebrandStatus = 'idle' | 'generating' | 'completed' | 'failed'
 
 export interface RebrandImage {
@@ -80,13 +83,15 @@ export interface RebrandDraft {
   heightCm: number | null
   /** Kiểu dán nhãn. */
   packagingType: PackagingType
+  /** Model render nhãn. */
+  labelModel: LabelModel
   market: Market
   /** Tên brand user đã chọn từ identity.names. */
   chosenName: string | null
 }
 
 export function emptyRebrandDraft(): RebrandDraft {
-  return { productId: null, originalImageRefs: [], widthCm: null, heightCm: null, packagingType: 'flat', market: 'vi', chosenName: null }
+  return { productId: null, originalImageRefs: [], widthCm: null, heightCm: null, packagingType: 'flat', labelModel: 'gpt4o', market: 'vi', chosenName: null }
 }
 
 export const MAX_ORIGINAL_IMAGES = 4

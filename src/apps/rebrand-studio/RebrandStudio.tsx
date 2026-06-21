@@ -16,7 +16,6 @@ import { useAssetUrl } from '../../hooks/useAssetUrl'
 import { saveAsset } from '../../utils/assetStore'
 import type { Market } from '../../types/brandKit'
 import {
-  REBRAND_TOTAL_CREDITS,
   MAX_ORIGINAL_IMAGES,
   cmToPx,
   rebrandSig,
@@ -47,7 +46,7 @@ function AssetImg({ refId, alt }: { refId: string | undefined | null; alt: strin
 export default function RebrandStudio({ embedded = false }: { embedded?: boolean }) {
   const {
     draft, images, identity, isAnalyzing,
-    setProductId, addOriginalImage, removeOriginalImage, setWidthCm, setHeightCm, setPackagingType, setMarket, setChosenName,
+    setProductId, addOriginalImage, removeOriginalImage, setWidthCm, setHeightCm, setPackagingType, setLabelModel, setMarket, setChosenName,
     setIdentity, setAnalyzing, patchImage,
   } = useRebrandStore()
 
@@ -148,6 +147,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
         originalImageRefs: refsForKind,
         widthCm: draft.widthCm, heightCm: draft.heightCm,
         packagingType: draft.packagingType,
+        labelModel: draft.labelModel,
         labelRef: isLabel ? undefined : labelRef,
       })
       patchImage(kind, { status: 'completed', assetRef: res.assetRef })
@@ -197,6 +197,8 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
   const pxHint = draft.widthCm && draft.heightCm
     ? `${cmToPx(draft.widthCm)}×${cmToPx(draft.heightCm)} px @300DPI`
     : ''
+  const labelCredit = draft.labelModel === 'nano4k' ? 20 : 6
+  const totalCredit = labelCredit + 12 // product 6 + set 6
 
   return (
     <div className="flex h-full flex-col bg-[#F6F6F8]">
@@ -301,6 +303,21 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
             {pxHint && <p className="mt-1.5 text-[10px] text-gray-400">{pxHint}</p>}
           </div>
 
+          {/* Model nhãn (in) */}
+          <div className="rounded-xl border border-black/10 bg-white p-4">
+            <label className="mb-2 block text-xs font-semibold text-gray-700">Model render nhãn (để in)</label>
+            <div className="flex gap-2">
+              {([['gpt4o', 'GPT-4o · 1K', '6cr · look quen'], ['nano4k', 'Nano · 4K', '20cr · nét, để in']] as const).map(([m, lbl, sub]) => (
+                <button key={m} onClick={() => setLabelModel(m)}
+                  className={`flex-1 rounded-lg border px-2 py-2 text-left transition-colors ${draft.labelModel === m ? 'border-indigo-400 bg-indigo-50' : 'border-black/10 bg-white hover:bg-gray-50'}`}>
+                  <div className={`text-xs font-medium ${draft.labelModel === m ? 'text-indigo-700' : 'text-gray-800'}`}>{lbl}</div>
+                  <div className="text-[10px] text-gray-400">{sub}</div>
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[10px] text-gray-400">Nano 4K nét hơn cho bản in nhưng bố cục/chữ có thể khác GPT-4o — thử rồi đổi lại nếu không ưng.</p>
+          </div>
+
           {/* Bước 1: phân tích + chọn tên */}
           <div className="rounded-xl border border-black/10 bg-white p-4">
             <button onClick={() => { void handleAnalyze() }} disabled={!canAnalyze || isAnalyzing}
@@ -345,9 +362,9 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
           <button onClick={handleGenerateAll} disabled={!canGenerate || busy}
             className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-colors ${canGenerate && !busy ? 'bg-indigo-500 text-white hover:bg-indigo-600' : 'cursor-not-allowed bg-gray-200 text-gray-400'}`}>
             {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {busy ? 'Đang tạo bộ rebrand…' : `2 · Tạo bộ rebrand · ~${REBRAND_TOTAL_CREDITS} credit`}
+            {busy ? 'Đang tạo bộ rebrand…' : `2 · Tạo bộ rebrand · ~${totalCredit} credit`}
           </button>
-          <p className="text-[10px] text-gray-400">3 ảnh AI (~{REBRAND_TOTAL_CREDITS} credit): nhãn gộp + sản phẩm + bao bì. Pouch mặc đúng nhãn. Nhãn tải về đưa bên in (~{draft.widthCm ?? '?'}×{draft.heightCm ?? '?'}cm). ⚠️ Số bảng dinh dưỡng là AI ước lượng — kiểm tra lại trước khi in.</p>
+          <p className="text-[10px] text-gray-400">3 ảnh AI (~{totalCredit} credit): nhãn gộp + sản phẩm + bao bì. Pouch mặc đúng nhãn. Nhãn tải về đưa bên in (~{draft.widthCm ?? '?'}×{draft.heightCm ?? '?'}cm). ⚠️ Số bảng dinh dưỡng là AI ước lượng — kiểm tra lại trước khi in.</p>
         </div>
 
         {/* Output */}
