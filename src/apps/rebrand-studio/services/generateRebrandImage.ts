@@ -78,7 +78,8 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
   const flatLabelLock =
     `This is a FLAT printed LABEL / STICKER ARTWORK ONLY (it will be printed and stuck onto the packaging). ` +
     `Do NOT depict any pouch, bag, box, carton, jar, bottle or ANY 3D packaging / product mockup anywhere in the image. ` +
-    `Show ONLY the product's FOOD/ingredient imagery (the actual ${identity.productType}, e.g. the snack/fruit itself) + brand + text, as a flat full-bleed graphic, edge-to-edge. `
+    `Show ONLY the product's FOOD/ingredient imagery (the actual ${identity.productType}, e.g. the snack/fruit itself) + brand + text, as a flat full-bleed graphic, edge-to-edge. ` +
+    `SAFE AREA: keep ALL text, logo and key elements within the central area with a generous margin from every edge; only the background/decoration extends fully to the edges (full bleed), so the artwork can be trimmed to the exact print ratio WITHOUT cutting any text. `
 
   let prompt: string
   let size: Gpt4oSize
@@ -122,8 +123,43 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
     if (!resp.ok) throw new Error(`Tải ảnh AI thất bại (HTTP ${resp.status}).`)
     return resp.blob()
   })
-  const assetRef = await saveAsset(blob, 'image/jpeg')
+
+  // Nhãn: auto-CROP về ĐÚNG tỉ lệ cm (chỉ cắt mép, không vẽ lại/không kéo giãn).
+  let outBlob = blob
+  const isLabel = kind === 'label-front' || kind === 'label-back'
+  if (isLabel && params.widthCm && params.heightCm && params.heightCm > 0) {
+    try { outBlob = await cropBlobToRatio(blob, params.widthCm / params.heightCm) } catch { outBlob = blob }
+  }
+
+  const assetRef = await saveAsset(outBlob, 'image/jpeg')
   return { assetRef, prompt }
+}
+
+/** Center-crop blob về đúng tỉ lệ (w/h). Chỉ cắt mép thừa — không kéo giãn. */
+async function cropBlobToRatio(blob: Blob, ratio: number): Promise<Blob> {
+  if (!(ratio > 0)) return blob
+  const url = URL.createObjectURL(blob)
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image()
+      i.onload = () => res(i)
+      i.onerror = () => rej(new Error('load'))
+      i.src = url
+    })
+    const w = img.naturalWidth, h = img.naturalHeight
+    const cur = w / h
+    let sx = 0, sy = 0, sw = w, sh = h
+    if (cur > ratio) { sw = Math.round(h * ratio); sx = Math.round((w - sw) / 2) }
+    else if (cur < ratio) { sh = Math.round(w / ratio); sy = Math.round((h - sh) / 2) }
+    else return blob
+    const canvas = document.createElement('canvas')
+    canvas.width = sw; canvas.height = sh
+    const ctx = canvas.getContext('2d')!
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh)
+    return await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('crop'))), 'image/jpeg', 0.95))
+  } finally {
+    URL.revokeObjectURL(url)
+  }
 }
 
 function q(s: string): string {
