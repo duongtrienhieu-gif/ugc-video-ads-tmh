@@ -88,14 +88,14 @@ export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<Rebr
     `2) palette: extract the colour scheme from the references so the rebrand keeps a similar look. Hex: bg, primary, accent, onColor. Strong contrast.\n` +
     `3) productForm: short ENGLISH description of the REAL physical form taken from the packaging photo(s) (e.g. "stand-up pouch", "folding carton box", "round jar", "squeeze tube") — generation must preserve THIS form.\n` +
     `4) productType: 2-4 word ENGLISH product category grounded in the fields (e.g. "dried hawthorn snack").\n` +
-    `5) Label copy in ${langName} ONLY, grounded in the product fields: tagline (<=8 words), benefits (2-3 items, each <=7 words — derive from the given benefits/USPs), ingredients (one line, from the fields/photos if any), usage (one short line), caution (one short line).\n` +
+    `5) Label copy in ${langName} ONLY. The product fields are CONTEXT to UNDERSTAND the product — do NOT copy them verbatim and do NOT dump everything. Write fresh, concise, natural label copy, keeping ONLY what a real retail label needs: tagline (<=8 words), benefits (2-3 items, each <=7 words — pick only the strongest, rephrased), ingredients (one short line, real ones only), usage (one short line), caution (one short line).\n` +
     `6) netWeight: copy net weight/volume EXACTLY from a photo if visible (e.g. "500g", "30ml"); else "".\n` +
-    `RULES: Do NOT invent certifications (Halal/KKM/FDA/GMP) or fake claims. Keep it believable. Output ONLY JSON.`
+    `RULES: Do NOT invent certifications (Halal/KKM/FDA/GMP) or fake claims. Keep it concise + believable. Output ONLY JSON.`
 
   const userText =
     `Original product name: "${productName.trim()}".\n` +
-    (productContext ? `Product fields (read all):\n${productContext}\n` : '') +
-    `Analyse ALL the photos + fields above and return the rebrand identity JSON in ${langName} for label copy.`
+    (productContext ? `Product fields (CONTEXT to understand the product — do NOT copy verbatim):\n${productContext}\n` : '') +
+    `Understand the product from the photos + fields, then return the rebrand identity JSON in ${langName} with CONCISE label copy (only what's necessary).`
 
   const raw = await directGeminiVision({
     apiKey,
