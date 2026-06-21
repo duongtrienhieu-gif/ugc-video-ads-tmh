@@ -16,7 +16,6 @@ import { useAssetUrl } from '../../hooks/useAssetUrl'
 import { saveAsset } from '../../utils/assetStore'
 import type { Market } from '../../types/brandKit'
 import {
-  REBRAND_IMAGE_KINDS,
   REBRAND_TOTAL_CREDITS,
   MAX_ORIGINAL_IMAGES,
   cmToPx,
@@ -138,22 +137,26 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
     }
   }
 
-  async function generateOne(kind: RebrandImageKind, id: RebrandIdentity, name: string) {
+  async function generateOne(kind: RebrandImageKind, id: RebrandIdentity, name: string, labelRef?: string): Promise<string | undefined> {
     patchImage(kind, { status: 'generating', error: undefined })
     try {
       // Nhãn (flat artwork) chỉ cần ref ảnh SẢN PHẨM/món ăn (bank) — KHÔNG dùng
-      // ảnh pouch upload (tránh AI vẽ bao bì vào nhãn). Product/set dùng full ref.
+      // ảnh pouch upload (tránh AI vẽ bao bì vào nhãn). Product/set dùng full ref
+      // + nhãn front đã sinh (labelRef) để pouch mặc ĐÚNG nhãn in.
       const isLabel = kind === 'label-front' || kind === 'label-back'
       const refsForKind = isLabel ? (bankImages.length ? bankImages : sourceRefs) : sourceRefs
       const res = await generateRebrandImage({
         apiKey: kieApiKey, kind, identity: id, chosenName: name,
         originalImageRefs: refsForKind,
         widthCm: draft.widthCm, heightCm: draft.heightCm,
+        labelRef: isLabel ? undefined : labelRef,
       })
       patchImage(kind, { status: 'completed', assetRef: res.assetRef })
+      return res.assetRef
     } catch (err) {
       patchImage(kind, { status: 'failed', error: friendlyRebrandError(err) })
       addToast(`${KIND_LABEL[kind]}: ${friendlyRebrandError(err)}`, 'error')
+      return undefined
     }
   }
 
@@ -163,7 +166,15 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
     try {
       const id = identity!
       const name = draft.chosenName!
-      await Promise.all(REBRAND_IMAGE_KINDS.map((k) => generateOne(k, id, name)))
+      // Sinh NHÃN trước (song song) → lấy nhãn front làm ref cho product/set.
+      const [frontRef] = await Promise.all([
+        generateOne('label-front', id, name),
+        generateOne('label-back', id, name),
+      ])
+      await Promise.all([
+        generateOne('product', id, name, frontRef),
+        generateOne('set', id, name, frontRef),
+      ])
     } finally {
       setBusy(false)
     }
@@ -172,7 +183,11 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
   async function handleRegenerate(kind: RebrandImageKind) {
     if (!canGenerate || busy) return
     setBusy(true)
-    try { await generateOne(kind, identity!, draft.chosenName!) } finally { setBusy(false) }
+    try {
+      // product/set tạo lại → dùng nhãn front hiện có để giữ đồng nhất.
+      const frontRef = images.find((im) => im.kind === 'label-front')?.assetRef
+      await generateOne(kind, identity!, draft.chosenName!, frontRef)
+    } finally { setBusy(false) }
   }
 
   function handleDownload(kind: RebrandImageKind, url: string) {
@@ -314,7 +329,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
             {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {busy ? 'Đang tạo bộ rebrand…' : `2 · Tạo bộ rebrand · ~${REBRAND_TOTAL_CREDITS} credit`}
           </button>
-          <p className="text-[10px] text-gray-400">4 ảnh AI (~{REBRAND_TOTAL_CREDITS} credit): nhãn trước/sau + sản phẩm + hộp. Nhãn tải về đưa bên in (tỉ lệ ~{draft.widthCm ?? '?'}×{draft.heightCm ?? '?'}cm), dán đè mã cũ.</p>
+          <p className="text-[10px] text-gray-400">4 ảnh AI (~{REBRAND_TOTAL_CREDITS} credit): nhãn trước/sau + sản phẩm + bao bì. Pouch mặc đúng nhãn front. Nhãn tải về đưa bên in (~{draft.widthCm ?? '?'}×{draft.heightCm ?? '?'}cm). ⚠️ Số trên bảng dinh dưỡng là AI ước lượng — kiểm tra lại trước khi in.</p>
         </div>
 
         {/* Output */}

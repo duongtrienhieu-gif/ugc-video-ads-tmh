@@ -65,8 +65,9 @@ const SCHEMA: Record<string, unknown> = {
     ingredients: { type: 'string' },
     usage: { type: 'string' },
     caution: { type: 'string' },
+    nutrition: { type: 'string' },
   },
-  required: ['names', 'palette', 'productForm', 'productType', 'tagline', 'benefits', 'netWeight', 'ingredients', 'usage', 'caution'],
+  required: ['names', 'palette', 'productForm', 'productType', 'tagline', 'benefits', 'netWeight', 'ingredients', 'usage', 'caution', 'nutrition'],
 }
 
 export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<RebrandIdentity> {
@@ -90,6 +91,7 @@ export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<Rebr
     `4) productType: 2-4 word ENGLISH product category grounded in the fields (e.g. "dried hawthorn snack").\n` +
     `5) Label copy in ${langName} ONLY. The product fields are CONTEXT to UNDERSTAND the product — do NOT copy them verbatim and do NOT dump everything. Write fresh, concise, natural label copy, keeping ONLY what a real retail label needs: tagline (<=8 words), benefits (2-3 items, each <=7 words — pick only the strongest, rephrased), ingredients (one short line, real ones only), usage (one short line), caution (one short line).\n` +
     `6) netWeight: copy net weight/volume EXACTLY from a photo if visible (e.g. "500g", "30ml"); else "".\n` +
+    `7) nutrition: a compact TYPICAL Nutrition Information per 100g for this kind of product (Energy kcal, Protein, Fat, Carbohydrate, Sugars, Dietary Fibre, Sodium) as one short multi-line string. These are ESTIMATES for layout — the seller will verify.\n` +
     `RULES: Do NOT invent certifications (Halal/KKM/FDA/GMP) or fake claims. Keep it concise + believable. Output ONLY JSON.`
 
   const userText =
@@ -134,6 +136,7 @@ export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<Rebr
     ingredients: clean(p.ingredients),
     usage: clean(p.usage),
     caution: clean(p.caution),
+    nutrition: clean(p.nutrition),
     market,
     sig: rebrandSig({ productId: params.productId, originalImageRefs: refs, market }),
   }

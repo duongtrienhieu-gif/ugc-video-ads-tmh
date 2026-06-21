@@ -56,6 +56,8 @@ export interface RebrandIdentity {
   usage: string
   /** Lưu ý/bảo quản ngắn (theo ngôn ngữ nhãn). */
   caution: string
+  /** Bảng dinh dưỡng/100g (AI ước lượng — user phải verify trước khi in). */
+  nutrition: string
   market: Market
   sig: string
 }

@@ -17,6 +17,8 @@ export interface GenerateRebrandImageParams {
   /** Kích thước nhãn thật — để chọn tỉ lệ ảnh nhãn gần nhất. */
   widthCm?: number | null
   heightCm?: number | null
+  /** asset:xxx nhãn front đã sinh — dùng cho product/set để pouch mặc ĐÚNG nhãn. */
+  labelRef?: string | null
   onStatus?: (status: ImageStatus) => void
   signal?: AbortSignal
 }
@@ -52,10 +54,19 @@ function pickLabelSize(widthCm?: number | null, heightCm?: number | null): Gpt4o
 
 export async function generateRebrandImage(params: GenerateRebrandImageParams): Promise<{ assetRef: string; prompt: string }> {
   const { kind, identity, chosenName } = params
-  const refUrls = await resolveUrls(params.originalImageRefs, 4)
-  if (refUrls.length === 0) throw new Error('Cần ít nhất 1 ảnh gốc hợp lệ.')
+  const baseRefUrls = await resolveUrls(params.originalImageRefs, 4)
+  if (baseRefUrls.length === 0) throw new Error('Cần ít nhất 1 ảnh gốc hợp lệ.')
+  // product/set: chèn nhãn front đã sinh lên ĐẦU ref → pouch mặc đúng nhãn in.
+  const hasLabelRef = (kind === 'product' || kind === 'set') && !!params.labelRef
+  let refUrls = baseRefUrls
+  if (hasLabelRef) {
+    const lu = await resolveUrls([params.labelRef as string], 1)
+    if (lu.length) refUrls = [...lu, ...baseRefUrls].slice(0, 5)
+  }
   const langName = labelLangName(identity.market)
   const P = identity.palette
+  const bgRule = `BACKGROUND: a soft NON-WHITE light backdrop (warm beige or light grey gradient) + a soft drop shadow, so the product separates easily for background removal. Do NOT use a pure white background.`
+  const labelApply = hasLabelRef ? `Apply the EXACT finished front-label design shown in the FIRST reference image onto the packaging (same layout, text and colours). ` : ''
 
   const baseBrand =
     `NEW BRAND: "${chosenName}". Render "${chosenName}" large, clean and spelled EXACTLY. ` +
@@ -83,17 +94,18 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
     prompt =
       `TASK: Design the BACK product LABEL for a ${identity.productType} — tidy professional panel layout. ${flatLabelLock}` +
       `Sections: Ingredients (${q(identity.ingredients)}), Directions (${q(identity.usage)}), Caution & storage (${q(identity.caution)})` +
+      `${identity.nutrition ? `, AND a clear NUTRITION INFORMATION table (per 100g): ${q(identity.nutrition)}` : ''}` +
       `${identity.netWeight ? `, net weight ${q(identity.netWeight)}` : ''}, with the brand name. ${baseBrand}`
   } else if (kind === 'product') {
     size = '1:1'
     prompt =
-      `TASK: A clean studio PRODUCT SHOT of the re-branded ${identity.productType}. Single hero product, centered, soft neutral e-commerce background. ` +
+      `TASK: A clean studio PRODUCT SHOT of the re-branded ${identity.productType}. Single hero product, centered. ${bgRule} ${labelApply}` +
       `FORM LOCK: keep the EXACT physical form/shape from the reference (${identity.productForm}); only replace the label/branding. ${productLock}${baseBrand}`
   } else {
     size = '1:1'
     prompt =
       `TASK: A retail packshot of the re-branded ${identity.productType}: show EXACTLY ONE packaging — the SAME single ${identity.productForm} as the reference — together with the ACTUAL product item visible (spilling out of the open pack, or a small portion on a plate beside it). ` +
-      `STRICT: do NOT add any second/extra packaging; do NOT invent a box if the real packaging is a pouch (or vice-versa). Only the real packaging form + the real product. Premium e-commerce look, soft neutral background. ` +
+      `STRICT: do NOT add any second/extra packaging; do NOT invent a box if the real packaging is a pouch (or vice-versa). Only the real packaging form + the real product. Premium e-commerce look. ${bgRule} ${labelApply}` +
       `FORM LOCK: exactly one packaging matching the reference (${identity.productForm}); only replace branding. ${productLock}${baseBrand}`
   }
 
