@@ -67,8 +67,14 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
   }
   const langName = labelLangName(identity.market)
   const P = identity.palette
+  const isRound = params.packagingType === 'round'
   const bgRule = `BACKGROUND: a soft NON-WHITE light backdrop (warm beige or light grey gradient) + a soft drop shadow, so the product separates easily for background removal. Do NOT use a pure white background.`
-  const labelApply = hasLabelRef ? `Apply the EXACT finished front-label design shown in the FIRST reference image onto the packaging (same layout, text and colours). ` : ''
+  const roundFormHint = isRound ? `The packaging is a ROUND jar/bottle/can with a wrap-around label. ` : ''
+  const labelApply = hasLabelRef
+    ? (isRound
+        ? `The FIRST reference image is a WRAP-AROUND label strip (front · blank middle · back). Show the container with this label WRAPPED around it so ONLY the FRONT portion of the design faces the camera; the back-info and the middle blank gap curve away out of sight. Do NOT lay the whole flat strip (with back info / gap) flat on the front. `
+        : `Apply the EXACT finished front-label design shown in the FIRST reference image onto the packaging (same layout, text and colours). `)
+    : ''
 
   const colorsStr = (P.colors && P.colors.length ? P.colors : [P.bg, P.primary, P.accent]).join(', ')
   const baseBrand =
@@ -113,13 +119,13 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
   } else if (kind === 'product') {
     size = '1:1'
     prompt =
-      `TASK: A clean studio PRODUCT SHOT of the re-branded ${identity.productType}. Single hero product, centered. ${bgRule} ${labelApply}` +
+      `TASK: A clean studio PRODUCT SHOT of the re-branded ${identity.productType}. Single hero product, centered. ${roundFormHint}${bgRule} ${labelApply}` +
       `FORM LOCK: keep the EXACT physical form/shape from the reference (${identity.productForm}); only replace the label/branding. ${productLock}${baseBrand}`
   } else {
     size = '1:1'
     prompt =
       `TASK: A retail packshot of the re-branded ${identity.productType}: show EXACTLY ONE packaging — the SAME single ${identity.productForm} as the reference — together with the ACTUAL product item visible (spilling out of the open pack, or a small portion on a plate beside it). ` +
-      `STRICT: do NOT add any second/extra packaging; do NOT invent a box if the real packaging is a pouch (or vice-versa). Only the real packaging form + the real product. Premium e-commerce look. ${bgRule} ${labelApply}` +
+      `STRICT: do NOT add any second/extra packaging; do NOT invent a box if the real packaging is a pouch (or vice-versa). Only the real packaging form + the real product. Premium e-commerce look. ${roundFormHint}${bgRule} ${labelApply}` +
       `FORM LOCK: exactly one packaging matching the reference (${identity.productForm}); only replace branding. ${productLock}${baseBrand}`
   }
 
