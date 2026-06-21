@@ -141,9 +141,13 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
   async function generateOne(kind: RebrandImageKind, id: RebrandIdentity, name: string) {
     patchImage(kind, { status: 'generating', error: undefined })
     try {
+      // Nhãn (flat artwork) chỉ cần ref ảnh SẢN PHẨM/món ăn (bank) — KHÔNG dùng
+      // ảnh pouch upload (tránh AI vẽ bao bì vào nhãn). Product/set dùng full ref.
+      const isLabel = kind === 'label-front' || kind === 'label-back'
+      const refsForKind = isLabel ? (bankImages.length ? bankImages : sourceRefs) : sourceRefs
       const res = await generateRebrandImage({
         apiKey: kieApiKey, kind, identity: id, chosenName: name,
-        originalImageRefs: sourceRefs,
+        originalImageRefs: refsForKind,
         widthCm: draft.widthCm, heightCm: draft.heightCm,
       })
       patchImage(kind, { status: 'completed', assetRef: res.assetRef })

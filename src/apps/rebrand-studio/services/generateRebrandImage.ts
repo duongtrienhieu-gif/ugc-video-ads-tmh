@@ -57,11 +57,17 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
   const langName = labelLangName(identity.market)
   const P = identity.palette
 
-  const brandLock =
-    `USE THE REAL PRODUCT shown in the reference photos (the actual item + its packaging form ${identity.productForm}). Do NOT invent a different product or packaging. ` +
+  const baseBrand =
     `NEW BRAND: "${chosenName}". Render "${chosenName}" large, clean and spelled EXACTLY. ` +
     `Colour scheme similar to the original: background ${P.bg}, primary ${P.primary}, accent ${P.accent}. ` +
     `Label text language: ${langName}. Do NOT show any old brand name. Do NOT invent certification badges (Halal/KKM/FDA). Crisp, professional, readable.`
+  const productLock =
+    `USE THE REAL PRODUCT shown in the reference photos (the actual item + its packaging form ${identity.productForm}). Do NOT invent a different product or packaging. `
+  // Nhãn = artwork PHẲNG để in dán — TUYỆT ĐỐI không vẽ bao bì 3D.
+  const flatLabelLock =
+    `This is a FLAT printed LABEL / STICKER ARTWORK ONLY (it will be printed and stuck onto the packaging). ` +
+    `Do NOT depict any pouch, bag, box, carton, jar, bottle or ANY 3D packaging / product mockup anywhere in the image. ` +
+    `Show ONLY the product's FOOD/ingredient imagery (the actual ${identity.productType}, e.g. the snack/fruit itself) + brand + text, as a flat full-bleed graphic, edge-to-edge. `
 
   let prompt: string
   let size: Gpt4oSize
@@ -69,28 +75,26 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
   if (kind === 'label-front') {
     size = pickLabelSize(params.widthCm, params.heightCm)
     prompt =
-      `TASK: Design a FINISHED, attractive, print-ready PRODUCT LABEL — FRONT — for a ${identity.productType}. ` +
-      `Full-bleed rectangular FMCG packaging label artwork (edge-to-edge graphic design, vivid and premium). ` +
-      `Feature the PRODUCT attractively (use the reference product image so it looks like the real item) integrated into the design. ` +
+      `TASK: Design a FINISHED, attractive, print-ready PRODUCT LABEL — FRONT — for a ${identity.productType}. ${flatLabelLock}` +
       `Layout: big brand name at top, tagline ${q(identity.tagline)}, 2-3 benefit highlights (${identity.benefits.map(q).join(', ')})` +
-      `${identity.netWeight ? `, and net weight ${q(identity.netWeight)}` : ''}. ${brandLock}`
+      `${identity.netWeight ? `, and net weight ${q(identity.netWeight)}` : ''}, plus appetising imagery of the food itself. ${baseBrand}`
   } else if (kind === 'label-back') {
     size = pickLabelSize(params.widthCm, params.heightCm)
     prompt =
-      `TASK: Design the BACK product LABEL for a ${identity.productType} — full-bleed rectangular packaging label, tidy professional panel layout. ` +
+      `TASK: Design the BACK product LABEL for a ${identity.productType} — tidy professional panel layout. ${flatLabelLock}` +
       `Sections: Ingredients (${q(identity.ingredients)}), Directions (${q(identity.usage)}), Caution & storage (${q(identity.caution)})` +
-      `${identity.netWeight ? `, net weight ${q(identity.netWeight)}` : ''}, with the brand name. ${brandLock}`
+      `${identity.netWeight ? `, net weight ${q(identity.netWeight)}` : ''}, with the brand name. ${baseBrand}`
   } else if (kind === 'product') {
     size = '1:1'
     prompt =
       `TASK: A clean studio PRODUCT SHOT of the re-branded ${identity.productType}. Single hero product, centered, soft neutral e-commerce background. ` +
-      `FORM LOCK: keep the EXACT physical form/shape from the reference (${identity.productForm}); only replace the label/branding. ${brandLock}`
+      `FORM LOCK: keep the EXACT physical form/shape from the reference (${identity.productForm}); only replace the label/branding. ${productLock}${baseBrand}`
   } else {
     size = '1:1'
     prompt =
       `TASK: A retail packshot of the re-branded ${identity.productType}: show EXACTLY ONE packaging — the SAME single ${identity.productForm} as the reference — together with the ACTUAL product item visible (spilling out of the open pack, or a small portion on a plate beside it). ` +
       `STRICT: do NOT add any second/extra packaging; do NOT invent a box if the real packaging is a pouch (or vice-versa). Only the real packaging form + the real product. Premium e-commerce look, soft neutral background. ` +
-      `FORM LOCK: exactly one packaging matching the reference (${identity.productForm}); only replace branding. ${brandLock}`
+      `FORM LOCK: exactly one packaging matching the reference (${identity.productForm}); only replace branding. ${productLock}${baseBrand}`
   }
 
   if (typeof console !== 'undefined') {
