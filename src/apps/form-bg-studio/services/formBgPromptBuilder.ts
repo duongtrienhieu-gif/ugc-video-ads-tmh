@@ -94,8 +94,9 @@ export function buildFormBgPrompt(params: BuildFormBgPromptParams): string {
     `TASK: Design ONE TALL PORTRAIT (2:3) order-form BACKGROUND, stacked top-to-bottom: (1) header banner, (2) an urgency FOMO band containing an EMPTY countdown slot, (3) a LARGE EMPTY form area, (4) footer. High-converting Malaysian COD marketing infographic.`,
     headerLayout(preset, d, lang, hasGift),
     `FOMO BAND (directly below header): a bold urgency strip in the accent colour. Top label ${q(d.fomoTitle)}. ` +
-      `Then a RESERVED EMPTY countdown SLOT — make it NARROW in width (centred, about 55% of the strip width, NOT full-width) and TALL in height (generous, about twice a text line). Leave it COMPLETELY EMPTY: render NO clock, NO numbers, NO digits, NO boxes, NO text inside it (a real countdown widget is overlaid there later). ` +
-      `Below the slot, show these ${picked.length} DISTINCT urgency lines (each visually punchy): ${fomoLinesText}.`,
+      `Then a RESERVED EMPTY countdown SLOT sized to fit a real 4-cell countdown timer (4 number boxes + a small label under each, like Hari/Jam/Minit/Saat): make it WIDE — about 85-90% of the strip width, centred — and a comfortable landscape height (roughly 3.5:1 width-to-height, tall enough for the number boxes AND their labels). Keep clear vertical spacing ABOVE and BELOW it. ` +
+      `Leave the slot COMPLETELY EMPTY: render NO clock, NO numbers, NO digits, NO boxes, NO labels, NO text inside it (a real countdown widget is overlaid there later). ` +
+      `Below the slot (with clearance, NOT overlapping it), show these ${picked.length} DISTINCT urgency lines (each visually punchy): ${fomoLinesText}.`,
     `FORM SAFE ZONE (below the FOMO band): a LARGE area (~40% of the height) that is a FLAT SOLID ${bg} colour, COMPLETELY EMPTY — no card, no border, no fields, no buttons, no icons, no text. One uniform solid colour so it crops cleanly into a form area.`,
     footerLayout(preset, d),
     identityBlock(d),
