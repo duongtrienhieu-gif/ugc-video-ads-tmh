@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react'
-import { Gift, Upload, RefreshCw, Sparkles, Download, X, AlertCircle } from 'lucide-react'
+import { Gift, Upload, RefreshCw, Sparkles, Download, X, AlertCircle, Plus, Trash2 } from 'lucide-react'
 import { useGiftStudioStore } from './store'
 import { useBankStore } from '../../stores/bankStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -19,9 +19,11 @@ import { langDisplayName } from './labels'
 import {
   GIFT_IMAGE_KINDS,
   GIFT_TOTAL_CREDITS,
+  MAX_GIFT_TIERS,
   type GiftImageKind,
   type GiftBenefits,
 } from './types'
+import { giftLabels } from './labels'
 import { generateGiftBenefits, benefitsSig } from './services/generateGiftBenefits'
 import { generateGiftImage, friendlyGiftError } from './services/generateGiftImage'
 
@@ -47,6 +49,7 @@ export default function GiftStudio() {
   const {
     draft, images, benefits, isPreparing,
     setProductId, setGiftName, setGiftValueRM, setGiftImageRef, setLang,
+    addTier, removeTier, updateTier,
     setBenefits, setPreparing, patchImage,
   } = useGiftStudioStore()
 
@@ -67,9 +70,13 @@ export default function GiftStudio() {
   if (!draft.productId) missing.push('Chọn sản phẩm')
   else if (productImages.length === 0) missing.push('Sản phẩm cần có ít nhất 1 ảnh')
   if (!draft.giftName.trim()) missing.push('Tên quà')
-  if (draft.giftValueRM == null) missing.push('Giá trị quà (RM)')
+  if (draft.giftValueRM == null) missing.push('Giá trị 1 món quà (RM)')
   if (!draft.giftImageRef) missing.push('Ảnh quà')
+  if (draft.tiers.some((t) => !(t.price > 0) || !(t.buyQty >= 1) || !(t.giftQty >= 1))) {
+    missing.push('Mỗi mốc tặng cần giá bán > 0, mua ≥ 1, tặng ≥ 1')
+  }
   const ready = missing.length === 0
+  const L = giftLabels(draft.lang)
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -88,7 +95,7 @@ export default function GiftStudio() {
 
   /** Đảm bảo có benefits đúng với input hiện tại (sinh nếu thiếu/stale). */
   async function ensureBenefits(): Promise<GiftBenefits> {
-    const wantSig = benefitsSig(draft.giftImageRef!, draft.giftName, draft.lang)
+    const wantSig = benefitsSig(draft.giftImageRef!, draft.giftName, draft.giftValueRM, draft.lang)
     if (benefits && benefits.sig === wantSig) return benefits
     setPreparing(true)
     try {
@@ -96,6 +103,7 @@ export default function GiftStudio() {
         apiKey: geminiApiKey,
         giftImageRef: draft.giftImageRef!,
         giftName: draft.giftName,
+        giftValueRM: draft.giftValueRM,
         lang: draft.lang,
       })
       setBenefits(b)
@@ -114,6 +122,7 @@ export default function GiftStudio() {
         product: selectedProduct!,
         giftName: draft.giftName,
         giftValueRM: draft.giftValueRM,
+        tiers: draft.tiers,
         giftImageRef: draft.giftImageRef!,
         benefits: b,
         lang: draft.lang,
@@ -241,7 +250,7 @@ export default function GiftStudio() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-gray-700">Giá trị quà (RM)</label>
+              <label className="mb-1 block text-xs font-semibold text-gray-700">Giá trị 1 món quà (RM)</label>
               <input
                 type="number"
                 min={0}
@@ -278,6 +287,55 @@ export default function GiftStudio() {
                 </label>
               )}
             </div>
+          </div>
+
+          {/* Mốc tặng (tiers) */}
+          <div className="rounded-xl border border-black/10 bg-white p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-xs font-semibold text-gray-700">Mốc tặng (combo giá)</label>
+              <button
+                onClick={addTier}
+                disabled={draft.tiers.length >= MAX_GIFT_TIERS}
+                className="flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Plus className="h-3 w-3" /> Thêm mốc
+              </button>
+            </div>
+            <div className="space-y-3">
+              {draft.tiers.map((t, i) => (
+                <div key={t.id} className="rounded-lg border border-black/10 bg-gray-50 p-2.5">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-gray-500">{L.packageBadge(i + 1)}</span>
+                    <span className="text-[10px] font-medium text-rose-500">{L.tierDealLabel(t.buyQty, t.giftQty)}</span>
+                    {draft.tiers.length > 1 && (
+                      <button
+                        onClick={() => removeTier(t.id)}
+                        title="Xoá mốc"
+                        className="rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-red-500"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <TierField label="Mua (SP)" value={t.buyQty} min={1}
+                      onChange={(v) => updateTier(t.id, { buyQty: v ?? 1 })} />
+                    <TierField label="Tặng (quà)" value={t.giftQty} min={1}
+                      onChange={(v) => updateTier(t.id, { giftQty: v ?? 1 })} />
+                    <TierField label="Giá bán (RM)" value={t.price} min={0}
+                      onChange={(v) => updateTier(t.id, { price: v ?? 0 })} />
+                    <TierField label="Giá gốc (RM, optional)" value={t.originalPrice} min={0} allowEmpty
+                      onChange={(v) => updateTier(t.id, { originalPrice: v })} />
+                  </div>
+                  {t.originalPrice != null && t.originalPrice > t.price && (
+                    <div className="mt-1.5 text-[10px] font-semibold text-emerald-600">
+                      {L.savingsLabel(Math.round(t.originalPrice - t.price))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-[10px] text-gray-400">Tối đa {MAX_GIFT_TIERS} mốc. Giá gốc để trống = không hiện JIMAT.</p>
           </div>
 
           {/* Readiness + Generate */}
@@ -325,6 +383,32 @@ export default function GiftStudio() {
         </div>
       </div>
     </div>
+  )
+}
+
+function TierField(props: {
+  label: string
+  value: number | null
+  min: number
+  allowEmpty?: boolean
+  onChange: (v: number | null) => void
+}) {
+  const { label, value, min, allowEmpty, onChange } = props
+  return (
+    <label className="block">
+      <span className="mb-0.5 block text-[10px] font-medium text-gray-500">{label}</span>
+      <input
+        type="number"
+        min={min}
+        value={value ?? ''}
+        onChange={(e) => {
+          const raw = e.target.value
+          if (raw === '') { onChange(allowEmpty ? null : min); return }
+          onChange(Math.max(min, Math.round(Number(raw))))
+        }}
+        className="w-full rounded-md border border-black/10 bg-white px-2 py-1.5 text-sm text-gray-800"
+      />
+    </label>
   )
 }
 

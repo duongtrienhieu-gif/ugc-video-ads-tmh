@@ -1,9 +1,10 @@
 // generateGiftBenefits — Gemini vision đọc ẢNH quà + tên quà → mini-pitch
-// (headline + 2-3 công dụng) ĐÚNG ngôn ngữ đích.
+// BÁN HÀNG đầy đủ (hook WOW + công dụng + FOMO + nhấn giá trị) ĐÚNG ngôn
+// ngữ đích.
 //
-// Đây là nguồn "quà là gì / tác dụng như nào": user KHÔNG phải tự gõ công
-// dụng (đúng nguyên tắc tối thiểu input). Vì đọc chính ảnh thật nên công
-// dụng bám đúng món quà, không bịa. Kết quả được nướng vào ảnh "thẻ info".
+// Đây là nguồn "quà là gì / tác dụng / vì sao phải lấy ngay": user KHÔNG
+// phải tự gõ (đúng nguyên tắc tối thiểu input). Vì đọc chính ảnh thật nên
+// công dụng bám đúng món quà, không bịa. Kết quả nướng vào cả 3 ảnh.
 
 import { directGeminiVision } from '../../../utils/gemini'
 import { getUrl } from '../../../utils/assetStore'
@@ -14,12 +15,13 @@ export interface GenerateGiftBenefitsParams {
   apiKey: string
   giftImageRef: string
   giftName: string
+  giftValueRM: number | null
   lang: Market
 }
 
 /** Hash nhẹ để phát hiện benefits stale khi input đổi. */
-export function benefitsSig(giftImageRef: string, giftName: string, lang: Market): string {
-  return `${giftImageRef}|${giftName.trim().toLowerCase()}|${lang}`
+export function benefitsSig(giftImageRef: string, giftName: string, giftValueRM: number | null, lang: Market): string {
+  return `${giftImageRef}|${giftName.trim().toLowerCase()}|${giftValueRM ?? ''}|${lang}`
 }
 
 async function refToBase64(assetRef: string): Promise<{ data: string; mimeType: string }> {
@@ -42,36 +44,43 @@ async function refToBase64(assetRef: string): Promise<{ data: string; mimeType: 
 const SCHEMA: Record<string, unknown> = {
   type: 'object',
   properties: {
+    wowHook: { type: 'string' },
     headline: { type: 'string' },
     bullets: { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 3 },
+    fomoLines: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 2 },
+    valueLine: { type: 'string' },
   },
-  required: ['headline', 'bullets'],
+  required: ['wowHook', 'headline', 'bullets', 'fomoLines', 'valueLine'],
 }
 
 export async function generateGiftBenefits(
   params: GenerateGiftBenefitsParams,
 ): Promise<GiftBenefits> {
-  const { apiKey, giftImageRef, giftName, lang } = params
+  const { apiKey, giftImageRef, giftName, giftValueRM, lang } = params
   const img = await refToBase64(giftImageRef)
   const langName = langDisplayName(lang)
+  const valueHint = giftValueRM != null ? `The gift's perceived value is RM${giftValueRM}.` : ''
 
   const systemInstruction =
-    `You write SHORT marketing microcopy for a FREE BONUS GIFT shown on a Malaysian/Vietnamese ` +
-    `COD landing page. Look at the gift product in the image and the given gift name, then describe ` +
-    `what the gift is and its concrete usefulness for the buyer.\n` +
-    `OUTPUT LANGUAGE: ${langName} ONLY — every word must be natural, native ${langName}. ` +
-    (lang === 'ms'
-      ? `Use natural everyday Bahasa Malaysia (not formal/textbook), the way a real seller writes.\n`
-      : `Use natural everyday Vietnamese the way a real seller writes.\n`) +
+    `You are a high-converting Malaysian/Vietnamese COD direct-response copywriter. ` +
+    `You write SHORT, punchy, scroll-stopping microcopy for a FREE BONUS GIFT shown on a landing page. ` +
+    `Look at the gift product in the image + the given gift name, then write copy that makes the buyer go WOW, ` +
+    `feel they are getting a great deal, and fear missing out.\n` +
+    `OUTPUT LANGUAGE: ${langName} ONLY — every word natural, native ${langName}, the way a real seller writes ` +
+    (lang === 'ms' ? `(everyday Bahasa Malaysia, not formal/textbook).\n` : `(everyday Vietnamese).\n`) +
+    `${valueHint}\n` +
     `RULES:\n` +
+    `- wowHook: <= 8 words, an excited attention-grabbing line about getting this gift FREE.\n` +
     `- headline: <= 6 words, names the gift in an appealing way.\n` +
     `- bullets: 2-3 items, each <= 7 words, each a CONCRETE use/benefit grounded in what you SEE.\n` +
+    `- fomoLines: 1-2 items, each <= 6 words, scarcity / urgency / don't-miss-out (e.g. "Stok terhad", "Hanya hari ini", "Jangan lepaskan").\n` +
+    `- valueLine: <= 9 words, emphasises the gift's VALUE received for free.\n` +
     `- Be truthful to the image; do NOT invent specs you cannot see.\n` +
-    `- NO prices, NO numbers about money, NO emojis.`
+    `- NO emojis. Do NOT invent prices other than the given value.`
 
   const userText =
     `Gift name (source, may be in another language — render meaning in ${langName}): "${giftName.trim()}".\n` +
-    `Describe this gift for the bonus block. Return JSON {headline, bullets}.`
+    `Write the bonus-gift sales copy. Return JSON {wowHook, headline, bullets, fomoLines, valueLine}.`
 
   const raw = await directGeminiVision({
     apiKey,
@@ -86,23 +95,25 @@ export async function generateGiftBenefits(
     maxOutputTokens: 1024,
   })
 
-  let parsed: { headline?: string; bullets?: string[] }
+  let parsed: { wowHook?: string; headline?: string; bullets?: string[]; fomoLines?: string[]; valueLine?: string }
   try {
     parsed = JSON.parse(raw)
   } catch {
-    throw new Error('Gemini trả về không phải JSON hợp lệ cho công dụng quà.')
+    throw new Error('Gemini trả về không phải JSON hợp lệ cho nội dung quà.')
   }
 
-  const headline = (parsed.headline ?? '').trim() || giftName.trim()
-  const bullets = (parsed.bullets ?? [])
-    .map((b) => String(b).trim())
-    .filter(Boolean)
-    .slice(0, 3)
+  const clean = (s: unknown) => String(s ?? '').trim()
+  const headline = clean(parsed.headline) || giftName.trim()
+  const bullets = (parsed.bullets ?? []).map(clean).filter(Boolean).slice(0, 3)
+  const fomoLines = (parsed.fomoLines ?? []).map(clean).filter(Boolean).slice(0, 2)
 
   return {
+    wowHook: clean(parsed.wowHook) || headline,
     headline,
     bullets,
+    fomoLines: fomoLines.length ? fomoLines : [lang === 'ms' ? 'Stok terhad' : 'Số lượng có hạn'],
+    valueLine: clean(parsed.valueLine),
     lang,
-    sig: benefitsSig(giftImageRef, giftName, lang),
+    sig: benefitsSig(giftImageRef, giftName, giftValueRM, lang),
   }
 }

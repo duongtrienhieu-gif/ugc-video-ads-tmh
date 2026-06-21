@@ -2,15 +2,19 @@
 // Gift Studio — Xưởng Quà Tặng Kèm (standalone).
 //
 // Mode bổ sung CHẠY RIÊNG, không đụng super-ladipage. Input: 1 sản phẩm
-// (từ bank) + ảnh quà upload + tên quà + giá trị quà (RM) + ngôn ngữ.
-// Output: 3 ảnh AI (chữ nướng trong ảnh — full AI, no canvas, theo đúng
-// pipeline đã proven ở TikTok Shop / Super Ladipage qua gpt-4o-image):
-//   1. banner — sản phẩm hero + teaser "tặng kèm [quà]"
-//   2. combo  — combo giá: sản phẩm + quà + offer callout
-//   3. info   — thẻ thông tin quà: quà hero + tên + Bernilai/Trị giá RMxx
-//               + 2-3 công dụng (AI suy ra từ ảnh quà + tên)
+// (từ bank) + ảnh quà upload + tên quà + giá trị quà (RM) + các MỐC TẶNG
+// (tier: mua X SP → tặng Y quà, giá bán/giá gốc) + ngôn ngữ.
 //
-// Ngôn ngữ: ms (Malaysia — thị trường chính, mặc định) / vi (phụ).
+// Output: 3 ảnh AI infographic giàu chữ/FOMO (chữ nướng trong ảnh — full
+// AI, no canvas, theo pipeline gpt-4o-image đã proven ở TikTok Shop /
+// Super Ladipage):
+//   1. banner — poster mở đầu: hook WOW + quà nổi bật + giá trị quà to
+//   2. combo  — infographic 9:16 xếp chồng tier (port combo-vertical),
+//               mỗi tier kèm số quà tặng + JIMAT
+//   3. info   — thẻ thông tin quà: quà hero + tên + Bernilai RMxx +
+//               2-3 công dụng + dòng FOMO
+//
+// Ngôn ngữ: ms (Malaysia — chính, mặc định) / vi (phụ).
 // ─────────────────────────────────────────────────────────────────────
 
 import type { Market } from '../../types/brandKit'
@@ -35,14 +39,45 @@ export interface GiftImage {
   error?: string
 }
 
-/** Mini-pitch quà do Gemini suy ra từ ẢNH quà + tên (đúng ngôn ngữ đích).
- *  Đây là nguồn "quà là gì / tác dụng" — user KHÔNG phải tự gõ. */
+/** Một MỐC TẶNG (tier combo): mua X sản phẩm → tặng Y quà ở mức giá này. */
+export interface GiftTier {
+  id: string
+  /** Mua mấy sản phẩm. */
+  buyQty: number
+  /** Giá bán của mốc này (RM). */
+  price: number
+  /** Giá gốc (RM) — optional; nếu > price thì auto tính JIMAT. */
+  originalPrice: number | null
+  /** Tặng mấy món quà ở mốc này. */
+  giftQty: number
+}
+
+export const MAX_GIFT_TIERS = 4
+
+export function newGiftTier(buyQty = 1, giftQty = 1): GiftTier {
+  return {
+    id: `tier-${crypto.randomUUID().slice(0, 8)}`,
+    buyQty,
+    price: 0,
+    originalPrice: null,
+    giftQty,
+  }
+}
+
+/** Mini-pitch quà do Gemini suy ra từ ẢNH quà + tên (đúng ngôn ngữ đích) +
+ *  lớp copy bán hàng (wow / FOMO / nhấn giá trị). User KHÔNG phải tự gõ. */
 export interface GiftBenefits {
-  /** 1 dòng headline ngắn cho món quà (vd "Túi đựng mỹ phẩm chống thấm"). */
+  /** 1 dòng hook gây WOW (vd "Quà xịn hơn cả tiền bạn bỏ ra!"). */
+  wowHook: string
+  /** 1 dòng headline ngắn cho món quà (định vị/tên hấp dẫn). */
   headline: string
   /** 2-3 gạch đầu dòng công dụng ngắn. */
   bullets: string[]
-  /** Ngôn ngữ benefits đã sinh — để biết có cần sinh lại khi đổi lang. */
+  /** 1-2 dòng FOMO / khan hiếm / sợ bỏ lỡ. */
+  fomoLines: string[]
+  /** 1 dòng nhấn GIÁ TRỊ quà ("Bạn nhận thêm RM__ hoàn toàn miễn phí"). */
+  valueLine: string
+  /** Ngôn ngữ benefits đã sinh. */
   lang: Market
   /** Hash input (giftImageRef + name + lang) lúc sinh — phát hiện stale. */
   sig: string
@@ -54,10 +89,12 @@ export interface GiftDraft {
   productId: string | null
   /** Tên quà (nguồn user nhập — có thể tiếng Việt, sẽ localize theo lang). */
   giftName: string
-  /** Giá trị cảm nhận của quà, đơn vị RM (số nguyên, vd 49). */
+  /** Giá trị cảm nhận của 1 món quà, đơn vị RM (số nguyên, vd 49). */
   giftValueRM: number | null
   /** asset:xxx của ảnh quà user upload. */
   giftImageRef: string | null
+  /** Các mốc tặng (1-4 tier). */
+  tiers: GiftTier[]
   /** Ngôn ngữ đích của chiến dịch. */
   lang: Market
 }
@@ -68,6 +105,7 @@ export function emptyGiftDraft(): GiftDraft {
     giftName: '',
     giftValueRM: null,
     giftImageRef: null,
+    tiers: [newGiftTier(1, 1)],
     lang: 'ms',
   }
 }

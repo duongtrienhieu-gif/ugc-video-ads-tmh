@@ -11,7 +11,7 @@
 import { generateGpt4oImage, type ImageStatus, type Gpt4oSize } from '../../../utils/kieai'
 import { getUrl, saveAsset } from '../../../utils/assetStore'
 import type { Product } from '../../../stores/types'
-import type { Market, GiftBenefits, GiftImageKind } from '../types'
+import type { Market, GiftBenefits, GiftImageKind, GiftTier } from '../types'
 import { buildGiftPrompt } from './giftPromptBuilder'
 
 export interface GenerateGiftImageParams {
@@ -20,6 +20,7 @@ export interface GenerateGiftImageParams {
   product: Product
   giftName: string
   giftValueRM: number | null
+  tiers: GiftTier[]
   giftImageRef: string
   benefits: GiftBenefits
   lang: Market
@@ -36,7 +37,7 @@ const TIMEOUT_MS = 5 * 60 * 1000
 
 const SIZE_BY_KIND: Record<GiftImageKind, Gpt4oSize> = {
   banner: '3:2',
-  combo: '1:1',
+  combo: '2:3', // poster combo dọc 9:16 (gpt-4o map 9:16 → 2:3)
   info: '2:3',
 }
 
@@ -79,9 +80,9 @@ export async function generateGiftImage(
     product: params.product,
     giftName: params.giftName,
     giftValueRM: params.giftValueRM,
+    tiers: params.tiers,
     benefits: params.benefits,
     lang: params.lang,
-    hasGiftRef: giftUrls.length > 0,
   })
 
   if (typeof console !== 'undefined') {

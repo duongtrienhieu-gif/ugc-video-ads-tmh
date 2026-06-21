@@ -1,27 +1,27 @@
 // giftPromptBuilder — dựng prompt cho 3 ảnh quà (banner / combo / info).
 //
-// Full-AI, chữ NƯỚNG trong ảnh (no canvas) — đúng pipeline gpt-4o-image đã
-// proven ở TikTok Shop / Super Ladipage. Mỗi prompt:
-//   • Khoá identity: tái hiện ĐÚNG sản phẩm + ĐÚNG món quà từ ảnh tham chiếu.
-//   • Nướng chữ ĐÚNG ngôn ngữ đích (chuỗi cố định localize sẵn + văn Gemini).
-//   • KHÔNG bịa giá: chỉ dùng giá trị quà (user nhập) + offer sản phẩm (nếu có).
+// Full-AI, chữ NƯỚNG trong ảnh (no canvas) — pipeline gpt-4o-image proven.
+// Cả 3 ảnh là INFOGRAPHIC THIẾT KẾ giàu chữ/FOMO/WOW (không phải "ảnh SP +
+// 1 caption"). Combo port nguyên layout `combo-vertical` của super-ladipage
+// (đã rated đẹp): tier xếp chồng, badge, price block gạch + JIMAT, màu tier,
+// + THÊM món quà tặng kèm ở mỗi tier.
 //
-// Refs (ảnh tham chiếu) do generateGiftImage truyền riêng; builder chỉ lo CHỮ
-// + bố cục. Thứ tự ref theo từng kind cũng do generateGiftImage quyết.
+//   • Khoá identity: tái hiện ĐÚNG sản phẩm + ĐÚNG món quà từ ảnh tham chiếu.
+//   • Nướng chữ ĐÚNG ngôn ngữ đích (chuỗi cố định localize + văn Gemini).
+//   • STRICT giá/label EXACTLY từ tier input — KHÔNG bịa offer/giá.
 
 import type { Product } from '../../../stores/types'
-import type { Market, GiftBenefits, GiftImageKind } from '../types'
-import { giftLabels } from '../labels'
+import type { Market, GiftBenefits, GiftImageKind, GiftTier } from '../types'
+import { giftLabels, TIER_CORNER_BADGES, TIER_COLORS } from '../labels'
 
 export interface BuildGiftPromptParams {
   kind: GiftImageKind
   product: Product
   giftName: string
   giftValueRM: number | null
+  tiers: GiftTier[]
   benefits: GiftBenefits
   lang: Market
-  /** Số ảnh tham chiếu sản phẩm sẽ kèm (để câu chữ prompt khớp). */
-  hasGiftRef: boolean
 }
 
 /** Tên SP dùng trong ảnh: ưu tiên localizedName đúng lang, fallback productName. */
@@ -36,7 +36,7 @@ function quote(s: string): string {
   return `"${s.replace(/"/g, "'").trim()}"`
 }
 
-/** Khối nhận diện chung — bám ảnh tham chiếu, cấm drift (per product-fidelity). */
+/** Khối nhận diện chung — bám ảnh tham chiếu, cấm drift (product-fidelity). */
 function identityBlock(product: Product, lang: Market): string {
   const name = displayProductName(product, lang)
   const visual = (product.visualBrief ?? '').trim()
@@ -50,62 +50,100 @@ function identityBlock(product: Product, lang: Market): string {
 /** Khối nhận diện quà — bám ảnh quà thật. */
 function giftIdentityBlock(giftName: string): string {
   return [
-    `GIFT (the free bonus): ${giftName.trim()}.`,
+    `GIFT (the free bonus, a DIFFERENT product given free): ${giftName.trim()}.`,
     `Replicate the gift product from its reference photo EXACTLY — same color, shape and form. Do NOT invent a different object.`,
   ].join('\n')
 }
 
 const STYLE =
-  `STYLE: clean modern e-commerce / TikTok-Shop promo aesthetic, bright even studio lighting, ` +
-  `crisp focus, high contrast so text is readable, professional commercial look. ` +
-  `Solid or soft-gradient background. No watermark, no logo unless present in references.`
+  `STYLE: premium Malaysian e-commerce / TikTok-Shop promo INFOGRAPHIC. Designer-grade layout, ` +
+  `bold modern sans-serif, strong visual hierarchy, vivid high-contrast colors, glossy badges, ` +
+  `starbursts and ribbons for emphasis, generous but tidy spacing so every text is crisp and readable. ` +
+  `Looks like a high-converting paid-ad creative. No watermark.`
 
 /** Hướng dẫn render chữ — ép chính tả ngôn ngữ đích, gọn, dễ đọc. */
 function textRenderRules(langName: string): string {
   return (
-    `TEXT RENDERING — render the following text INTO the image as crisp, correctly spelled ${langName}. ` +
-    `Spell every word EXACTLY as written, with correct diacritics. Use bold clean sans-serif. ` +
-    `Keep text minimal, large and legible. Do NOT add any other text, numbers or currency you were not given.`
+    `TEXT RENDERING — render ALL text INTO the image as crisp, correctly spelled ${langName}. ` +
+    `Spell every word EXACTLY as written, with correct diacritics. Bold clean sans-serif, large and legible. ` +
+    `Do NOT add any other text, numbers or currency you were not given.`
   )
 }
 
+/** Lớp copy bán hàng (wow / FOMO / value) — nướng vào mọi ảnh. */
+function salesCopyBlock(b: GiftBenefits, valueText: string): string {
+  const lines = [
+    `WOW hook: ${quote(b.wowHook)}`,
+    valueText ? `Gift value, big & bold (starburst): ${quote(valueText)}` : '',
+    b.valueLine ? `Value emphasis: ${quote(b.valueLine)}` : '',
+    b.fomoLines.length ? `Urgency / FOMO badges: ${b.fomoLines.map(quote).join(', ')}` : '',
+  ].filter(Boolean)
+  return `SALES COPY TO RENDER (make these visually punchy — bursts/ribbons/contrasting color):\n` +
+    lines.map((l) => `  - ${l}`).join('\n')
+}
+
+function tierSavings(t: GiftTier): number | null {
+  if (t.originalPrice != null && t.originalPrice > t.price) return Math.round(t.originalPrice - t.price)
+  return null
+}
+
 export function buildGiftPrompt(params: BuildGiftPromptParams): string {
-  const { kind, product, giftName, giftValueRM, benefits, lang } = params
+  const { kind, product, giftName, giftValueRM, tiers, benefits, lang } = params
   const L = giftLabels(lang)
   const valueText = giftValueRM != null ? L.valueLabel(giftValueRM) : ''
-  const offer = (product.offer ?? '').trim()
-
   const head = [identityBlock(product, lang), giftIdentityBlock(giftName), STYLE, textRenderRules(L.langName)]
 
+  // Tier rẻ nhất (primary) cho banner.
+  const primary = tiers[0]
+
   if (kind === 'banner') {
+    const dealLine = primary
+      ? `Primary deal: ${quote(L.tierDealLabel(primary.buyQty, primary.giftQty))} — price ${quote(`RM${primary.price}`)}`
+      : ''
     const texts = [
-      `Big headline: ${quote(L.bannerCta)}`,
-      `Small badge near the gift: ${quote(L.freeGiftBadge)}`,
-      `Gift caption: ${quote(benefits.headline)}`,
-    ]
+      `Big top headline: ${quote(L.bannerCta)}`,
+      dealLine,
+      `Free-gift badge near the gift: ${quote(L.freeGiftBadge)}`,
+      `Gift name caption: ${quote(benefits.headline)}`,
+    ].filter(Boolean)
     return [
-      `TASK: Design a WIDE promotional BANNER (landscape) for a COD landing page.`,
-      `LAYOUT: the PRODUCT is the large hero on one side; the GIFT appears smaller beside/below it with a clear "free gift" badge, so a shopper instantly sees "buy product, get this gift free".`,
+      `TASK: Design a WIDE high-impact promo BANNER (landscape) for a Malaysian COD landing page.`,
+      `LAYOUT: the PRODUCT is the large hero on one side; the GIFT appears prominently beside it with a glossy "free gift" badge + a BIG starburst showing its value, so a shopper instantly feels "buy product, get this valuable gift FREE". Punchy, ad-creative look.`,
       ...head,
-      `TEXT TO RENDER (only these):`,
+      salesCopyBlock(benefits, valueText),
+      `OTHER TEXT TO RENDER:`,
       ...texts.map((t) => `  - ${t}`),
-    ].join('\n')
+      `STRICT: prices + deal label EXACTLY as given. No invented offers.`,
+    ].join('\n\n')
   }
 
   if (kind === 'combo') {
-    const texts = [
-      `Label: ${quote(L.comboLabel)}`,
-      `Gift badge: ${quote(L.freeGiftBadge)}`,
-      valueText ? `Gift value tag on the gift: ${quote(valueText)}` : '',
-      offer ? `Offer line: ${quote(offer)}` : '',
-    ].filter(Boolean)
+    const dealsList = tiers.map((t, i) => {
+      const sav = tierSavings(t)
+      const corner = TIER_CORNER_BADGES[i] || ''
+      const color = TIER_COLORS[i] || TIER_COLORS[TIER_COLORS.length - 1]
+      const parts = [
+        `Tier ${i + 1}: package badge=${quote(L.packageBadge(i + 1))}`,
+        `color theme=${color}${corner ? `, corner badge=${quote(corner)}` : ''}`,
+        `deal label=${quote(L.tierDealLabel(t.buyQty, t.giftQty))}`,
+        `product mockup=${t.buyQty} unit(s)`,
+        `price=${quote(`RM${t.price}`)}`,
+        t.originalPrice != null && t.originalPrice > t.price ? `original price (strikethrough)=${quote(`RM${t.originalPrice}`)}` : '',
+        sav != null ? `savings=${quote(L.savingsLabel(sav))}` : '',
+        `FREE GIFT=${quote(`${t.giftQty}× ${giftName.trim()}`)} with tag ${quote(L.freeGiftBadge)}`,
+      ].filter(Boolean)
+      return '  ' + parts.join(', ')
+    }).join('\n')
+
     return [
-      `TASK: Design a COMBO / bundle packshot showing the PRODUCT and the GIFT together as one money-saving deal.`,
-      `LAYOUT: product and gift arranged together like a bundle (flat-lay or side-by-side packshot). Make the gift visibly a "bonus" via the badge + value tag.`,
+      `TASK: Design a TALL PORTRAIT (9:16) COMBO PRICING INFOGRAPHIC — a Malaysian COD offer poster stacking ALL tiers vertically. This must look like a polished, high-converting deal poster.`,
+      `LAYOUT (COMBO VERTICAL): Bold title at top: ${quote(L.comboTitle)}. Then stack each tier as its own colored block. Each tier block contains: the package badge, the product mockup (N units = tier quantity, SHAPE LOCK identical to reference), the deal label, a price block (original price struck through → big highlighted sale price + savings burst), AND the FREE GIFT shown as a bonus item with its "free gift" badge + value. Color-code tiers distinctly; add the corner badges. Make the FREE GIFT visually obvious in every tier.`,
       ...head,
-      `TEXT TO RENDER (only these):`,
-      ...texts.map((t) => `  - ${t}`),
-    ].join('\n')
+      `MULTI-PRODUCT: all product units across tiers must match the SAME reference — identical label, shape, color; just scale the count per tier.`,
+      salesCopyBlock(benefits, valueText),
+      `FULL DEALS LIST (render ALL tiers below, each as a separate vertical block, data EXACTLY as given):\n${dealsList}`,
+      `STRICT: all tier prices, savings, deal labels and gift counts EXACTLY from the list above. Each tier distinct + readable. No invented numbers.`,
+    ].join('\n\n')
   }
 
   // kind === 'info' — thẻ thông tin quà (quà là hero)
@@ -113,15 +151,17 @@ export function buildGiftPrompt(params: BuildGiftPromptParams): string {
   const texts = [
     `Card title: ${quote(L.giftInfoTitle)}`,
     `Gift name headline: ${quote(benefits.headline)}`,
-    valueText ? `Value tag: ${quote(valueText)} + ${quote(L.free)}` : `Free tag: ${quote(L.free)}`,
+    valueText ? `Big value tag (starburst): ${quote(valueText)} + ${quote(L.free)}` : `Free tag: ${quote(L.free)}`,
     `Benefit bullet points:`,
   ]
   return [
-    `TASK: Design a clean GIFT-INFO card (portrait) that explains WHAT the free gift is and WHY it is useful.`,
-    `LAYOUT: the GIFT product is the large hero in the upper area; below it a tidy info panel with the title, name, value tag and 2-3 short benefit bullets. This card must make the gift feel valuable and clearly understood.`,
+    `TASK: Design a clean, premium GIFT-INFO card (portrait) that explains WHAT the free gift is and WHY it is valuable — make the buyer feel they'd regret missing it.`,
+    `LAYOUT: the GIFT product is the large hero in the upper area; below it a tidy info panel with the title, name, a BIG value starburst, 2-3 short benefit bullets, and a FOMO ribbon. Designer infographic look.`,
     ...head,
-    `TEXT TO RENDER (only these):`,
+    salesCopyBlock(benefits, valueText),
+    `OTHER TEXT TO RENDER:`,
     ...texts.map((t) => `  - ${t}`),
     bulletText,
-  ].join('\n')
+    `STRICT: render only the text given. No invented prices.`,
+  ].join('\n\n')
 }

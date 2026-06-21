@@ -2,8 +2,7 @@
 // Gift Studio store — zustand + localStorage cache.
 //
 // State chỉ thuộc app này, KHÔNG đụng store nào khác. Cache draft + ảnh +
-// benefits vào localStorage để refresh không mất việc (mirror cách các app
-// khác cache cục bộ). Ảnh là asset:xxx nên cache nhẹ.
+// benefits vào localStorage để refresh không mất việc. Ảnh là asset:xxx.
 // ─────────────────────────────────────────────────────────────────────
 
 import { create } from 'zustand'
@@ -13,7 +12,10 @@ import {
   type GiftImage,
   type GiftImageKind,
   type GiftBenefits,
+  type GiftTier,
   emptyGiftDraft,
+  newGiftTier,
+  MAX_GIFT_TIERS,
   GIFT_IMAGE_KINDS,
 } from './types'
 
@@ -34,8 +36,14 @@ function loadCache(): PersistShape {
     const raw = localStorage.getItem(CACHE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<PersistShape>
+      const base = emptyGiftDraft()
+      const draft: GiftDraft = { ...base, ...(parsed.draft ?? {}) }
+      // Migration: cache cũ (trước khi có tier) → đảm bảo luôn có ≥1 tier hợp lệ.
+      if (!Array.isArray(draft.tiers) || draft.tiers.length === 0) {
+        draft.tiers = [newGiftTier(1, 1)]
+      }
       return {
-        draft: { ...emptyGiftDraft(), ...(parsed.draft ?? {}) },
+        draft,
         images: Array.isArray(parsed.images) && parsed.images.length === GIFT_IMAGE_KINDS.length
           ? parsed.images
           : freshImages(),
@@ -59,6 +67,11 @@ interface GiftStudioState {
   setGiftValueRM: (rm: number | null) => void
   setGiftImageRef: (ref: string | null) => void
   setLang: (lang: Market) => void
+
+  // ── tier setters ──
+  addTier: () => void
+  removeTier: (id: string) => void
+  updateTier: (id: string, patch: Partial<Omit<GiftTier, 'id'>>) => void
 
   // ── pipeline state ──
   setBenefits: (b: GiftBenefits | null) => void
@@ -91,6 +104,29 @@ export const useGiftStudioStore = create<GiftStudioState>((set, get) => {
     setGiftValueRM: (rm) => { set((s) => ({ draft: { ...s.draft, giftValueRM: rm } })); save() },
     setGiftImageRef: (ref) => { set((s) => ({ draft: { ...s.draft, giftImageRef: ref } })); save() },
     setLang: (lang) => { set((s) => ({ draft: { ...s.draft, lang } })); save() },
+
+    addTier: () => {
+      set((s) => {
+        if (s.draft.tiers.length >= MAX_GIFT_TIERS) return s
+        const last = s.draft.tiers[s.draft.tiers.length - 1]
+        const next = newGiftTier((last?.buyQty ?? 0) + 1, (last?.giftQty ?? 0) + 1)
+        return { draft: { ...s.draft, tiers: [...s.draft.tiers, next] } }
+      })
+      save()
+    },
+    removeTier: (id) => {
+      set((s) => {
+        if (s.draft.tiers.length <= 1) return s // luôn giữ ≥1 tier
+        return { draft: { ...s.draft, tiers: s.draft.tiers.filter((t) => t.id !== id) } }
+      })
+      save()
+    },
+    updateTier: (id, patch) => {
+      set((s) => ({
+        draft: { ...s.draft, tiers: s.draft.tiers.map((t) => (t.id === id ? { ...t, ...patch } : t)) },
+      }))
+      save()
+    },
 
     setBenefits: (b) => { set({ benefits: b }); save() },
     setPreparing: (v) => set({ isPreparing: v }),
