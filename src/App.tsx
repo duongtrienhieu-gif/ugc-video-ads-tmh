@@ -88,7 +88,7 @@ const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> =
   'tiktok-shop':       { name: 'TikTok Shop',      resetKeys: [] },
   'research':          { name: 'Research',         resetKeys: [] },
   'chat-bot':          { name: 'Chat Bot',         resetKeys: ['chat-bot-configs-v1'] },
-  'image-studio':      { name: 'Xưởng Ảnh',        resetKeys: ['gift-studio-draft-v1', 'form-bg-studio-draft-v1', 'image-studio-mode-v1'] },
+  'image-studio':      { name: 'Xưởng Ảnh',        resetKeys: ['gift-studio-draft-v1', 'form-bg-studio-draft-v1', 'rebrand-studio-draft-v1', 'image-studio-mode-v1'] },
 }
 
 export default function App() {

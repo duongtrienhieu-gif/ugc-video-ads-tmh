@@ -7,18 +7,21 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react'
-import { Images, Gift, LayoutTemplate } from 'lucide-react'
+import { Images, Gift, LayoutTemplate, Tags } from 'lucide-react'
 import GiftStudio from '../gift-studio/GiftStudio'
 import FormBgStudio from '../form-bg-studio/FormBgStudio'
+import RebrandStudio from '../rebrand-studio/RebrandStudio'
 import { GIFT_TOTAL_CREDITS } from '../gift-studio/types'
 import { FORM_BG_TOTAL_CREDITS } from '../form-bg-studio/types'
+import { REBRAND_TOTAL_CREDITS } from '../rebrand-studio/types'
 
-type Mode = 'gift' | 'form'
+type Mode = 'gift' | 'form' | 'rebrand'
 const MODE_KEY = 'image-studio-mode-v1'
 
 function loadMode(): Mode {
   try {
-    return localStorage.getItem(MODE_KEY) === 'form' ? 'form' : 'gift'
+    const m = localStorage.getItem(MODE_KEY)
+    return m === 'form' || m === 'rebrand' ? m : 'gift'
   } catch {
     return 'gift'
   }
@@ -37,7 +40,7 @@ export default function ImageStudio() {
       active ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
     }`
 
-  const credit = mode === 'gift' ? GIFT_TOTAL_CREDITS : FORM_BG_TOTAL_CREDITS
+  const credit = mode === 'gift' ? GIFT_TOTAL_CREDITS : mode === 'form' ? FORM_BG_TOTAL_CREDITS : REBRAND_TOTAL_CREDITS
 
   return (
     <div className="flex h-full flex-col bg-[#F6F6F8]">
@@ -53,6 +56,9 @@ export default function ImageStudio() {
           <button onClick={() => pick('form')} className={tabCls(mode === 'form')}>
             <LayoutTemplate className="h-3.5 w-3.5" /> Thiết kế Form Sale
           </button>
+          <button onClick={() => pick('rebrand')} className={tabCls(mode === 'rebrand')}>
+            <Tags className="h-3.5 w-3.5" /> Re-Branding Sản phẩm
+          </button>
         </div>
         <span className="ml-auto rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-600">
           ~{credit} credit / lần
@@ -60,7 +66,7 @@ export default function ImageStudio() {
       </div>
 
       <div className="min-h-0 flex-1">
-        {mode === 'gift' ? <GiftStudio embedded /> : <FormBgStudio embedded />}
+        {mode === 'gift' ? <GiftStudio embedded /> : mode === 'form' ? <FormBgStudio embedded /> : <RebrandStudio embedded />}
       </div>
     </div>
   )
