@@ -25,6 +25,9 @@ export interface HybridRenderContext {
   kieApiKey: string
   /** Creator keyframe (Bước 3) — the talking face for lips + the chain anchor. */
   keyframeRef?: string
+  /** P6av — KF-B: the same creator HOLDING the product; used for a lips cut whose line mentions
+   *  the product (scene.lipsHoldsProduct). Falls back to keyframeRef when absent. */
+  keyframeProductRef?: string
   /** Master TTS (asset ref) — lips cuts slice their span from this. */
   voiceRef?: string
   product?: Product | null
@@ -56,11 +59,14 @@ export async function renderOneHybridScene(
     if (!ctx.keyframeRef || !ctx.voiceRef) {
       throw new Error('Cảnh lips cần keyframe + voice — tạo keyframe ở Bước 3 trước.')
     }
+    // P6av — a product-mention lips uses KF-B (creator holding the product) when available;
+    // otherwise the plain talking-head KF-A. Falls back safely if KF-B wasn't generated.
+    const lipsKeyframe = (scene.lipsHoldsProduct && ctx.keyframeProductRef) ? ctx.keyframeProductRef : ctx.keyframeRef
     const r = await renderLipsyncSegment({
       kieApiKey: ctx.kieApiKey,
       config: ctx.creatorVideoConfig,
       voiceRef: ctx.voiceRef,
-      keyframeRef: ctx.keyframeRef,
+      keyframeRef: lipsKeyframe,
       startSec: scene.startSec,
       endSec: scene.endSec,
     })

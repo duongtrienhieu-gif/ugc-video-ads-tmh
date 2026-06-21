@@ -93,7 +93,9 @@ interface AdsVideoStoreState {
   /** P4p — persist the bulk-render queue so it survives a tab switch. */
   setHybridQueue:         (idxs: number[]) => void
   /** Store the one creator keyframe + voice for the whole video. */
-  setHybridCreatorAssets: (a: { keyframeRef: string; voiceRef: string; voiceDurationSec: number; voiceAlignment?: VoiceAlignment; voiceId?: string }) => void
+  setHybridCreatorAssets: (a: { keyframeRef: string; voiceRef: string; voiceDurationSec: number; voiceAlignment?: VoiceAlignment; voiceId?: string; keyframeProductRef?: string }) => void
+  /** P6av — toggle the "lips holding product" 2-keyframe feature (default ON). */
+  setHybridLipsHoldProduct: (on: boolean) => void
   /** Store the final assembled MP4. */
   setHybridFinal:         (videoRef: string) => void
   /** P5k — burned-caption settings (preset + on/off), applied at assemble. */
@@ -485,8 +487,11 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
   setHybridCreatorAssets: (a) =>
     commit(set, get, (s) => ({
       ...s,
-      hybrid: { ...s.hybrid, keyframeRef: a.keyframeRef, voiceRef: a.voiceRef, voiceDurationSec: a.voiceDurationSec, voiceAlignment: a.voiceAlignment, voiceId: a.voiceId },
+      hybrid: { ...s.hybrid, keyframeRef: a.keyframeRef, voiceRef: a.voiceRef, voiceDurationSec: a.voiceDurationSec, voiceAlignment: a.voiceAlignment, voiceId: a.voiceId, keyframeProductRef: a.keyframeProductRef },
     })),
+
+  setHybridLipsHoldProduct: (on) =>
+    commit(set, get, (s) => ({ ...s, hybrid: { ...s.hybrid, lipsHoldProduct: on } })),
 
   setHybridFinal: (videoRef) =>
     commit(set, get, (s) => ({ ...s, hybrid: { ...s.hybrid, finalVideoRef: videoRef } })),

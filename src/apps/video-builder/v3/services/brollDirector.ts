@@ -72,6 +72,10 @@ export interface BrollScene {
   /** P6m — Gemini's declared single shot archetype for this line (P1: captured + shown
    *  only; not yet used for decisions). */
   shotIntent?: ShotIntent
+  /** P6av — a lips cut whose line mentions/points at the product → render it from KF-B (the
+   *  creator HOLDING the product) instead of the plain talking-head KF-A. At most one lips per
+   *  video carries this (set by assignLipsProductKeyframe). */
+  lipsHoldsProduct?: boolean
   /** one short phrase explaining the choice (debug / UI). */
   reason?: string
 }
@@ -490,6 +494,22 @@ const EATING_ACTION_RE = /\b(?:bite|chew)\b|(?:^|[\s.,!?;:"'(])(?:cắn|nhai|gig
 function isBadLipsCandidate(quote: string | undefined): boolean {
   const q = quote ?? ''
   return DEMO_ACTION_RE.test(q) || DEICTIC_RE.test(q)
+}
+
+// P6av — Hybrid 2-keyframe: mark AT MOST ONE lips cut (whose line NAMES or POINTS at the
+// product) to render from KF-B (the creator HOLDING the product) instead of the static
+// talking-head KF-A. Prefers the EARLIEST product-mention lips (usually the reveal/discovery
+// line). Deterministic; the renderer falls back to KF-A if KF-B wasn't generated.
+function assignLipsProductKeyframe(scenes: BrollScene[], product: Product | null | undefined): void {
+  const name = (product?.productName ?? '').toLowerCase()
+  const nameTokens = name.split(/[^a-z0-9à-ỹ]+/i).filter((w) => w.length >= 4)
+  const mentionsProduct = (q: string): boolean => {
+    const t = (q ?? '').toLowerCase()
+    if (DEICTIC_RE.test(q ?? '')) return true
+    return nameTokens.some((w) => t.includes(w))
+  }
+  const idx = scenes.findIndex((s) => s.role === 'lips' && mentionsProduct(s.quote))
+  if (idx >= 0) scenes[idx].lipsHoldsProduct = true
 }
 // P6f — shared archetype cues (ONE source of truth for the meaning→shot system). Matched on
 // the ENGLISH conceptPrompt the director writes, so universal across markets/niches.
@@ -1302,6 +1322,8 @@ OUTPUT strict JSON only (no markdown fences):
   enforceRenderSafeHolds(scenes, params.product)
   // P6f Part B — reserve the endorsement look for the CTA (must run LAST, after the holds pass).
   capEndorsement(scenes)
+  // P6av — mark ≤1 product-mention lips to render from KF-B (creator holding the product).
+  assignLipsProductKeyframe(scenes, params.product)
 
   const coveredSec = scenes.reduce((s, x) => s + x.durationSec, 0)
   const lipsScenes = scenes.filter((s) => s.role === 'lips')

@@ -734,6 +734,12 @@ export interface HybridState {
   clips: Record<number, string>
   /** One creator keyframe + voice for the whole video (needed for lips + master TTS). */
   keyframeRef?: string
+  /** P6av — KF-B: the SAME creator HOLDING the product, used for lips lines that mention/point
+   *  at the product (Hybrid 2-keyframe). Absent if the toggle is off / gen failed → those lips
+   *  fall back to keyframeRef (KF-A). */
+  keyframeProductRef?: string
+  /** P6av — toggle for the product-holding lips keyframe. Absent = ON (default). */
+  lipsHoldProduct?: boolean
   voiceRef?: string
   voiceDurationSec?: number
   voiceAlignment?: VoiceAlignment

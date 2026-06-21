@@ -93,6 +93,7 @@ export default function HybridVideoPhase(_props: Props) {
   const setHybridClip  = useAdsVideoStore((s) => s.setHybridClip)
   const setSceneConceptPrompt = useAdsVideoStore((s) => s.setSceneConceptPrompt)
   const setHybridAssets= useAdsVideoStore((s) => s.setHybridCreatorAssets)
+  const setHybridLipsHoldProduct = useAdsVideoStore((s) => s.setHybridLipsHoldProduct)
   const setAssetsGenStartedAt = useAdsVideoStore((s) => s.setAssetsGenStartedAt)
   const patchSceneRender = useAdsVideoStore((s) => s.patchSceneRender)
   const setHybridQueue = useAdsVideoStore((s) => s.setHybridQueue)
@@ -232,11 +233,13 @@ export default function HybridVideoPhase(_props: Props) {
         script, voiceCategory, voiceId: state.inputs.voiceId,
         lang: state.scriptBrain.outputLang,   // P6e — MY → TTS 1.15×, VN → 1.2×
         avatar, product: state.inputs.product, onStageUpdate: () => {},
+        // P6av — also make KF-B (creator holding product) for product-mention lips (toggle, default ON).
+        withProductKeyframe: state.hybrid.lipsHoldProduct !== false && !!state.inputs.product,
       })
       // P4m — record WHICH voice this was made with (the user's pick, '' = default)
       // so auto-run can detect a voice change and regenerate instead of serving a
       // stale cached voice (the "đổi giọng mà Bước 2 vẫn giọng cũ" bug).
-      setHybridAssets({ keyframeRef: kf.keyframeRef, voiceRef: kf.voiceRef, voiceDurationSec: kf.voiceDurationSec, voiceAlignment: kf.voiceAlignment, voiceId: state.inputs.voiceId ?? '' })
+      setHybridAssets({ keyframeRef: kf.keyframeRef, voiceRef: kf.voiceRef, voiceDurationSec: kf.voiceDurationSec, voiceAlignment: kf.voiceAlignment, voiceId: state.inputs.voiceId ?? '', keyframeProductRef: kf.keyframeProductRef })
       // P5j — feed the REAL measured voice back into the per-language syllable-rate
       // calibration so the Bước-1 "~Xs" estimate converges to the user's ACTUAL
       // ElevenLabs pace. The hybrid flow never did this (only the legacy ActionInserts
@@ -281,7 +284,7 @@ export default function HybridVideoPhase(_props: Props) {
   }, [kieApiKey, elevenLabsKey, script])
 
   const ctx = (): HybridRenderContext => ({
-    kieApiKey, keyframeRef: hybrid.keyframeRef, voiceRef: hybrid.voiceRef,
+    kieApiKey, keyframeRef: hybrid.keyframeRef, keyframeProductRef: hybrid.keyframeProductRef, voiceRef: hybrid.voiceRef,
     // P6i — render with the localized-name copy so PRODUCT LOCK / social-proof card use the
     // same spoken name as the script (cached on the product by the script/director step).
     product: applyLocalizedName(state.inputs.product, state.scriptBrain.outputLang),
@@ -601,8 +604,10 @@ export default function HybridVideoPhase(_props: Props) {
 
         {/* ── Creator assets — listen to the voice + see the face before paying ─ */}
         {hasAssets ? (
-          <AssetsBar keyframeRef={hybrid.keyframeRef} voiceRef={hybrid.voiceRef}
-            voiceDurationSec={hybrid.voiceDurationSec} busy={busy} onRegen={makeVoice} />
+          <AssetsBar keyframeRef={hybrid.keyframeRef} keyframeProductRef={hybrid.keyframeProductRef}
+            voiceRef={hybrid.voiceRef} voiceDurationSec={hybrid.voiceDurationSec} busy={busy}
+            lipsHoldProduct={hybrid.lipsHoldProduct !== false} hasProduct={!!state.inputs.product}
+            onRegen={makeVoice} onToggleLips={setHybridLipsHoldProduct} />
         ) : scenes.length > 0 ? (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[12px] text-amber-800">
             Chưa có giọng — bấm <strong>"Tạo giọng + mặt"</strong> để tạo khuôn mặt + giọng thật, rồi bấm <strong>"Đạo diễn"</strong> chia cảnh theo nhịp giọng.
@@ -666,20 +671,39 @@ export default function HybridVideoPhase(_props: Props) {
 }
 
 // ── Creator assets bar — face thumbnail + voice audio player ──────────────────
-function AssetsBar({ keyframeRef, voiceRef, voiceDurationSec, busy, onRegen }: {
-  keyframeRef?: string; voiceRef?: string; voiceDurationSec?: number; busy: boolean; onRegen: () => void
+function AssetsBar({ keyframeRef, keyframeProductRef, voiceRef, voiceDurationSec, busy, lipsHoldProduct, hasProduct, onRegen, onToggleLips }: {
+  keyframeRef?: string; keyframeProductRef?: string; voiceRef?: string; voiceDurationSec?: number
+  busy: boolean; lipsHoldProduct: boolean; hasProduct: boolean
+  onRegen: () => void; onToggleLips: (on: boolean) => void
 }) {
   const faceUrl = useAssetUrl(keyframeRef ?? undefined)
+  const prodFaceUrl = useAssetUrl(keyframeProductRef ?? undefined)   // P6av — KF-B (cầm sản phẩm)
   const voiceUrl = useAssetUrl(voiceRef ?? undefined)
   return (
     <div className="mb-4 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
-      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-gray-900">
-        {faceUrl && <img src={faceUrl} alt="creator" className="h-full w-full object-cover" />}
+      <div className="flex shrink-0 gap-1">
+        <div className="h-16 w-16 overflow-hidden rounded-lg bg-gray-900" title="Mặt nói (KF-A)">
+          {faceUrl && <img src={faceUrl} alt="creator" className="h-full w-full object-cover" />}
+        </div>
+        {/* P6av — KF-B thumbnail (creator holding the product) when the toggle is on. */}
+        {lipsHoldProduct && hasProduct && (
+          <div className="relative h-16 w-16 overflow-hidden rounded-lg border border-emerald-300 bg-gray-900" title="Mặt cầm sản phẩm (KF-B) — dùng cho câu lips nhắc sản phẩm">
+            {prodFaceUrl
+              ? <img src={prodFaceUrl} alt="creator+product" className="h-full w-full object-cover" />
+              : <div className="flex h-full w-full items-center justify-center px-1 text-center text-[8px] text-gray-400">KF cầm SP</div>}
+          </div>
+        )}
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-[12px] font-bold text-emerald-800">🎙 Giọng + khuôn mặt creator {voiceDurationSec ? `· ${voiceDurationSec.toFixed(1)}s` : ''}</p>
-        <p className="mb-1 text-[10px] text-emerald-700/80">Nghe thử xem ĐÚNG giọng đã chọn chưa — sai thì "Tạo lại" trước khi render.</p>
+        <p className="mb-1 text-[10px] text-emerald-700/80">Nghe thử giọng + soi mặt. Sai thì "Tạo lại" trước khi render.</p>
         {voiceUrl && <audio src={voiceUrl} controls className="h-8 w-full max-w-md" />}
+        {hasProduct && (
+          <label className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700/90">
+            <input type="checkbox" checked={lipsHoldProduct} disabled={busy} onChange={(e) => onToggleLips(e.target.checked)} />
+            Lips kèm "cầm sản phẩm" (KF-B — bật/tắt rồi bấm Tạo lại)
+          </label>
+        )}
       </div>
       <button onClick={onRegen} disabled={busy}
         className="flex shrink-0 items-center gap-1 rounded-lg border border-emerald-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">

@@ -33,6 +33,8 @@ function cleanHybridForSnapshot(h: HybridState | undefined): HybridState | undef
     scenes: h.scenes ?? null,
     clips: h.clips ?? {},
     keyframeRef: h.keyframeRef,
+    keyframeProductRef: h.keyframeProductRef,   // P6av — KF-B (creator holding product)
+    lipsHoldProduct: h.lipsHoldProduct,
     voiceRef: h.voiceRef,
     voiceDurationSec: h.voiceDurationSec,
     voiceAlignment: h.voiceAlignment,
