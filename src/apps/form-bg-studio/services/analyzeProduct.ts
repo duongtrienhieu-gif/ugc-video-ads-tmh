@@ -64,11 +64,11 @@ const SCHEMA: Record<string, unknown> = {
     scarcity: { type: 'string' },
     trust: { type: 'string' },
     fomoTitle: { type: 'string' },
-    fomoLine: { type: 'string' },
+    fomoLines: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 4 },
     testimonial: { type: 'string' },
     giftTeaser: { type: 'string' },
   },
-  required: ['heroImageIndex', 'palette', 'productLabel', 'headline', 'subhead', 'ctaWord', 'scarcity', 'trust', 'fomoTitle', 'fomoLine'],
+  required: ['heroImageIndex', 'palette', 'productLabel', 'headline', 'subhead', 'ctaWord', 'scarcity', 'trust', 'fomoTitle', 'fomoLines'],
 }
 
 const PRESET_BRIEF: Record<FormBgPreset, string> = {
@@ -100,7 +100,7 @@ export async function analyzeProduct(params: AnalyzeProductParams): Promise<Prod
     `   - headline (<=7 words, benefit + desire), subhead (<=9 words), ctaWord (1-2 words, e.g. "Pesan sekarang"),\n` +
     `   - scarcity (<=6 words, urgency/limited), trust (<=8 words, guarantee/COD/credibility).\n` +
     `   - fomoTitle (<=4 words, a countdown/urgency label that sits ABOVE a countdown timer, e.g. deadline framing),\n` +
-    `   - fomoLine (<=10 words, loss-aversion: price goes back up / stock runs out when time ends). Fresh wording, do NOT copy common templates verbatim.\n` +
+    `   - fomoLines: an array of 3-4 SHORT (<=10 words each) urgency lines, EACH a DIFFERENT mechanism — e.g. (1) deadline/price-revert "price goes back up when time ends", (2) quantity scarcity "limited stock / last sets", (3) EARLY-BUYER EXCLUSIVE "only for the first N buyers today", (4) loss-aversion/regret "don't miss out". Make them DISTINCT and freshly worded — do NOT repeat the same idea, do NOT copy common templates verbatim.\n` +
     `${PRESET_BRIEF[preset]}\n` +
     `${hasGift ? 'A free BONUS GIFT is included — reference it where relevant.' : 'No bonus gift.'}\n` +
     `NO emojis. Do NOT invent specific prices or money amounts. Output ONLY the JSON.`
@@ -144,7 +144,13 @@ export async function analyzeProduct(params: AnalyzeProductParams): Promise<Prod
     scarcity: clean(p.scarcity),
     trust: clean(p.trust),
     fomoTitle: clean(p.fomoTitle) || (lang === 'ms' ? 'Tawaran tamat dalam' : 'Ưu đãi kết thúc sau'),
-    fomoLine: clean(p.fomoLine) || (lang === 'ms' ? 'Bila masa habis, harga naik balik!' : 'Hết giờ là giá về như cũ!'),
+    fomoLines: (() => {
+      const arr = (p.fomoLines ?? []).map(clean).filter(Boolean)
+      if (arr.length >= 2) return arr.slice(0, 4)
+      return lang === 'ms'
+        ? ['Bila masa habis, harga naik balik!', 'Stok terhad — set terakhir hari ini.', 'Khas untuk 100 pembeli terawal sahaja.', 'Jangan menyesal terlepas tawaran ini.']
+        : ['Hết giờ là giá về như cũ!', 'Số lượng có hạn — set cuối hôm nay.', 'Chỉ dành cho 100 khách đặt đầu tiên.', 'Đừng tiếc nuối vì bỏ lỡ ưu đãi này.']
+    })(),
     testimonial: clean(p.testimonial) || undefined,
     giftTeaser: clean(p.giftTeaser) || undefined,
     lang,

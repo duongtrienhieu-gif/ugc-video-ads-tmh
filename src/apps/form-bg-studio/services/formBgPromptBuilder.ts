@@ -55,7 +55,7 @@ function textRules(langName: string): string {
 function variantBlock(i: number): string {
   return i === 0
     ? `COMPOSITION: balanced primary layout (variation A).`
-    : `COMPOSITION: a noticeably DIFFERENT arrangement from variation A (reposition hero/badges/decor) while keeping the SAME style, palette and identical text (variation B).`
+    : `COMPOSITION: a noticeably DIFFERENT arrangement from variation A — reposition the hero/badges/decor (variation B). Keep the same headline, style and palette; the urgency lines provided already differ between variants.`
 }
 
 function headerLayout(preset: FormBgPreset, d: ProductDirection, lang: Market, hasGift: boolean): string {
@@ -84,12 +84,18 @@ export function buildFormBgPrompt(params: BuildFormBgPromptParams): string {
   const langName = langDisplayName(lang)
   const bg = d.palette.bg
 
+  // Pool FOMO → mỗi biến thể lấy 2 dòng KHÁC nhau (chống "y chang").
+  const pool = (d.fomoLines && d.fomoLines.length ? d.fomoLines : [d.scarcity]).filter(Boolean)
+  const picked = [pool[(variantIndex * 2) % pool.length], pool[(variantIndex * 2 + 1) % pool.length]]
+    .filter((v, i, a) => v && a.indexOf(v) === i)
+  const fomoLinesText = picked.map(q).join(' and ')
+
   return [
     `TASK: Design ONE TALL PORTRAIT (2:3) order-form BACKGROUND, stacked top-to-bottom: (1) header banner, (2) an urgency FOMO band containing an EMPTY countdown slot, (3) a LARGE EMPTY form area, (4) footer. High-converting Malaysian COD marketing infographic.`,
     headerLayout(preset, d, lang, hasGift),
     `FOMO BAND (directly below header): a bold urgency strip in the accent colour. Top label ${q(d.fomoTitle)}. ` +
-      `Then a RESERVED EMPTY horizontal SLOT for a countdown timer — leave it COMPLETELY EMPTY: render NO clock, NO numbers, NO digits, NO timer boxes, NO text inside it (a real countdown widget is overlaid there later). ` +
-      `Below the slot, one urgency line ${q(d.fomoLine)}.`,
+      `Then a RESERVED EMPTY countdown SLOT — make it NARROW in width (centred, about 55% of the strip width, NOT full-width) and TALL in height (generous, about twice a text line). Leave it COMPLETELY EMPTY: render NO clock, NO numbers, NO digits, NO boxes, NO text inside it (a real countdown widget is overlaid there later). ` +
+      `Below the slot, show these ${picked.length} DISTINCT urgency lines (each visually punchy): ${fomoLinesText}.`,
     `FORM SAFE ZONE (below the FOMO band): a LARGE area (~40% of the height) that is a FLAT SOLID ${bg} colour, COMPLETELY EMPTY — no card, no border, no fields, no buttons, no icons, no text. One uniform solid colour so it crops cleanly into a form area.`,
     footerLayout(preset, d),
     identityBlock(d),

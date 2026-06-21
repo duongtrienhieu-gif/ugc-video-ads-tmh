@@ -70,9 +70,11 @@ export interface ProductDirection {
   ctaWord: string
   scarcity: string
   trust: string
-  /** Dải FOMO (đi với đồng hồ) — AI sinh, thiên deadline + sợ mất giá. */
+  /** Dải FOMO (đi với đồng hồ). */
   fomoTitle: string
-  fomoLine: string
+  /** POOL 3-4 dòng FOMO khác cơ chế (deadline/giá bật lại · khan hiếm ·
+   *  chỉ dành cho người mua đầu · sợ bỏ lỡ). Mỗi biến thể lấy khác nhau. */
+  fomoLines: string[]
   /** Cho preset editorial. */
   testimonial?: string
   /** Cho preset abundance (khi có quà). */
@@ -96,7 +98,8 @@ export function emptyFormBgDraft(): FormBgDraft {
 
 /** Sig phát hiện direction stale. */
 export function directionSig(d: { productId: string | null; preset: FormBgPreset; lang: Market; giftImageRef: string | null }): string {
-  return `${d.productId ?? ''}|${d.preset}|${d.lang}|${d.giftImageRef ? 'g' : 'n'}`
+  // v2: đổi schema FOMO (fomoLine → fomoLines pool) → invalidate cache cũ.
+  return `v2|${d.productId ?? ''}|${d.preset}|${d.lang}|${d.giftImageRef ? 'g' : 'n'}`
 }
 
 /** Palette mặc định (fallback khi vision lỗi) theo preset. */
