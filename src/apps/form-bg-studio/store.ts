@@ -28,10 +28,10 @@ function loadCache(): PersistShape {
     const raw = localStorage.getItem(CACHE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<PersistShape>
-      // Migration: shape ảnh đổi (assetRef → headerRef/footerRef). Cache cũ → reset.
+      // Migration: shape ảnh về lại 1 ảnh/biến thể (assetRef). Cache dải cũ → reset.
       const imgsOk = Array.isArray(parsed.images)
         && parsed.images.length === FORM_BG_VARIANTS
-        && !parsed.images.some((im) => im != null && 'assetRef' in (im as object))
+        && !parsed.images.some((im) => im != null && ('headerRef' in (im as object) || 'footerRef' in (im as object)))
       return {
         draft: { ...emptyFormBgDraft(), ...(parsed.draft ?? {}) },
         images: imgsOk ? (parsed.images as FormBgImage[]) : freshImages(),

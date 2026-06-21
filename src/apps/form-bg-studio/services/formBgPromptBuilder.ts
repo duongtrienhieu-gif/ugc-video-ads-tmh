@@ -1,16 +1,16 @@
-// formBgPromptBuilder — dựng prompt gpt-4o-image cho từng DẢI (header/footer)
-// của ảnh nền form, theo preset.
+// formBgPromptBuilder — dựng prompt gpt-4o-image cho 1 ẢNH NỀN form đầy đủ:
+//   (1) header banner  (2) dải FOMO + Ô TRỐNG đồng hồ  (3) khu form trống
+//   (nền phẳng palette.bg)  (4) footer trust.
+// User tự cắt header/footer, set nền section = palette.bg, nhét đồng hồ + form
+// vào 2 ô trống.
 //
-// Bất biến: (1) giữ identity SP/quà từ ref, (2) NHÚNG palette AI trích, (3)
-// chữ đúng ngôn ngữ, (4) — QUAN TRỌNG — mép trong của dải là MÀU NỀN PHẲNG
-// (palette.bg) để hoà liền với khu form, KHÔNG vẽ ô input/nút/field.
-// Có quà → MỌI preset đều nhúng quà + badge. 2 biến thể khác bố cục.
+// Bất biến: identity lock (chống drift), palette AI trích, chữ đúng ngôn ngữ,
+// quà cho MỌI preset khi có. 2 reserved zones (đồng hồ + form) KHÔNG vẽ gì.
 
-import type { Market, FormBgPreset, ProductDirection, StripKind } from '../types'
+import type { Market, FormBgPreset, ProductDirection } from '../types'
 import { langDisplayName, freeGiftBadge } from '../labels'
 
 export interface BuildFormBgPromptParams {
-  kind: StripKind
   preset: FormBgPreset
   direction: ProductDirection
   hasGift: boolean
@@ -30,15 +30,6 @@ function expertSeal(lang: Market): string {
   return lang === 'vi' ? 'CHUYÊN GIA KHUYÊN DÙNG' : 'PAKAR CADANG'
 }
 
-function paletteBlock(d: ProductDirection): string {
-  const p = d.palette
-  return `COLOUR PALETTE (anchored to the real product): background ${p.bg}, primary ${p.primary}, accent ${p.accent}, text-on-colour ${p.onColor}. Strong contrast, readable text.`
-}
-
-function textRules(langName: string): string {
-  return `TEXT RENDERING: render all text as crisp, correctly spelled ${langName} with correct diacritics, spelled EXACTLY as given. Bold clean typography. Render ONLY the text specified.`
-}
-
 function identityBlock(d: ProductDirection): string {
   return `PRODUCT IDENTITY LOCK (HIGHEST PRIORITY — overrides styling): the product is ${d.productLabel}. ` +
     `Reproduce it 100% IDENTICAL to the reference photo: exact packaging shape, exact colours, exact logo, and ALL printed label text COPIED character-for-character. ` +
@@ -48,8 +39,17 @@ function identityBlock(d: ProductDirection): string {
 
 function giftBlock(hasGift: boolean, lang: Market): string {
   return hasGift
-    ? `SEPARATE BONUS GIFT: the LAST reference image is a DIFFERENT bonus product. Reproduce it faithfully too, but keep it VISUALLY DISTINCT from the main product — do NOT merge or blend the two products' shapes, colours, labels or text. Place a small glossy ${q(freeGiftBadge(lang))} badge near it.`
+    ? `SEPARATE BONUS GIFT: the LAST reference image is a DIFFERENT bonus product. Reproduce it faithfully, kept VISUALLY DISTINCT from the main product — do NOT merge/blend the two products' shapes, colours, labels or text. Place a small glossy ${q(freeGiftBadge(lang))} badge near it.`
     : ''
+}
+
+function paletteBlock(d: ProductDirection): string {
+  const p = d.palette
+  return `COLOUR PALETTE (anchored to the real product): background ${p.bg}, primary ${p.primary}, accent ${p.accent}, text-on-colour ${p.onColor}. Strong contrast, readable.`
+}
+
+function textRules(langName: string): string {
+  return `TEXT RENDERING: render all text as crisp, correctly spelled ${langName} with correct diacritics, spelled EXACTLY as given. Bold clean typography. Render ONLY the text specified; NOTHING in the two reserved empty areas.`
 }
 
 function variantBlock(i: number): string {
@@ -58,96 +58,45 @@ function variantBlock(i: number): string {
     : `COMPOSITION: a noticeably DIFFERENT arrangement from variation A (reposition hero/badges/decor) while keeping the SAME style, palette and identical text (variation B).`
 }
 
-/** Mép hoà với khu form — chìa khoá để 2 dải ghép liền với nền section. */
-function blendEdge(kind: StripKind, bg: string): string {
-  return kind === 'header'
-    ? `FORMAT: a WIDE horizontal TOP banner strip. The content sits in the upper part. The ENTIRE BOTTOM EDGE must be a clean SOLID ${bg} band with NOTHING on it, so it blends seamlessly into a plain form area placed below. Absolutely NO input fields, NO buttons, NO form of any kind.`
-    : `FORMAT: a WIDE horizontal BOTTOM strip. The ENTIRE TOP EDGE must be a clean SOLID ${bg} band with NOTHING on it, so it blends seamlessly from a plain form area placed above. Content sits in the lower part. Absolutely NO input fields, NO buttons, NO form of any kind.`
+function headerLayout(preset: FormBgPreset, d: ProductDirection, lang: Market, hasGift: boolean): string {
+  if (preset === 'editorial') {
+    return `HEADER (top): premium HEALTH-MAGAZINE EDITORIAL look (trustworthy, not a loud flyer). A magazine masthead kicker ${q(lang === 'vi' ? 'SỐNG KHỎE · SỐ ĐẶC BIỆT' : 'SIHAT · EDISI KHAS')}, a big SERIF headline ${q(d.headline)}, sub-headline ${q(d.subhead)}, a clean studio shot of the product${hasGift ? ' plus the bonus gift' : ''}, and a circular expert seal ${q(expertSeal(lang))}.`
+  }
+  if (preset === 'abundance') {
+    return `HEADER (top): warm generous BUNDLE / VALUE-STACK look. A colourful ribbon banner with headline ${q(d.headline)} + sub ${q(d.subhead)}, an abundant cluster of the PRODUCT (several units)${hasGift ? ' together with the FREE BONUS GIFT' : ''} and glossy badges; a scarcity badge ${q(d.scarcity)}.`
+  }
+  const [before, after] = beforeAfterWords(lang)
+  return `HEADER (top): BEFORE→AFTER TRANSFORMATION. A split scene — left half labelled ${q(before)} (dull, the problem) and right half labelled ${q(after)} (bright, the result) with a transformation arrow between, the PRODUCT${hasGift ? ' + bonus gift' : ''} as the bridge; a headline band ${q(d.headline)} and sub ${q(d.subhead)}.`
+}
+
+function footerLayout(preset: FormBgPreset, d: ProductDirection): string {
+  if (preset === 'editorial') {
+    return `FOOTER (bottom): a refined trust line ${q(d.trust)}${d.testimonial ? ` and one customer testimonial with a believable Malay name + city ${q(d.testimonial)}` : ''}.`
+  }
+  if (preset === 'abundance') {
+    return `FOOTER (bottom): a bold value + trust strip ${q(d.trust)} with a guarantee/COD feel.`
+  }
+  return `FOOTER (bottom): a confident result + trust strip ${q(d.trust)}.`
 }
 
 export function buildFormBgPrompt(params: BuildFormBgPromptParams): string {
-  const { kind, preset, direction: d, hasGift, lang, variantIndex } = params
+  const { preset, direction: d, hasGift, lang, variantIndex } = params
   const langName = langDisplayName(lang)
   const bg = d.palette.bg
-  const shared = [identityBlock(d), paletteBlock(d), textRules(langName), variantBlock(variantIndex), blendEdge(kind, bg)]
 
-  // ── HEADER ───────────────────────────────────────────────────────────
-  if (kind === 'header') {
-    if (preset === 'editorial') {
-      const copy = [
-        `Masthead kicker (small, very top): ${q(lang === 'vi' ? 'SỐNG KHỎE · SỐ ĐẶC BIỆT' : 'SIHAT · EDISI KHAS')}`,
-        `Big serif headline: ${q(d.headline)}`,
-        `Sub-headline: ${q(d.subhead)}`,
-        `Expert seal/stamp: ${q(expertSeal(lang))}`,
-      ]
-      return [
-        `TASK: Design the TOP banner of an order-form background in a premium HEALTH-MAGAZINE EDITORIAL style (trustworthy, not a loud sale flyer).`,
-        `LAYOUT: magazine masthead bar + big serif headline + a clean studio shot of the product + a circular "expert recommended" seal. Refined, paper-like.`,
-        ...shared, giftBlock(hasGift, lang),
-        `TEXT TO RENDER:`, ...copy.map((c) => `  - ${c}`),
-      ].filter(Boolean).join('\n\n')
-    }
-    if (preset === 'abundance') {
-      const copy = [
-        `Top ribbon banner headline: ${q(d.headline)}`,
-        `Sub line: ${q(d.subhead)}`,
-        `Scarcity badge: ${q(d.scarcity)}`,
-        d.giftTeaser ? `Gift teaser: ${q(d.giftTeaser)}` : '',
-      ].filter(Boolean)
-      return [
-        `TASK: Design the TOP banner of an order-form background in a warm, generous BUNDLE / VALUE-STACK style (makes shopper feel they get a LOT). Festive but designed.`,
-        `LAYOUT: colourful ribbon banner + an abundant flat-lay cluster of the PRODUCT (several units)${hasGift ? ' together with the FREE BONUS GIFT' : ''} + glossy badges/tags.`,
-        ...shared, giftBlock(hasGift, lang),
-        `TEXT TO RENDER:`, ...copy.map((c) => `  - ${c}`),
-      ].filter(Boolean).join('\n\n')
-    }
-    // transformation
-    const [before, after] = beforeAfterWords(lang)
-    const copy = [
-      `Left panel label: ${q(before)}`,
-      `Right panel label: ${q(after)}`,
-      `Headline band: ${q(d.headline)}`,
-      `Sub line: ${q(d.subhead)}`,
-    ]
-    return [
-      `TASK: Design the TOP banner of an order-form background in a BEFORE→AFTER TRANSFORMATION style (the result/proof is the hook).`,
-      `LAYOUT: split scene — left half "${before}" (dull, the problem) and right half "${after}" (bright, the result) with a transformation arrow between, and the PRODUCT as the bridge.`,
-      ...shared, giftBlock(hasGift, lang),
-      `TEXT TO RENDER:`, ...copy.map((c) => `  - ${c}`),
-    ].filter(Boolean).join('\n\n')
-  }
-
-  // ── FOOTER ───────────────────────────────────────────────────────────
-  if (preset === 'editorial') {
-    const copy = [
-      `Trust line: ${q(d.trust)}`,
-      d.testimonial ? `One testimonial quote with a believable Malay name + city: ${q(d.testimonial)}` : '',
-    ].filter(Boolean)
-    return [
-      `TASK: Design the BOTTOM strip of an order-form background, EDITORIAL style — refined trust + a customer testimonial.`,
-      ...shared,
-      `TEXT TO RENDER:`, ...copy.map((c) => `  - ${c}`),
-    ].join('\n\n')
-  }
-  if (preset === 'abundance') {
-    const copy = [
-      `Bold value/trust line: ${q(d.trust)}`,
-      `Scarcity line: ${q(d.scarcity)}`,
-    ]
-    return [
-      `TASK: Design the BOTTOM strip of an order-form background, ABUNDANCE style — a bold value + trust strip with a guarantee/COD feel.`,
-      ...shared,
-      `TEXT TO RENDER:`, ...copy.map((c) => `  - ${c}`),
-    ].join('\n\n')
-  }
-  // transformation footer
-  const copy = [
-    `Confident result line: ${q(d.subhead)}`,
-    `Trust line: ${q(d.trust)}`,
-  ]
   return [
-    `TASK: Design the BOTTOM strip of an order-form background, TRANSFORMATION style — a confident result + trust strip.`,
-    ...shared,
-    `TEXT TO RENDER:`, ...copy.map((c) => `  - ${c}`),
-  ].join('\n\n')
+    `TASK: Design ONE TALL PORTRAIT (2:3) order-form BACKGROUND, stacked top-to-bottom: (1) header banner, (2) an urgency FOMO band containing an EMPTY countdown slot, (3) a LARGE EMPTY form area, (4) footer. High-converting Malaysian COD marketing infographic.`,
+    headerLayout(preset, d, lang, hasGift),
+    `FOMO BAND (directly below header): a bold urgency strip in the accent colour. Top label ${q(d.fomoTitle)}. ` +
+      `Then a RESERVED EMPTY horizontal SLOT for a countdown timer — leave it COMPLETELY EMPTY: render NO clock, NO numbers, NO digits, NO timer boxes, NO text inside it (a real countdown widget is overlaid there later). ` +
+      `Below the slot, one urgency line ${q(d.fomoLine)}.`,
+    `FORM SAFE ZONE (below the FOMO band): a LARGE area (~40% of the height) that is a FLAT SOLID ${bg} colour, COMPLETELY EMPTY — no card, no border, no fields, no buttons, no icons, no text. One uniform solid colour so it crops cleanly into a form area.`,
+    footerLayout(preset, d),
+    identityBlock(d),
+    giftBlock(hasGift, lang),
+    paletteBlock(d),
+    textRules(langName),
+    variantBlock(variantIndex),
+    `STRICT: render only the specified marketing text. The TWO reserved areas (countdown slot + form area) MUST contain absolutely nothing.`,
+  ].filter(Boolean).join('\n\n')
 }

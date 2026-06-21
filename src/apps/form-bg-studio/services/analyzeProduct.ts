@@ -63,10 +63,12 @@ const SCHEMA: Record<string, unknown> = {
     ctaWord: { type: 'string' },
     scarcity: { type: 'string' },
     trust: { type: 'string' },
+    fomoTitle: { type: 'string' },
+    fomoLine: { type: 'string' },
     testimonial: { type: 'string' },
     giftTeaser: { type: 'string' },
   },
-  required: ['heroImageIndex', 'palette', 'productLabel', 'headline', 'subhead', 'ctaWord', 'scarcity', 'trust'],
+  required: ['heroImageIndex', 'palette', 'productLabel', 'headline', 'subhead', 'ctaWord', 'scarcity', 'trust', 'fomoTitle', 'fomoLine'],
 }
 
 const PRESET_BRIEF: Record<FormBgPreset, string> = {
@@ -97,6 +99,8 @@ export async function analyzeProduct(params: AnalyzeProductParams): Promise<Prod
     `3) Write SHORT punchy marketing copy in ${langName} ONLY (native, natural ${lang === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'}):\n` +
     `   - headline (<=7 words, benefit + desire), subhead (<=9 words), ctaWord (1-2 words, e.g. "Pesan sekarang"),\n` +
     `   - scarcity (<=6 words, urgency/limited), trust (<=8 words, guarantee/COD/credibility).\n` +
+    `   - fomoTitle (<=4 words, a countdown/urgency label that sits ABOVE a countdown timer, e.g. deadline framing),\n` +
+    `   - fomoLine (<=10 words, loss-aversion: price goes back up / stock runs out when time ends). Fresh wording, do NOT copy common templates verbatim.\n` +
     `${PRESET_BRIEF[preset]}\n` +
     `${hasGift ? 'A free BONUS GIFT is included — reference it where relevant.' : 'No bonus gift.'}\n` +
     `NO emojis. Do NOT invent specific prices or money amounts. Output ONLY the JSON.`
@@ -139,6 +143,8 @@ export async function analyzeProduct(params: AnalyzeProductParams): Promise<Prod
     ctaWord: clean(p.ctaWord) || (lang === 'ms' ? 'Pesan sekarang' : 'Đặt ngay'),
     scarcity: clean(p.scarcity),
     trust: clean(p.trust),
+    fomoTitle: clean(p.fomoTitle) || (lang === 'ms' ? 'Tawaran tamat dalam' : 'Ưu đãi kết thúc sau'),
+    fomoLine: clean(p.fomoLine) || (lang === 'ms' ? 'Bila masa habis, harga naik balik!' : 'Hết giờ là giá về như cũ!'),
     testimonial: clean(p.testimonial) || undefined,
     giftTeaser: clean(p.giftTeaser) || undefined,
     lang,

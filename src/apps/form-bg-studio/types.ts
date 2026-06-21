@@ -38,20 +38,15 @@ export const FORM_BG_PRESETS: PresetMeta[] = [
 /** Xuất 2 biến thể mỗi lần (user chốt). */
 export const FORM_BG_VARIANTS = 2
 
-/** Mỗi biến thể gồm 2 DẢI rời: header (trên) + footer (dưới). Giữa để màu
- *  nền phẳng (palette.bg) cho user đè form — form dài bao nhiêu cũng vừa. */
-export type StripKind = 'header' | 'footer'
-export const STRIP_KINDS: StripKind[] = ['header', 'footer']
-
 export type FormBgStatus = 'idle' | 'generating' | 'completed' | 'failed'
 
+/** Mỗi biến thể = 1 ẢNH dọc 2:3 chứa: header + dải FOMO (có Ô TRỐNG cho đồng
+ *  hồ) + khu form trống (nền phẳng palette.bg) + footer. User tự cắt header/
+ *  footer, set nền section = palette.bg, nhét đồng hồ + form vào ô trống. */
 export interface FormBgImage {
   index: number
   status: FormBgStatus
-  /** asset:xxx dải header. */
-  headerRef?: string
-  /** asset:xxx dải footer. */
-  footerRef?: string
+  assetRef?: string
   error?: string
 }
 
@@ -75,6 +70,9 @@ export interface ProductDirection {
   ctaWord: string
   scarcity: string
   trust: string
+  /** Dải FOMO (đi với đồng hồ) — AI sinh, thiên deadline + sợ mất giá. */
+  fomoTitle: string
+  fomoLine: string
   /** Cho preset editorial. */
   testimonial?: string
   /** Cho preset abundance (khi có quà). */
@@ -112,5 +110,4 @@ export function defaultPalette(preset: FormBgPreset): FormBgPalette {
 }
 
 export const FORM_BG_CREDITS_PER_IMAGE = 6
-export const FORM_BG_STRIPS = STRIP_KINDS.length
-export const FORM_BG_TOTAL_CREDITS = FORM_BG_CREDITS_PER_IMAGE * FORM_BG_STRIPS * FORM_BG_VARIANTS
+export const FORM_BG_TOTAL_CREDITS = FORM_BG_CREDITS_PER_IMAGE * FORM_BG_VARIANTS

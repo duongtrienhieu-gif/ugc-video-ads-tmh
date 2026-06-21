@@ -1,16 +1,15 @@
-// generateFormBg — render 1 DẢI (header/footer) qua gpt-4o-image (i2i), 3:2.
-// Header: dùng ref ảnh SP (hero AI chọn lên đầu) + ảnh quà (nếu có, MỌI preset).
-// Footer: chủ yếu chữ, không cần ref. Có RETRY cho lỗi mạng transient.
+// generateFormBg — render 1 ẢNH NỀN form đầy đủ (header+FOMO+form trống+footer)
+// qua gpt-4o-image (i2i), size 2:3. Ref = ảnh SP (hero AI chọn lên đầu, ÍT ref
+// để bớt drift) + ảnh quà (nếu có, MỌI preset). Có RETRY lỗi mạng transient.
 
 import { generateGpt4oImage, type ImageStatus } from '../../../utils/kieai'
 import { getUrl, saveAsset } from '../../../utils/assetStore'
 import type { Product } from '../../../stores/types'
-import type { Market, FormBgPreset, ProductDirection, StripKind } from '../types'
+import type { Market, FormBgPreset, ProductDirection } from '../types'
 import { buildFormBgPrompt } from './formBgPromptBuilder'
 
-export interface GenerateStripParams {
+export interface GenerateFormBgParams {
   apiKey: string
-  kind: StripKind
   variantIndex: number
   product: Product
   direction: ProductDirection
@@ -23,7 +22,6 @@ export interface GenerateStripParams {
 
 const TIMEOUT_MS = 5 * 60 * 1000
 
-/** Lỗi cứng — KHÔNG retry (retry chỉ tốn credit vô ích). */
 function isHardError(err: unknown): boolean {
   const m = err instanceof Error ? err.message : String(err)
   return m.includes('INSUFFICIENT_CREDITS') || m.toLowerCase().includes('policy') || m.includes('CANCELLED')
@@ -37,7 +35,6 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
     } catch (err) {
       lastErr = err
       if (isHardError(err)) throw err
-      // transient (Failed to fetch / network / timeout) → thử lại
     }
   }
   throw lastErr
@@ -54,41 +51,35 @@ async function resolveUrls(refs: string[], max: number): Promise<string[]> {
   return urls
 }
 
-export async function generateStrip(params: GenerateStripParams): Promise<{ assetRef: string; prompt: string }> {
-  const { kind, product, direction, preset, giftImageRef } = params
+export async function generateFormBg(params: GenerateFormBgParams): Promise<{ assetRef: string; prompt: string }> {
+  const { product, direction, preset, giftImageRef } = params
   const hasGift = !!giftImageRef
 
-  let refUrls: string[] = []
-  if (kind === 'header') {
-    const allImgs = (product.productImages ?? []).filter((s) => !!s && s.trim() !== '')
-    const heroIdx = Math.max(0, Math.min(allImgs.length - 1, direction.heroImageIndex))
-    const ordered = allImgs.length > 0 ? [allImgs[heroIdx], ...allImgs.filter((_, i) => i !== heroIdx)] : allImgs
-    // Ít ref hơn + sạch hơn = ÍT DRIFT. Khi có quà chỉ lấy 2 ảnh SP (hero + 1)
-    // để chừa chỗ cho quà mà không làm model lẫn 2 sản phẩm.
-    const productUrls = await resolveUrls(ordered, hasGift ? 2 : 3)
-    if (productUrls.length === 0) throw new Error('Sản phẩm chưa có ảnh tham chiếu hợp lệ.')
-    const giftUrls = hasGift ? await resolveUrls([giftImageRef as string], 1) : []
-    refUrls = [...productUrls, ...giftUrls].slice(0, 4)
-  }
+  const allImgs = (product.productImages ?? []).filter((s) => !!s && s.trim() !== '')
+  const heroIdx = Math.max(0, Math.min(allImgs.length - 1, direction.heroImageIndex))
+  const ordered = allImgs.length > 0 ? [allImgs[heroIdx], ...allImgs.filter((_, i) => i !== heroIdx)] : allImgs
+  // Ít ref + sạch = bớt drift. Có quà chỉ lấy 2 ảnh SP để khỏi lẫn 2 sản phẩm.
+  const productUrls = await resolveUrls(ordered, hasGift ? 2 : 3)
+  if (productUrls.length === 0) throw new Error('Sản phẩm chưa có ảnh tham chiếu hợp lệ.')
+  const giftUrls = hasGift ? await resolveUrls([giftImageRef as string], 1) : []
+  const refUrls = [...productUrls, ...giftUrls].slice(0, 4)
 
-  const prompt = buildFormBgPrompt({ kind, preset, direction, hasGift, lang: params.lang, variantIndex: params.variantIndex })
+  const prompt = buildFormBgPrompt({ preset, direction, hasGift, lang: params.lang, variantIndex: params.variantIndex })
 
   if (typeof console !== 'undefined') {
-    console.log(`[form-bg] ${preset} v${params.variantIndex} ${kind} lang=${params.lang} promptLen=${prompt.length} refs=${refUrls.length}`)
+    console.log(`[form-bg] ${preset} v${params.variantIndex} lang=${params.lang} promptLen=${prompt.length} refs=${refUrls.length}`)
   }
 
-  // Submit + poll (retry transient — re-submit nếu lỗi mạng trước khi có task).
   const kieImageUrl = await withRetry(() => generateGpt4oImage({
     apiKey: params.apiKey,
     prompt,
-    filesUrl: refUrls.length ? refUrls : undefined,
-    size: '3:2',
+    filesUrl: refUrls,
+    size: '2:3',
     onStatusChange: params.onStatus,
     timeoutMs: TIMEOUT_MS,
     signal: params.signal,
   }))
 
-  // Tải ảnh về (retry riêng — rẻ, không tốn credit).
   const blob = await withRetry(async () => {
     const resp = await fetch(kieImageUrl)
     if (!resp.ok) throw new Error(`Tải ảnh AI thất bại (HTTP ${resp.status}).`)
