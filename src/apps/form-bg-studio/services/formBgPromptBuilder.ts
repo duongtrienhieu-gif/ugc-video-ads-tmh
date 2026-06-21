@@ -40,12 +40,15 @@ function textRules(langName: string): string {
 }
 
 function identityBlock(d: ProductDirection): string {
-  return `PRODUCT: ${d.productLabel}. Replicate the product EXACTLY from the reference photo(s) — same colour, shape, label, packaging, brand text. Do NOT redesign.`
+  return `PRODUCT IDENTITY LOCK (HIGHEST PRIORITY — overrides styling): the product is ${d.productLabel}. ` +
+    `Reproduce it 100% IDENTICAL to the reference photo: exact packaging shape, exact colours, exact logo, and ALL printed label text COPIED character-for-character. ` +
+    `Do NOT rotate, redesign, restyle, re-letter, translate, blur, or invent any text/graphic on the packaging. Show it from an angle close to the reference. ` +
+    `It must read as the SAME real product photographed, NOT an AI redraw. Do NOT add any extra/unbranded product not in the references.`
 }
 
 function giftBlock(hasGift: boolean, lang: Market): string {
   return hasGift
-    ? `BONUS GIFT: also show the FREE BONUS GIFT (replicate exactly from its reference photo) with a small glossy ${q(freeGiftBadge(lang))} badge.`
+    ? `SEPARATE BONUS GIFT: the LAST reference image is a DIFFERENT bonus product. Reproduce it faithfully too, but keep it VISUALLY DISTINCT from the main product — do NOT merge or blend the two products' shapes, colours, labels or text. Place a small glossy ${q(freeGiftBadge(lang))} badge near it.`
     : ''
 }
 

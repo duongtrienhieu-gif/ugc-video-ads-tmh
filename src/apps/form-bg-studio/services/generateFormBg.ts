@@ -63,10 +63,12 @@ export async function generateStrip(params: GenerateStripParams): Promise<{ asse
     const allImgs = (product.productImages ?? []).filter((s) => !!s && s.trim() !== '')
     const heroIdx = Math.max(0, Math.min(allImgs.length - 1, direction.heroImageIndex))
     const ordered = allImgs.length > 0 ? [allImgs[heroIdx], ...allImgs.filter((_, i) => i !== heroIdx)] : allImgs
-    const productUrls = await resolveUrls(ordered, hasGift ? 4 : 5)
+    // Ít ref hơn + sạch hơn = ÍT DRIFT. Khi có quà chỉ lấy 2 ảnh SP (hero + 1)
+    // để chừa chỗ cho quà mà không làm model lẫn 2 sản phẩm.
+    const productUrls = await resolveUrls(ordered, hasGift ? 2 : 3)
     if (productUrls.length === 0) throw new Error('Sản phẩm chưa có ảnh tham chiếu hợp lệ.')
     const giftUrls = hasGift ? await resolveUrls([giftImageRef as string], 1) : []
-    refUrls = [...productUrls, ...giftUrls].slice(0, 5)
+    refUrls = [...productUrls, ...giftUrls].slice(0, 4)
   }
 
   const prompt = buildFormBgPrompt({ kind, preset, direction, hasGift, lang: params.lang, variantIndex: params.variantIndex })

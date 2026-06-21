@@ -91,7 +91,7 @@ export async function analyzeProduct(params: AnalyzeProductParams): Promise<Prod
     `You are an expert Malaysian COD direct-response ART DIRECTOR + copywriter. You design the BACKGROUND ` +
     `art-direction for an order-form landing page. You are given ${inlineParts.length} product photo(s), indexed 0..${inlineParts.length - 1}.\n` +
     `TASKS:\n` +
-    `1) heroImageIndex: pick the SINGLE best photo to feature as the hero (clearest, most appealing, shows the product/packaging well).\n` +
+    `1) heroImageIndex: pick the SINGLE best photo for IDENTITY FIDELITY — a CLEAN studio packshot where the product + its label text are sharp, front-facing and clearly readable (avoid lifestyle/in-use shots, hands, or busy backgrounds). This image will be copied faithfully, so clarity of the packaging matters most.\n` +
     `2) palette: extract a harmonious colour scheme ANCHORED to the product's real colours/packaging. ` +
     `Return hex strings: bg (page background), primary (headline/brand colour), accent (badge/highlight), onColor (text that sits on primary/accent). Ensure strong contrast + readable.\n` +
     `3) Write SHORT punchy marketing copy in ${langName} ONLY (native, natural ${lang === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'}):\n` +
