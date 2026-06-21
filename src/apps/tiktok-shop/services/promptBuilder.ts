@@ -9,6 +9,7 @@ import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
 import type { Product } from '../../../stores/types'
 import type { SlotConfig, PaletteFamily, SlotTexts, TiktokShopProductBrief } from '../types'
 import { TPCN_PALETTES } from '../constants'
+import { MS_ECOM_CODESWITCH } from '../../video-builder/v3/services/bodyPatternsMs'
 
 /** Split a seller free-text field into short, name-like tokens, DROPPING long
  *  prose fragments (e.g. mechanism sentences) so they never leak into the
@@ -102,7 +103,7 @@ STYLE: Premium e-commerce listing — top-seller aesthetic for this product's ca
 
 PALETTE (use ONLY these): ${p.primary} primary, ${p.secondary} secondary, ${p.cta} accent. High saturation.
 
-LANGUAGE: ${langName} ONLY in any rendered text (except "Official store" subtitle which stays English as universal e-commerce terminology). NO other language characters.${diacriticsRule}
+LANGUAGE: ${langName} ONLY in any rendered text (except "Official store" subtitle which stays English as universal e-commerce terminology${ctx.language === 'ms' ? `, plus common Malaysian e-commerce terms that stay English: ${MS_ECOM_CODESWITCH.join(', ')}` : ''}). NO other language characters.${ctx.language === 'ms' ? ' Use natural Malaysian listing Malay — NOT stiff textbook register, and NEVER Indonesian spelling (guna, tak, korang — not nggak, aja, udah).' : ''}${diacriticsRule}
 
 NO trust bar at bottom — leave clean for visual breathing.`
 }

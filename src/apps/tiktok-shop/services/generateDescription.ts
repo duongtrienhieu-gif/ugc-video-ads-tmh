@@ -9,6 +9,8 @@ import type { Product } from '../../../stores/types'
 import type { DescriptionBlock, ListingDescription, SlotTexts, TiktokShopProductBrief } from '../types'
 import { directGeminiText } from '../../../utils/gemini'
 import { MOCK_DESCRIPTION_BLOCKS } from '../constants'
+// Shared MS PRINT-register block (negative rules + e-commerce code-switch ONLY — no spoken slang).
+import { buildMsPrintRegisterBlock } from '../../video-builder/v3/services/bodyPatternsMs'
 
 export interface GenerateDescriptionParams {
   /** Google AI Studio API key (NOT kie.ai — text gen routes via Gemini direct
@@ -81,10 +83,12 @@ function buildCompactBriefBlock(brief: TiktokShopProductBrief): string {
 function buildSystemInstruction(params: GenerateDescriptionParams): string {
   const lang = params.language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
   const briefBlock = params.brief ? buildCompactBriefBlock(params.brief) : ''
+  // MS only — natural Malaysian listing register (negative rules + e-commerce code-switch, NO slang).
+  const msRegister = params.language === 'ms' ? `\n${buildMsPrintRegisterBlock()}` : ''
 
   return `You are a TikTok Shop conversion copywriter for the Malaysia/Vietnam market. ${params.brief ? 'The PRODUCT BRIEF below has already been extracted — use it as ground truth.' : 'Read PRODUCT DATA carefully and write conversion copy that fits THIS specific product.'} The product can be ANY niche — never assume.
 ${briefBlock}
-LANGUAGE LOCK: every string value in your JSON must be in ${lang}. Even if product name/ingredients/refs contain other languages, output is ${lang} ONLY.
+LANGUAGE LOCK: every string value in your JSON must be in ${lang}${params.language === 'ms' ? ' — EXCEPT the short list of English e-commerce terms in the register block below, which Malaysians keep in English' : ''}. Even if product name/ingredients/refs contain other languages, output is ${lang} ONLY.${msRegister}
 
 OUTPUT FORMAT: a single strict JSON object. No markdown fences, no preamble, no text after the closing brace.
 

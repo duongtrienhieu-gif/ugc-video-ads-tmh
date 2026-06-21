@@ -237,3 +237,33 @@ export function buildMsBodyVocabBlock(nicheHint?: string): string {
   lines.push('Target voice: "Real Malaysian TikTok creator talking to a friend."')
   return lines.join('\n')
 }
+
+/** English terms a Malaysian e-commerce seller KEEPS in English on a listing / label
+ *  (translating them reads stiff or wrong). These are COMMERCE terms, NOT spoken slang —
+ *  safe for printed copy (TikTok Shop / Ladipage). Deliberately excludes the spoken-hype
+ *  code-switch in MS_CODESWITCH_EN (game changer / no joke / trust me) which would look
+ *  unprofessional on a listing. */
+export const MS_ECOM_CODESWITCH: string[] = [
+  'original', 'ready stock', 'free gift', 'COD', 'postage', 'restock',
+  'value set', 'combo', 'refund', 'review', 'best seller', 'limited stock',
+]
+
+/** Render the inline MS "PRINT REGISTER" block for IMAGE / LISTING / LABEL copy
+ *  (TikTok Shop, Super Ladipage). This is the SAFE subset to share with the text apps:
+ *  the NEGATIVE rules (no Indonesian leak, no VN calque, no stiff textbook/corporate) +
+ *  a small e-commerce code-switch whitelist. It DELIBERATELY DOES NOT bring the spoken-UGC
+ *  signals (end-particles lah/weh, hype "best gila", creator openers "eh wait") — those are
+ *  for the talking-head VIDEO only and read FAKE / unprofessional on printed copy. Keep
+ *  printed Malay natural + correct, NOT slangy. */
+export function buildMsPrintRegisterBlock(): string {
+  const lines: string[] = []
+  lines.push('*** MALAY REGISTER (printed listing / label copy — natural Malaysian, NOT textbook, NOT slang) ***')
+  lines.push('- Write the way a real Malaysian e-commerce seller writes a listing: clear, natural, confident Malay — NOT stiff school/government register, NOT a word-for-word translation of the source notes.')
+  lines.push('- This is PRINTED copy, NOT a person talking: do NOT add spoken slang or end-particles (lah / weh / je / kot / gila) and do NOT use hype-creator phrasing. Keep it clean and professional but native.')
+  lines.push(`- KEEP these e-commerce terms in English (Malaysians use them as-is — translating them reads wrong): ${MS_ECOM_CODESWITCH.join(', ')}.`)
+  lines.push(`- NEVER use Indonesian words (instant fake / wrong-market giveaway): ${MS_BLACKLIST_INDO.join(', ')} — use the Malay form instead (tak, korang, je, dah, penat).`)
+  lines.push('*** AVOID ***')
+  lines.push('  - textbook / formal "anda sekalian / saudara / pihak kami" stiffness, corporate-brochure or TV-commercial tone.')
+  lines.push('  - direct word-for-word translation from Vietnamese / English — rephrase as a Malaysian seller naturally would.')
+  return lines.join('\n')
+}

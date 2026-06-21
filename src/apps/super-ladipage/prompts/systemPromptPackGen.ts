@@ -1,4 +1,5 @@
 import type { ProductIdentity, PresetSpec, LandingLanguage } from '../types'
+import { MS_BLACKLIST_INDO } from '../../video-builder/v3/services/bodyPatternsMs'
 
 // ─────────────────────────────────────────────────────────────────────
 // System prompt cho Gemini text gen → output pack JSON đầy đủ.
@@ -44,6 +45,7 @@ Tone: ${preset.toneBrief}
 
 Output language for all native fields: ${langName}.
 SOURCE-LANGUAGE LOCK: the PRODUCT IDENTITY above is the operator's working notes and may be written in a DIFFERENT language (usually Vietnamese). Treat it as SOURCE ONLY — every user-visible value you output MUST be in ${langName}. If the source is not ${langName}, translate/localize it; never leave source-language words, and never leave a foreign currency token (e.g. "đ") — use the target market's currency (MY → RM, VN → đ). Keep AS-IS ONLY genuine brand proper nouns + international scientific / certification names.
+${language === 'ms' ? `MALAY PURITY (MY market): this is MALAYSIAN Malay, NOT Indonesian. NEVER use Indonesian words (${MS_BLACKLIST_INDO.join(', ')}) — always the Malay form (tak, korang, je, dah, penat). Keep the existing intimate "saya/anda" diary tone; do NOT add spoken TikTok slang or end-particles (printed landing copy stays natural but clean).` : ''}
 ${competitorUrl ? `Competitor STYLE reference (learn tone only, NEVER copy product info): ${competitorUrl}` : ''}
 
 Sections:
