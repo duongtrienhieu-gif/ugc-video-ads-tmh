@@ -94,6 +94,6 @@ export function rebrandSig(d: { productId: string | null; originalImageRefs: str
   return `v1|${d.productId ?? ''}|${d.market}|${d.originalImageRefs.join(',')}`
 }
 
-/** label-front + label-back qua canvas (0 credit) · product + set qua gpt-4o (6 mỗi ảnh). */
-export const REBRAND_AI_IMAGES = 2
+/** Cả 4 ảnh (nhãn trước/sau + product + set) đều qua gpt-4o-image (6 mỗi ảnh). */
+export const REBRAND_AI_IMAGES = 4
 export const REBRAND_TOTAL_CREDITS = 6 * REBRAND_AI_IMAGES

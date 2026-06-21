@@ -26,7 +26,6 @@ import {
   type RebrandIdentity,
 } from './types'
 import { analyzeRebrand } from './services/analyzeRebrand'
-import { renderLabel } from './services/renderLabelCanvas'
 import { generateRebrandImage, friendlyRebrandError } from './services/generateRebrandImage'
 
 const KIND_LABEL: Record<RebrandImageKind, string> = {
@@ -36,8 +35,8 @@ const KIND_LABEL: Record<RebrandImageKind, string> = {
   'set': 'Hộp + sản phẩm',
 }
 const KIND_HINT: Record<RebrandImageKind, string> = {
-  'label-front': 'Kích thước thật · canvas chữ nét',
-  'label-back': 'Thành phần / HDSD · để in',
+  'label-front': 'AI · tỉ lệ gần kích thước thật',
+  'label-back': 'AI · thành phần / HDSD',
   'product': 'AI giữ form, thay nhãn',
   'set': 'AI · hộp + sản phẩm bên trong',
 }
@@ -120,20 +119,12 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
   async function generateOne(kind: RebrandImageKind, id: RebrandIdentity, name: string) {
     patchImage(kind, { status: 'generating', error: undefined })
     try {
-      if (kind === 'label-front' || kind === 'label-back') {
-        const blob = await renderLabel({
-          side: kind === 'label-front' ? 'front' : 'back',
-          widthCm: draft.widthCm!, heightCm: draft.heightCm!,
-          name, identity: id, market: draft.market,
-        })
-        const ref = await saveAsset(blob, 'image/jpeg')
-        patchImage(kind, { status: 'completed', assetRef: ref })
-      } else {
-        const res = await generateRebrandImage({
-          apiKey: kieApiKey, kind, identity: id, chosenName: name, originalImageRefs: draft.originalImageRefs,
-        })
-        patchImage(kind, { status: 'completed', assetRef: res.assetRef })
-      }
+      const res = await generateRebrandImage({
+        apiKey: kieApiKey, kind, identity: id, chosenName: name,
+        originalImageRefs: draft.originalImageRefs,
+        widthCm: draft.widthCm, heightCm: draft.heightCm,
+      })
+      patchImage(kind, { status: 'completed', assetRef: res.assetRef })
     } catch (err) {
       patchImage(kind, { status: 'failed', error: friendlyRebrandError(err) })
       addToast(`${KIND_LABEL[kind]}: ${friendlyRebrandError(err)}`, 'error')
@@ -284,7 +275,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
             {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {busy ? 'Đang tạo bộ rebrand…' : '2 · Tạo bộ rebrand (4 ảnh)'}
           </button>
-          <p className="text-[10px] text-gray-400">2 nhãn in (canvas, 0 credit) + 2 ảnh AI (~{REBRAND_TOTAL_CREDITS} credit). Nhãn in tải về đưa bên thứ 3 in, dán đè mã cũ.</p>
+          <p className="text-[10px] text-gray-400">4 ảnh AI (~{REBRAND_TOTAL_CREDITS} credit): nhãn trước/sau + sản phẩm + hộp. Nhãn tải về đưa bên in (tỉ lệ ~{draft.widthCm ?? '?'}×{draft.heightCm ?? '?'}cm), dán đè mã cũ.</p>
         </div>
 
         {/* Output */}
