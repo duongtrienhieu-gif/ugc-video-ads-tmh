@@ -1322,6 +1322,7 @@ OUTPUT strict JSON only (no markdown fences):
   if (lastScene && lastScene.role === 'broll') {
     lastScene.kind = 'product_action'
     lastScene.cameraFraming = 'creator'
+    lastScene.shotIntent = 'endorsement'   // mark as CTA-lock so split passes keep it atomic
     if (giftOn) {
       // Phase A (option C) — creator holds the PRODUCT and the GIFT, one in each hand,
       // both presented to camera. HARD product lock — two SEPARATE objects, never merged.
@@ -1351,7 +1352,10 @@ OUTPUT strict JSON only (no markdown fences):
   // block, NOT a field). "mua 1 được thêm 2" → 3 → the penult hero shows 3 real units.
   const offerQty = parseOfferQty(params.script.blocks.find((b) => b.id === 'cta')?.text ?? '')
   if (penult && penult.role === 'broll' && ctaCue.test(penult.quote ?? '')) {
-    penult.kind = 'product_action'
+    // FIX2 — the offer cut is a PURE product close-up: NO hands, NO action. product_closeup
+    // routes to the PRODUCT_CLOSEUP preset (renderer forces product-only / no hands) while STILL
+    // honouring the free conceptPrompt below (N units + gift). product_action grew a stray hand.
+    penult.kind = 'product_closeup'
     penult.cameraFraming = 'hands_noface'
     penult.shotIntent = 'offer'
     const hasOffer = !!(params.product?.offer && params.product.offer.trim())
@@ -1373,8 +1377,8 @@ OUTPUT strict JSON only (no markdown fences):
         `PRODUCT-HERO shot — NO person, NO face: ${units} on a clean premium surface in good light — a generous "buy more, get more" deal worth grabbing.${sameUnitsClause} No on-screen price or numbers.`
     } else {
       penult.conceptPrompt = hasOffer
-        ? 'PRODUCT-HERO shot — NO person, NO face: the product is the clear HERO, centred + premium on a clean surface in good light, presented as a special DEAL / offer moment (a hand may place or point at it). Make it look worth grabbing. No on-screen price or numbers.'
-        : 'PRODUCT-HERO shot — NO person, NO face: the product is the clear HERO on a shelf / surface, a hand quickly REACHING in to grab it — a "selling fast, last one, get it now" urgency feel. Clean, premium light. No on-screen text.'
+        ? 'PRODUCT-HERO close-up — NO person, NO hands, NO action: the product sits ALONE, static and centred + premium on a clean surface in good light, framed as a special DEAL / offer moment. Make it look worth grabbing. No on-screen price or numbers.'
+        : 'PRODUCT-HERO close-up — NO person, NO hands, NO action: the product sits ALONE, static and premium on a clean surface in good light — a "selling fast, last one, get it now" urgency feel from the framing alone. No on-screen text.'
     }
   }
 
@@ -1614,6 +1618,14 @@ const MAX_BROLL_SEC = 6.0   // P5u — hard cap: no cut > ~6s (capSplitScenes sp
 // 2s minimum so a leftover cut never flashes < 2s and disrupts the eye.
 const MIN_CUT_SEC = 2.0
 
+// FIX1 — the two CLOSING CTA cuts (penult offer / product-hero, final endorsement) are LOCKED by
+// the director and must stay ATOMIC: never split / duplicated by the cap or density passes. A split
+// copies the same gift/offer concept onto BOTH halves → the "2 cảnh offer trùng" bug the user
+// audited. Detected by the deliberate shotIntent or the gift reference.
+function isCtaLockCut(s: TimedBrollScene): boolean {
+  return s.shotIntent === 'offer' || s.shotIntent === 'endorsement' || !!s.giftRef
+}
+
 function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
   const out: TimedBrollScene[] = []
   // Fill [start,end] with B-roll cut(s), each ≤ MAX_BROLL_SEC. These are the
@@ -1653,6 +1665,9 @@ function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
     // would render the SAME quote as TWO identical cards = double credit + ugly repeat).
     // Hold the single card for its whole span even if that exceeds MAX_BROLL_SEC.
     if (s.role === 'social_proof') { out.push(s); continue }
+    // FIX1 — never split the locked closing CTA cuts (offer / endorsement); hold them whole
+    // even past MAX_BROLL_SEC so the gift/offer concept is NOT duplicated onto two cuts.
+    if (isCtaLockCut(s)) { out.push(s); continue }
     if (s.role === 'lips') {
       if (L <= MAX_LIPS_SEC + 0.4) { out.push(s); continue }
       // Hard-cap the lips ABSOLUTELY: cut it at MAX_LIPS_SEC, but pull the cut a
@@ -1867,6 +1882,7 @@ function enforceDensityFloor(scenes: TimedBrollScene[], minScenes: number): Time
     let lLen = 2 * MIN_CUT_SEC   // only split cuts that yield two ≥ MIN_CUT halves
     for (let i = 0; i < out.length; i++) {
       if (out[i].role === 'social_proof') continue   // P5w — never split a static FB-post card
+      if (isCtaLockCut(out[i])) continue             // FIX1 — keep the locked CTA closing cuts atomic
       const L = out[i].endSec - out[i].startSec
       if (L > lLen) { lLen = L; li = i }
     }

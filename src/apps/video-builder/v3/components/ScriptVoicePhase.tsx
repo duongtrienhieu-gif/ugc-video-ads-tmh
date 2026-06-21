@@ -672,6 +672,9 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                 </label>
                 {state.gift?.imageRef && <GiftThumb refStr={state.gift.imageRef} onClear={() => setGift({ imageRef: undefined })} />}
               </div>
+              <p className="text-[10px] leading-relaxed text-amber-700">
+                📷 Chỉ tải <b>ảnh quà sạch nền</b>, rõ 1 món (bao bì gốc hoặc sản phẩm trần). AI sẽ giữ <b>y hệt</b> ảnh này — tránh ảnh có sẵn chữ/giá, ảnh ghép nhiều món, hay nền rối (ảnh xấu → quà render xấu).
+              </p>
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between gap-2">

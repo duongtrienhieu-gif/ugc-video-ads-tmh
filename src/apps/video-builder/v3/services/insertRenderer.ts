@@ -330,6 +330,15 @@ function buildInsertKeyframePrompt(
       `blend, fuse, swap, or restyle one into the other, and do NOT turn the product into the ` +
       `gift or the gift into the product. Two distinct objects, each faithful to its own reference.`,
     )
+    // FIX5 — anti-invent-packaging for the gift (the model dreamed up a fake box + garbled label
+    // "Sandr Berb / Suitable for blood pressure" over a loose snack). Mirror the product LOOSE rule.
+    paragraphs.push(
+      `GIFT FIDELITY: reproduce the gift EXACTLY as in reference #${giftRefIndex} and NOTHING more. ` +
+      `Do NOT invent a box / pack / wrapper / label / logo / sticker / any text or words that are ` +
+      `NOT visible in that reference. If the gift in the reference is LOOSE / has NO packaging (e.g. ` +
+      `loose food, fruit, an unpackaged item), keep it LOOSE exactly as shown — never wrap it in a ` +
+      `made-up package. Any text already on the gift must be copied verbatim, not re-spelled.`,
+    )
   }
   if (personRefIndex > 0) {
     // P6at — wardrobe policy = SAME outfit as the keyframe (identity fix; see brollWardrobeClause).

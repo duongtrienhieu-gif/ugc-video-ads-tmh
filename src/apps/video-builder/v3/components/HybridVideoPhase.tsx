@@ -79,10 +79,32 @@ function suspectMismatch(s: TimedBrollScene, isLast: boolean): string | null {
   const q = s.quote ?? ''
   const it = s.shotIntent
   if (!it) return null
+  // FIX4 — the closing CTA cuts (penult offer / final endorsement / any gift cut) are LOCKED on
+  // purpose; their buy/popularity wording is expected, so the heuristic must NOT flag them
+  // (the "stok laku keras" endorsement was firing a false "nên là thẻ bằng chứng" warning).
+  if (isLast || it === 'offer' || it === 'endorsement' || s.giftRef) return null
   if (SP_FLAG_RE.test(q) && it !== 'social_proof') return 'Câu nghe như BẰNG CHỨNG (đám đông/review) — cảnh nên là thẻ bằng chứng?'
-  if (!isLast && CTA_FLAG_RE.test(q) && it !== 'offer' && it !== 'endorsement') return 'Câu nghe như KÊU GỌI MUA — cảnh nên là ưu đãi/CTA?'
+  // offer/endorsement/isLast already returned above → this only flags non-CTA cuts that sound like a buy push.
+  if (CTA_FLAG_RE.test(q)) return 'Câu nghe như KÊU GỌI MUA — cảnh nên là ưu đãi/CTA?'
   if (MECH_FLAG_RE.test(q) && it !== 'mechanism3d') return 'Câu tả CƠ CHẾ/hấp thụ bên trong — cân nhắc cảnh 3D cơ chế?'
   return null
+}
+
+// FIX3 — the "🎬 cảnh quay gì" line must ALWAYS show (the user saw it appear on some cards, vanish
+// on others). Prefer the VN gloss; fall back to the raw concept, then a kind-based label, then a
+// role label for lips / proof cards — so a card is NEVER blank regardless of translation/derive state.
+function conceptLineFor(s: TimedBrollScene, gloss?: string): string {
+  if (gloss && gloss.trim()) return gloss.trim()
+  if (s.role === 'lips') return 'Người nói trực tiếp (talking head)'
+  if (s.role === 'social_proof') return 'Thẻ bằng chứng (review / đám đông)'
+  const c = (s.conceptPrompt ?? '').trim()
+  if (c) return c   // raw concept (English) — better than blank until the gloss lands
+  switch (s.kind) {
+    case 'product_closeup': return 'Cận cảnh sản phẩm'
+    case 'product_action':  return 'Sản phẩm đang được dùng'
+    case 'concept':         return 'Cảnh minh hoạ / cảm xúc'
+    default:                return 'Cảnh sản phẩm'
+  }
 }
 
 interface Props { onContinue?: () => void }
@@ -890,12 +912,10 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
             🇻🇳 {gloss}
           </p>
         )}
-        {/* P6z — "Cảnh quay gì" (dịch từ conceptPrompt cuối) để đối chiếu với thoại. Display-only. */}
-        {conceptGloss && (
-          <p className="text-[12px] font-medium leading-snug text-sky-700" title="Cảnh sẽ quay (giải nghĩa từ prompt) — so với thoại ở trên xem có khớp không">
-            🎬 {conceptGloss}
-          </p>
-        )}
+        {/* P6z + FIX3 — "Cảnh quay gì" LUÔN hiển thị (gloss → concept thô → nhãn theo loại), không bao giờ trống. */}
+        <p className="text-[12px] font-medium leading-snug text-sky-700 line-clamp-3" title="Cảnh sẽ quay (giải nghĩa từ prompt) — so với thoại ở trên xem có khớp không">
+          🎬 {conceptLineFor(scene, conceptGloss)}
+        </p>
         {/* P6z — cờ nghi lệch (heuristic, không tự sửa) → bấm "Nhờ AI sửa" nếu đúng là lệch. */}
         {mismatch && (
           <p className="rounded bg-amber-50 px-1.5 py-1 text-[11px] font-semibold leading-snug text-amber-700" title="Cảnh báo tự động — không tự sửa. Kiểm tra rồi bấm Nhờ AI sửa nếu lệch thật.">
