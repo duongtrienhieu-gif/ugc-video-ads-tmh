@@ -40,6 +40,7 @@ import TikTokShop from './apps/tiktok-shop/TikTokShop'
 import Research from './apps/research/Research'
 import ChatBot from './apps/chat-bot/ChatBot'
 import GiftStudio from './apps/gift-studio/GiftStudio'
+import FormBgStudio from './apps/form-bg-studio/FormBgStudio'
 
 const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'finder': Finder,
@@ -64,6 +65,7 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'research': Research,
   'chat-bot': ChatBot,
   'gift-studio': GiftStudio,
+  'form-bg-studio': FormBgStudio,
 }
 
 /** VN label + cache keys used by the per-app ErrorBoundary fallback so the
@@ -89,6 +91,7 @@ const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> =
   'research':          { name: 'Research',         resetKeys: [] },
   'chat-bot':          { name: 'Chat Bot',         resetKeys: ['chat-bot-configs-v1'] },
   'gift-studio':       { name: 'Xưởng Quà Tặng',   resetKeys: ['gift-studio-draft-v1'] },
+  'form-bg-studio':    { name: 'Nền Form Đặt Hàng', resetKeys: ['form-bg-studio-draft-v1'] },
 }
 
 export default function App() {
