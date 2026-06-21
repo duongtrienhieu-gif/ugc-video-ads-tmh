@@ -54,9 +54,13 @@ const SCHEMA: Record<string, unknown> = {
     names: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 3 },
     palette: {
       type: 'object',
-      properties: { bg: { type: 'string' }, primary: { type: 'string' }, accent: { type: 'string' }, onColor: { type: 'string' } },
-      required: ['bg', 'primary', 'accent', 'onColor'],
+      properties: {
+        bg: { type: 'string' }, primary: { type: 'string' }, accent: { type: 'string' }, onColor: { type: 'string' },
+        colors: { type: 'array', items: { type: 'string' }, minItems: 4, maxItems: 6 },
+      },
+      required: ['bg', 'primary', 'accent', 'onColor', 'colors'],
     },
+    vibe: { type: 'string' },
     productForm: { type: 'string' },
     productType: { type: 'string' },
     tagline: { type: 'string' },
@@ -67,7 +71,7 @@ const SCHEMA: Record<string, unknown> = {
     caution: { type: 'string' },
     nutrition: { type: 'string' },
   },
-  required: ['names', 'palette', 'productForm', 'productType', 'tagline', 'benefits', 'netWeight', 'ingredients', 'usage', 'caution', 'nutrition'],
+  required: ['names', 'palette', 'vibe', 'productForm', 'productType', 'tagline', 'benefits', 'netWeight', 'ingredients', 'usage', 'caution', 'nutrition'],
 }
 
 export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<RebrandIdentity> {
@@ -86,7 +90,8 @@ export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<Rebr
       : `The photos show the real product/packaging — reproduce THIS real product, not an imagined one.\n`) +
     `TASKS:\n` +
     `1) names: propose 3 DISTINCT new brand names suitable for the ${market === 'vi' ? 'Vietnamese' : 'Malaysian (English-label)'} market — short, brandable, pronounceable, fitting the product niche. Avoid obvious existing trademarks.\n` +
-    `2) palette: extract the colour scheme from the references so the rebrand keeps a similar look. Hex: bg, primary, accent, onColor. Strong contrast.\n` +
+    `2) palette: extract the colour scheme so the rebrand keeps a similar RICH look. Hex: bg, primary, accent, onColor, AND colors = 5-6 dominant hex colours sampled from the original (sky/background tones, brand colour, product colour, leaf/decoration, neutrals) — capture the real richness, not just 2 colours.\n` +
+    `   vibe: one sentence (ENGLISH) describing the original's overall LOOK & FEEL — background scene/style, mood, and decorative motifs (e.g. "illustrated nature scene: teal sky gradient, fruit branch, distant mountains, warm oriental wellness mood").\n` +
     `3) productForm: short ENGLISH description of the REAL physical form taken from the packaging photo(s) (e.g. "stand-up pouch", "folding carton box", "round jar", "squeeze tube") — generation must preserve THIS form.\n` +
     `4) productType: 2-4 word ENGLISH product category grounded in the fields (e.g. "dried hawthorn snack").\n` +
     `5) Label copy in ${langName} ONLY. The product fields are CONTEXT to UNDERSTAND the product — do NOT copy them verbatim and do NOT dump everything. Write fresh, concise, natural label copy, keeping ONLY what a real retail label needs: tagline (<=8 words), benefits (2-3 items, each <=7 words — pick only the strongest, rephrased), ingredients (one short line, real ones only), usage (one short line), caution (one short line).\n` +
@@ -131,7 +136,10 @@ export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<Rebr
       primary: hex(p.palette?.primary, '#C0392B'),
       accent: hex(p.palette?.accent, '#E0A82E'),
       onColor: hex(p.palette?.onColor, '#FFFFFF'),
+      colors: ((p.palette?.colors as string[] | undefined) ?? [])
+        .map((c) => hex(c, '')).filter(Boolean).slice(0, 6),
     },
+    vibe: clean(p.vibe),
     productForm: clean(p.productForm) || 'product container',
     productType: clean(p.productType) || productName.trim(),
     tagline: clean(p.tagline),

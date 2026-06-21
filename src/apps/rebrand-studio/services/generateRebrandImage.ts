@@ -68,9 +68,12 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
   const bgRule = `BACKGROUND: a soft NON-WHITE light backdrop (warm beige or light grey gradient) + a soft drop shadow, so the product separates easily for background removal. Do NOT use a pure white background.`
   const labelApply = hasLabelRef ? `Apply the EXACT finished front-label design shown in the FIRST reference image onto the packaging (same layout, text and colours). ` : ''
 
+  const colorsStr = (P.colors && P.colors.length ? P.colors : [P.bg, P.primary, P.accent]).join(', ')
   const baseBrand =
     `NEW BRAND: "${chosenName}". Render "${chosenName}" large, clean and spelled EXACTLY. ` +
-    `Colour scheme similar to the original: background ${P.bg}, primary ${P.primary}, accent ${P.accent}. ` +
+    `COLOUR PALETTE — use the FULL rich set, do NOT reduce to 1-2 colours: ${colorsStr}. ` +
+    `MATCH ~75% the LOOK & FEEL of the reference design: similar background style/scene, colour richness and decorative motifs` +
+    `${identity.vibe ? ` (${identity.vibe})` : ''}; clearly inspired by it but NOT an identical copy. ` +
     `Label text language: ${langName}. Do NOT show any old brand name. Do NOT invent certification badges (Halal/KKM/FDA). Crisp, professional, readable.`
   const productLock =
     `USE THE REAL PRODUCT shown in the reference photos (the actual item + its packaging form ${identity.productForm}). Do NOT invent a different product or packaging. `

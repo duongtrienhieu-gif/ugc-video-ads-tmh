@@ -307,11 +307,13 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
                     )
                   })}
                 </div>
-                <div className="mt-2 flex items-center gap-1.5">
-                  <span className="h-3.5 w-3.5 rounded-sm border border-black/10" style={{ background: identity.palette.primary }} />
-                  <span className="h-3.5 w-3.5 rounded-sm border border-black/10" style={{ background: identity.palette.accent }} />
-                  <span className="text-[10px] text-gray-400">palette giữ từ bản gốc · nhãn {labelLangName(identity.market)}</span>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {(identity.palette.colors.length ? identity.palette.colors : [identity.palette.primary, identity.palette.accent, identity.palette.bg]).map((c, i) => (
+                    <span key={`${c}-${i}`} title={c} className="h-4 w-4 rounded-sm border border-black/10" style={{ background: c }} />
+                  ))}
+                  <span className="text-[10px] text-gray-400">palette ~75% vibe gốc · nhãn {labelLangName(identity.market)}</span>
                 </div>
+                {identity.vibe && <div className="mt-1 text-[10px] italic text-gray-400">Vibe: {identity.vibe}</div>}
               </div>
             )}
           </div>

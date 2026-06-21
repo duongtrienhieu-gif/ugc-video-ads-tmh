@@ -33,6 +33,8 @@ export interface RebrandPalette {
   primary: string
   accent: string
   onColor: string
+  /** 5-6 màu chủ đạo trích từ bản gốc (giàu vibe, không chỉ 2 màu). */
+  colors: string[]
 }
 
 /** Kết quả AI phân tích bản gốc + đặt tên (Gemini vision). */
@@ -58,6 +60,8 @@ export interface RebrandIdentity {
   caution: string
   /** Bảng dinh dưỡng/100g (AI ước lượng — user phải verify trước khi in). */
   nutrition: string
+  /** Mô tả vibe bản gốc (phong cách nền/cảnh + tâm trạng + hoạ tiết) để bám ~75%. */
+  vibe: string
   market: Market
   sig: string
 }
@@ -93,7 +97,7 @@ export function labelLangName(market: Market): string {
 
 /** Sig phát hiện identity stale. */
 export function rebrandSig(d: { productId: string | null; originalImageRefs: string[]; market: Market }): string {
-  return `v1|${d.productId ?? ''}|${d.market}|${d.originalImageRefs.join(',')}`
+  return `v3|${d.productId ?? ''}|${d.market}|${d.originalImageRefs.join(',')}`
 }
 
 /** Cả 4 ảnh (nhãn trước/sau + product + set) đều qua gpt-4o-image (6 mỗi ảnh). */
