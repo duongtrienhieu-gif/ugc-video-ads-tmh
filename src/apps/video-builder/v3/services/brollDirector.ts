@@ -82,6 +82,12 @@ export interface BrollScene {
    *  BOTH). The renderer hard-locks the product + renders the gift as a distinct
    *  second object. Absent on every other cut. */
   giftRef?: string
+  /** Phase A — how many IDENTICAL product units to render in this cut, read from the
+   *  SPOKEN offer in the script (buy X get Y → X+Y, capped 4). >1 only on the penult
+   *  product-hero cut so a "mua 1 được thêm 2" deal shows the real 3 units. The renderer
+   *  also hard-locks the product to ONE hero ref when this is set (anti-drift). Absent/1
+   *  elsewhere. */
+  productUnits?: number
   /** one short phrase explaining the choice (debug / UI). */
   reason?: string
 }
@@ -782,6 +788,29 @@ function enforceBeforeAfterSplit(scenes: BrollScene[], script: GeneratedScript):
 }
 
 // ── Public: plan a full-coverage hybrid shot list ───────────────────────────
+// Phase A — total product units a SPOKEN buy-X-get-Y offer implies (X + Y), parsed from the
+// script text (what the viewer hears), capped at 4 (more identical units = i2v drift from one
+// reference). Returns 1 when no quantified offer is found. Universal VN / MS / EN, DIGITS only
+// (word-numbers fall back to 1 → never renders a wrong larger count). Picks the LARGEST match.
+const OFFER_QTY_PATTERNS: RegExp[] = [
+  /\bmua\s+(\d+)\s+(?:đư[ơợ]c\s+)?(?:th[eê]m|t[aặ]ng|k[eè]m)\s+(\d+)/gi,   // mua 1 (được) thêm/tặng/kèm 2
+  /\bbeli\s+(\d+)\s+(?:dapat|free|percuma)\s+(\d+)/gi,                      // beli 1 dapat/free/percuma 2
+  /\bbuy\s+(\d+)\s+(?:get|free)\s+(\d+)/gi,                                 // buy 1 get/free 2
+]
+export function parseOfferQty(text: string): number {
+  const t = text ?? ''
+  let best = 1
+  for (const re of OFFER_QTY_PATTERNS) {
+    re.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = re.exec(t)) !== null) {
+      const x = parseInt(m[1], 10), y = parseInt(m[2], 10)
+      if (Number.isFinite(x) && Number.isFinite(y) && x > 0 && y > 0) best = Math.max(best, x + y)
+    }
+  }
+  return Math.min(4, Math.max(1, best))
+}
+
 export async function directBrollScenes(
   params: BrollDirectorParams,
 ): Promise<BrollDirectorResult> {
@@ -1318,17 +1347,30 @@ OUTPUT strict JSON only (no markdown fences):
   // urgency flavour matching the buy-push line. No face, no on-screen price.
   const penult = scenes[scenes.length - 2]
   const ctaCue = /(mua|ch[oố]t|gi[oỏ] h[aà]ng|link|[uư]u đãi|t[aặ]ng|sale|h[eế]t h[aà]ng|h[oố]t|s[oở] h[uữ]u|grab|beli|checkout|order|jom|cart)/i
+  // Phase A — how many product units the SPOKEN offer implies (read from the script's CTA
+  // block, NOT a field). "mua 1 được thêm 2" → 3 → the penult hero shows 3 real units.
+  const offerQty = parseOfferQty(params.script.blocks.find((b) => b.id === 'cta')?.text ?? '')
   if (penult && penult.role === 'broll' && ctaCue.test(penult.quote ?? '')) {
     penult.kind = 'product_action'
     penult.cameraFraming = 'hands_noface'
     penult.shotIntent = 'offer'
     const hasOffer = !!(params.product?.offer && params.product.offer.trim())
+    // The product unit phrase — renders the REAL deal quantity (capped 4) when >1.
+    if (offerQty > 1) penult.productUnits = offerQty
+    const units = offerQty > 1 ? `${offerQty} IDENTICAL units of the product, neatly grouped together` : 'the product'
+    const sameUnitsClause = offerQty > 1
+      ? ` Render ALL ${offerQty} product units IDENTICAL to the product reference (same form, color, label).`
+      : ''
     if (giftOn) {
-      // Phase A (option A) — the gift IS the offer beat: product + free gift, NO person.
-      // Takes priority over the deal / urgency flavours. Two distinct objects, hard product lock.
+      // Phase A (option A) — the gift IS the offer beat: product unit(s) + free gift, NO person.
+      // Takes priority over deal / urgency flavours. Distinct objects, hard product lock.
       penult.giftRef = params.gift!.imageRef
       penult.conceptPrompt =
-        'PRODUCT-HERO shot — NO person, NO face: the PRODUCT and the FREE GIFT sit side by side on a clean premium surface in good light — a "buy now, get this free too" bundle that looks worth grabbing. CRITICAL: product and gift are TWO SEPARATE, DISTINCT objects placed apart — do NOT merge, blend, swap, or restyle either one; keep each exactly as in its reference. No on-screen price or numbers.'
+        `PRODUCT-HERO shot — NO person, NO face: ${units} together with the FREE GIFT, arranged side by side on a clean premium surface in good light — a "buy now, get this free too" bundle that looks worth grabbing. CRITICAL: the product unit(s) and the gift are SEPARATE, DISTINCT objects placed apart — do NOT merge, blend, swap, or restyle any of them; keep each exactly as in its reference.${sameUnitsClause} No on-screen price or numbers.`
+    } else if (offerQty > 1) {
+      // Offer with a real quantity, no gift → show the true number of units (the deal).
+      penult.conceptPrompt =
+        `PRODUCT-HERO shot — NO person, NO face: ${units} on a clean premium surface in good light — a generous "buy more, get more" deal worth grabbing.${sameUnitsClause} No on-screen price or numbers.`
     } else {
       penult.conceptPrompt = hasOffer
         ? 'PRODUCT-HERO shot — NO person, NO face: the product is the clear HERO, centred + premium on a clean surface in good light, presented as a special DEAL / offer moment (a hand may place or point at it). Make it look worth grabbing. No on-screen price or numbers.'

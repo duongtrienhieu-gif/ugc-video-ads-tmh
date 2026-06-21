@@ -147,6 +147,7 @@ export async function renderOneHybridScene(
     cameraFraming,   // P3v — defaulted above so product shots don't grow a face.
     quote: scene.quote,
     giftRef: scene.giftRef,   // Phase A — extra gift reference on the two closing cuts
+    productUnits: scene.productUnits,   // Phase A — render the real offer quantity (penult)
 
     onStageUpdate: (u) => {
       onStage?.(u.stage)

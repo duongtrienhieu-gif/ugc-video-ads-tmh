@@ -90,6 +90,10 @@ export interface RenderInsertParams {
    *  SEPARATE reference object (two distinct objects, never merged). Set only on
    *  the two closing cuts; absent on every other insert. */
   giftRef?: string
+  /** Phase A — render this many IDENTICAL product units (the real offer quantity, capped 4).
+   *  >1 hard-locks the product to ONE clean hero ref so the N copies stay consistent. Set only
+   *  on the penult product-hero cut; absent/1 elsewhere. */
+  productUnits?: number
   /** Per-stage status callback */
   onStageUpdate: (update: InsertStageUpdate) => void
   /** P3t — KIE poll progress fan-out so the UI can show "đang render…
@@ -475,14 +479,17 @@ async function resolveRefs(
   noFace = false,
   cameraFraming?: CameraFraming,
   giftRef?: string,
+  productUnits = 1,
 ): Promise<{ refs: string[]; productRefIndex: number; personRefIndex: number; giftRefIndex: number }> {
   const refs: string[] = []
   let productRefIndex = 0
   let personRefIndex = 0
   let giftRefIndex = 0
-  // Phase A — when a gift rides along, HARD-LOCK the product to ONE clean hero ref
-  // so the model doesn't blend the gift into a second product shot.
+  // Phase A — when a gift rides along OR we must render multiple identical units (a quantity
+  // offer), HARD-LOCK the product to ONE clean hero ref so the model has a single source of
+  // truth to replicate (no blend with the gift; the N copies stay consistent).
   const hasGift = !!(giftRef && giftRef.trim())
+  const singleHero = hasGift || productUnits > 1
   // Z98 — a 3D mechanism animation shows no product + no person.
   if (preset.needsProduct && product && !is3D) {
     // P4b — pick which of the product's 4 images fit THIS insert (hero + a
@@ -494,15 +501,15 @@ async function resolveRefs(
     if (imgs.length > 0) {
       const picked = pickProductRefIndexes(visualBrief, preset.id, quote, conceptPrompt)
         .filter((i) => i >= 0 && i < imgs.length)
-      // Phase A — with a gift in frame, use ONLY the hero (1 ref) so the model
-      // has a single clean product to preserve next to the gift. Otherwise the
-      // usual hero + scene-match + diversity pick.
-      const chosen = hasGift
+      // Phase A — with a gift in frame OR a multi-unit deal, use ONLY the hero (1 ref) so
+      // the model has a single clean product to preserve / replicate. Otherwise the usual
+      // hero + scene-match + diversity pick.
+      const chosen = singleHero
         ? [picked.length ? picked[0] : 0]
         : picked.length ? [...picked] : [0]
-      // Guarantee ≥2 product refs when ≥2 images exist (anti-lazy) — SKIPPED when a
-      // gift rides along (we deliberately keep the product to a single hero ref).
-      if (!hasGift) {
+      // Guarantee ≥2 product refs when ≥2 images exist (anti-lazy) — SKIPPED when we deliberately
+      // keep the product to a single hero ref (gift bundle / multi-unit deal).
+      if (!singleHero) {
         for (let i = 0; chosen.length < Math.min(2, imgs.length) && i < imgs.length; i++) {
           if (!chosen.includes(i)) chosen.push(i)
         }
@@ -595,6 +602,7 @@ export async function renderInsert(
   const { refs: filesUrl, productRefIndex, personRefIndex, giftRefIndex } = await resolveRefs(
     preset, params.product, params.avatar, params.creatorKeyframeRef, params.renderMode, is3D,
     params.visualBrief, params.quote, params.conceptPrompt, noFace, params.cameraFraming, params.giftRef,
+    params.productUnits ?? 1,
   )
 
   // Z37 — the scene verb that drives the Kling motion prompts (Stage 2/3).

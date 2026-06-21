@@ -705,6 +705,7 @@ function buildUserPrompt(args: {
     ? `\nBUNDLED GIFT — applies to the CTA BLOCK ONLY (do NOT touch hook/pain/discovery/benefit):
 - A FREE bonus gift comes with the order: "${args.gift.name.trim()}"${args.gift.benefitLine.trim() ? ` — ${args.gift.benefitLine.trim()}` : ''}.
 - Frame it as something SPECIAL and FOMO-worthy yet BELIEVABLE — an exclusive / limited bonus that makes buying NOW feel like a great deal. Make it punchy + native. Do NOT open it with a flat "today / hôm nay / hari ni" — find a more compelling, natural way to introduce the gift.
+- CHAIN, don't stack: if the product already has a buy-X-get-Y offer, fold the gift onto it in ONE short flowing beat (e.g. "…mua 1 được thêm 2 món, lại còn được tặng thêm [gift] — [benefit]…") instead of a separate extra sentence — keep the whole CTA tight (the ad must not run long).
 - ORDER (CRITICAL): announce the gift JUST BEFORE the final push. The VERY LAST sentence of the whole script MUST be the strongest urgency call-to-buy (buy now / grab it before it's gone) — NOT the gift line.
 - ABSOLUTELY NO price / money / value-in-RM / discount % for the gift — just the gift + its benefit.
 - The 4 hero blocks stay 100% about the main product — the gift exists only at the CTA.\n`
