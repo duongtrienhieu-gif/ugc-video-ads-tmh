@@ -181,6 +181,7 @@ p, span, div, label, button, a, li, td, th, h1, h2, h3, h4, h5, h6 {
 [data-theme="dark"] .bg-\[\#EEEEF2\] { background-color: var(--color-base) !important; }
 [data-theme="dark"] .bg-\[\#FAFAFA\] { background-color: var(--color-surface) !important; }
 [data-theme="dark"] .bg-gray-50 { background-color: var(--color-surface) !important; }
+[data-theme="dark"] .bg-\[\#F6F6F8\] { background-color: var(--color-base) !important; }
 [data-theme="dark"] .bg-gray-100 { background-color: var(--color-card-elevated) !important; }
 [data-theme="dark"] .bg-gray-200 { background-color: var(--color-card-elevated) !important; }
 
@@ -200,6 +201,17 @@ p, span, div, label, button, a, li, td, th, h1, h2, h3, h4, h5, h6 {
 [data-theme="dark"] .text-slate-400 { color: var(--color-text-tertiary) !important; }
 [data-theme="dark"] .text-slate-300,
 [data-theme="dark"] .text-slate-200 { color: var(--color-text-faint) !important; }
+
+/* Gray-* text shades — same tier ladder as slate (gift-studio / form-bg-studio
+   and other apps use gray-* for typography). */
+[data-theme="dark"] .text-gray-900,
+[data-theme="dark"] .text-gray-800 { color: var(--color-text-primary) !important; }
+[data-theme="dark"] .text-gray-700,
+[data-theme="dark"] .text-gray-600 { color: var(--color-text-secondary) !important; }
+[data-theme="dark"] .text-gray-500,
+[data-theme="dark"] .text-gray-400 { color: var(--color-text-tertiary) !important; }
+[data-theme="dark"] .text-gray-300,
+[data-theme="dark"] .text-gray-200 { color: var(--color-text-faint) !important; }
 
 /* Saturated tinted icon containers (bg-{color}-500/10..20) — keep the
    hue but slightly lift opacity so the icon container stays visible
@@ -226,6 +238,13 @@ p, span, div, label, button, a, li, td, th, h1, h2, h3, h4, h5, h6 {
 [data-theme="dark"] [class*="border-stone-200"] { border-color: var(--color-border) !important; }
 [data-theme="dark"] [class*="border-slate-300"],
 [data-theme="dark"] [class*="border-stone-300"] { border-color: var(--color-border-strong) !important; }
+
+/* Black-alpha borders (border-black/5, /10, /20…) + gray-* borders — used as
+   the default hairline in gift-studio / form-bg-studio. Nearly invisible on
+   dark; lift to the themed border colour. */
+[data-theme="dark"] [class*="border-black/"] { border-color: var(--color-border) !important; }
+[data-theme="dark"] [class*="border-gray-1"],
+[data-theme="dark"] [class*="border-gray-2"] { border-color: var(--color-border) !important; }
 
 /* Subtle gray-tinted backgrounds — collapse them onto the surface tone
    so faint card sub-regions remain visually grouped without a white
