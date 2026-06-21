@@ -23,8 +23,8 @@ export interface GiftLabels {
   comboTitle: string
   /** Câu CTA ngắn dán trên banner. */
   bannerCta: string
-  /** Nhãn tier "deal label": mua X → tặng Y quà. */
-  tierDealLabel: (buyQty: number, giftQty: number) => string
+  /** Nhãn deal SẢN PHẨM CHÍNH: mua X (tặng kèm Y SP chính). */
+  mainDealLabel: (buyMainQty: number, freeMainQty: number) => string
   /** Badge gói ở mép trái mỗi tier (PAKEJ 1 / GÓI 1). */
   packageBadge: (i: number) => string
   /** "JIMAT RM{n}" / "TIẾT KIỆM RM{n}". */
@@ -39,7 +39,7 @@ const MS: GiftLabels = {
   giftInfoTitle: 'Hadiah Anda',
   comboTitle: 'TAWARAN COMBO HARI INI',
   bannerCta: 'Order hari ini',
-  tierDealLabel: (b, g) => `BELI ${b} HADIAH ${g} PERCUMA`,
+  mainDealLabel: (b, f) => (f > 0 ? `BELI ${b} PERCUMA ${f}` : `BELI ${b} KOTAK`),
   packageBadge: (i) => `PAKEJ ${i}`,
   savingsLabel: (rm) => `JIMAT RM${rm}`,
 }
@@ -52,7 +52,7 @@ const VI: GiftLabels = {
   giftInfoTitle: 'Quà tặng của bạn',
   comboTitle: 'COMBO ƯU ĐÃI HÔM NAY',
   bannerCta: 'Đặt ngay hôm nay',
-  tierDealLabel: (b, g) => `MUA ${b} TẶNG ${g} QUÀ`,
+  mainDealLabel: (b, f) => (f > 0 ? `MUA ${b} TẶNG ${f}` : `MUA ${b} HỘP`),
   packageBadge: (i) => `GÓI ${i}`,
   savingsLabel: (rm) => `TIẾT KIỆM RM${rm}`,
 }

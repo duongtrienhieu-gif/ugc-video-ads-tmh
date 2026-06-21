@@ -39,29 +39,41 @@ export interface GiftImage {
   error?: string
 }
 
-/** Một MỐC TẶNG (tier combo): mua X sản phẩm → tặng Y quà ở mức giá này. */
+/** Một MỐC TẶNG (tier combo) do AI parse từ ô dán offer.
+ *  2 chiều "tặng": SẢN PHẨM CHÍNH (buy X free X) + QUÀ kèm (SP khác). */
 export interface GiftTier {
-  id: string
-  /** Mua mấy sản phẩm. */
-  buyQty: number
+  /** Mua mấy sản phẩm CHÍNH. */
+  buyMainQty: number
+  /** Tặng kèm mấy sản phẩm CHÍNH (buy X free X). 0 nếu không. */
+  freeMainQty: number
+  /** Tặng mấy món QUÀ (SP khác) ở mốc này. 0 = mốc không tặng quà. */
+  giftQty: number
   /** Giá bán của mốc này (RM). */
   price: number
-  /** Giá gốc (RM) — optional; nếu > price thì auto tính JIMAT. */
-  originalPrice: number | null
-  /** Tặng mấy món quà ở mốc này. */
-  giftQty: number
 }
 
 export const MAX_GIFT_TIERS = 4
 
-export function newGiftTier(buyQty = 1, giftQty = 1): GiftTier {
-  return {
-    id: `tier-${crypto.randomUUID().slice(0, 8)}`,
-    buyQty,
-    price: 0,
-    originalPrice: null,
-    giftQty,
-  }
+/** Toán giá 1 tier (app tự tính — KHÔNG bắt user nhập giá gốc).
+ *  - mainUnit = giá / số SP chính mua
+ *  - giáGốc gạch = round(mainUnit × tổng SP chính) + giáTrịQuà × số quà
+ *  - JIMAT = giáGốc − giá (gồm SP chính free + quà)
+ *  - giftTotal = giáTrịQuà × số quà (trị giá quà nhân theo số lượng) */
+export interface TierPricing {
+  totalMainUnits: number
+  giftTotalValue: number
+  originalPrice: number
+  jimat: number
+}
+
+export function computeTierPricing(tier: GiftTier, giftValueRM: number | null): TierPricing {
+  const buy = Math.max(1, tier.buyMainQty)
+  const totalMainUnits = tier.buyMainQty + tier.freeMainQty
+  const mainUnit = tier.price / buy
+  const giftTotalValue = Math.round((giftValueRM ?? 0) * tier.giftQty)
+  const originalPrice = Math.round(mainUnit * totalMainUnits) + giftTotalValue
+  const jimat = originalPrice - tier.price
+  return { totalMainUnits, giftTotalValue, originalPrice, jimat }
 }
 
 /** Mini-pitch quà do Gemini suy ra từ ẢNH quà + tên (đúng ngôn ngữ đích) +
@@ -93,8 +105,12 @@ export interface GiftDraft {
   giftValueRM: number | null
   /** asset:xxx của ảnh quà user upload. */
   giftImageRef: string | null
-  /** Các mốc tặng (1-4 tier). */
+  /** Ô dán offer thô (bất kỳ ngôn ngữ) — AI sẽ parse ra tiers. */
+  offerText: string
+  /** Các mốc tặng do AI parse từ offerText. Rỗng khi chưa parse. */
   tiers: GiftTier[]
+  /** Sig của (offerText, lang) mà tiers đã parse — phát hiện stale. */
+  tiersSig: string
   /** Ngôn ngữ đích của chiến dịch. */
   lang: Market
 }
@@ -105,9 +121,16 @@ export function emptyGiftDraft(): GiftDraft {
     giftName: '',
     giftValueRM: null,
     giftImageRef: null,
-    tiers: [newGiftTier(1, 1)],
+    offerText: '',
+    tiers: [],
+    tiersSig: '',
     lang: 'ms',
   }
+}
+
+/** Sig phát hiện tiers stale khi đổi ô dán / ngôn ngữ. */
+export function offerSig(offerText: string, lang: Market): string {
+  return `${offerText.trim()}|${lang}`
 }
 
 /** Credit gpt-4o-image: 6/ảnh × 3 ảnh = 18. (Hằng số hiển thị cho user.) */

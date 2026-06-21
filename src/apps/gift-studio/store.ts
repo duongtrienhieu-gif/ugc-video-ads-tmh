@@ -14,8 +14,7 @@ import {
   type GiftBenefits,
   type GiftTier,
   emptyGiftDraft,
-  newGiftTier,
-  MAX_GIFT_TIERS,
+  offerSig,
   GIFT_IMAGE_KINDS,
 } from './types'
 
@@ -38,10 +37,10 @@ function loadCache(): PersistShape {
       const parsed = JSON.parse(raw) as Partial<PersistShape>
       const base = emptyGiftDraft()
       const draft: GiftDraft = { ...base, ...(parsed.draft ?? {}) }
-      // Migration: cache cũ (trước khi có tier) → đảm bảo luôn có ≥1 tier hợp lệ.
-      if (!Array.isArray(draft.tiers) || draft.tiers.length === 0) {
-        draft.tiers = [newGiftTier(1, 1)]
-      }
+      // Migration: cache cũ (model tier khác) → reset tiers về rỗng, giữ các field khác.
+      if (!Array.isArray(draft.tiers)) draft.tiers = []
+      if (typeof draft.offerText !== 'string') draft.offerText = ''
+      if (typeof draft.tiersSig !== 'string') draft.tiersSig = ''
       return {
         draft,
         images: Array.isArray(parsed.images) && parsed.images.length === GIFT_IMAGE_KINDS.length
@@ -60,6 +59,8 @@ interface GiftStudioState {
   benefits: GiftBenefits | null
   /** Đang sinh benefits (1 call Gemini) trước khi render ảnh. */
   isPreparing: boolean
+  /** Đang parse ô dán offer → tiers. */
+  isParsing: boolean
 
   // ── draft setters ──
   setProductId: (id: string | null) => void
@@ -67,15 +68,14 @@ interface GiftStudioState {
   setGiftValueRM: (rm: number | null) => void
   setGiftImageRef: (ref: string | null) => void
   setLang: (lang: Market) => void
-
-  // ── tier setters ──
-  addTier: () => void
-  removeTier: (id: string) => void
-  updateTier: (id: string, patch: Partial<Omit<GiftTier, 'id'>>) => void
+  setOfferText: (text: string) => void
+  /** Lưu tiers AI parse + sig của (offerText, lang) hiện tại. */
+  setTiers: (tiers: GiftTier[]) => void
 
   // ── pipeline state ──
   setBenefits: (b: GiftBenefits | null) => void
   setPreparing: (v: boolean) => void
+  setParsing: (v: boolean) => void
   patchImage: (kind: GiftImageKind, patch: Partial<GiftImage>) => void
   resetImages: () => void
   reset: () => void
@@ -98,43 +98,27 @@ export const useGiftStudioStore = create<GiftStudioState>((set, get) => {
     images: init.images,
     benefits: init.benefits,
     isPreparing: false,
+    isParsing: false,
 
     setProductId: (id) => { set((s) => ({ draft: { ...s.draft, productId: id } })); save() },
     setGiftName: (name) => { set((s) => ({ draft: { ...s.draft, giftName: name } })); save() },
     setGiftValueRM: (rm) => { set((s) => ({ draft: { ...s.draft, giftValueRM: rm } })); save() },
     setGiftImageRef: (ref) => { set((s) => ({ draft: { ...s.draft, giftImageRef: ref } })); save() },
     setLang: (lang) => { set((s) => ({ draft: { ...s.draft, lang } })); save() },
-
-    addTier: () => {
-      set((s) => {
-        if (s.draft.tiers.length >= MAX_GIFT_TIERS) return s
-        const last = s.draft.tiers[s.draft.tiers.length - 1]
-        const next = newGiftTier((last?.buyQty ?? 0) + 1, (last?.giftQty ?? 0) + 1)
-        return { draft: { ...s.draft, tiers: [...s.draft.tiers, next] } }
-      })
-      save()
-    },
-    removeTier: (id) => {
-      set((s) => {
-        if (s.draft.tiers.length <= 1) return s // luôn giữ ≥1 tier
-        return { draft: { ...s.draft, tiers: s.draft.tiers.filter((t) => t.id !== id) } }
-      })
-      save()
-    },
-    updateTier: (id, patch) => {
-      set((s) => ({
-        draft: { ...s.draft, tiers: s.draft.tiers.map((t) => (t.id === id ? { ...t, ...patch } : t)) },
-      }))
+    setOfferText: (text) => { set((s) => ({ draft: { ...s.draft, offerText: text } })); save() },
+    setTiers: (tiers) => {
+      set((s) => ({ draft: { ...s.draft, tiers, tiersSig: offerSig(s.draft.offerText, s.draft.lang) } }))
       save()
     },
 
     setBenefits: (b) => { set({ benefits: b }); save() },
     setPreparing: (v) => set({ isPreparing: v }),
+    setParsing: (v) => set({ isParsing: v }),
     patchImage: (kind, patch) => {
       set((s) => ({ images: s.images.map((im) => (im.kind === kind ? { ...im, ...patch } : im)) }))
       save()
     },
     resetImages: () => { set({ images: freshImages() }); save() },
-    reset: () => { set({ draft: emptyGiftDraft(), images: freshImages(), benefits: null, isPreparing: false }); save() },
+    reset: () => { set({ draft: emptyGiftDraft(), images: freshImages(), benefits: null, isPreparing: false, isParsing: false }); save() },
   }
 })

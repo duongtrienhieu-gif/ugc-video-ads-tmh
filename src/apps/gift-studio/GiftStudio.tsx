@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react'
-import { Gift, Upload, RefreshCw, Sparkles, Download, X, AlertCircle, Plus, Trash2 } from 'lucide-react'
+import { Gift, Upload, RefreshCw, Sparkles, Download, X, AlertCircle, Wand2 } from 'lucide-react'
 import { useGiftStudioStore } from './store'
 import { useBankStore } from '../../stores/bankStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -15,17 +15,19 @@ import { useAppStore } from '../../stores/appStore'
 import { useAssetUrl } from '../../hooks/useAssetUrl'
 import { saveAsset } from '../../utils/assetStore'
 import type { Market } from '../../types/brandKit'
-import { langDisplayName } from './labels'
+import { langDisplayName, giftLabels } from './labels'
 import {
   GIFT_IMAGE_KINDS,
   GIFT_TOTAL_CREDITS,
-  MAX_GIFT_TIERS,
+  computeTierPricing,
+  offerSig,
   type GiftImageKind,
   type GiftBenefits,
+  type GiftTier,
 } from './types'
-import { giftLabels } from './labels'
 import { generateGiftBenefits, benefitsSig } from './services/generateGiftBenefits'
 import { generateGiftImage, friendlyGiftError } from './services/generateGiftImage'
+import { parseOffer } from './services/parseOffer'
 
 const KIND_LABEL: Record<GiftImageKind, string> = {
   banner: 'Banner có quà',
@@ -47,9 +49,9 @@ function AssetImg({ refId, alt }: { refId: string | undefined | null; alt: strin
 
 export default function GiftStudio() {
   const {
-    draft, images, benefits, isPreparing,
+    draft, images, benefits, isPreparing, isParsing,
     setProductId, setGiftName, setGiftValueRM, setGiftImageRef, setLang,
-    addTier, removeTier, updateTier,
+    setOfferText, setTiers, setParsing,
     setBenefits, setPreparing, patchImage,
   } = useGiftStudioStore()
 
@@ -64,6 +66,10 @@ export default function GiftStudio() {
   const selectedProduct = draft.productId ? getProductById(draft.productId) : undefined
   const productImages = (selectedProduct?.productImages ?? []).filter((r) => !!r && r.trim() !== '')
 
+  const L = giftLabels(draft.lang)
+  // Tiers còn "tươi" khi đã parse đúng ô dán + ngôn ngữ hiện tại.
+  const tiersFresh = draft.tiers.length > 0 && draft.tiersSig === offerSig(draft.offerText, draft.lang)
+
   const missing: string[] = []
   if (!geminiApiKey) missing.push('Gemini API key (Cài đặt)')
   if (!kieApiKey) missing.push('KIE API key (Cài đặt)')
@@ -72,11 +78,9 @@ export default function GiftStudio() {
   if (!draft.giftName.trim()) missing.push('Tên quà')
   if (draft.giftValueRM == null) missing.push('Giá trị 1 món quà (RM)')
   if (!draft.giftImageRef) missing.push('Ảnh quà')
-  if (draft.tiers.some((t) => !(t.price > 0) || !(t.buyQty >= 1) || !(t.giftQty >= 1))) {
-    missing.push('Mỗi mốc tặng cần giá bán > 0, mua ≥ 1, tặng ≥ 1')
-  }
+  if (!draft.offerText.trim()) missing.push('Dán nội dung offer (mốc tặng)')
+  else if (!tiersFresh) missing.push('Bấm “Phân tích mốc” để AI đọc offer')
   const ready = missing.length === 0
-  const L = giftLabels(draft.lang)
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -91,6 +95,29 @@ export default function GiftStudio() {
     } finally {
       setUploading(false)
     }
+  }
+
+  /** Parse ô dán offer → tiers (AI). Trả về tiers vừa parse. */
+  async function handleParse(): Promise<GiftTier[]> {
+    if (!draft.offerText.trim() || isParsing) return draft.tiers
+    setParsing(true)
+    try {
+      const tiers = await parseOffer({ apiKey: geminiApiKey, offerText: draft.offerText })
+      setTiers(tiers)
+      addToast(`Đã đọc ${tiers.length} mốc tặng.`, 'success')
+      return tiers
+    } catch (err) {
+      addToast(`Phân tích mốc thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error')
+      throw err
+    } finally {
+      setParsing(false)
+    }
+  }
+
+  /** Đảm bảo tiers tươi với ô dán hiện tại (parse nếu stale). */
+  async function ensureTiers(): Promise<GiftTier[]> {
+    if (tiersFresh) return draft.tiers
+    return handleParse()
   }
 
   /** Đảm bảo có benefits đúng với input hiện tại (sinh nếu thiếu/stale). */
@@ -113,7 +140,7 @@ export default function GiftStudio() {
     }
   }
 
-  async function generateOne(kind: GiftImageKind, b: GiftBenefits) {
+  async function generateOne(kind: GiftImageKind, b: GiftBenefits, tiers: GiftTier[]) {
     patchImage(kind, { status: 'generating', error: undefined })
     try {
       const res = await generateGiftImage({
@@ -122,7 +149,7 @@ export default function GiftStudio() {
         product: selectedProduct!,
         giftName: draft.giftName,
         giftValueRM: draft.giftValueRM,
-        tiers: draft.tiers,
+        tiers,
         giftImageRef: draft.giftImageRef!,
         benefits: b,
         lang: draft.lang,
@@ -138,13 +165,14 @@ export default function GiftStudio() {
     if (!ready || busy) return
     setBusy(true)
     try {
+      const tiers = await ensureTiers()
       const b = await ensureBenefits()
       // Tuần tự cho ổn định + tránh spike rate (chỉ 3 ảnh).
       for (const kind of GIFT_IMAGE_KINDS) {
-        await generateOne(kind, b)
+        await generateOne(kind, b, tiers)
       }
     } catch (err) {
-      addToast(`Sinh công dụng quà thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error')
+      addToast(`Tạo ảnh thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error')
     } finally {
       setBusy(false)
     }
@@ -154,10 +182,11 @@ export default function GiftStudio() {
     if (!ready || busy) return
     setBusy(true)
     try {
+      const tiers = await ensureTiers()
       const b = await ensureBenefits()
-      await generateOne(kind, b)
+      await generateOne(kind, b, tiers)
     } catch (err) {
-      addToast(`Sinh công dụng quà thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error')
+      addToast(`Tạo ảnh thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error')
     } finally {
       setBusy(false)
     }
@@ -289,53 +318,53 @@ export default function GiftStudio() {
             </div>
           </div>
 
-          {/* Mốc tặng (tiers) */}
+          {/* Mốc tặng — dán offer, AI tự đọc */}
           <div className="rounded-xl border border-black/10 bg-white p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <label className="text-xs font-semibold text-gray-700">Mốc tặng (combo giá)</label>
-              <button
-                onClick={addTier}
-                disabled={draft.tiers.length >= MAX_GIFT_TIERS}
-                className="flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Plus className="h-3 w-3" /> Thêm mốc
-              </button>
-            </div>
-            <div className="space-y-3">
-              {draft.tiers.map((t, i) => (
-                <div key={t.id} className="rounded-lg border border-black/10 bg-gray-50 p-2.5">
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-gray-500">{L.packageBadge(i + 1)}</span>
-                    <span className="text-[10px] font-medium text-rose-500">{L.tierDealLabel(t.buyQty, t.giftQty)}</span>
-                    {draft.tiers.length > 1 && (
-                      <button
-                        onClick={() => removeTier(t.id)}
-                        title="Xoá mốc"
-                        className="rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-red-500"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <TierField label="Mua (SP)" value={t.buyQty} min={1}
-                      onChange={(v) => updateTier(t.id, { buyQty: v ?? 1 })} />
-                    <TierField label="Tặng (quà)" value={t.giftQty} min={1}
-                      onChange={(v) => updateTier(t.id, { giftQty: v ?? 1 })} />
-                    <TierField label="Giá bán (RM)" value={t.price} min={0}
-                      onChange={(v) => updateTier(t.id, { price: v ?? 0 })} />
-                    <TierField label="Giá gốc (RM, optional)" value={t.originalPrice} min={0} allowEmpty
-                      onChange={(v) => updateTier(t.id, { originalPrice: v })} />
-                  </div>
-                  {t.originalPrice != null && t.originalPrice > t.price && (
-                    <div className="mt-1.5 text-[10px] font-semibold text-emerald-600">
-                      {L.savingsLabel(Math.round(t.originalPrice - t.price))}
-                    </div>
-                  )}
+            <label className="mb-1 block text-xs font-semibold text-gray-700">Mốc tặng (dán offer combo)</label>
+            <p className="mb-2 text-[10px] text-gray-400">
+              Dán nguyên offer (bất kỳ ngôn ngữ). AI tự hiểu: mua mấy SP chính · tặng mấy SP chính · tặng mấy quà · giá. Freeship sẽ bỏ qua.
+            </p>
+            <textarea
+              value={draft.offerText}
+              onChange={(e) => setOfferText(e.target.value)}
+              rows={5}
+              placeholder={'VD:\nBELI 1 KOTAK FREE 1 KOTAK: RM59\nBELI 2 KOTAK FREE 2 KOTAK: RM89 + 1 SNACK\nBELI 3 KOTAK FREE 3 KOTAK: RM119 + 2 SNACK'}
+              className="w-full resize-y rounded-lg border border-black/10 bg-white px-3 py-2 text-xs leading-relaxed text-gray-800"
+            />
+            <button
+              onClick={() => { void handleParse() }}
+              disabled={!draft.offerText.trim() || isParsing}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {isParsing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+              {isParsing ? 'Đang đọc offer…' : 'Phân tích mốc'}
+            </button>
+
+            {/* Preview mốc đã parse */}
+            {draft.tiers.length > 0 && (
+              <div className="mt-3 space-y-1.5">
+                <div className="flex items-center gap-1 text-[10px] font-semibold text-gray-500">
+                  {tiersFresh ? 'Mốc AI đã hiểu:' : '⚠ Ô dán đã đổi — bấm phân tích lại:'}
                 </div>
-              ))}
-            </div>
-            <p className="mt-2 text-[10px] text-gray-400">Tối đa {MAX_GIFT_TIERS} mốc. Giá gốc để trống = không hiện JIMAT.</p>
+                {draft.tiers.map((t, i) => {
+                  const p = computeTierPricing(t, draft.giftValueRM)
+                  return (
+                    <div key={i} className="rounded-md border border-black/10 bg-gray-50 px-2 py-1.5 text-[11px]">
+                      <div className="flex items-center justify-between font-semibold text-gray-700">
+                        <span>{L.packageBadge(i + 1)} · {L.mainDealLabel(t.buyMainQty, t.freeMainQty)}</span>
+                        <span className="text-rose-600">RM{t.price}</span>
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-gray-500">
+                        {p.jimat > 0 && <span className="text-emerald-600">{L.savingsLabel(p.jimat)} (gốc RM{p.originalPrice})</span>}
+                        {t.giftQty > 0
+                          ? <span>🎁 {t.giftQty}× {draft.giftName || 'quà'}{p.giftTotalValue > 0 ? ` · ${L.valueLabel(p.giftTotalValue)}` : ''}</span>
+                          : <span className="text-gray-400">không tặng quà</span>}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {/* Readiness + Generate */}
@@ -360,7 +389,7 @@ export default function GiftStudio() {
             }`}
           >
             {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {isPreparing ? 'Đang phân tích quà…' : busy ? 'Đang tạo ảnh…' : `Tạo ${GIFT_IMAGE_KINDS.length} ảnh quà`}
+            {isParsing ? 'Đang đọc offer…' : isPreparing ? 'Đang phân tích quà…' : busy ? 'Đang tạo ảnh…' : `Tạo ${GIFT_IMAGE_KINDS.length} ảnh quà`}
           </button>
         </div>
 
@@ -386,32 +415,6 @@ export default function GiftStudio() {
   )
 }
 
-function TierField(props: {
-  label: string
-  value: number | null
-  min: number
-  allowEmpty?: boolean
-  onChange: (v: number | null) => void
-}) {
-  const { label, value, min, allowEmpty, onChange } = props
-  return (
-    <label className="block">
-      <span className="mb-0.5 block text-[10px] font-medium text-gray-500">{label}</span>
-      <input
-        type="number"
-        min={min}
-        value={value ?? ''}
-        onChange={(e) => {
-          const raw = e.target.value
-          if (raw === '') { onChange(allowEmpty ? null : min); return }
-          onChange(Math.max(min, Math.round(Number(raw))))
-        }}
-        className="w-full rounded-md border border-black/10 bg-white px-2 py-1.5 text-sm text-gray-800"
-      />
-    </label>
-  )
-}
-
 function GiftCell(props: {
   kind: GiftImageKind
   status: string
@@ -423,7 +426,7 @@ function GiftCell(props: {
 }) {
   const { kind, status, assetRef, error, busy, onRegenerate, onDownload } = props
   const url = useAssetUrl(assetRef)
-  const aspect = kind === 'banner' ? 'aspect-[3/2]' : kind === 'info' ? 'aspect-[2/3]' : 'aspect-square'
+  const aspect = kind === 'banner' ? 'aspect-[3/2]' : 'aspect-[2/3]' // combo + info dọc 9:16/2:3
 
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border border-black/10 bg-white">

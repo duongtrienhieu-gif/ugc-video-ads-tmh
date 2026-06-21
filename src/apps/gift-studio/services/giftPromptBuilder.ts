@@ -12,6 +12,7 @@
 
 import type { Product } from '../../../stores/types'
 import type { Market, GiftBenefits, GiftImageKind, GiftTier } from '../types'
+import { computeTierPricing } from '../types'
 import { giftLabels, TIER_CORNER_BADGES, TIER_COLORS } from '../labels'
 
 export interface BuildGiftPromptParams {
@@ -82,11 +83,6 @@ function salesCopyBlock(b: GiftBenefits, valueText: string): string {
     lines.map((l) => `  - ${l}`).join('\n')
 }
 
-function tierSavings(t: GiftTier): number | null {
-  if (t.originalPrice != null && t.originalPrice > t.price) return Math.round(t.originalPrice - t.price)
-  return null
-}
-
 export function buildGiftPrompt(params: BuildGiftPromptParams): string {
   const { kind, product, giftName, giftValueRM, tiers, benefits, lang } = params
   const L = giftLabels(lang)
@@ -98,7 +94,7 @@ export function buildGiftPrompt(params: BuildGiftPromptParams): string {
 
   if (kind === 'banner') {
     const dealLine = primary
-      ? `Primary deal: ${quote(L.tierDealLabel(primary.buyQty, primary.giftQty))} — price ${quote(`RM${primary.price}`)}`
+      ? `Primary deal: ${quote(L.mainDealLabel(primary.buyMainQty, primary.freeMainQty))} — price ${quote(`RM${primary.price}`)}`
       : ''
     const texts = [
       `Big top headline: ${quote(L.bannerCta)}`,
@@ -119,18 +115,21 @@ export function buildGiftPrompt(params: BuildGiftPromptParams): string {
 
   if (kind === 'combo') {
     const dealsList = tiers.map((t, i) => {
-      const sav = tierSavings(t)
+      const p = computeTierPricing(t, giftValueRM)
       const corner = TIER_CORNER_BADGES[i] || ''
       const color = TIER_COLORS[i] || TIER_COLORS[TIER_COLORS.length - 1]
+      const giftBlock = t.giftQty > 0
+        ? `FREE GIFT=${quote(`${t.giftQty}× ${giftName.trim()}`)} with tag ${quote(L.freeGiftBadge)}${p.giftTotalValue > 0 ? ` + value ${quote(L.valueLabel(p.giftTotalValue))}` : ''}`
+        : `NO bonus gift in this tier (do NOT show a gift here)`
       const parts = [
         `Tier ${i + 1}: package badge=${quote(L.packageBadge(i + 1))}`,
         `color theme=${color}${corner ? `, corner badge=${quote(corner)}` : ''}`,
-        `deal label=${quote(L.tierDealLabel(t.buyQty, t.giftQty))}`,
-        `product mockup=${t.buyQty} unit(s)`,
-        `price=${quote(`RM${t.price}`)}`,
-        t.originalPrice != null && t.originalPrice > t.price ? `original price (strikethrough)=${quote(`RM${t.originalPrice}`)}` : '',
-        sav != null ? `savings=${quote(L.savingsLabel(sav))}` : '',
-        `FREE GIFT=${quote(`${t.giftQty}× ${giftName.trim()}`)} with tag ${quote(L.freeGiftBadge)}`,
+        `main deal label=${quote(L.mainDealLabel(t.buyMainQty, t.freeMainQty))}`,
+        `product mockup=${p.totalMainUnits} unit(s) (buy ${t.buyMainQty} + free ${t.freeMainQty})`,
+        `sale price=${quote(`RM${t.price}`)}`,
+        p.jimat > 0 ? `original price (strikethrough)=${quote(`RM${p.originalPrice}`)}` : '',
+        p.jimat > 0 ? `savings=${quote(L.savingsLabel(p.jimat))}` : '',
+        giftBlock,
       ].filter(Boolean)
       return '  ' + parts.join(', ')
     }).join('\n')
