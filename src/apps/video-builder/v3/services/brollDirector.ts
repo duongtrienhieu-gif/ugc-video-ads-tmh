@@ -1348,11 +1348,17 @@ OUTPUT strict JSON only (no markdown fences):
   // audited). With an offer in the brief → a special-deal flavour; otherwise → a sold-fast
   // urgency flavour matching the buy-push line. No face, no on-screen price.
   const penult = scenes[scenes.length - 2]
-  const ctaCue = /(mua|ch[oố]t|gi[oỏ] h[aà]ng|link|[uư]u đãi|t[aặ]ng|sale|h[eế]t h[aà]ng|h[oố]t|s[oở] h[uữ]u|grab|beli|checkout|order|jom|cart)/i
+  // P6ay — ctaCue now covers MS/EN deal+gift terms too (was VN-biased → a MS gift line
+  // "lagi best dapat free Gel…" missed the lock → the gift cut kept Gemini's hand concept
+  // + drifted the gift from its NAME). Added: free/percuma/dapat/jimat/hadiah/bonus/gift/set/combo.
+  const ctaCue = /(mua|ch[oố]t|gi[oỏ] h[aà]ng|link|[uư]u đãi|t[aặ]ng|sale|h[eế]t h[aà]ng|h[oố]t|s[oở] h[uữ]u|grab|beli|checkout|order|jom|cart|free|percuma|dapat|jimat|hadiah|bonus|gift|combo|\bset\b)/i
   // Phase A — how many product units the SPOKEN offer implies (read from the script's CTA
   // block, NOT a field). "mua 1 được thêm 2" → 3 → the penult hero shows 3 real units.
   const offerQty = parseOfferQty(params.script.blocks.find((b) => b.id === 'cta')?.text ?? '')
-  if (penult && penult.role === 'broll' && ctaCue.test(penult.quote ?? '')) {
+  // P6ay — when a GIFT is on, the cut just before the endorsement IS the gift/offer beat (the
+  // script reorder puts the gift line second-to-last). Lock it REGARDLESS of ctaCue so a MS/EN
+  // wording never slips the lock (the #14 drift). Otherwise still gate on the (expanded) cue.
+  if (penult && penult.role === 'broll' && (giftOn || ctaCue.test(penult.quote ?? ''))) {
     // FIX2 — the offer cut is a PURE product close-up: NO hands, NO action. product_closeup
     // routes to the PRODUCT_CLOSEUP preset (renderer forces product-only / no hands) while STILL
     // honouring the free conceptPrompt below (N units + gift). product_action grew a stray hand.
@@ -1371,7 +1377,7 @@ OUTPUT strict JSON only (no markdown fences):
       // Takes priority over deal / urgency flavours. Distinct objects, hard product lock.
       penult.giftRef = params.gift!.imageRef
       penult.conceptPrompt =
-        `PRODUCT-HERO shot — NO person, NO face: ${units} together with the FREE GIFT, arranged side by side on a clean premium surface in good light — a "buy now, get this free too" bundle that looks worth grabbing. CRITICAL: the product unit(s) and the gift are SEPARATE, DISTINCT objects placed apart — do NOT merge, blend, swap, or restyle any of them; keep each exactly as in its reference.${sameUnitsClause} No on-screen price or numbers.`
+        `PRODUCT-HERO close-up — NO person, NO hands, NO action: ${units} together with the FREE GIFT, arranged side by side STATIC on a clean premium surface in good light — a "buy now, get this free too" bundle worth grabbing. The FREE GIFT must be rendered EXACTLY as its reference image — do NOT invent it, do NOT render it from its name/text, do NOT redesign its packaging. CRITICAL: the product unit(s) and the gift are SEPARATE, DISTINCT objects placed apart — never merge, blend, swap, or restyle any of them; keep each exactly as in its reference.${sameUnitsClause} No on-screen price or numbers.`
     } else if (offerQty > 1) {
       // Offer with a real quantity, no gift → show the true number of units (the deal).
       penult.conceptPrompt =
