@@ -94,10 +94,13 @@ export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<Rebr
     `7) nutrition: a compact TYPICAL Nutrition Information per 100g for this kind of product (Energy kcal, Protein, Fat, Carbohydrate, Sugars, Dietary Fibre, Sodium) as one short multi-line string. These are ESTIMATES for layout — the seller will verify.\n` +
     `RULES: Do NOT invent certifications (Halal/KKM/FDA/GMP) or fake claims. Keep it concise + believable. Output ONLY JSON.`
 
+  // Seed ngẫu nhiên mỗi lần bấm → 3 tên brand KHÁC HẲN lần trước.
+  const seed = Math.random().toString(36).slice(2, 8)
   const userText =
     `Original product name: "${productName.trim()}".\n` +
     (productContext ? `Product fields (CONTEXT to understand the product — do NOT copy verbatim):\n${productContext}\n` : '') +
-    `Understand the product from the photos + fields, then return the rebrand identity JSON in ${langName} with CONCISE label copy (only what's necessary).`
+    `Understand the product from the photos + fields, then return the rebrand identity JSON in ${langName} with CONCISE label copy (only what's necessary).\n` +
+    `Variation seed: ${seed} — propose 3 FRESH, creative brand names that are DIFFERENT from typical/previous suggestions.`
 
   const raw = await directGeminiVision({
     apiKey,
@@ -106,6 +109,7 @@ export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<Rebr
     responseMimeType: 'application/json',
     responseSchema: SCHEMA,
     thinkingBudget: 0,
+    temperature: 0.9,
     maxOutputTokens: 1536,
   })
 
