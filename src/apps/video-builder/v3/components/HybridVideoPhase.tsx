@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Loader2, Wand2, RotateCcw, AlertCircle, Sparkles, Mic, User, Film, Play, ChevronRight,
-  Edit3, Save, X, Pause, Volume2,
+  Edit3, Save, X, Pause, Volume2, Image as ImageIcon,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
@@ -281,6 +281,42 @@ export default function HybridVideoPhase(_props: Props) {
       ASSETS_GEN_ACTIVE = false          // P5h — live gen done (success or fail)
       setAssetsBusy(false)
       setAssetsGenStartedAt(undefined)   // clear persisted lock (also runs if unmounted)
+    }
+  }
+
+  // FIX C2 — regenerate ONLY the keyframe image(s) (KF-A + KF-B), REUSING the already-paid voice
+  // (no new TTS, timing/alignment unchanged). For when the face/hands drift but the voice is fine.
+  // Does NOT touch rendered clips — warns the user to re-render lips cuts so they match the new face.
+  const makeKeyframeOnly = async (): Promise<void> => {
+    if (!script) { addToast('Chưa có kịch bản', 'error'); return }
+    if (!kieApiKey) { addToast('Thiếu KIE key', 'error'); return }
+    const avatar = state.inputs.avatar
+    if (!avatar) { addToast('Cần chọn Avatar ở Bước 1', 'error'); return }
+    const h = state.hybrid
+    if (!h.voiceRef) { addToast('Chưa có giọng — bấm "Tạo lại" (giọng + mặt) trước', 'info'); return }
+    if (assetsGenRunning) { addToast('Đang tạo rồi — đợi xong nhé', 'info'); return }
+    setAssetsBusy(true); setError('')
+    ASSETS_GEN_ACTIVE = true
+    setAssetsGenStartedAt(Date.now())
+    try {
+      const voiceCategory = state.scriptBrain.voiceCategory ?? matchVoiceForAvatar(avatar, state.scriptBrain.angle)
+      const kf = await renderCreatorKeyframe({
+        kieApiKey, elevenLabsApiKey: elevenLabsKey, config: state.creatorVideoConfig,
+        script, voiceCategory, voiceId: state.inputs.voiceId,
+        lang: state.scriptBrain.outputLang,
+        avatar, product: state.inputs.product, onStageUpdate: () => {},
+        withProductKeyframe: state.hybrid.lipsHoldProduct !== false && !!state.inputs.product,
+        // Reuse the existing voice → keyframe-only, no TTS charge, timeline unchanged.
+        reuseVoiceRef: h.voiceRef, reuseVoiceDurationSec: h.voiceDurationSec, reuseVoiceId: h.voiceId, reuseVoiceAlignment: h.voiceAlignment,
+      })
+      setHybridAssets({ keyframeRef: kf.keyframeRef, voiceRef: h.voiceRef, voiceDurationSec: h.voiceDurationSec ?? 0, voiceAlignment: h.voiceAlignment, voiceId: h.voiceId ?? '', keyframeProductRef: kf.keyframeProductRef })
+      addToast('✓ Đã tạo lại ảnh khuôn mặt — render lại các cảnh lips để khớp mặt mới', 'success')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e); setError(msg); addToast(`Tạo lại ảnh lỗi: ${msg.slice(0, 120)}`, 'error')
+    } finally {
+      ASSETS_GEN_ACTIVE = false
+      setAssetsBusy(false)
+      setAssetsGenStartedAt(undefined)
     }
   }
 
@@ -630,7 +666,7 @@ export default function HybridVideoPhase(_props: Props) {
           <AssetsBar keyframeRef={hybrid.keyframeRef} keyframeProductRef={hybrid.keyframeProductRef}
             voiceRef={hybrid.voiceRef} voiceDurationSec={hybrid.voiceDurationSec} busy={busy}
             lipsHoldProduct={hybrid.lipsHoldProduct !== false} hasProduct={!!state.inputs.product}
-            onRegen={makeVoice} onToggleLips={setHybridLipsHoldProduct} />
+            onRegen={makeVoice} onRegenKeyframe={makeKeyframeOnly} onToggleLips={setHybridLipsHoldProduct} />
         ) : scenes.length > 0 ? (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[12px] text-amber-800">
             Chưa có giọng — bấm <strong>"Tạo giọng + mặt"</strong> để tạo khuôn mặt + giọng thật, rồi bấm <strong>"Đạo diễn"</strong> chia cảnh theo nhịp giọng.
@@ -694,10 +730,10 @@ export default function HybridVideoPhase(_props: Props) {
 }
 
 // ── Creator assets bar — face thumbnail + voice audio player ──────────────────
-function AssetsBar({ keyframeRef, keyframeProductRef, voiceRef, voiceDurationSec, busy, lipsHoldProduct, hasProduct, onRegen, onToggleLips }: {
+function AssetsBar({ keyframeRef, keyframeProductRef, voiceRef, voiceDurationSec, busy, lipsHoldProduct, hasProduct, onRegen, onRegenKeyframe, onToggleLips }: {
   keyframeRef?: string; keyframeProductRef?: string; voiceRef?: string; voiceDurationSec?: number
   busy: boolean; lipsHoldProduct: boolean; hasProduct: boolean
-  onRegen: () => void; onToggleLips: (on: boolean) => void
+  onRegen: () => void; onRegenKeyframe: () => void; onToggleLips: (on: boolean) => void
 }) {
   const faceUrl = useAssetUrl(keyframeRef ?? undefined)
   const prodFaceUrl = useAssetUrl(keyframeProductRef ?? undefined)   // P6av — KF-B (cầm sản phẩm)
@@ -728,10 +764,18 @@ function AssetsBar({ keyframeRef, keyframeProductRef, voiceRef, voiceDurationSec
           </label>
         )}
       </div>
-      <button onClick={onRegen} disabled={busy}
-        className="flex shrink-0 items-center gap-1 rounded-lg border border-emerald-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">
-        <RotateCcw className="h-3 w-3" /> Tạo lại
-      </button>
+      <div className="flex shrink-0 flex-col gap-1">
+        <button onClick={onRegen} disabled={busy}
+          className="flex items-center gap-1 rounded-lg border border-emerald-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+          title="Tạo lại CẢ giọng + ảnh khuôn mặt (làm lại từ đầu)">
+          <RotateCcw className="h-3 w-3" /> Tạo lại
+        </button>
+        <button onClick={onRegenKeyframe} disabled={busy || !keyframeRef}
+          className="flex items-center gap-1 rounded-lg border border-emerald-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+          title="Chỉ tạo lại ẢNH khuôn mặt (giữ nguyên giọng) — dùng khi mặt/tay bị lỗi">
+          <ImageIcon className="h-3 w-3" /> Tạo lại ảnh
+        </button>
+      </div>
     </div>
   )
 }

@@ -439,6 +439,18 @@ function buildInsertKeyframePrompt(
     'no morphing, no warping, no extra or vanishing limbs/fingers; the product keeps a STABLE ' +
     'shape, size and identity throughout (it never melts, bends or changes form).',
   )
+  // FIX B — PRODUCT-IN-USE coherence (demo cuts keep hands BY DESIGN, but must not drift). When the
+  // product is applied to / used on the body, lock it to the SAME body site + one anatomically-sane
+  // hand + a stable single human, so "tay bôi lên người/mặt" never renders chaotic / wrong-logic.
+  if (presetId === 'PRODUCT_IN_ACTION') {
+    paragraphs.push(
+      'PRODUCT-IN-USE COHERENCE: if the product is applied to / rubbed on / used on a body part, apply ' +
+      'it to the EXACT body area the action describes, on the SAME spot the whole shot — ONE hand, five ' +
+      'correct fingers, a natural grip, one realistic gesture (no second hand appearing, no hand passing ' +
+      'through the body). The person stays ONE consistent human: face, skin tone, hair and proportions do ' +
+      'NOT morph, duplicate, smear or distort, and NO second face appears. Realistic human anatomy only.',
+    )
+  }
 
   return paragraphs.join('\n\n')
 }

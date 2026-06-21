@@ -339,11 +339,13 @@ export async function renderCreatorKeyframe(
   let voiceId: string
   let voiceAlignment: VoiceAlignment | undefined
 
-  if (params.reuseVoiceRef && params.reuseVoiceId) {
-    // Regenerate keyframe ONLY — reuse the already-paid voice (no new TTS cost).
+  if (params.reuseVoiceRef) {
+    // Regenerate keyframe ONLY — reuse the already-paid voice (no new TTS cost). Guard on the
+    // voice REF alone: the default voice is stored with an empty voiceId (''), so requiring
+    // reuseVoiceId here would wrongly fall through to a new TTS charge. voiceId is metadata only.
     voiceRef = params.reuseVoiceRef
     voiceDurationSec = params.reuseVoiceDurationSec ?? 0
-    voiceId = params.reuseVoiceId
+    voiceId = params.reuseVoiceId ?? params.voiceId ?? ''
     voiceAlignment = params.reuseVoiceAlignment
   } else {
     // ── STAGE 1: TTS via ElevenLabs (same routine voice-first uses at Step 2) ──
@@ -442,7 +444,10 @@ export async function renderCreatorKeyframe(
           `camera while talking (mouth slightly open, natural, friendly). The product is the EXACT ` +
           `product from reference #2 — same packaging, colour, label; do NOT redesign or swap it. ` +
           `Render-safe: product held steady against the body, NOT up near the face, NOT rotating, no ` +
-          `floating object. Vertical 9:16 authentic UGC photo, identical lighting to reference #1.`
+          `floating object. HANDS anatomically correct — exactly five fingers per hand, natural relaxed ` +
+          `grip, fingers do NOT pass through, merge with, or bend around the product; no extra, missing, ` +
+          `or malformed fingers/thumbs. Exactly ONE product in frame (do NOT duplicate or add a second). ` +
+          `Vertical 9:16 authentic UGC photo, identical lighting to reference #1.`
         let urlB: string
         try {
           urlB = await generateGpt4oImageFast({ apiKey: params.kieApiKey, prompt: promptB, filesUrl: refs2, size: '2:3', softTimeoutMs: 60_000, attemptTimeoutMs: 90_000, maxAttempts: 2, signal: params.signal })

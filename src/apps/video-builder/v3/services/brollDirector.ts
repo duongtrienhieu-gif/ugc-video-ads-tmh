@@ -29,6 +29,7 @@ import type { Product } from '../../../../stores/types'
 import { buildProductContextBlock, detectProductNiche } from './insertSuggester'
 import { computeQuoteTimestampFromAlignment, computeQuoteTimestamp } from './insertTimingEngine'
 import { buildShapeDirectorHint } from './scriptShapes'
+import { estimateReadDurationSec } from './voiceTimingEstimator'
 
 // ── Output types ────────────────────────────────────────────────────────────
 
@@ -1380,6 +1381,34 @@ OUTPUT strict JSON only (no markdown fences):
         ? 'PRODUCT-HERO close-up — NO person, NO hands, NO action: the product sits ALONE, static and centred + premium on a clean surface in good light, framed as a special DEAL / offer moment. Make it look worth grabbing. No on-screen price or numbers.'
         : 'PRODUCT-HERO close-up — NO person, NO hands, NO action: the product sits ALONE, static and premium on a clean surface in good light — a "selling fast, last one, get it now" urgency feel from the framing alone. No on-screen text.'
     }
+
+    // D2' — if the offer beat is TOO LONG for ONE i2v clip (~7.5s spoken), one cut would have to
+    // slow-mo to fill the slot. Instead split it into TWO DISTINCT closing cuts (different framing
+    // AND different background) so two real clips cover the full voice — no slow-mo, no clone, and
+    // the script is NEVER truncated. Cut A = the combo WIDE on background A; Cut B = a MACRO detail
+    // (the gift if present, else the product) on a DIFFERENT background B. Both no-hands
+    // product_closeup, shotIntent='offer' (atomic + dedupe-protected). Endorsement (last) untouched.
+    if (penult && estimateReadDurationSec(penult.quote, params.lang) > 7.5) {
+      const [qA, qB] = splitQuoteByParts(penult.quote, 2)
+      const unitsA = offerQty > 1 ? `${offerQty} IDENTICAL units of the product` : 'the product'
+      const sameUnitsA = offerQty > 1 ? ` Render ALL ${offerQty} units IDENTICAL to the product reference.` : ''
+      // Cut A — WIDE combo, BACKGROUND A (bright marble / stone countertop).
+      penult.quote = qA
+      penult.conceptPrompt = giftOn
+        ? `PRODUCT-HERO WIDE shot — NO person, NO hands: ${unitsA} together with the FREE GIFT, arranged on a clean BRIGHT MARBLE / STONE countertop in soft daylight (BACKGROUND A). Distinct objects placed apart — do NOT merge, blend, swap, or restyle any of them; keep each EXACTLY as its reference.${sameUnitsA} No on-screen price or numbers.`
+        : `PRODUCT-HERO WIDE shot — NO person, NO hands: ${unitsA} arranged on a clean BRIGHT MARBLE / STONE countertop in soft daylight (BACKGROUND A) — a generous deal worth grabbing.${sameUnitsA} No on-screen price or numbers.`
+      // Cut B — MACRO detail, a DIFFERENT angle + a DIFFERENT background B (warm wood / linen).
+      const cutB: BrollScene = {
+        role: 'broll', kind: 'product_closeup', cameraFraming: 'hands_noface', shotIntent: 'offer',
+        quote: qB, durationSec: penult.durationSec,
+        giftRef: giftOn ? params.gift!.imageRef : undefined,
+        conceptPrompt: giftOn
+          ? 'MACRO close-up — NO person, NO hands, NO action: a tight DETAIL shot of the FREE GIFT alone, a DIFFERENT angle, resting STATIC on a WARM WOODEN / LINEN surface (BACKGROUND B — clearly different from the previous WIDE cut). Reproduce the gift EXACTLY as its reference (same form / colour / label); if it is loose / has no packaging keep it loose — do NOT invent a box, label, or text. No on-screen price or numbers.'
+          : 'MACRO close-up — NO person, NO hands, NO action: a tight DETAIL shot of the product, a DIFFERENT angle, resting STATIC on a WARM WOODEN / LINEN surface (BACKGROUND B — clearly different from the previous WIDE cut). The product stays EXACTLY as its reference (same colour, shape, label). No on-screen price or numbers.',
+      }
+      // Insert Cut B right AFTER the penult (i.e., directly BEFORE the last endorsement cut).
+      scenes.splice(scenes.length - 1, 0, cutB)
+    }
   }
 
   // P4e Layer 2 — fill any scene the director left with an empty / vague
@@ -1528,8 +1557,21 @@ function sanitizeScenes(raw: RawScene[] | undefined): BrollScene[] {
       const onBody = APPLIES_PRODUCT_TO_BODY_RE.test(cp)
       scene.cameraFraming = wantsNoFace && role === 'broll' && scene.kind !== 'concept' && !onBody ? 'hands_noface' : 'creator'
     }
-    // P6m (P1) — capture Gemini's declared intent (display/observe only; no decision uses it yet).
+    // P6m (P1) — capture Gemini's declared intent.
     if (SHOT_INTENTS.includes(r.shotIntent as ShotIntent)) scene.shotIntent = r.shotIntent as ShotIntent
+    // FIX A — a CLEAN-MACRO intent must render HANDS-FREE. The renderer keys hands off `kind`
+    // (product_closeup = no hands, product_action = hands), but Gemini sometimes tags a spec/
+    // detail line shotIntent='product_macro' while leaving kind='product_action' (or the L1513
+    // default) → the cut grows a stray hand (same class as the gift-offer bug). Reconcile here:
+    // a product_macro broll that is NOT an on-body application → force product_closeup + no-hands.
+    if (
+      scene.role === 'broll' && scene.shotIntent === 'product_macro' &&
+      scene.kind !== 'concept' && scene.kind !== 'product_closeup' &&
+      !APPLIES_PRODUCT_TO_BODY_RE.test(scene.conceptPrompt ?? '')
+    ) {
+      scene.kind = 'product_closeup'
+      scene.cameraFraming = 'hands_noface'
+    }
     scene.reason = typeof r.reason === 'string' ? r.reason : undefined
     out.push(scene)
   }
