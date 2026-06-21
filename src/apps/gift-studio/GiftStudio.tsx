@@ -391,7 +391,7 @@ export default function GiftStudio({ embedded = false }: { embedded?: boolean })
             }`}
           >
             {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {isParsing ? 'Đang đọc offer…' : isPreparing ? 'Đang phân tích quà…' : busy ? 'Đang tạo ảnh…' : `Tạo ${GIFT_IMAGE_KINDS.length} ảnh quà`}
+            {isParsing ? 'Đang đọc offer…' : isPreparing ? 'Đang phân tích quà…' : busy ? 'Đang tạo ảnh…' : `Tạo ${GIFT_IMAGE_KINDS.length} ảnh quà · ~${GIFT_TOTAL_CREDITS} credit`}
           </button>
         </div>
 

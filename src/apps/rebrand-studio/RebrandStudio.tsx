@@ -32,13 +32,13 @@ const KIND_LABEL: Record<RebrandImageKind, string> = {
   'label-front': 'Nhãn mặt trước (in)',
   'label-back': 'Nhãn mặt sau (in)',
   'product': 'Sản phẩm nhãn mới',
-  'set': 'Hộp + sản phẩm',
+  'set': 'Bao bì + sản phẩm bên trong',
 }
 const KIND_HINT: Record<RebrandImageKind, string> = {
   'label-front': 'AI · tỉ lệ gần kích thước thật',
   'label-back': 'AI · thành phần / HDSD',
   'product': 'AI giữ form, thay nhãn',
-  'set': 'AI · hộp + sản phẩm bên trong',
+  'set': 'AI · đúng 1 bao bì + sản phẩm',
 }
 
 function AssetImg({ refId, alt }: { refId: string | undefined | null; alt: string }) {
@@ -308,7 +308,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
           <button onClick={handleGenerateAll} disabled={!canGenerate || busy}
             className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-colors ${canGenerate && !busy ? 'bg-indigo-500 text-white hover:bg-indigo-600' : 'cursor-not-allowed bg-gray-200 text-gray-400'}`}>
             {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {busy ? 'Đang tạo bộ rebrand…' : '2 · Tạo bộ rebrand (4 ảnh)'}
+            {busy ? 'Đang tạo bộ rebrand…' : `2 · Tạo bộ rebrand · ~${REBRAND_TOTAL_CREDITS} credit`}
           </button>
           <p className="text-[10px] text-gray-400">4 ảnh AI (~{REBRAND_TOTAL_CREDITS} credit): nhãn trước/sau + sản phẩm + hộp. Nhãn tải về đưa bên in (tỉ lệ ~{draft.widthCm ?? '?'}×{draft.heightCm ?? '?'}cm), dán đè mã cũ.</p>
         </div>
@@ -350,15 +350,15 @@ function RebrandCell(props: {
           <button onClick={onRegenerate} disabled={busy} title="Tạo lại" className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-40"><RefreshCw className={`h-3.5 w-3.5 ${status === 'generating' ? 'animate-spin' : ''}`} /></button>
         </div>
       </div>
-      <div className="relative aspect-square w-full bg-gray-50 p-2">
+      <div className="w-full bg-gray-50">
         {status === 'generating' ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-gray-400"><RefreshCw className="h-6 w-6 animate-spin" /><span className="text-xs">Đang tạo…</span></div>
+          <div className="flex min-h-[180px] w-full flex-col items-center justify-center gap-2 text-gray-400"><RefreshCw className="h-6 w-6 animate-spin" /><span className="text-xs">Đang tạo…</span></div>
         ) : status === 'failed' ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-1 p-3 text-center text-red-400"><AlertCircle className="h-6 w-6" /><span className="text-[11px]">{error ?? 'Lỗi'}</span></div>
+          <div className="flex min-h-[180px] w-full flex-col items-center justify-center gap-1 p-3 text-center text-red-400"><AlertCircle className="h-6 w-6" /><span className="text-[11px]">{error ?? 'Lỗi'}</span></div>
         ) : url ? (
-          <AssetImg refId={assetRef} alt={KIND_LABEL[kind]} />
+          <img src={url} alt={KIND_LABEL[kind]} className="block h-auto w-full" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-xs text-gray-300">Chưa có ảnh</div>
+          <div className="flex min-h-[180px] w-full items-center justify-center text-xs text-gray-300">Chưa có ảnh</div>
         )}
       </div>
     </div>

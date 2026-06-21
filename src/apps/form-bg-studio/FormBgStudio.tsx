@@ -279,7 +279,7 @@ export default function FormBgStudio({ embedded = false }: { embedded?: boolean 
             }`}
           >
             {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {isAnalyzing ? 'Đang phân tích sản phẩm…' : busy ? 'Đang tạo nền…' : `Tạo ${FORM_BG_VARIANTS} biến thể nền`}
+            {isAnalyzing ? 'Đang phân tích sản phẩm…' : busy ? 'Đang tạo nền…' : `Tạo ${FORM_BG_VARIANTS} biến thể nền · ~${FORM_BG_TOTAL_CREDITS} credit`}
           </button>
           <p className="text-[10px] text-gray-400">Mỗi biến thể = 1 ảnh dọc (header + dải FOMO chừa ô đồng hồ + khu form trống + footer). Anh cắt header/footer, set nền section = hex báo ở trên, nhét đồng hồ + form vào 2 ô trống.</p>
         </div>

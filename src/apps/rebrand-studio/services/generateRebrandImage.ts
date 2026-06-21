@@ -88,8 +88,9 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
   } else {
     size = '1:1'
     prompt =
-      `TASK: A retail SET shot — the re-branded ${identity.productType} standing NEXT TO its matching retail BOX/packaging (same new brand, consistent design), the actual product item visible. Premium e-commerce/unboxing look, soft background. ` +
-      `FORM LOCK: keep the EXACT form from the reference (${identity.productForm}); only replace branding. ${brandLock}`
+      `TASK: A retail packshot of the re-branded ${identity.productType}: show EXACTLY ONE packaging — the SAME single ${identity.productForm} as the reference — together with the ACTUAL product item visible (spilling out of the open pack, or a small portion on a plate beside it). ` +
+      `STRICT: do NOT add any second/extra packaging; do NOT invent a box if the real packaging is a pouch (or vice-versa). Only the real packaging form + the real product. Premium e-commerce look, soft neutral background. ` +
+      `FORM LOCK: exactly one packaging matching the reference (${identity.productForm}); only replace branding. ${brandLock}`
   }
 
   if (typeof console !== 'undefined') {
