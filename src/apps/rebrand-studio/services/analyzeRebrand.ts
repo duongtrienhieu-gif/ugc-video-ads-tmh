@@ -89,7 +89,7 @@ export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<Rebr
       ? `IMPORTANT: the FIRST ${nUploaded} photo(s) are the seller's ACTUAL packaging — they DECIDE the real packaging FORM/shape (box/pouch/jar/bottle/sachet). The remaining photos show the real PRODUCT content/item. Reproduce THIS real product, not an imagined one.\n`
       : `The photos show the real product/packaging — reproduce THIS real product, not an imagined one.\n`) +
     `TASKS:\n` +
-    `1) names: propose 3 DISTINCT new brand names suitable for the ${market === 'vi' ? 'Vietnamese' : 'Malaysian (English-label)'} market — short, brandable, pronounceable, fitting the product niche. Avoid obvious existing trademarks.\n` +
+    `1) names: propose 3 DISTINCT new brand names for the ${market === 'vi' ? 'Vietnamese' : 'Malaysian (English-label)'} market. RELEVANCE FIRST — EVERY name MUST clearly relate to THIS product: its main ingredient (the actual fruit you see, e.g. apricot), its category/texture (dried snack, chewy, sweet) OR its core benefit. Do NOT use abstract words unrelated to the product (no random "Stone/Bliss/Burst/Kiss/Glow" unless genuinely tied to the product). Use 3 angles: (a) ingredient-led, (b) benefit-led, (c) evocative but ON-THEME. Short, brandable, pronounceable; avoid obvious existing trademarks.\n` +
     `2) palette: extract the colour scheme so the rebrand keeps a similar RICH look. Hex: bg, primary, accent, onColor, AND colors = 5-6 dominant hex colours sampled from the original (sky/background tones, brand colour, product colour, leaf/decoration, neutrals) — capture the real richness, not just 2 colours.\n` +
     `   vibe: one sentence (ENGLISH) describing the original's overall LOOK & FEEL — background scene/style, mood, and decorative motifs (e.g. "illustrated nature scene: teal sky gradient, fruit branch, distant mountains, warm oriental wellness mood").\n` +
     `3) productForm: short ENGLISH description of the REAL physical form taken from the packaging photo(s) (e.g. "stand-up pouch", "folding carton box", "round jar", "squeeze tube") — generation must preserve THIS form.\n` +
@@ -105,7 +105,7 @@ export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<Rebr
     `Original product name: "${productName.trim()}".\n` +
     (productContext ? `Product fields (CONTEXT to understand the product — do NOT copy verbatim):\n${productContext}\n` : '') +
     `Understand the product from the photos + fields, then return the rebrand identity JSON in ${langName} with CONCISE label copy (only what's necessary).\n` +
-    `Variation seed: ${seed} — propose 3 FRESH, creative brand names that are DIFFERENT from typical/previous suggestions.`
+    `Variation seed: ${seed} — make the 3 names fresh & different each time, but EVERY name must still clearly read as THIS product (its fruit / category / benefit), never generic or off-topic.`
 
   const raw = await directGeminiVision({
     apiKey,
@@ -114,7 +114,7 @@ export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<Rebr
     responseMimeType: 'application/json',
     responseSchema: SCHEMA,
     thinkingBudget: 0,
-    temperature: 0.9,
+    temperature: 0.8,
     maxOutputTokens: 1536,
   })
 
