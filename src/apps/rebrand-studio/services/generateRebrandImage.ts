@@ -52,12 +52,13 @@ function pickLabelSize(widthCm?: number | null, heightCm?: number | null): Gpt4o
 
 export async function generateRebrandImage(params: GenerateRebrandImageParams): Promise<{ assetRef: string; prompt: string }> {
   const { kind, identity, chosenName } = params
-  const refUrls = await resolveUrls(params.originalImageRefs, 3)
+  const refUrls = await resolveUrls(params.originalImageRefs, 4)
   if (refUrls.length === 0) throw new Error('Cần ít nhất 1 ảnh gốc hợp lệ.')
   const langName = labelLangName(identity.market)
   const P = identity.palette
 
   const brandLock =
+    `USE THE REAL PRODUCT shown in the reference photos (the actual item + its packaging form ${identity.productForm}). Do NOT invent a different product or packaging. ` +
     `NEW BRAND: "${chosenName}". Render "${chosenName}" large, clean and spelled EXACTLY. ` +
     `Colour scheme similar to the original: background ${P.bg}, primary ${P.primary}, accent ${P.accent}. ` +
     `Label text language: ${langName}. Do NOT show any old brand name. Do NOT invent certification badges (Halal/KKM/FDA). Crisp, professional, readable.`

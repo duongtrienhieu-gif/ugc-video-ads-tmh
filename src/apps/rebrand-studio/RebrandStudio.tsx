@@ -63,14 +63,34 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
   const [busy, setBusy] = useState(false)
 
   const selectedProduct = draft.productId ? getProductById(draft.productId) : undefined
-  const identityFresh = !!identity && identity.sig === rebrandSig(draft)
+  // Reference = ẢNH UPLOAD (quyết định FORM bao bì thật) + 4 ẢNH BANK (nội dung/
+  // sản phẩm thật). Upload đứng TRƯỚC để form bám bao bì user cung cấp. AI đọc cả
+  // cụm → không bịa.
+  const bankImages = (selectedProduct?.productImages ?? []).filter((r) => !!r && r.trim() !== '')
+  const sourceRefs = Array.from(new Set([...draft.originalImageRefs, ...bankImages]))
+
+  // Gom MỌI field sản phẩm cho AI đọc hiểu (không chỉ tên).
+  const productContext = selectedProduct
+    ? [
+        `Name: ${selectedProduct.productName}`,
+        selectedProduct.productDescription && `Description: ${selectedProduct.productDescription}`,
+        selectedProduct.targetMarket && `Target market: ${selectedProduct.targetMarket}`,
+        selectedProduct.benefits && `Benefits: ${selectedProduct.benefits}`,
+        selectedProduct.usps && `USPs: ${selectedProduct.usps}`,
+        selectedProduct.ingredients && `Ingredients: ${selectedProduct.ingredients}`,
+        selectedProduct.usageGuide && `Usage: ${selectedProduct.usageGuide}`,
+        selectedProduct.painPoints && `Pain points: ${selectedProduct.painPoints}`,
+      ].filter(Boolean).join('\n')
+    : ''
+
+  const identityFresh = !!identity && identity.sig === rebrandSig({ productId: draft.productId, originalImageRefs: sourceRefs, market: draft.market })
   const namesValid = identityFresh && !!draft.chosenName && (identity?.names.includes(draft.chosenName) ?? false)
 
   const missing: string[] = []
   if (!geminiApiKey) missing.push('Gemini API key (Cài đặt)')
   if (!kieApiKey) missing.push('KIE API key (Cài đặt)')
   if (!draft.productId) missing.push('Chọn sản phẩm')
-  if (draft.originalImageRefs.length === 0) missing.push('Tải ít nhất 1 ảnh gốc')
+  if (sourceRefs.length === 0) missing.push('Sản phẩm cần có ảnh (4 ảnh bank) hoặc tải ảnh gốc')
   if (!(draft.widthCm && draft.widthCm > 0) || !(draft.heightCm && draft.heightCm > 0)) missing.push('Nhập kích thước nhãn (cm)')
   const canAnalyze = missing.length === 0
   const canGenerate = canAnalyze && namesValid
@@ -100,8 +120,10 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
       const d = await analyzeRebrand({
         apiKey: geminiApiKey,
         productId: draft.productId,
-        originalImageRefs: draft.originalImageRefs,
+        originalImageRefs: sourceRefs,
+        uploadedCount: draft.originalImageRefs.length,
         productName: selectedProduct?.productName ?? '',
+        productContext,
         market: draft.market,
       })
       setIdentity(d)
@@ -121,7 +143,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
     try {
       const res = await generateRebrandImage({
         apiKey: kieApiKey, kind, identity: id, chosenName: name,
-        originalImageRefs: draft.originalImageRefs,
+        originalImageRefs: sourceRefs,
         widthCm: draft.widthCm, heightCm: draft.heightCm,
       })
       patchImage(kind, { status: 'completed', assetRef: res.assetRef })
@@ -198,7 +220,20 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
                 {products.map((p) => <option key={p.id} value={p.id}>{p.productName}</option>)}
               </select>
             )}
-            <label className="mb-1 mt-3 block text-xs font-semibold text-gray-700">Ảnh gốc (sản phẩm / bao bì / hộp)</label>
+            {selectedProduct && (
+              <div className="mt-3">
+                <div className="mb-1 text-[11px] font-medium text-gray-500">{bankImages.length} ảnh sản phẩm từ project (AI đọc + dùng làm gốc)</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {bankImages.map((ref) => (
+                    <div key={ref} className="h-12 w-12 overflow-hidden rounded-md border border-black/10 bg-gray-50">
+                      <AssetImg refId={ref} alt="ảnh bank" />
+                    </div>
+                  ))}
+                  {bankImages.length === 0 && <span className="text-[11px] text-amber-600">SP này chưa có ảnh — hãy tải ảnh gốc bên dưới.</span>}
+                </div>
+              </div>
+            )}
+            <label className="mb-1 mt-3 block text-xs font-semibold text-gray-700">Ảnh upload thêm — quyết định hình dáng bao bì (tuỳ chọn)</label>
             <div className="flex flex-wrap gap-1.5">
               {draft.originalImageRefs.map((ref) => (
                 <div key={ref} className="relative h-16 w-16 overflow-hidden rounded-md border border-black/10 bg-gray-50">

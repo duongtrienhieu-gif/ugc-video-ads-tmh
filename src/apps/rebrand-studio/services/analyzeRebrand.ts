@@ -18,8 +18,14 @@ import {
 export interface AnalyzeRebrandParams {
   apiKey: string
   productId: string | null
+  /** Toàn bộ ảnh tham chiếu: ảnh upload (đầu danh sách, quyết định FORM bao bì)
+   *  + 4 ảnh sản phẩm từ bank. */
   originalImageRefs: string[]
+  /** Số ảnh đầu là ảnh UPLOAD (bao bì thật) — phần còn lại là ảnh bank. */
+  uploadedCount: number
   productName: string
+  /** Mọi field sản phẩm (description/benefits/ingredients/usage/…) để AI đọc hiểu. */
+  productContext: string
   market: Market
 }
 
@@ -64,25 +70,32 @@ const SCHEMA: Record<string, unknown> = {
 }
 
 export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<RebrandIdentity> {
-  const { apiKey, originalImageRefs, productName, market } = params
+  const { apiKey, originalImageRefs, uploadedCount, productName, productContext, market } = params
   const langName = labelLangName(market)
-  const refs = originalImageRefs.slice(0, 4)
+  const refs = originalImageRefs.slice(0, 6)
   const inlineParts = (await Promise.all(refs.map(refToInline))).filter(Boolean) as Array<{ inlineData: { mimeType: string; data: string } }>
   if (inlineParts.length === 0) throw new Error('Không tải được ảnh gốc để phân tích.')
+  const nUploaded = Math.min(uploadedCount, inlineParts.length)
 
   const systemInstruction =
     `You are an expert product BRANDING + packaging designer for a Malaysian/Vietnamese COD seller doing white-label rebranding. ` +
-    `You are given photo(s) of an ORIGINAL product / its packaging. Analyse them and design a NEW brand.\n` +
+    `Study the ENTIRE input carefully: ALL ${inlineParts.length} photos AND all product fields given. Do NOT invent a product that differs from these references.\n` +
+    (nUploaded > 0
+      ? `IMPORTANT: the FIRST ${nUploaded} photo(s) are the seller's ACTUAL packaging — they DECIDE the real packaging FORM/shape (box/pouch/jar/bottle/sachet). The remaining photos show the real PRODUCT content/item. Reproduce THIS real product, not an imagined one.\n`
+      : `The photos show the real product/packaging — reproduce THIS real product, not an imagined one.\n`) +
     `TASKS:\n` +
     `1) names: propose 3 DISTINCT new brand names suitable for the ${market === 'vi' ? 'Vietnamese' : 'Malaysian (English-label)'} market — short, brandable, pronounceable, fitting the product niche. Avoid obvious existing trademarks.\n` +
-    `2) palette: extract the ORIGINAL packaging's colour scheme so the rebrand keeps a similar look. Hex: bg, primary, accent, onColor (text on primary/accent). Strong contrast.\n` +
-    `3) productForm: short ENGLISH description of the physical form (e.g. "red squeeze tube", "amber dropper bottle", "round jar", "sachet") — for image generation that preserves the form.\n` +
-    `4) productType: 2-4 word ENGLISH product category (e.g. "joint massage gel").\n` +
-    `5) Label copy in ${langName} ONLY (native, natural ${langName}): tagline (<=8 words), benefits (2-3 items, each <=7 words), ingredients (one line, from what's visible on the original if any), usage (one short line), caution (one short line, storage/skin-test style).\n` +
-    `6) netWeight: copy the net weight/volume EXACTLY from the original if visible (e.g. "30ml", "100g"); else "".\n` +
+    `2) palette: extract the colour scheme from the references so the rebrand keeps a similar look. Hex: bg, primary, accent, onColor. Strong contrast.\n` +
+    `3) productForm: short ENGLISH description of the REAL physical form taken from the packaging photo(s) (e.g. "stand-up pouch", "folding carton box", "round jar", "squeeze tube") — generation must preserve THIS form.\n` +
+    `4) productType: 2-4 word ENGLISH product category grounded in the fields (e.g. "dried hawthorn snack").\n` +
+    `5) Label copy in ${langName} ONLY, grounded in the product fields: tagline (<=8 words), benefits (2-3 items, each <=7 words — derive from the given benefits/USPs), ingredients (one line, from the fields/photos if any), usage (one short line), caution (one short line).\n` +
+    `6) netWeight: copy net weight/volume EXACTLY from a photo if visible (e.g. "500g", "30ml"); else "".\n` +
     `RULES: Do NOT invent certifications (Halal/KKM/FDA/GMP) or fake claims. Keep it believable. Output ONLY JSON.`
 
-  const userText = `Original product name (reference): "${productName.trim()}". Analyse the photos and return the rebrand identity JSON in ${langName} for label copy.`
+  const userText =
+    `Original product name: "${productName.trim()}".\n` +
+    (productContext ? `Product fields (read all):\n${productContext}\n` : '') +
+    `Analyse ALL the photos + fields above and return the rebrand identity JSON in ${langName} for label copy.`
 
   const raw = await directGeminiVision({
     apiKey,
