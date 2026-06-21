@@ -6,7 +6,7 @@
 
 import { generateGpt4oImage, type ImageStatus, type Gpt4oSize } from '../../../utils/kieai'
 import { getUrl, saveAsset } from '../../../utils/assetStore'
-import { type RebrandIdentity, type RebrandImageKind, labelLangName } from '../types'
+import { type RebrandIdentity, type RebrandImageKind, type PackagingType, labelLangName } from '../types'
 
 export interface GenerateRebrandImageParams {
   apiKey: string
@@ -17,6 +17,8 @@ export interface GenerateRebrandImageParams {
   /** Kích thước nhãn thật — để chọn tỉ lệ ảnh nhãn gần nhất. */
   widthCm?: number | null
   heightCm?: number | null
+  /** Kiểu dán nhãn (flat = 1 mặt · round = quấn tròn). */
+  packagingType?: PackagingType
   /** asset:xxx nhãn front đã sinh — dùng cho product/set để pouch mặc ĐÚNG nhãn. */
   labelRef?: string | null
   onStatus?: (status: ImageStatus) => void
@@ -84,22 +86,30 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
     `Show ONLY the product's FOOD/ingredient imagery (the actual ${identity.productType}, e.g. the snack/fruit itself) + brand + text, as a flat full-bleed graphic, edge-to-edge. ` +
     `SAFE AREA: keep ALL text, logo and key elements within the central area with a generous margin from every edge; only the background/decoration extends fully to the edges (full bleed), so the artwork can be trimmed to the exact print ratio WITHOUT cutting any text. `
 
+  // Khối nội dung gộp (front + back) dùng chung cho nhãn 1 nhãn.
+  const frontContent =
+    `FRONT content: big brand name, tagline ${q(identity.tagline)}, 2-3 benefit highlights (${identity.benefits.map(q).join(', ')})` +
+    `${identity.netWeight ? `, net weight ${q(identity.netWeight)}` : ''}, plus appetising imagery of the food itself.`
+  const backContent =
+    `BACK / INFO content: Ingredients (${q(identity.ingredients)}), Directions (${q(identity.usage)}), Caution & storage (${q(identity.caution)})` +
+    `${identity.nutrition ? `, a clear NUTRITION INFORMATION table per 100g: ${q(identity.nutrition)}` : ''}.`
+
   let prompt: string
   let size: Gpt4oSize
 
-  if (kind === 'label-front') {
-    size = pickLabelSize(params.widthCm, params.heightCm)
-    prompt =
-      `TASK: Design a FINISHED, attractive, print-ready PRODUCT LABEL — FRONT — for a ${identity.productType}. ${flatLabelLock}` +
-      `Layout: big brand name at top, tagline ${q(identity.tagline)}, 2-3 benefit highlights (${identity.benefits.map(q).join(', ')})` +
-      `${identity.netWeight ? `, and net weight ${q(identity.netWeight)}` : ''}, plus appetising imagery of the food itself. ${baseBrand}`
-  } else if (kind === 'label-back') {
-    size = pickLabelSize(params.widthCm, params.heightCm)
-    prompt =
-      `TASK: Design the BACK product LABEL for a ${identity.productType} — tidy professional panel layout. ${flatLabelLock}` +
-      `Sections: Ingredients (${q(identity.ingredients)}), Directions (${q(identity.usage)}), Caution & storage (${q(identity.caution)})` +
-      `${identity.nutrition ? `, AND a clear NUTRITION INFORMATION table (per 100g): ${q(identity.nutrition)}` : ''}` +
-      `${identity.netWeight ? `, net weight ${q(identity.netWeight)}` : ''}, with the brand name. ${baseBrand}`
+  if (kind === 'label') {
+    const isRound = params.packagingType === 'round'
+    if (isRound) {
+      size = '3:2' // nhãn quấn dài → dùng landscape rộng nhất của gpt + gap giữa
+      prompt =
+        `TASK: Design ONE long WRAP-AROUND product LABEL for a ${identity.productType} packaged in a ROUND jar/can (the label wraps from front to back). ${flatLabelLock}` +
+        `LAYOUT (left→right): the FRONT design on the LEFT (~45%) [${frontContent}], then a CLEAR BLANK / neutral background BAND in the MIDDLE (~10%, no text — this is the wrap seam / side), then the BACK INFO on the RIGHT (~45%) [${backContent}]. ${baseBrand}`
+    } else {
+      size = pickLabelSize(params.widthCm, params.heightCm)
+      prompt =
+        `TASK: Design ONE single-face product LABEL (everything on ONE sticker) for a ${identity.productType} on a flat pouch/box. ${flatLabelLock}` +
+        `LAYOUT: TOP HALF = hero [${frontContent}]; BOTTOM HALF = a tidy info panel [${backContent}]. Balanced, readable, not cramped. ${baseBrand}`
+    }
   } else if (kind === 'product') {
     size = '1:1'
     prompt =
@@ -127,10 +137,11 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
     return resp.blob()
   })
 
-  // Nhãn: auto-CROP về ĐÚNG tỉ lệ cm (chỉ cắt mép, không vẽ lại/không kéo giãn).
+  // Nhãn PHẲNG: auto-CROP về ĐÚNG tỉ lệ cm (chỉ cắt mép). Nhãn QUẤN tròn giữ
+  // native 3:2 + gap (không crop — tỉ lệ quấn quá rộng, user đã chấp nhận ~gần).
   let outBlob = blob
-  const isLabel = kind === 'label-front' || kind === 'label-back'
-  if (isLabel && params.widthCm && params.heightCm && params.heightCm > 0) {
+  const cropFlatLabel = kind === 'label' && params.packagingType !== 'round'
+  if (cropFlatLabel && params.widthCm && params.heightCm && params.heightCm > 0) {
     try { outBlob = await cropBlobToRatio(blob, params.widthCm / params.heightCm) } catch { outBlob = blob }
   }
 

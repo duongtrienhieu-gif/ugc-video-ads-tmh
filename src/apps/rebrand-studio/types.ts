@@ -16,8 +16,13 @@ import type { Market } from '../../types/brandKit'
 
 export type { Market }
 
-export type RebrandImageKind = 'label-front' | 'label-back' | 'product' | 'set'
-export const REBRAND_IMAGE_KINDS: RebrandImageKind[] = ['label-front', 'label-back', 'product', 'set']
+export type RebrandImageKind = 'label' | 'product' | 'set'
+export const REBRAND_IMAGE_KINDS: RebrandImageKind[] = ['label', 'product', 'set']
+
+/** Kiểu dán nhãn — quyết định bố cục nhãn gộp.
+ *  flat  = dán 1 mặt (túi/hộp phẳng): gộp front+back lên 1 mặt.
+ *  round = quấn quanh lọ/hộp tròn: nhãn dài [front · gap giữa · back]. */
+export type PackagingType = 'flat' | 'round'
 
 export type RebrandStatus = 'idle' | 'generating' | 'completed' | 'failed'
 
@@ -70,16 +75,18 @@ export interface RebrandDraft {
   productId: string | null
   /** Ảnh gốc user upload (SP/bao bì/hộp) — asset refs. */
   originalImageRefs: string[]
-  /** Kích thước nhãn thật (cm). */
+  /** Kích thước nhãn thật (cm). flat = nhãn; round = chu vi × cao. */
   widthCm: number | null
   heightCm: number | null
+  /** Kiểu dán nhãn. */
+  packagingType: PackagingType
   market: Market
   /** Tên brand user đã chọn từ identity.names. */
   chosenName: string | null
 }
 
 export function emptyRebrandDraft(): RebrandDraft {
-  return { productId: null, originalImageRefs: [], widthCm: null, heightCm: null, market: 'vi', chosenName: null }
+  return { productId: null, originalImageRefs: [], widthCm: null, heightCm: null, packagingType: 'flat', market: 'vi', chosenName: null }
 }
 
 export const MAX_ORIGINAL_IMAGES = 4
@@ -100,6 +107,6 @@ export function rebrandSig(d: { productId: string | null; originalImageRefs: str
   return `v3|${d.productId ?? ''}|${d.market}|${d.originalImageRefs.join(',')}`
 }
 
-/** Cả 4 ảnh (nhãn trước/sau + product + set) đều qua gpt-4o-image (6 mỗi ảnh). */
-export const REBRAND_AI_IMAGES = 4
+/** 3 ảnh (nhãn gộp + product + set) đều qua gpt-4o-image (6 mỗi ảnh). */
+export const REBRAND_AI_IMAGES = 3
 export const REBRAND_TOTAL_CREDITS = 6 * REBRAND_AI_IMAGES

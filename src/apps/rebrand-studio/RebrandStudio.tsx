@@ -28,14 +28,12 @@ import { analyzeRebrand } from './services/analyzeRebrand'
 import { generateRebrandImage, friendlyRebrandError } from './services/generateRebrandImage'
 
 const KIND_LABEL: Record<RebrandImageKind, string> = {
-  'label-front': 'Nhãn mặt trước (in)',
-  'label-back': 'Nhãn mặt sau (in)',
+  'label': 'Nhãn (gộp, để in)',
   'product': 'Sản phẩm nhãn mới',
   'set': 'Bao bì + sản phẩm bên trong',
 }
 const KIND_HINT: Record<RebrandImageKind, string> = {
-  'label-front': 'AI · tỉ lệ gần kích thước thật',
-  'label-back': 'AI · thành phần / HDSD',
+  'label': 'AI · gộp front+back, đúng tỉ lệ',
   'product': 'AI giữ form, thay nhãn',
   'set': 'AI · đúng 1 bao bì + sản phẩm',
 }
@@ -49,7 +47,7 @@ function AssetImg({ refId, alt }: { refId: string | undefined | null; alt: strin
 export default function RebrandStudio({ embedded = false }: { embedded?: boolean }) {
   const {
     draft, images, identity, isAnalyzing,
-    setProductId, addOriginalImage, removeOriginalImage, setWidthCm, setHeightCm, setMarket, setChosenName,
+    setProductId, addOriginalImage, removeOriginalImage, setWidthCm, setHeightCm, setPackagingType, setMarket, setChosenName,
     setIdentity, setAnalyzing, patchImage,
   } = useRebrandStore()
 
@@ -143,12 +141,13 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
       // Nhãn (flat artwork) chỉ cần ref ảnh SẢN PHẨM/món ăn (bank) — KHÔNG dùng
       // ảnh pouch upload (tránh AI vẽ bao bì vào nhãn). Product/set dùng full ref
       // + nhãn front đã sinh (labelRef) để pouch mặc ĐÚNG nhãn in.
-      const isLabel = kind === 'label-front' || kind === 'label-back'
+      const isLabel = kind === 'label'
       const refsForKind = isLabel ? (bankImages.length ? bankImages : sourceRefs) : sourceRefs
       const res = await generateRebrandImage({
         apiKey: kieApiKey, kind, identity: id, chosenName: name,
         originalImageRefs: refsForKind,
         widthCm: draft.widthCm, heightCm: draft.heightCm,
+        packagingType: draft.packagingType,
         labelRef: isLabel ? undefined : labelRef,
       })
       patchImage(kind, { status: 'completed', assetRef: res.assetRef })
@@ -166,14 +165,11 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
     try {
       const id = identity!
       const name = draft.chosenName!
-      // Sinh NHÃN trước (song song) → lấy nhãn front làm ref cho product/set.
-      const [frontRef] = await Promise.all([
-        generateOne('label-front', id, name),
-        generateOne('label-back', id, name),
-      ])
+      // Sinh NHÃN gộp trước → lấy làm ref cho product/set (pouch mặc đúng nhãn).
+      const labelRef = await generateOne('label', id, name)
       await Promise.all([
-        generateOne('product', id, name, frontRef),
-        generateOne('set', id, name, frontRef),
+        generateOne('product', id, name, labelRef),
+        generateOne('set', id, name, labelRef),
       ])
     } finally {
       setBusy(false)
@@ -184,9 +180,9 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
     if (!canGenerate || busy) return
     setBusy(true)
     try {
-      // product/set tạo lại → dùng nhãn front hiện có để giữ đồng nhất.
-      const frontRef = images.find((im) => im.kind === 'label-front')?.assetRef
-      await generateOne(kind, identity!, draft.chosenName!, frontRef)
+      // product/set tạo lại → dùng nhãn gộp hiện có để giữ đồng nhất.
+      const labelRef = images.find((im) => im.kind === 'label')?.assetRef
+      await generateOne(kind, identity!, draft.chosenName!, labelRef)
     } finally { setBusy(false) }
   }
 
@@ -269,9 +265,29 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
             </div>
           </div>
 
+          {/* Kiểu dán nhãn */}
+          <div className="rounded-xl border border-black/10 bg-white p-4">
+            <label className="mb-2 block text-xs font-semibold text-gray-700">Kiểu dán nhãn</label>
+            <div className="flex gap-2">
+              {([['flat', 'Dán 1 mặt'], ['round', 'Quấn quanh lọ tròn']] as const).map(([t, lbl]) => (
+                <button key={t} onClick={() => setPackagingType(t)}
+                  className={`flex-1 rounded-lg border px-2 py-2 text-xs font-medium transition-colors ${draft.packagingType === t ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-black/10 bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[10px] text-gray-400">
+              {draft.packagingType === 'round'
+                ? 'Nhãn dài quấn từ trước ra sau, chừa khoảng trống giữa. Tỉ lệ quấn rộng → AI ra ~gần nhất (3:2).'
+                : 'Gộp toàn bộ front + back lên 1 mặt (1 nhãn dán nhanh).'}
+            </p>
+          </div>
+
           {/* Kích thước */}
           <div className="rounded-xl border border-black/10 bg-white p-4">
-            <label className="mb-1 block text-xs font-semibold text-gray-700">Kích thước nhãn thật (cm)</label>
+            <label className="mb-1 block text-xs font-semibold text-gray-700">
+              {draft.packagingType === 'round' ? 'Kích thước quấn (cm): chu vi × cao' : 'Kích thước nhãn thật (cm)'}
+            </label>
             <p className="mb-2 text-[10px] text-gray-400">Đo thực tế ngoài đời — dùng để xuất file in đúng size.</p>
             <div className="flex items-center gap-2">
               <input type="number" min={0} step="0.1" value={draft.widthCm ?? ''} placeholder="Rộng"
@@ -331,7 +347,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
             {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {busy ? 'Đang tạo bộ rebrand…' : `2 · Tạo bộ rebrand · ~${REBRAND_TOTAL_CREDITS} credit`}
           </button>
-          <p className="text-[10px] text-gray-400">4 ảnh AI (~{REBRAND_TOTAL_CREDITS} credit): nhãn trước/sau + sản phẩm + bao bì. Pouch mặc đúng nhãn front. Nhãn tải về đưa bên in (~{draft.widthCm ?? '?'}×{draft.heightCm ?? '?'}cm). ⚠️ Số trên bảng dinh dưỡng là AI ước lượng — kiểm tra lại trước khi in.</p>
+          <p className="text-[10px] text-gray-400">3 ảnh AI (~{REBRAND_TOTAL_CREDITS} credit): nhãn gộp + sản phẩm + bao bì. Pouch mặc đúng nhãn. Nhãn tải về đưa bên in (~{draft.widthCm ?? '?'}×{draft.heightCm ?? '?'}cm). ⚠️ Số bảng dinh dưỡng là AI ước lượng — kiểm tra lại trước khi in.</p>
         </div>
 
         {/* Output */}

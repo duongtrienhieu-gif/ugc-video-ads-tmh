@@ -7,6 +7,7 @@ import {
   type RebrandImage,
   type RebrandImageKind,
   type RebrandIdentity,
+  type PackagingType,
   emptyRebrandDraft,
   REBRAND_IMAGE_KINDS,
   MAX_ORIGINAL_IMAGES,
@@ -50,6 +51,7 @@ interface RebrandState {
   removeOriginalImage: (ref: string) => void
   setWidthCm: (v: number | null) => void
   setHeightCm: (v: number | null) => void
+  setPackagingType: (t: PackagingType) => void
   setMarket: (m: Market) => void
   setChosenName: (n: string | null) => void
 
@@ -89,6 +91,7 @@ export const useRebrandStore = create<RebrandState>((set, get) => {
     },
     setWidthCm: (v) => { set((s) => ({ draft: { ...s.draft, widthCm: v } })); save() },
     setHeightCm: (v) => { set((s) => ({ draft: { ...s.draft, heightCm: v } })); save() },
+    setPackagingType: (t) => { set((s) => ({ draft: { ...s.draft, packagingType: t } })); save() },
     setMarket: (m) => { set((s) => ({ draft: { ...s.draft, market: m } })); save() },
     setChosenName: (n) => { set((s) => ({ draft: { ...s.draft, chosenName: n } })); save() },
 
