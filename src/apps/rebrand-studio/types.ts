@@ -85,16 +85,49 @@ export interface RebrandDraft {
   packagingType: PackagingType
   /** Model render nhãn. */
   labelModel: LabelModel
-  /** NSX (ngày sản xuất) + HSD (hạn dùng) — user nhập, in lên nhãn. */
+  /** NSX (ngày sản xuất) + HSD (hạn dùng) — user nhập DD/MM/YYYY, in lên nhãn. */
   mfgDate: string
   expDate: string
+  /** Mã lô + số barcode (random unique, sinh 1 lần, ổn định qua 4 ảnh). */
+  batchCode: string
+  barcodeNum: string
   market: Market
   /** Tên brand user đã chọn từ identity.names. */
   chosenName: string | null
 }
 
 export function emptyRebrandDraft(): RebrandDraft {
-  return { productId: null, originalImageRefs: [], widthCm: null, heightCm: null, packagingType: 'flat', labelModel: 'gpt4o', mfgDate: '', expDate: '', market: 'vi', chosenName: null }
+  return { productId: null, originalImageRefs: [], widthCm: null, heightCm: null, packagingType: 'flat', labelModel: 'gpt4o', mfgDate: '', expDate: '', batchCode: '', barcodeNum: '', market: 'vi', chosenName: null }
+}
+
+const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** User nhập DD/MM/YYYY → format theo thị trường nhãn:
+ *  vi → "04/09/2026" (DD/MM/YYYY) · ms → "04 Sep 2026" (DD Mon YYYY, không nhầm). */
+export function formatLabelDate(raw: string, market: Market): string {
+  const s = (raw ?? '').trim()
+  if (!s) return ''
+  const m = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/)
+  if (!m) return s // không parse được → giữ nguyên
+  const d = m[1].padStart(2, '0')
+  const mo = Math.max(1, Math.min(12, parseInt(m[2], 10)))
+  const y = m[3].length === 2 ? `20${m[3]}` : m[3]
+  return market === 'ms' ? `${d} ${EN_MONTHS[mo - 1]} ${y}` : `${d}/${String(mo).padStart(2, '0')}/${y}`
+}
+
+/** Sinh mã lô (6 ký tự) + barcode EAN-13 (12 số ngẫu nhiên + check digit). */
+export function genBatchCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let s = ''
+  for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)]
+  return s
+}
+export function genBarcode13(): string {
+  let d = ''
+  for (let i = 0; i < 12; i++) d += Math.floor(Math.random() * 10)
+  let sum = 0
+  for (let i = 0; i < 12; i++) sum += (i % 2 === 0 ? +d[i] : +d[i] * 3)
+  return d + String((10 - (sum % 10)) % 10)
 }
 
 export const MAX_ORIGINAL_IMAGES = 4

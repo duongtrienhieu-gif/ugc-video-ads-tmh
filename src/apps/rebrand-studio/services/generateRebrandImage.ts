@@ -6,7 +6,7 @@
 
 import { generateGpt4oImage, generateNanoBanana2, type ImageStatus, type Gpt4oSize } from '../../../utils/kieai'
 import { getUrl, saveAsset } from '../../../utils/assetStore'
-import { type RebrandIdentity, type RebrandImageKind, type PackagingType, type LabelModel, labelLangName } from '../types'
+import { type RebrandIdentity, type RebrandImageKind, type PackagingType, type LabelModel, labelLangName, formatLabelDate } from '../types'
 
 export interface GenerateRebrandImageParams {
   apiKey: string
@@ -26,6 +26,9 @@ export interface GenerateRebrandImageParams {
   /** NSX / HSD — in lên nhãn (kind 'label'). */
   mfgDate?: string
   expDate?: string
+  /** Mã lô + số barcode — in lên nhãn (kind 'label'). */
+  batchCode?: string
+  barcodeNum?: string
   onStatus?: (status: ImageStatus) => void
   signal?: AbortSignal
 }
@@ -107,9 +110,16 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
   const backContent =
     `BACK / INFO content: Ingredients (${q(identity.ingredients)}), Directions (${q(identity.usage)}), Caution & storage (${q(identity.caution)})` +
     `${identity.nutrition ? `, a clear NUTRITION INFORMATION table per 100g: ${q(identity.nutrition)}` : ''}.`
-  const mfg = (params.mfgDate ?? '').trim(), exp = (params.expDate ?? '').trim()
+  // Ngày format theo thị trường: ms → "04 Sep 2026" (MFG/EXP), vi → "04/09/2026" (NSX/HSD).
+  const mfg = formatLabelDate(params.mfgDate ?? '', identity.market)
+  const exp = formatLabelDate(params.expDate ?? '', identity.market)
+  const dLbl = identity.market === 'ms' ? { mfg: 'MFG', exp: 'EXP' } : { mfg: 'NSX', exp: 'HSD' }
   const dateLine = (mfg || exp)
-    ? ` Also print a small date line on the label: ${mfg ? `Manufacture date (NSX) ${q(mfg)}` : ''}${mfg && exp ? ' · ' : ''}${exp ? `Expiry (HSD/EXP) ${q(exp)}` : ''}.`
+    ? ` Also print a small date line on the label: ${mfg ? `${dLbl.mfg} ${q(mfg)}` : ''}${mfg && exp ? ' · ' : ''}${exp ? `${dLbl.exp} ${q(exp)}` : ''}.`
+    : ''
+  const batch = (params.batchCode ?? '').trim(), barcode = (params.barcodeNum ?? '').trim()
+  const codeLine = (batch || barcode)
+    ? `${batch ? ` Print a small batch/lot code "LOT: ${batch}".` : ''}${barcode ? ` Render a realistic EAN-13 BARCODE graphic (sharp black bars on white) with the digits ${barcode} printed beneath it, in the info area.` : ''}`
     : ''
 
   let prompt: string
@@ -121,12 +131,12 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
       size = '3:2' // nhãn quấn dài → dùng landscape rộng nhất của gpt + gap giữa
       prompt =
         `TASK: Design ONE long WRAP-AROUND product LABEL for a ${identity.productType} packaged in a ROUND jar/can (the label wraps from front to back). ${flatLabelLock}` +
-        `LAYOUT (left→right): the FRONT design on the LEFT (~45%) [${frontContent}], then a CLEAR BLANK / neutral background BAND in the MIDDLE (~10%, no text — this is the wrap seam / side), then the BACK INFO on the RIGHT (~45%) [${backContent}].${dateLine} ${baseBrand}`
+        `LAYOUT (left→right): the FRONT design on the LEFT (~45%) [${frontContent}], then a CLEAR BLANK / neutral background BAND in the MIDDLE (~10%, no text — this is the wrap seam / side), then the BACK INFO on the RIGHT (~45%) [${backContent}].${dateLine}${codeLine} ${baseBrand}`
     } else {
       size = pickLabelSize(params.widthCm, params.heightCm)
       prompt =
         `TASK: Design ONE single-face product LABEL (everything on ONE sticker) for a ${identity.productType} on a flat pouch/box. ${flatLabelLock}` +
-        `LAYOUT: TOP HALF = hero [${frontContent}]; BOTTOM HALF = a tidy info panel [${backContent}]. Balanced, readable, not cramped.${dateLine} ${baseBrand}`
+        `LAYOUT: TOP HALF = hero [${frontContent}]; BOTTOM HALF = a tidy info panel [${backContent}]. Balanced, readable, not cramped.${dateLine}${codeLine} ${baseBrand}`
     }
   } else if (kind === 'product') {
     size = '1:1'

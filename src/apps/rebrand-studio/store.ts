@@ -10,6 +10,8 @@ import {
   type PackagingType,
   type LabelModel,
   emptyRebrandDraft,
+  genBatchCode,
+  genBarcode13,
   REBRAND_IMAGE_KINDS,
   MAX_ORIGINAL_IMAGES,
 } from './types'
@@ -74,6 +76,9 @@ interface RebrandState {
   setLabelModel: (m: LabelModel) => void
   setMfgDate: (v: string) => void
   setExpDate: (v: string) => void
+  /** Sinh mã nếu chưa có; trả về mã hiện hành (ổn định qua các lần render). */
+  ensureCode: () => { batchCode: string; barcodeNum: string }
+  regenCode: () => void
   setMarket: (m: Market) => void
   setChosenName: (n: string | null) => void
 
@@ -147,6 +152,16 @@ export const useRebrandStore = create<RebrandState>((set, get) => {
     setLabelModel: (m) => { set((s) => ({ draft: { ...s.draft, labelModel: m } })); save() },
     setMfgDate: (v) => { set((s) => ({ draft: { ...s.draft, mfgDate: v } })); save() },
     setExpDate: (v) => { set((s) => ({ draft: { ...s.draft, expDate: v } })); save() },
+    ensureCode: () => {
+      const { draft } = get()
+      const batchCode = draft.batchCode || genBatchCode()
+      const barcodeNum = draft.barcodeNum || genBarcode13()
+      if (batchCode !== draft.batchCode || barcodeNum !== draft.barcodeNum) {
+        set((s) => ({ draft: { ...s.draft, batchCode, barcodeNum } })); save()
+      }
+      return { batchCode, barcodeNum }
+    },
+    regenCode: () => { set((s) => ({ draft: { ...s.draft, batchCode: genBatchCode(), barcodeNum: genBarcode13() } })); save() },
     setMarket: (m) => { set((s) => ({ draft: { ...s.draft, market: m } })); save() },
     setChosenName: (n) => { set((s) => ({ draft: { ...s.draft, chosenName: n } })); save() },
 

@@ -48,7 +48,7 @@ function AssetImg({ refId, alt }: { refId: string | undefined | null; alt: strin
 export default function RebrandStudio({ embedded = false }: { embedded?: boolean }) {
   const {
     draft, images, identity, isAnalyzing,
-    setProductId, addOriginalImage, removeOriginalImage, setWidthCm, setHeightCm, setPackagingType, setLabelModel, setMfgDate, setExpDate, setMarket, setChosenName,
+    setProductId, addOriginalImage, removeOriginalImage, setWidthCm, setHeightCm, setPackagingType, setLabelModel, setMfgDate, setExpDate, ensureCode, regenCode, setMarket, setChosenName,
     setIdentity, setAnalyzing, patchImage,
     savedSets, saveCurrentSet, newSet, openSet,
   } = useRebrandStore()
@@ -137,7 +137,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
     }
   }
 
-  async function generateOne(kind: RebrandImageKind, id: RebrandIdentity, name: string, labelRef?: string, comboBaseRef?: string): Promise<string | undefined> {
+  async function generateOne(kind: RebrandImageKind, id: RebrandIdentity, name: string, labelRef?: string, comboBaseRef?: string, codes?: { batchCode: string; barcodeNum: string }): Promise<string | undefined> {
     patchImage(kind, { status: 'generating', error: undefined })
     try {
       // Nhãn (flat artwork): ref ảnh món ăn bank (không dùng pouch upload).
@@ -156,6 +156,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
         packagingType: draft.packagingType,
         labelModel: draft.labelModel,
         mfgDate: draft.mfgDate, expDate: draft.expDate,
+        batchCode: codes?.batchCode, barcodeNum: codes?.barcodeNum,
         labelRef: isLabel ? undefined : labelRef,
       })
       patchImage(kind, { status: 'completed', assetRef: res.assetRef })
@@ -173,8 +174,9 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
     try {
       const id = identity!
       const name = draft.chosenName!
+      const codes = ensureCode()
       // Sinh NHÃN gộp trước → lấy làm ref cho product/set (pouch mặc đúng nhãn).
-      const labelRef = await generateOne('label', id, name)
+      const labelRef = await generateOne('label', id, name, undefined, undefined, codes)
       // product + set song song; combo CHỜ product xong để lấy pouch sạch làm ref.
       const [productRef] = await Promise.all([
         generateOne('product', id, name, labelRef),
@@ -193,7 +195,8 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
       // product/set/combo tạo lại → dùng nhãn gộp hiện có; combo thêm pouch sạch (#2).
       const labelRef = images.find((im) => im.kind === 'label')?.assetRef
       const comboBaseRef = kind === 'combo' ? images.find((im) => im.kind === 'product')?.assetRef : undefined
-      await generateOne(kind, identity!, draft.chosenName!, labelRef, comboBaseRef)
+      const codes = kind === 'label' ? ensureCode() : undefined
+      await generateOne(kind, identity!, draft.chosenName!, labelRef, comboBaseRef, codes)
     } finally { setBusy(false) }
   }
 
@@ -355,9 +358,14 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
               <input type="text" value={draft.mfgDate} placeholder="NSX (vd 01/2026)"
                 onChange={(e) => setMfgDate(e.target.value)}
                 className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm text-gray-800" />
-              <input type="text" value={draft.expDate} placeholder="HSD (vd 01/2028)"
+              <input type="text" value={draft.expDate} placeholder="HSD (vd 04/12/2027)"
                 onChange={(e) => setExpDate(e.target.value)}
                 className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm text-gray-800" />
+            </div>
+            <p className="mt-1 text-[10px] text-gray-400">Nhập DD/MM/YYYY. Nhãn MY tự đổi sang "04 Sep 2026"; VN giữ 04/09/2026.</p>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-[11px] text-gray-500">Mã (random): <span className="font-mono text-gray-700">{draft.batchCode || '—'}</span> · <span className="font-mono text-gray-700">{draft.barcodeNum || '—'}</span></span>
+              <button onClick={regenCode} className="ml-auto rounded-md border border-black/10 px-2 py-1 text-[10px] text-gray-600 hover:bg-gray-50">Đổi mã</button>
             </div>
           </div>
 
