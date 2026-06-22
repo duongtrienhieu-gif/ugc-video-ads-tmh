@@ -1389,28 +1389,32 @@ OUTPUT strict JSON only (no markdown fences):
     }
 
     // D2' — if the offer beat is TOO LONG for ONE i2v clip (~7.5s spoken), one cut would have to
-    // slow-mo to fill the slot. Instead split it into TWO DISTINCT closing cuts (different framing
-    // AND different background) so two real clips cover the full voice — no slow-mo, no clone, and
-    // the script is NEVER truncated. Cut A = the combo WIDE on background A; Cut B = a MACRO detail
-    // (the gift if present, else the product) on a DIFFERENT background B. Both no-hands
-    // product_closeup, shotIntent='offer' (atomic + dedupe-protected). Endorsement (last) untouched.
+    // slow-mo to fill the slot. Split it into TWO DISTINCT closing cuts that cover the full voice
+    // (no slow-mo, no clone, no script truncation):
+    //   • Cut A = the DEAL GRAB — a person's HANDS presenting / picking up the deal (product + gift),
+    //     NO face, on BACKGROUND A (the #13 "human grabs the deal" energy the user wants kept).
+    //   • Cut B = a clean no-hands MACRO of the gift (else product) on a DIFFERENT BACKGROUND B.
+    // Split by SPOKEN TIME (splitQuoteByTime) so the two spans are ~equal (~5.5s each), not 8.5s+2.8s.
     if (penult && estimateReadDurationSec(penult.quote, params.lang) > 7.5) {
-      const [qA, qB] = splitQuoteByParts(penult.quote, 2)
+      const [qA, qB] = splitQuoteByTime(penult.quote, params.lang)
       const unitsA = offerQty > 1 ? `${offerQty} IDENTICAL units of the product` : 'the product'
       const sameUnitsA = offerQty > 1 ? ` Render ALL ${offerQty} units IDENTICAL to the product reference.` : ''
-      // Cut A — WIDE combo, BACKGROUND A (bright marble / stone countertop).
+      // Cut A — DEAL GRAB: hands only (NO face), product (+units) + gift, BACKGROUND A. PRODUCT_IN_ACTION
+      // (kind product_action + hands_noface) → hands, no face. Overrides the no-hands gift set above.
       penult.quote = qA
+      penult.kind = 'product_action'
+      penult.cameraFraming = 'hands_noface'
       penult.conceptPrompt = giftOn
-        ? `PRODUCT-HERO WIDE shot — NO person, NO hands: ${unitsA} together with the FREE GIFT, arranged on a clean BRIGHT MARBLE / STONE countertop in soft daylight (BACKGROUND A). Distinct objects placed apart — do NOT merge, blend, swap, or restyle any of them; keep each EXACTLY as its reference.${sameUnitsA} No on-screen price or numbers.`
-        : `PRODUCT-HERO WIDE shot — NO person, NO hands: ${unitsA} arranged on a clean BRIGHT MARBLE / STONE countertop in soft daylight (BACKGROUND A) — a generous deal worth grabbing.${sameUnitsA} No on-screen price or numbers.`
-      // Cut B — MACRO detail, a DIFFERENT angle + a DIFFERENT background B (warm wood / linen).
+        ? `DEAL-GRAB shot — HANDS ONLY, NO face, NO full person: a person's hands presenting / picking up ${unitsA} together with the FREE GIFT on a clean BRIGHT MARBLE / STONE countertop (BACKGROUND A), an over-the-hands phone angle — the "grab this deal" moment. The FREE GIFT rendered EXACTLY as its reference image (do NOT invent it or render it from its name). Product and gift are SEPARATE, DISTINCT objects — never merge/swap/restyle. Anatomically correct hands (one or two hands, five fingers each, natural grip, no extra/melted fingers).${sameUnitsA} No on-screen price or numbers.`
+        : `DEAL-GRAB shot — HANDS ONLY, NO face, NO full person: a person's hands presenting / picking up ${unitsA} on a clean BRIGHT MARBLE / STONE countertop (BACKGROUND A), an over-the-hands phone angle — the "grab this deal" moment. Anatomically correct hands (five fingers, natural grip, no extra/melted fingers).${sameUnitsA} No on-screen price or numbers.`
+      // Cut B — clean no-hands MACRO, a DIFFERENT angle + a DIFFERENT background B (warm wood / linen).
       const cutB: BrollScene = {
         role: 'broll', kind: 'product_closeup', cameraFraming: 'hands_noface', shotIntent: 'offer',
         quote: qB, durationSec: penult.durationSec,
         giftRef: giftOn ? params.gift!.imageRef : undefined,
         conceptPrompt: giftOn
-          ? 'MACRO close-up — NO person, NO hands, NO action: a tight DETAIL shot of the FREE GIFT alone, a DIFFERENT angle, resting STATIC on a WARM WOODEN / LINEN surface (BACKGROUND B — clearly different from the previous WIDE cut). Reproduce the gift EXACTLY as its reference (same form / colour / label); if it is loose / has no packaging keep it loose — do NOT invent a box, label, or text. No on-screen price or numbers.'
-          : 'MACRO close-up — NO person, NO hands, NO action: a tight DETAIL shot of the product, a DIFFERENT angle, resting STATIC on a WARM WOODEN / LINEN surface (BACKGROUND B — clearly different from the previous WIDE cut). The product stays EXACTLY as its reference (same colour, shape, label). No on-screen price or numbers.',
+          ? 'MACRO close-up — NO person, NO hands, NO action: a tight DETAIL shot of the FREE GIFT alone, a DIFFERENT angle, resting STATIC on a WARM WOODEN / LINEN surface (BACKGROUND B — clearly different from the previous cut). Render the gift EXACTLY as its reference image (same form / colour / label); if it is loose / has no packaging keep it loose — do NOT invent a box, label, or text, do NOT render it from its name. No on-screen price or numbers.'
+          : 'MACRO close-up — NO person, NO hands, NO action: a tight DETAIL shot of the product, a DIFFERENT angle, resting STATIC on a WARM WOODEN / LINEN surface (BACKGROUND B — clearly different from the previous cut). The product stays EXACTLY as its reference (same colour, shape, label). No on-screen price or numbers.',
       }
       // Insert Cut B right AFTER the penult (i.e., directly BEFORE the last endorsement cut).
       scenes.splice(scenes.length - 1, 0, cutB)
@@ -1875,6 +1879,34 @@ function dedupeScenePrompts(timed: TimedBrollScene[]): TimedBrollScene[] {
     }
   }
   return timed
+}
+
+// D2' — split a quote into TWO halves of ~EQUAL SPOKEN TIME (not equal characters). The CTA split
+// must balance by TIME because assignSceneTiming anchors each half to WHERE it is spoken in the
+// voice — a char/word-balanced split (splitQuoteByParts) put a short tail into cut B → an 8.5s + 2.8s
+// imbalance. Here we pick the word boundary whose prefix duration is closest to half, PREFERRING a
+// clean punctuation boundary near the midpoint so we never cut mid-clause / mid-name (e.g. never
+// "Dr. | Mitsui"). Returns two non-empty halves. Universal VN/MS/EN.
+function splitQuoteByTime(quote: string, lang: ScriptLang): [string, string] {
+  const q = (quote ?? '').trim()
+  const words = q.split(/\s+/).filter(Boolean)
+  if (words.length < 2) return [q, '']
+  const total = estimateReadDurationSec(q, lang) || 1
+  const target = total / 2
+  const tol = total * 0.28
+  // A "clean" boundary word ends a clause/sentence — comma/!?;… always, or a period on a real
+  // word (length ≥ 4 without the dot) so an abbreviation like "Dr." is NOT treated as a boundary.
+  const isClean = (w: string): boolean =>
+    /[,!?;…]$/.test(w) || (/\.$/.test(w) && w.replace(/\.$/, '').length >= 4)
+  let timeIdx = 1, timeDiff = Infinity
+  let cleanIdx = -1, cleanDiff = Infinity
+  for (let i = 1; i < words.length; i++) {
+    const diff = Math.abs(estimateReadDurationSec(words.slice(0, i).join(' '), lang) - target)
+    if (diff < timeDiff) { timeDiff = diff; timeIdx = i }
+    if (isClean(words[i - 1]) && diff <= tol && diff < cleanDiff) { cleanDiff = diff; cleanIdx = i }
+  }
+  const idx = cleanIdx > 0 ? cleanIdx : timeIdx
+  return [words.slice(0, idx).join(' '), words.slice(idx).join(' ')]
 }
 
 // P3v — split a quote across N sub-cuts so a long line chẻ thành nhiều cảnh
