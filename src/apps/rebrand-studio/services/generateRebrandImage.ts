@@ -86,12 +86,17 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
     : ''
 
   const colorsStr = (P.colors && P.colors.length ? P.colors : [P.bg, P.primary, P.accent]).join(', ')
+  // baseBrand = quy tắc brand DÙNG CHUNG mọi ảnh (tên + palette + ngôn ngữ + cấm nhãn cũ).
   const baseBrand =
     `NEW BRAND: "${chosenName}". Render "${chosenName}" large, clean and spelled EXACTLY. ` +
     `COLOUR PALETTE — use the FULL rich set, do NOT reduce to 1-2 colours: ${colorsStr}. ` +
-    `MATCH ~85% the LOOK & FEEL of the reference design: closely follow its background style/scene, colour richness and decorative motifs` +
-    `${identity.vibe ? ` (${identity.vibe})` : ''}; clearly inspired by it but NOT an identical copy. ` +
     `Label text language: ${langName}. Do NOT show any old brand name. Do NOT invent certification badges (Halal/KKM/FDA). Crisp, professional, readable.`
+  // sceneMatch = bám bối cảnh/vibe bản gốc — CHỈ cho NHÃN + COMBO (artwork & ads).
+  // KHÔNG dùng cho product/set: chúng là packshot studio sạch (theo bgRule); ép bám
+  // "scene gốc" sẽ chọi bgRule → AI rải đồ ăn/đạo cụ lung tung ("bịa", lệch nhãn #1).
+  const sceneMatch =
+    ` MATCH ~85% the LOOK & FEEL of the reference design: closely follow its background style/scene, colour richness and decorative motifs` +
+    `${identity.vibe ? ` (${identity.vibe})` : ''}; clearly inspired by it but NOT an identical copy.`
   const productLock =
     `USE THE REAL PRODUCT shown in the reference photos (the actual item + its packaging form ${identity.productForm}). Do NOT invent a different product or packaging. `
   // Nhãn = artwork PHẲNG để in dán — TUYỆT ĐỐI không vẽ bao bì 3D.
@@ -132,17 +137,18 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
       size = '3:2' // nhãn quấn dài → dùng landscape rộng nhất của gpt + gap giữa
       prompt =
         `TASK: Design ONE long WRAP-AROUND product LABEL for a ${identity.productType} packaged in a ROUND jar/can (the label wraps from front to back). ${flatLabelLock}` +
-        `LAYOUT (left→right): the FRONT design on the LEFT (~45%) [${frontContent}], then a CLEAR BLANK / neutral background BAND in the MIDDLE (~10%, no text — this is the wrap seam / side), then the BACK INFO on the RIGHT (~45%) [${backContent}].${dateLine}${codeLine} ${baseBrand}`
+        `LAYOUT (left→right): the FRONT design on the LEFT (~45%) [${frontContent}], then a CLEAR BLANK / neutral background BAND in the MIDDLE (~10%, no text — this is the wrap seam / side), then the BACK INFO on the RIGHT (~45%) [${backContent}].${dateLine}${codeLine} ${baseBrand}${sceneMatch}`
     } else {
       size = pickLabelSize(params.widthCm, params.heightCm)
       prompt =
         `TASK: Design ONE single-face product LABEL (everything on ONE sticker) for a ${identity.productType} on a flat pouch/box. ${flatLabelLock}` +
-        `LAYOUT: TOP HALF = hero [${frontContent}]; BOTTOM HALF = a tidy info panel [${backContent}]. Balanced, readable, not cramped.${dateLine}${codeLine} ${baseBrand}`
+        `LAYOUT: TOP HALF = hero [${frontContent}]; BOTTOM HALF = a tidy info panel [${backContent}]. Balanced, readable, not cramped.${dateLine}${codeLine} ${baseBrand}${sceneMatch}`
     }
   } else if (kind === 'product') {
     size = '1:1'
     prompt =
-      `TASK: A clean studio PRODUCT SHOT of the re-branded ${identity.productType}. Single hero product, centered. ${roundFormHint}${bgRule} ${labelApply}` +
+      `TASK: A clean studio PRODUCT SHOT of the re-branded ${identity.productType}. Single hero product, centered, wearing the EXACT new label shown in the FIRST reference image. ${roundFormHint}${bgRule} ${labelApply}` +
+      `Plain clean studio backdrop ONLY — do NOT scatter loose food, ingredients, herbs or props around the product, and do NOT recreate the original packaging's busy scene. ` +
       `FORM LOCK: keep the EXACT physical form/shape from the reference (${identity.productForm}); only replace the label/branding. ${productLock}${baseBrand}`
   } else if (kind === 'set') {
     size = '1:1'
@@ -162,7 +168,7 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
       `The reference image shows the FINISHED new-label product — replicate THAT exact label on EVERY single unit. NEVER copy any old, original or foreign-language (e.g. Chinese) label onto any unit. ` +
       `LAYOUT: the product pyramid sits in the CENTRE. On the LEFT, an info panel — the brand name ${q(chosenName)}, tagline ${q(identity.tagline)}, and 3-4 benefit points with small icons (${identity.benefits.map(q).join(', ')}). On the RIGHT, a panel titled "Formulated with…" listing the ingredients (${q(identity.ingredients)}). Keep these panels clean and readable. ` +
       `Heap and scatter the product's REAL raw ingredients (e.g. ${q(identity.ingredients || identity.productType)}) at the base and foreground — natural and appetising. ${adBgRule} ${labelApply}` +
-      `FORM LOCK: same packaging form as the reference (${identity.productForm}); only the branding is the new one. ${baseBrand}`
+      `FORM LOCK: same packaging form as the reference (${identity.productForm}); only the branding is the new one. ${baseBrand}${sceneMatch}`
   }
 
   if (typeof console !== 'undefined') {
