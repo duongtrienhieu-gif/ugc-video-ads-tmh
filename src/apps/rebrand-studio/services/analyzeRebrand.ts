@@ -69,9 +69,10 @@ const SCHEMA: Record<string, unknown> = {
     ingredients: { type: 'string' },
     usage: { type: 'string' },
     caution: { type: 'string' },
+    nutritionTitle: { type: 'string' },
     nutrition: { type: 'string' },
   },
-  required: ['names', 'palette', 'vibe', 'productForm', 'productType', 'tagline', 'benefits', 'netWeight', 'ingredients', 'usage', 'caution', 'nutrition'],
+  required: ['names', 'palette', 'vibe', 'productForm', 'productType', 'tagline', 'benefits', 'netWeight', 'ingredients', 'usage', 'caution', 'nutritionTitle', 'nutrition'],
 }
 
 export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<RebrandIdentity> {
@@ -97,7 +98,10 @@ export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<Rebr
     `5) Label copy in ${langName} ONLY. The product fields are CONTEXT to UNDERSTAND the product — do NOT copy them verbatim and do NOT dump everything. Write fresh, concise, natural label copy, keeping ONLY what a real retail label needs: tagline (<=8 words), benefits (2-3 items, each <=7 words — pick only the strongest, rephrased), usage (one short line), caution (one short line).\n` +
     `   ingredients: list ONLY the REAL ingredient names that actually appear in the source/photos — the source fields may be in Vietnamese, so TRANSLATE each ingredient name ACCURATELY into ${langName} (e.g. Vừng đen → Black Sesame, Dâu tằm → Mulberry, Bạch chỉ → Angelica, Linh chi → Ganoderma). Do NOT add or invent any ingredient that isn't there, and DROP marketing phrases (like "9 natural extracts"). For EACH real ingredient, ADD a PLAUSIBLE estimated amount (mg or g) typical for this product type — format like "Black Sesame 200mg, Mulberry 150mg, Angelica 100mg, Ganoderma 80mg". (Amounts are estimates the seller will verify.)\n` +
     `6) netWeight: copy net weight/volume EXACTLY from a photo if visible (e.g. "500g", "30ml"); else "".\n` +
-    `7) nutrition: a compact TYPICAL Nutrition Information per 100g for this kind of product (Energy kcal, Protein, Fat, Carbohydrate, Sugars, Dietary Fibre, Sodium) as one short multi-line string. These are ESTIMATES for layout — the seller will verify.\n` +
+    `7) Nutrition panel — DERIVE it from the product KIND + the REAL ingredients above. Do NOT output a fixed food template:\n` +
+    `   • If this is a DIETARY SUPPLEMENT / vitamin / herbal remedy in TABLET / CAPSULE / SOFTGEL / PILL / powder-sachet form → nutritionTitle = "SUPPLEMENT FACTS"; nutrition = a Supplement Facts panel that STARTS with "Serving size: <the real dose, e.g. 1 tablet (290mg)>", then lists EACH active ingredient with its amount PER SERVING and an estimated %NRV/RDI, taken DIRECTLY from the real ingredients listed above (e.g. "Vitamin B1 1.2mg (109% NRV), Vitamin B2 1.2mg (86% NRV), Niacin 15mg (94% NRV), Folic Acid 300mcg (150% NRV)"). Do NOT output Energy/Protein/Fat/Carbohydrate for supplements — they are meaningless for a tablet.\n` +
+    `   • Otherwise (a real FOOD / snack / drink) → nutritionTitle = "NUTRITION INFORMATION (per 100g)"; nutrition = compact food macros (Energy kcal, Protein, Fat, Carbohydrate, Sugars, Dietary Fibre, Sodium).\n` +
+    `   These are ESTIMATES for layout — the seller will verify.\n` +
     `RULES: Do NOT invent certifications (Halal/KKM/FDA/GMP) or fake claims. Keep it concise + believable. Output ONLY JSON.`
 
   // Seed ngẫu nhiên mỗi lần bấm → 3 tên brand KHÁC HẲN lần trước.
@@ -149,6 +153,7 @@ export async function analyzeRebrand(params: AnalyzeRebrandParams): Promise<Rebr
     ingredients: clean(p.ingredients),
     usage: clean(p.usage),
     caution: clean(p.caution),
+    nutritionTitle: clean(p.nutritionTitle) || 'NUTRITION INFORMATION',
     nutrition: clean(p.nutrition),
     market,
     sig: rebrandSig({ productId: params.productId, originalImageRefs: refs, market }),

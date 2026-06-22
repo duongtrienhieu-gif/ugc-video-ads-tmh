@@ -83,7 +83,8 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
     : ''
 
   const identityFresh = !!identity && identity.sig === rebrandSig({ productId: draft.productId, originalImageRefs: sourceRefs, market: draft.market })
-  const namesValid = identityFresh && !!draft.chosenName && (identity?.names.includes(draft.chosenName) ?? false)
+  // Tên hợp lệ = identity tươi + có tên (chọn từ AI HOẶC tự nhập). Không bắt buộc nằm trong list AI.
+  const namesValid = identityFresh && !!draft.chosenName && draft.chosenName.trim().length > 0
 
   const missing: string[] = []
   if (!geminiApiKey) missing.push('Gemini API key (Cài đặt)')
@@ -115,6 +116,9 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
   async function handleAnalyze(): Promise<RebrandIdentity | null> {
     if (!canAnalyze || isAnalyzing) return identity
     setAnalyzing(true)
+    // Tên user TỰ NHẬP (không thuộc list AI cũ) → giữ nguyên qua các lần roll lại.
+    const prevNames = identity?.names ?? []
+    const hasCustomName = !!draft.chosenName?.trim() && !prevNames.includes(draft.chosenName)
     try {
       const d = await analyzeRebrand({
         apiKey: geminiApiKey,
@@ -126,7 +130,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
         market: draft.market,
       })
       setIdentity(d)
-      setChosenName(d.names[0] ?? null) // mặc định chọn tên đầu
+      if (!hasCustomName) setChosenName(d.names[0] ?? null) // chỉ auto-chọn tên đầu nếu user chưa tự nhập
       addToast(`AI gợi ý ${d.names.length} tên brand.`, 'success')
       return d
     } catch (err) {
@@ -405,6 +409,16 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
                       </button>
                     )
                   })}
+                </div>
+                {/* Tự nhập tên brand — hoặc dùng tên AI ở trên. Giữ qua các lần roll. */}
+                <div className="mt-2">
+                  <label className="mb-1 block text-[11px] font-medium text-gray-500">Hoặc tự nhập tên brand:</label>
+                  <input
+                    type="text"
+                    value={draft.chosenName ?? ''}
+                    placeholder="Gõ tên brand của bạn…"
+                    onChange={(e) => setChosenName(e.target.value)}
+                    className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm font-medium text-gray-800 placeholder:font-normal placeholder:text-gray-400" />
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   {(identity.palette.colors.length ? identity.palette.colors : [identity.palette.primary, identity.palette.accent, identity.palette.bg]).map((c, i) => (

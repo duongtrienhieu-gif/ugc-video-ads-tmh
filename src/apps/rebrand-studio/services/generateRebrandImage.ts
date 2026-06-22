@@ -107,15 +107,16 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
     `The product category "${identity.productType}" appears only as a SMALLER secondary line BELOW the brand — it must NOT be larger than the brand name and must NOT replace it. ` +
     `Plus tagline ${q(identity.tagline)}, 2-3 benefit highlights (${identity.benefits.map(q).join(', ')})` +
     `${identity.netWeight ? `, net weight ${q(identity.netWeight)}` : ''}, plus appetising imagery of the food itself.`
+  const nutriTitle = (identity.nutritionTitle || 'NUTRITION INFORMATION').trim()
   const backContent =
     `BACK / INFO content: Ingredients (${q(identity.ingredients)}), Directions (${q(identity.usage)}), Caution & storage (${q(identity.caution)})` +
-    `${identity.nutrition ? `, a clear NUTRITION INFORMATION table per 100g: ${q(identity.nutrition)}` : ''}.`
+    `${identity.nutrition ? `, a clear panel titled ${q(nutriTitle)} containing EXACTLY this data (render it faithfully, do NOT swap in generic food macros): ${q(identity.nutrition)}` : ''}.`
   // Ngày format theo thị trường: ms → "04 Sep 2026" (MFG/EXP), vi → "04/09/2026" (NSX/HSD).
   const mfg = formatLabelDate(params.mfgDate ?? '', identity.market)
   const exp = formatLabelDate(params.expDate ?? '', identity.market)
   const dLbl = identity.market === 'ms' ? { mfg: 'MFG', exp: 'EXP' } : { mfg: 'NSX', exp: 'HSD' }
   const dateLine = (mfg || exp)
-    ? ` Also print a small date line on the label: ${mfg ? `${dLbl.mfg} ${q(mfg)}` : ''}${mfg && exp ? ' · ' : ''}${exp ? `${dLbl.exp} ${q(exp)}` : ''}.`
+    ? ` In the info area print a small date block; render BOTH dates character-for-character EXACTLY as written below, in the SAME format, with NO slashes added, NO extra digits, NO reformatting: ${mfg ? `${dLbl.mfg} ${q(mfg)}` : ''}${mfg && exp ? ' , ' : ''}${exp ? `${dLbl.exp} ${q(exp)}` : ''}.`
     : ''
   const batch = (params.batchCode ?? '').trim(), barcode = (params.barcodeNum ?? '').trim()
   const codeLine = (batch || barcode)

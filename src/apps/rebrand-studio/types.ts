@@ -66,7 +66,11 @@ export interface RebrandIdentity {
   usage: string
   /** Lưu ý/bảo quản ngắn (theo ngôn ngữ nhãn). */
   caution: string
-  /** Bảng dinh dưỡng/100g (AI ước lượng — user phải verify trước khi in). */
+  /** Tiêu đề bảng dinh dưỡng — "SUPPLEMENT FACTS" (viên/nang) hoặc
+   *  "NUTRITION INFORMATION (per 100g)" (thực phẩm). AI tự quyết theo loại SP. */
+  nutritionTitle: string
+  /** Nội dung bảng: viên uống = hoạt chất/liều + %NRV (suy từ ingredients);
+   *  thực phẩm = macro/100g. AI ước lượng — user phải verify trước khi in. */
   nutrition: string
   /** Mô tả vibe bản gốc (phong cách nền/cảnh + tâm trạng + hoạ tiết) để bám ~85%. */
   vibe: string
@@ -145,7 +149,7 @@ export function labelLangName(market: Market): string {
 
 /** Sig phát hiện identity stale. */
 export function rebrandSig(d: { productId: string | null; originalImageRefs: string[]; market: Market }): string {
-  return `v4|${d.productId ?? ''}|${d.market}|${d.originalImageRefs.join(',')}`
+  return `v5|${d.productId ?? ''}|${d.market}|${d.originalImageRefs.join(',')}`
 }
 
 /** 4 ảnh (nhãn gộp + product + set + combo) qua gpt-4o-image (6 mỗi ảnh; nhãn
