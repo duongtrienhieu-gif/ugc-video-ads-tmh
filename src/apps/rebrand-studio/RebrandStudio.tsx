@@ -366,7 +366,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
                 onChange={(e) => setExpDate(e.target.value)}
                 className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm text-gray-800" />
             </div>
-            <p className="mt-1 text-[10px] text-gray-400">Nhập DD/MM/YYYY. Nhãn MY tự đổi sang "04 Sep 2026"; VN giữ 04/09/2026.</p>
+            <p className="mt-1 text-[10px] text-gray-400">Nhập DD/MM/YYYY hoặc MM/YYYY. Nhãn MY tự đổi sang "04 Sep 2026" / "Sep 2026"; VN giữ 04/09/2026 / 09/2026.</p>
             <div className="mt-2 flex items-center gap-2">
               <span className="text-[11px] text-gray-500">Mã (random): <span className="font-mono text-gray-700">{draft.batchCode || '—'}</span> · <span className="font-mono text-gray-700">{draft.barcodeNum || '—'}</span></span>
               <button onClick={regenCode} className="ml-auto rounded-md border border-black/10 px-2 py-1 text-[10px] text-gray-600 hover:bg-gray-50">Đổi mã</button>

@@ -106,17 +106,29 @@ export function emptyRebrandDraft(): RebrandDraft {
 
 const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-/** User nhập DD/MM/YYYY → format theo thị trường nhãn:
- *  vi → "04/09/2026" (DD/MM/YYYY) · ms → "04 Sep 2026" (DD Mon YYYY, không nhầm). */
+/** User nhập DD/MM/YYYY HOẶC MM/YYYY → format theo thị trường nhãn:
+ *  • DD/MM/YYYY → vi "04/09/2026" · ms "04 Sep 2026"
+ *  • MM/YYYY    → vi "09/2026"    · ms "Sep 2026"
+ *  ms luôn dùng tên tháng chữ để KHÔNG nhầm thứ tự ngày/tháng. */
 export function formatLabelDate(raw: string, market: Market): string {
   const s = (raw ?? '').trim()
   if (!s) return ''
-  const m = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/)
-  if (!m) return s // không parse được → giữ nguyên
-  const d = m[1].padStart(2, '0')
-  const mo = Math.max(1, Math.min(12, parseInt(m[2], 10)))
-  const y = m[3].length === 2 ? `20${m[3]}` : m[3]
-  return market === 'ms' ? `${d} ${EN_MONTHS[mo - 1]} ${y}` : `${d}/${String(mo).padStart(2, '0')}/${y}`
+  // DD/MM/YYYY (đủ ngày · tháng · năm)
+  const full = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/)
+  if (full) {
+    const d = full[1].padStart(2, '0')
+    const mo = Math.max(1, Math.min(12, parseInt(full[2], 10)))
+    const y = full[3].length === 2 ? `20${full[3]}` : full[3]
+    return market === 'ms' ? `${d} ${EN_MONTHS[mo - 1]} ${y}` : `${d}/${String(mo).padStart(2, '0')}/${y}`
+  }
+  // MM/YYYY (chỉ tháng + năm — vd "04/2026", phổ biến cho NSX/HSD)
+  const my = s.match(/^(\d{1,2})[/\-.](\d{4})$/)
+  if (my) {
+    const mo = Math.max(1, Math.min(12, parseInt(my[1], 10)))
+    const y = my[2]
+    return market === 'ms' ? `${EN_MONTHS[mo - 1]} ${y}` : `${String(mo).padStart(2, '0')}/${y}`
+  }
+  return s // không parse được → giữ nguyên
 }
 
 /** Sinh mã lô (6 ký tự) + barcode EAN-13 (12 số ngẫu nhiên + check digit). */
