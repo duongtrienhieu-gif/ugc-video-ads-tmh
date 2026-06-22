@@ -245,6 +245,9 @@ export async function generateScript(
     // [...other CTA sentences] → [gift] → [urgency LAST]. No-op when gift is off or it
     // can't confidently find both a gift + an urgency sentence (never mangles a normal CTA).
     if (params.gift?.name?.trim() && blockMap.cta) {
+      // (a) GUARANTEE the gift is present (Gemini drop / refit trim) — inject if missing.
+      blockMap.cta = ensureGiftInCta(blockMap.cta, params.gift.name, params.gift.benefitLine, params.lang)
+      // (b) order it: [...] → [gift] → [urgency LAST].
       blockMap.cta = reorderGiftBeforeFinalCta(blockMap.cta, params.gift.name)
     }
     // Keep the user's picked hook verbatim through any refit.
@@ -286,10 +289,12 @@ const SCRIPT_BLOCK_IDS: ScriptBlockId[] = [
   'hook', 'pain', 'discovery', 'benefit', 'cta',
 ]
 
-// Phase A — urgency / buy-push cue (universal VN / MS / EN) used to find the line the
-// CTA must END on. Mirrors the director's ctaCue but tuned for closing-push verbs.
+// Phase A — URGENCY / SCARCITY cue (the line the CTA must END on). DELIBERATELY excludes plain
+// buy verbs (mua / beli / order / đặt / chốt) — those mark the OFFER ("Mua 1 Tặng 1"), NOT the
+// hurry-close, and including them made the reorder mistake the offer for the close (the audited
+// "Mua 1 Tặng 1 nhảy ra cuối" bug). Keep only HURRY / SCARCITY words. Universal VN / MS / EN.
 const GIFT_CTA_URGENCY_RE =
-  /\b(mua|ch[oố]t|hốt|nhanh tay|kẻo|hết hàng|s[oở] h[uữ]u|đặt\s*(ngay|li[eề]n|hàng)|grab|beli|jom|order|checkout|cart|sekarang|cepat|jangan\s*lepas|stok)\b/i
+  /(nhanh tay|kẻo|hết hàng|hốt l[eẹ]|hốt ngay|đừng (?:bỏ|để) l[ỡõ]|gấp lên|grab cepat|cepat|jangan tunggu|jangan lepas|sebelum (?:stok )?habis|stok terhad|sekarang|hurry|last chance|limited stock|while stock)/i
 
 function stripDiacriticsLower(s: string): string {
   return (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -321,6 +326,32 @@ function reorderGiftBeforeFinalCta(cta: string, giftName: string): string {
   const urgency = sentences[urgencyIdx]
   const rest = sentences.filter((_, i) => i !== giftIdx && i !== urgencyIdx)
   return [...rest, gift, urgency].join(' ')
+}
+
+/** Phase A — GUARANTEE the gift appears in the CTA. Gemini sometimes drops it, and the
+ *  fit-to-length refit can trim it (gift = "compressible"). Runs AFTER refit + stripMoney:
+ *  if the gift name (or its most distinctive word) is NOT already in the CTA, inject ONE short
+ *  native clause just BEFORE the final sentence (so the close stays last). No-op when the gift
+ *  is already present → never duplicates. Connector is per-language so it reads native. */
+function ensureGiftInCta(cta: string, giftName: string, benefitLine: string, lang: ScriptLang): string {
+  const text = (cta ?? '').trim()
+  const name = (giftName ?? '').trim()
+  if (!text || !name) return cta
+  const ctaN = stripDiacriticsLower(text)
+  // Present if the full name OR its longest distinctive word (≥4 chars) is already in the CTA.
+  const longest = name.split(/\s+/).filter((w) => w.length >= 4).sort((a, b) => b.length - a.length)[0]
+  if (ctaN.includes(stripDiacriticsLower(name)) || (longest && ctaN.includes(stripDiacriticsLower(longest)))) return text
+  const benefit = (benefitLine ?? '').trim().replace(/[.!?…]+$/, '')
+  // Per-language gift clause (name + benefit already localized to the output lang).
+  const clause = lang === 'ms'
+    ? `Dapat ${name} percuma${benefit ? ` — ${benefit}` : ''}.`
+    : lang === 'en'
+      ? `Plus a free ${name}${benefit ? ` — ${benefit}` : ''}.`
+      : `Tặng kèm ${name}${benefit ? ` — ${benefit}` : ''}.`
+  const sentences = (text.match(/[^.!?…]+[.!?…]*/g) ?? [text]).map((s) => s.trim()).filter(Boolean)
+  if (sentences.length <= 1) return `${text} ${clause}`.trim()
+  sentences.splice(sentences.length - 1, 0, clause)   // insert before the final (urgency) sentence
+  return sentences.join(' ')
 }
 
 const HOOK_STYLES: HookStyle[] = ['emotional', 'shock', 'curiosity']
@@ -703,7 +734,8 @@ function buildUserPrompt(args: {
   // localised; the benefit line is given. The 4 hero blocks must NOT mention it.
   const giftLine = args.gift && args.gift.name.trim()
     ? `\nBUNDLED GIFT — applies to the CTA BLOCK ONLY (do NOT touch hook/pain/discovery/benefit):
-- A FREE bonus gift comes with the order: "${args.gift.name.trim()}"${args.gift.benefitLine.trim() ? ` — ${args.gift.benefitLine.trim()}` : ''}.
+- A FREE bonus gift comes with the order: "${args.gift.name.trim()}"${args.gift.benefitLine.trim() ? ` — ${args.gift.benefitLine.trim()}` : ''}.${args.gift.benefitLine.trim() ? '' : ' No benefit was provided for the gift — write ONE short, believable benefit for it yourself (a few words), in the output language.'}
+- ALWAYS include the gift in the CTA — it must NOT be dropped even when trimming for length.
 - Frame it as something SPECIAL and FOMO-worthy yet BELIEVABLE — an exclusive / limited bonus that makes buying NOW feel like a great deal. Make it punchy + native. Do NOT open it with a flat "today / hôm nay / hari ni" — find a more compelling, natural way to introduce the gift.
 - CHAIN, don't stack: if the product already has a buy-X-get-Y offer, fold the gift onto it in ONE short flowing beat (e.g. "…mua 1 được thêm 2 món, lại còn được tặng thêm [gift] — [benefit]…") instead of a separate extra sentence — keep the whole CTA tight (the ad must not run long).
 - ORDER (CRITICAL): announce the gift JUST BEFORE the final push. The VERY LAST sentence of the whole script MUST be the strongest urgency call-to-buy (buy now / grab it before it's gone) — NOT the gift line.
