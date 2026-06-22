@@ -27,13 +27,13 @@ export interface GenerateRebrandImageParams {
   signal?: AbortSignal
 }
 
-const TIMEOUT_MS = 5 * 60 * 1000
+const TIMEOUT_MS = 3.5 * 60 * 1000 // fail nhanh hơn để khỏi treo lâu
 
 function isHardError(err: unknown): boolean {
   const m = err instanceof Error ? err.message : String(err)
   return m.includes('INSUFFICIENT_CREDITS') || m.toLowerCase().includes('policy') || m.includes('CANCELLED')
 }
-async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, attempts = 2): Promise<T> {
   let lastErr: unknown
   for (let i = 0; i < attempts; i++) {
     try { return await fn() } catch (err) { lastErr = err; if (isHardError(err)) throw err }
@@ -140,6 +140,7 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
       (isRound
         ? `Since the packaging is a round bottle/jar, use a STABLE tiered/triangular arrangement on a small riser/box so it looks solid (not about to topple). ${roundFormHint}`
         : ``) +
+      `EVERY bottle/unit must show the IDENTICAL new front label — same design, text, colours and ORIENTATION on all units (no rotated or mismatched labels). ` +
       `Heap and scatter the product's REAL raw ingredients (e.g. ${q(identity.ingredients || identity.productType)}) at the base and foreground — natural and appetising. ${adBgRule} ${labelApply}` +
       `FORM LOCK: same packaging form as the reference (${identity.productForm}); only the branding is the new one. ${productLock}${baseBrand}`
   }
@@ -165,43 +166,10 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
     return resp.blob()
   })
 
-  // Nhãn PHẲNG: auto-CROP về ĐÚNG tỉ lệ cm (chỉ cắt mép). Nhãn QUẤN tròn giữ
-  // native 3:2 + gap (không crop — tỉ lệ quấn quá rộng, user đã chấp nhận ~gần).
-  let outBlob = blob
-  const cropFlatLabel = kind === 'label' && params.packagingType !== 'round'
-  if (cropFlatLabel && params.widthCm && params.heightCm && params.heightCm > 0) {
-    try { outBlob = await cropBlobToRatio(blob, params.widthCm / params.heightCm) } catch { outBlob = blob }
-  }
-
-  const assetRef = await saveAsset(outBlob, outBlob.type || 'image/jpeg')
+  // KHÔNG crop nữa: giữ NHÃN FULL (crop cũ cắt mép trên → mất brand). Chấp nhận
+  // tỉ lệ ~gần (gpt 3:2/1:1/2:3) đổi lại không bao giờ cắt mất nội dung.
+  const assetRef = await saveAsset(blob, blob.type || 'image/jpeg')
   return { assetRef, prompt }
-}
-
-/** Center-crop blob về đúng tỉ lệ (w/h). Chỉ cắt mép thừa — không kéo giãn. */
-async function cropBlobToRatio(blob: Blob, ratio: number): Promise<Blob> {
-  if (!(ratio > 0)) return blob
-  const url = URL.createObjectURL(blob)
-  try {
-    const img = await new Promise<HTMLImageElement>((res, rej) => {
-      const i = new Image()
-      i.onload = () => res(i)
-      i.onerror = () => rej(new Error('load'))
-      i.src = url
-    })
-    const w = img.naturalWidth, h = img.naturalHeight
-    const cur = w / h
-    let sx = 0, sy = 0, sw = w, sh = h
-    if (cur > ratio) { sw = Math.round(h * ratio); sx = Math.round((w - sw) / 2) }
-    else if (cur < ratio) { sh = Math.round(w / ratio); sy = Math.round((h - sh) / 2) }
-    else return blob
-    const canvas = document.createElement('canvas')
-    canvas.width = sw; canvas.height = sh
-    const ctx = canvas.getContext('2d')!
-    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh)
-    return await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('crop'))), 'image/png'))
-  } finally {
-    URL.revokeObjectURL(url)
-  }
 }
 
 function q(s: string): string {

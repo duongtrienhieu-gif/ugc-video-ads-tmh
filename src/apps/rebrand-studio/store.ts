@@ -15,6 +15,7 @@ import {
 } from './types'
 
 const CACHE_KEY = 'rebrand-studio-draft-v1'
+const SETS_KEY = 'rebrand-studio-sets-v1'
 
 interface PersistShape {
   draft: RebrandDraft
@@ -22,8 +23,25 @@ interface PersistShape {
   identity: RebrandIdentity | null
 }
 
+/** 1 bộ ảnh rebrand đã lưu (thư viện). */
+export interface SavedRebrandSet {
+  id: string
+  name: string
+  savedAt: number
+  draft: RebrandDraft
+  identity: RebrandIdentity | null
+  images: RebrandImage[]
+}
+
 function freshImages(): RebrandImage[] {
   return REBRAND_IMAGE_KINDS.map((kind) => ({ kind, status: 'idle' as const }))
+}
+
+function loadSets(): SavedRebrandSet[] {
+  try { return JSON.parse(localStorage.getItem(SETS_KEY) || '[]') as SavedRebrandSet[] } catch { return [] }
+}
+function persistSets(sets: SavedRebrandSet[]) {
+  try { localStorage.setItem(SETS_KEY, JSON.stringify(sets)) } catch { /* ignore */ }
 }
 
 function loadCache(): PersistShape {
@@ -57,6 +75,13 @@ interface RebrandState {
   setMarket: (m: Market) => void
   setChosenName: (n: string | null) => void
 
+  // ── thư viện bộ ảnh ──
+  savedSets: SavedRebrandSet[]
+  saveCurrentSet: (name: string) => void
+  newSet: () => void
+  openSet: (id: string) => void
+  deleteSet: (id: string) => void
+
   setIdentity: (d: RebrandIdentity | null) => void
   setAnalyzing: (v: boolean) => void
   patchImage: (kind: RebrandImageKind, patch: Partial<RebrandImage>) => void
@@ -78,6 +103,29 @@ export const useRebrandStore = create<RebrandState>((set, get) => {
     images: init.images,
     identity: init.identity,
     isAnalyzing: false,
+    savedSets: loadSets(),
+
+    saveCurrentSet: (name) => {
+      const { draft, identity, images, savedSets } = get()
+      const item: SavedRebrandSet = {
+        id: `set-${crypto.randomUUID().slice(0, 8)}`,
+        name: name.trim() || (draft.chosenName ?? 'Bộ rebrand'),
+        savedAt: Date.now(),
+        draft, identity, images,
+      }
+      const next = [item, ...savedSets].slice(0, 50)
+      set({ savedSets: next }); persistSets(next)
+    },
+    newSet: () => { set({ draft: emptyRebrandDraft(), images: freshImages(), identity: null }); save() },
+    openSet: (id) => {
+      const s = get().savedSets.find((x) => x.id === id)
+      if (!s) return
+      set({ draft: s.draft, identity: s.identity, images: s.images }); save()
+    },
+    deleteSet: (id) => {
+      const next = get().savedSets.filter((x) => x.id !== id)
+      set({ savedSets: next }); persistSets(next)
+    },
 
     setProductId: (id) => { set((s) => ({ draft: { ...s.draft, productId: id } })); save() },
     addOriginalImage: (ref) => {
