@@ -110,7 +110,7 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
   const nutriTitle = (identity.nutritionTitle || 'NUTRITION INFORMATION').trim()
   const backContent =
     `BACK / INFO content: Ingredients (${q(identity.ingredients)}), Directions (${q(identity.usage)}), Caution & storage (${q(identity.caution)})` +
-    `${identity.nutrition ? `, a clear panel titled ${q(nutriTitle)} containing EXACTLY this data (render it faithfully, do NOT swap in generic food macros): ${q(identity.nutrition)}` : ''}.`
+    `${identity.nutrition ? `, a clear panel titled ${q(nutriTitle)} containing EXACTLY this data (render every row + any "† Daily Value not established" footnote faithfully; do NOT swap in generic food macros and NEVER print placeholder asterisks like "**"): ${q(identity.nutrition)}` : ''}.`
   // Ngày format theo thị trường: ms → "04 Sep 2026" (MFG/EXP), vi → "04/09/2026" (NSX/HSD).
   const mfg = formatLabelDate(params.mfgDate ?? '', identity.market)
   const exp = formatLabelDate(params.expDate ?? '', identity.market)
