@@ -72,6 +72,8 @@ interface RebrandState {
   setHeightCm: (v: number | null) => void
   setPackagingType: (t: PackagingType) => void
   setLabelModel: (m: LabelModel) => void
+  setMfgDate: (v: string) => void
+  setExpDate: (v: string) => void
   setMarket: (m: Market) => void
   setChosenName: (n: string | null) => void
 
@@ -143,6 +145,8 @@ export const useRebrandStore = create<RebrandState>((set, get) => {
     setHeightCm: (v) => { set((s) => ({ draft: { ...s.draft, heightCm: v } })); save() },
     setPackagingType: (t) => { set((s) => ({ draft: { ...s.draft, packagingType: t } })); save() },
     setLabelModel: (m) => { set((s) => ({ draft: { ...s.draft, labelModel: m } })); save() },
+    setMfgDate: (v) => { set((s) => ({ draft: { ...s.draft, mfgDate: v } })); save() },
+    setExpDate: (v) => { set((s) => ({ draft: { ...s.draft, expDate: v } })); save() },
     setMarket: (m) => { set((s) => ({ draft: { ...s.draft, market: m } })); save() },
     setChosenName: (n) => { set((s) => ({ draft: { ...s.draft, chosenName: n } })); save() },
 

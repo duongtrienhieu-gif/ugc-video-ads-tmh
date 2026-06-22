@@ -48,7 +48,7 @@ function AssetImg({ refId, alt }: { refId: string | undefined | null; alt: strin
 export default function RebrandStudio({ embedded = false }: { embedded?: boolean }) {
   const {
     draft, images, identity, isAnalyzing,
-    setProductId, addOriginalImage, removeOriginalImage, setWidthCm, setHeightCm, setPackagingType, setLabelModel, setMarket, setChosenName,
+    setProductId, addOriginalImage, removeOriginalImage, setWidthCm, setHeightCm, setPackagingType, setLabelModel, setMfgDate, setExpDate, setMarket, setChosenName,
     setIdentity, setAnalyzing, patchImage,
     savedSets, saveCurrentSet, newSet, openSet,
   } = useRebrandStore()
@@ -155,6 +155,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
         widthCm: draft.widthCm, heightCm: draft.heightCm,
         packagingType: draft.packagingType,
         labelModel: draft.labelModel,
+        mfgDate: draft.mfgDate, expDate: draft.expDate,
         labelRef: isLabel ? undefined : labelRef,
       })
       patchImage(kind, { status: 'completed', assetRef: res.assetRef })
@@ -345,6 +346,19 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
                 className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm text-gray-800" />
             </div>
             {pxHint && <p className="mt-1.5 text-[10px] text-gray-400">{pxHint}</p>}
+          </div>
+
+          {/* NSX / HSD */}
+          <div className="rounded-xl border border-black/10 bg-white p-4">
+            <label className="mb-1 block text-xs font-semibold text-gray-700">NSX / HSD (in lên nhãn, tuỳ chọn)</label>
+            <div className="flex items-center gap-2">
+              <input type="text" value={draft.mfgDate} placeholder="NSX (vd 01/2026)"
+                onChange={(e) => setMfgDate(e.target.value)}
+                className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm text-gray-800" />
+              <input type="text" value={draft.expDate} placeholder="HSD (vd 01/2028)"
+                onChange={(e) => setExpDate(e.target.value)}
+                className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm text-gray-800" />
+            </div>
           </div>
 
           {/* Model nhãn (in) */}

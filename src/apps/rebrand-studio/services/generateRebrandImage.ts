@@ -23,6 +23,9 @@ export interface GenerateRebrandImageParams {
   labelModel?: LabelModel
   /** asset:xxx nhãn front đã sinh — dùng cho product/set để pouch mặc ĐÚNG nhãn. */
   labelRef?: string | null
+  /** NSX / HSD — in lên nhãn (kind 'label'). */
+  mfgDate?: string
+  expDate?: string
   onStatus?: (status: ImageStatus) => void
   signal?: AbortSignal
 }
@@ -104,6 +107,10 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
   const backContent =
     `BACK / INFO content: Ingredients (${q(identity.ingredients)}), Directions (${q(identity.usage)}), Caution & storage (${q(identity.caution)})` +
     `${identity.nutrition ? `, a clear NUTRITION INFORMATION table per 100g: ${q(identity.nutrition)}` : ''}.`
+  const mfg = (params.mfgDate ?? '').trim(), exp = (params.expDate ?? '').trim()
+  const dateLine = (mfg || exp)
+    ? ` Also print a small date line on the label: ${mfg ? `Manufacture date (NSX) ${q(mfg)}` : ''}${mfg && exp ? ' · ' : ''}${exp ? `Expiry (HSD/EXP) ${q(exp)}` : ''}.`
+    : ''
 
   let prompt: string
   let size: Gpt4oSize
@@ -114,12 +121,12 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
       size = '3:2' // nhãn quấn dài → dùng landscape rộng nhất của gpt + gap giữa
       prompt =
         `TASK: Design ONE long WRAP-AROUND product LABEL for a ${identity.productType} packaged in a ROUND jar/can (the label wraps from front to back). ${flatLabelLock}` +
-        `LAYOUT (left→right): the FRONT design on the LEFT (~45%) [${frontContent}], then a CLEAR BLANK / neutral background BAND in the MIDDLE (~10%, no text — this is the wrap seam / side), then the BACK INFO on the RIGHT (~45%) [${backContent}]. ${baseBrand}`
+        `LAYOUT (left→right): the FRONT design on the LEFT (~45%) [${frontContent}], then a CLEAR BLANK / neutral background BAND in the MIDDLE (~10%, no text — this is the wrap seam / side), then the BACK INFO on the RIGHT (~45%) [${backContent}].${dateLine} ${baseBrand}`
     } else {
       size = pickLabelSize(params.widthCm, params.heightCm)
       prompt =
         `TASK: Design ONE single-face product LABEL (everything on ONE sticker) for a ${identity.productType} on a flat pouch/box. ${flatLabelLock}` +
-        `LAYOUT: TOP HALF = hero [${frontContent}]; BOTTOM HALF = a tidy info panel [${backContent}]. Balanced, readable, not cramped. ${baseBrand}`
+        `LAYOUT: TOP HALF = hero [${frontContent}]; BOTTOM HALF = a tidy info panel [${backContent}]. Balanced, readable, not cramped.${dateLine} ${baseBrand}`
     }
   } else if (kind === 'product') {
     size = '1:1'
@@ -142,6 +149,7 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
         : ``) +
       `EVERY unit must show the IDENTICAL new front label — same design, text, colours and ORIENTATION on ALL units (no rotated or mismatched labels). ` +
       `The reference image shows the FINISHED new-label product — replicate THAT exact label on EVERY single unit. NEVER copy any old, original or foreign-language (e.g. Chinese) label onto any unit. ` +
+      `LAYOUT: the product pyramid sits in the CENTRE. On the LEFT, an info panel — the brand name ${q(chosenName)}, tagline ${q(identity.tagline)}, and 3-4 benefit points with small icons (${identity.benefits.map(q).join(', ')}). On the RIGHT, a panel titled "Formulated with…" listing the ingredients (${q(identity.ingredients)}). Keep these panels clean and readable. ` +
       `Heap and scatter the product's REAL raw ingredients (e.g. ${q(identity.ingredients || identity.productType)}) at the base and foreground — natural and appetising. ${adBgRule} ${labelApply}` +
       `FORM LOCK: same packaging form as the reference (${identity.productForm}); only the branding is the new one. ${baseBrand}`
   }

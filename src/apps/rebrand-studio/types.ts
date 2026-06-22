@@ -85,13 +85,16 @@ export interface RebrandDraft {
   packagingType: PackagingType
   /** Model render nhãn. */
   labelModel: LabelModel
+  /** NSX (ngày sản xuất) + HSD (hạn dùng) — user nhập, in lên nhãn. */
+  mfgDate: string
+  expDate: string
   market: Market
   /** Tên brand user đã chọn từ identity.names. */
   chosenName: string | null
 }
 
 export function emptyRebrandDraft(): RebrandDraft {
-  return { productId: null, originalImageRefs: [], widthCm: null, heightCm: null, packagingType: 'flat', labelModel: 'gpt4o', market: 'vi', chosenName: null }
+  return { productId: null, originalImageRefs: [], widthCm: null, heightCm: null, packagingType: 'flat', labelModel: 'gpt4o', mfgDate: '', expDate: '', market: 'vi', chosenName: null }
 }
 
 export const MAX_ORIGINAL_IMAGES = 4
