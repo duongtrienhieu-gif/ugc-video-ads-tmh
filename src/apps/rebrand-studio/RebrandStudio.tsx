@@ -344,7 +344,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
                   {(identity.palette.colors.length ? identity.palette.colors : [identity.palette.primary, identity.palette.accent, identity.palette.bg]).map((c, i) => (
                     <span key={`${c}-${i}`} title={c} className="h-4 w-4 rounded-sm border border-black/10" style={{ background: c }} />
                   ))}
-                  <span className="text-[10px] text-gray-400">palette ~75% vibe gốc · nhãn {labelLangName(identity.market)}</span>
+                  <span className="text-[10px] text-gray-400">palette ~85% vibe gốc · nhãn {labelLangName(identity.market)}</span>
                 </div>
                 {identity.vibe && <div className="mt-1 text-[10px] italic text-gray-400">Vibe: {identity.vibe}</div>}
               </div>

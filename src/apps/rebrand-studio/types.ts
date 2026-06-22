@@ -68,7 +68,7 @@ export interface RebrandIdentity {
   caution: string
   /** Bảng dinh dưỡng/100g (AI ước lượng — user phải verify trước khi in). */
   nutrition: string
-  /** Mô tả vibe bản gốc (phong cách nền/cảnh + tâm trạng + hoạ tiết) để bám ~75%. */
+  /** Mô tả vibe bản gốc (phong cách nền/cảnh + tâm trạng + hoạ tiết) để bám ~85%. */
   vibe: string
   market: Market
   sig: string

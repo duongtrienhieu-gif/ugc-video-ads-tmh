@@ -82,7 +82,7 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
   const baseBrand =
     `NEW BRAND: "${chosenName}". Render "${chosenName}" large, clean and spelled EXACTLY. ` +
     `COLOUR PALETTE — use the FULL rich set, do NOT reduce to 1-2 colours: ${colorsStr}. ` +
-    `MATCH ~75% the LOOK & FEEL of the reference design: similar background style/scene, colour richness and decorative motifs` +
+    `MATCH ~85% the LOOK & FEEL of the reference design: closely follow its background style/scene, colour richness and decorative motifs` +
     `${identity.vibe ? ` (${identity.vibe})` : ''}; clearly inspired by it but NOT an identical copy. ` +
     `Label text language: ${langName}. Do NOT show any old brand name. Do NOT invent certification badges (Halal/KKM/FDA). Crisp, professional, readable.`
   const productLock =
