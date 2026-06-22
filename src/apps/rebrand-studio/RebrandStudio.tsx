@@ -137,14 +137,18 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
     }
   }
 
-  async function generateOne(kind: RebrandImageKind, id: RebrandIdentity, name: string, labelRef?: string): Promise<string | undefined> {
+  async function generateOne(kind: RebrandImageKind, id: RebrandIdentity, name: string, labelRef?: string, comboBaseRef?: string): Promise<string | undefined> {
     patchImage(kind, { status: 'generating', error: undefined })
     try {
-      // Nhãn (flat artwork) chỉ cần ref ảnh SẢN PHẨM/món ăn (bank) — KHÔNG dùng
-      // ảnh pouch upload (tránh AI vẽ bao bì vào nhãn). Product/set dùng full ref
-      // + nhãn front đã sinh (labelRef) để pouch mặc ĐÚNG nhãn in.
+      // Nhãn (flat artwork): ref ảnh món ăn bank (không dùng pouch upload).
+      // product/set: full ref + labelRef.
+      // combo: ref = ảnh "Sản phẩm nhãn mới" SẠCH (comboBaseRef) — KHÔNG dùng ảnh
+      // gốc nhãn cũ → tránh rò rỉ nhãn cũ lên 1 trong nhiều pouch.
       const isLabel = kind === 'label'
-      const refsForKind = isLabel ? (bankImages.length ? bankImages : sourceRefs) : sourceRefs
+      const isCombo = kind === 'combo'
+      const refsForKind = isLabel
+        ? (bankImages.length ? bankImages : sourceRefs)
+        : (isCombo && comboBaseRef) ? [comboBaseRef] : sourceRefs
       const res = await generateRebrandImage({
         apiKey: kieApiKey, kind, identity: id, chosenName: name,
         originalImageRefs: refsForKind,
@@ -170,11 +174,12 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
       const name = draft.chosenName!
       // Sinh NHÃN gộp trước → lấy làm ref cho product/set (pouch mặc đúng nhãn).
       const labelRef = await generateOne('label', id, name)
-      await Promise.all([
+      // product + set song song; combo CHỜ product xong để lấy pouch sạch làm ref.
+      const [productRef] = await Promise.all([
         generateOne('product', id, name, labelRef),
         generateOne('set', id, name, labelRef),
-        generateOne('combo', id, name, labelRef),
       ])
+      await generateOne('combo', id, name, labelRef, productRef)
     } finally {
       setBusy(false)
     }
@@ -184,9 +189,10 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
     if (!canGenerate || busy) return
     setBusy(true)
     try {
-      // product/set tạo lại → dùng nhãn gộp hiện có để giữ đồng nhất.
+      // product/set/combo tạo lại → dùng nhãn gộp hiện có; combo thêm pouch sạch (#2).
       const labelRef = images.find((im) => im.kind === 'label')?.assetRef
-      await generateOne(kind, identity!, draft.chosenName!, labelRef)
+      const comboBaseRef = kind === 'combo' ? images.find((im) => im.kind === 'product')?.assetRef : undefined
+      await generateOne(kind, identity!, draft.chosenName!, labelRef, comboBaseRef)
     } finally { setBusy(false) }
   }
 

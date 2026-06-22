@@ -140,9 +140,10 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
       (isRound
         ? `Since the packaging is a round bottle/jar, use a STABLE tiered/triangular arrangement on a small riser/box so it looks solid (not about to topple). ${roundFormHint}`
         : ``) +
-      `EVERY bottle/unit must show the IDENTICAL new front label — same design, text, colours and ORIENTATION on all units (no rotated or mismatched labels). ` +
+      `EVERY unit must show the IDENTICAL new front label — same design, text, colours and ORIENTATION on ALL units (no rotated or mismatched labels). ` +
+      `The reference image shows the FINISHED new-label product — replicate THAT exact label on EVERY single unit. NEVER copy any old, original or foreign-language (e.g. Chinese) label onto any unit. ` +
       `Heap and scatter the product's REAL raw ingredients (e.g. ${q(identity.ingredients || identity.productType)}) at the base and foreground — natural and appetising. ${adBgRule} ${labelApply}` +
-      `FORM LOCK: same packaging form as the reference (${identity.productForm}); only the branding is the new one. ${productLock}${baseBrand}`
+      `FORM LOCK: same packaging form as the reference (${identity.productForm}); only the branding is the new one. ${baseBrand}`
   }
 
   if (typeof console !== 'undefined') {
