@@ -932,6 +932,10 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
           <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${badge.cls}`}>{badge.label}</span>
           {/* P6m (P1) — Gemini's declared shot intent, for auditing the refactor (display only). */}
           {scene.shotIntent && <span className="rounded bg-violet-900/70 px-1 text-[8px] font-semibold text-violet-200">{scene.shotIntent}</span>}
+          {/* P6av — flag a lips cut that the director picked to render from KF-B (creator HOLDING the product). */}
+          {scene.role === 'lips' && scene.lipsHoldsProduct && (
+            <span className="rounded bg-amber-500/90 px-1 text-[8px] font-bold text-white" title="Cảnh lips này render từ keyframe creator ĐANG CẦM sản phẩm (KF-B)">🧴 cầm SP</span>
+          )}
         </div>
         <span className="pointer-events-none absolute right-1 top-1 rounded bg-black/60 px-1 text-[9px] text-white/90">{scene.startSec.toFixed(1)}-{scene.endSec.toFixed(1)}s</span>
         {scene.cameraFraming === 'hands_noface' && <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[8px] text-white/80">no-face</span>}
