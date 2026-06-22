@@ -16,8 +16,8 @@ import type { Market } from '../../types/brandKit'
 
 export type { Market }
 
-export type RebrandImageKind = 'label' | 'product' | 'set'
-export const REBRAND_IMAGE_KINDS: RebrandImageKind[] = ['label', 'product', 'set']
+export type RebrandImageKind = 'label' | 'product' | 'set' | 'combo'
+export const REBRAND_IMAGE_KINDS: RebrandImageKind[] = ['label', 'product', 'set', 'combo']
 
 /** Kiểu dán nhãn — quyết định bố cục nhãn gộp.
  *  flat  = dán 1 mặt (túi/hộp phẳng): gộp front+back lên 1 mặt.
@@ -112,6 +112,7 @@ export function rebrandSig(d: { productId: string | null; originalImageRefs: str
   return `v3|${d.productId ?? ''}|${d.market}|${d.originalImageRefs.join(',')}`
 }
 
-/** 3 ảnh (nhãn gộp + product + set) đều qua gpt-4o-image (6 mỗi ảnh). */
-export const REBRAND_AI_IMAGES = 3
+/** 4 ảnh (nhãn gộp + product + set + combo) qua gpt-4o-image (6 mỗi ảnh; nhãn
+ *  có thể nano 4K = 20). REBRAND_TOTAL_CREDITS chỉ là ước tính header (gpt-4o). */
+export const REBRAND_AI_IMAGES = 4
 export const REBRAND_TOTAL_CREDITS = 6 * REBRAND_AI_IMAGES

@@ -71,6 +71,7 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
   const P = identity.palette
   const isRound = params.packagingType === 'round'
   const bgRule = `BACKGROUND: a soft NON-WHITE light backdrop (warm beige or light grey gradient) + a soft drop shadow, so the product separates easily for background removal. Do NOT use a pure white background.`
+  const adBgRule = `BACKGROUND: a rich, finished ADVERTISING backdrop — a soft gradient / lightly styled scene in the brand palette with a gentle glow. This image is used directly in ads/banners, so NO need for background removal.`
   const roundFormHint = isRound ? `The packaging is a ROUND jar/bottle/can with a wrap-around label. ` : ''
   const labelApply = hasLabelRef
     ? (isRound
@@ -123,12 +124,22 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
     prompt =
       `TASK: A clean studio PRODUCT SHOT of the re-branded ${identity.productType}. Single hero product, centered. ${roundFormHint}${bgRule} ${labelApply}` +
       `FORM LOCK: keep the EXACT physical form/shape from the reference (${identity.productForm}); only replace the label/branding. ${productLock}${baseBrand}`
-  } else {
+  } else if (kind === 'set') {
     size = '1:1'
     prompt =
       `TASK: A retail packshot of the re-branded ${identity.productType}: show EXACTLY ONE packaging — the SAME single ${identity.productForm} as the reference — together with the ACTUAL product item visible (spilling out of the open pack, or a small portion on a plate beside it). ` +
       `STRICT: do NOT add any second/extra packaging; do NOT invent a box if the real packaging is a pouch (or vice-versa). Only the real packaging form + the real product. Premium e-commerce look. ${roundFormHint}${bgRule} ${labelApply}` +
       `FORM LOCK: exactly one packaging matching the reference (${identity.productForm}); only replace branding. ${productLock}${baseBrand}`
+  } else {
+    // combo — tháp chính diện + nguyên liệu, nền ads (không cần tách nền)
+    size = '1:1'
+    prompt =
+      `TASK: An eye-catching ADVERTISING COMBO hero for the re-branded ${identity.productType}. Show MULTIPLE units (4-6) arranged FRONT-ON in a tiered PYRAMID (bottom row of 3, then 2, then 1), ALL front labels facing the camera straight-on (eye-level, not top-down). ` +
+      (isRound
+        ? `Since the packaging is a round bottle/jar, use a STABLE tiered/triangular arrangement on a small riser/box so it looks solid (not about to topple). ${roundFormHint}`
+        : ``) +
+      `Heap and scatter the product's REAL raw ingredients (e.g. ${q(identity.ingredients || identity.productType)}) at the base and foreground — natural and appetising. ${adBgRule} ${labelApply}` +
+      `FORM LOCK: same packaging form as the reference (${identity.productForm}); only the branding is the new one. ${productLock}${baseBrand}`
   }
 
   if (typeof console !== 'undefined') {

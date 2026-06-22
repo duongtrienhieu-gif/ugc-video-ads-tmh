@@ -30,11 +30,13 @@ const KIND_LABEL: Record<RebrandImageKind, string> = {
   'label': 'Nhãn (gộp, để in)',
   'product': 'Sản phẩm nhãn mới',
   'set': 'Bao bì + sản phẩm bên trong',
+  'combo': 'Tháp combo (ads)',
 }
 const KIND_HINT: Record<RebrandImageKind, string> = {
   'label': 'AI · gộp front+back, đúng tỉ lệ',
   'product': 'AI giữ form, thay nhãn',
   'set': 'AI · đúng 1 bao bì + sản phẩm',
+  'combo': 'AI · tháp chính diện + nguyên liệu',
 }
 
 function AssetImg({ refId, alt }: { refId: string | undefined | null; alt: string }) {
@@ -170,6 +172,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
       await Promise.all([
         generateOne('product', id, name, labelRef),
         generateOne('set', id, name, labelRef),
+        generateOne('combo', id, name, labelRef),
       ])
     } finally {
       setBusy(false)
@@ -198,7 +201,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
     ? `${cmToPx(draft.widthCm)}×${cmToPx(draft.heightCm)} px @300DPI`
     : ''
   const labelCredit = draft.labelModel === 'nano4k' ? 20 : 6
-  const totalCredit = labelCredit + 12 // product 6 + set 6
+  const totalCredit = labelCredit + 18 // product 6 + set 6 + combo 6
 
   return (
     <div className="flex h-full flex-col bg-[#F6F6F8]">
@@ -364,7 +367,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
             {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {busy ? 'Đang tạo bộ rebrand…' : `2 · Tạo bộ rebrand · ~${totalCredit} credit`}
           </button>
-          <p className="text-[10px] text-gray-400">3 ảnh AI (~{totalCredit} credit): nhãn gộp + sản phẩm + bao bì. Pouch mặc đúng nhãn. Nhãn tải về đưa bên in (~{draft.widthCm ?? '?'}×{draft.heightCm ?? '?'}cm). ⚠️ Số bảng dinh dưỡng là AI ước lượng — kiểm tra lại trước khi in.</p>
+          <p className="text-[10px] text-gray-400">4 ảnh AI (~{totalCredit} credit): nhãn gộp + sản phẩm + bao bì + tháp combo (ads). Pouch/combo mặc đúng nhãn. Nhãn tải về đưa bên in (~{draft.widthCm ?? '?'}×{draft.heightCm ?? '?'}cm). ⚠️ Số bảng dinh dưỡng là AI ước lượng — kiểm tra lại trước khi in.</p>
         </div>
 
         {/* Output */}
