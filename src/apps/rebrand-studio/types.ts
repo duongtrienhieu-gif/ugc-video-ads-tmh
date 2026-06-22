@@ -24,8 +24,8 @@ export const REBRAND_IMAGE_KINDS: RebrandImageKind[] = ['label', 'product', 'set
  *  round = quấn quanh lọ/hộp tròn: nhãn dài [front · gap giữa · back]. */
 export type PackagingType = 'flat' | 'round'
 
-/** Model render NHÃN: gpt4o (1K, bám ref tốt, look quen) / nano4k (4K nét, để in). */
-export type LabelModel = 'gpt4o' | 'nano4k'
+/** Model render NHÃN: gpt4o (1K, bám ref tốt, look quen) / nano2k (2K nét, để in). */
+export type LabelModel = 'gpt4o' | 'nano2k'
 
 export type RebrandStatus = 'idle' | 'generating' | 'completed' | 'failed'
 
@@ -165,6 +165,6 @@ export function rebrandSig(d: { productId: string | null; originalImageRefs: str
 }
 
 /** 4 ảnh (nhãn gộp + product + set + combo) qua gpt-4o-image (6 mỗi ảnh; nhãn
- *  có thể nano 4K = 20). REBRAND_TOTAL_CREDITS chỉ là ước tính header (gpt-4o). */
+ *  có thể nano 2K = 12). REBRAND_TOTAL_CREDITS chỉ là ước tính header (gpt-4o). */
 export const REBRAND_AI_IMAGES = 4
 export const REBRAND_TOTAL_CREDITS = 6 * REBRAND_AI_IMAGES

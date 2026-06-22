@@ -51,8 +51,10 @@ function loadCache(): PersistShape {
     const raw = localStorage.getItem(CACHE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<PersistShape>
+      const draft = { ...emptyRebrandDraft(), ...(parsed.draft ?? {}) }
+      if ((draft.labelModel as string) === 'nano4k') draft.labelModel = 'nano2k' // migrate model cũ
       return {
-        draft: { ...emptyRebrandDraft(), ...(parsed.draft ?? {}) },
+        draft,
         images: Array.isArray(parsed.images) && parsed.images.length === REBRAND_IMAGE_KINDS.length ? parsed.images : freshImages(),
         identity: parsed.identity ?? null,
       }

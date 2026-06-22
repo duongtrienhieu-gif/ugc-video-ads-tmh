@@ -175,11 +175,11 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
     console.log(`[rebrand] ${kind} size=${size} name="${chosenName}" promptLen=${prompt.length} refs=${refUrls.length}`)
   }
 
-  // Nhãn + nano4k → nano-banana-2 4K (PNG, bám ref). Còn lại → gpt-4o-image.
-  const useNano = kind === 'label' && params.labelModel === 'nano4k'
+  // Nhãn + nano2k → nano-banana-2 2K (PNG, bám ref). Còn lại → gpt-4o-image.
+  const useNano = kind === 'label' && params.labelModel === 'nano2k'
   const kieImageUrl = await withRetry(() => useNano
     ? generateNanoBanana2({
-        apiKey: params.apiKey, prompt, imageInput: refUrls, aspectRatio: size, resolution: '4K', outputFormat: 'png',
+        apiKey: params.apiKey, prompt, imageInput: refUrls, aspectRatio: size, resolution: '2K', outputFormat: 'png',
         onStatusChange: params.onStatus, timeoutMs: TIMEOUT_MS, signal: params.signal,
       })
     : generateGpt4oImage({
