@@ -145,7 +145,7 @@ export function labelLangName(market: Market): string {
 
 /** Sig phát hiện identity stale. */
 export function rebrandSig(d: { productId: string | null; originalImageRefs: string[]; market: Market }): string {
-  return `v3|${d.productId ?? ''}|${d.market}|${d.originalImageRefs.join(',')}`
+  return `v4|${d.productId ?? ''}|${d.market}|${d.originalImageRefs.join(',')}`
 }
 
 /** 4 ảnh (nhãn gộp + product + set + combo) qua gpt-4o-image (6 mỗi ảnh; nhãn
