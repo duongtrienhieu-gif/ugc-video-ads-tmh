@@ -97,7 +97,9 @@ export async function generateRebrandImage(params: GenerateRebrandImageParams): 
 
   // Khối nội dung gộp (front + back) dùng chung cho nhãn 1 nhãn.
   const frontContent =
-    `FRONT content: big brand name, tagline ${q(identity.tagline)}, 2-3 benefit highlights (${identity.benefits.map(q).join(', ')})` +
+    `FRONT content: the BRAND NAME ${q(chosenName)} must be the BIGGEST, most prominent text on the label (the hero). ` +
+    `The product category "${identity.productType}" appears only as a SMALLER secondary line BELOW the brand — it must NOT be larger than the brand name and must NOT replace it. ` +
+    `Plus tagline ${q(identity.tagline)}, 2-3 benefit highlights (${identity.benefits.map(q).join(', ')})` +
     `${identity.netWeight ? `, net weight ${q(identity.netWeight)}` : ''}, plus appetising imagery of the food itself.`
   const backContent =
     `BACK / INFO content: Ingredients (${q(identity.ingredients)}), Directions (${q(identity.usage)}), Caution & storage (${q(identity.caution)})` +
