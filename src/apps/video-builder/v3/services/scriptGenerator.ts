@@ -1360,6 +1360,23 @@ rhythm, shock device and energy, but replace any vague placeholder ("điều nà
 này / thứ này / nó / cách này" or their ${langName} equivalents) with a SHORT, natural
 reference to the product OR its core purpose / benefit / standout feature.
 
+★ SCROLL-KILLER UPGRADE (this is a PAID AD — second 1 decides skip-or-stay; "correct" is NOT
+enough, the hook must be UN-SKIPPABLE). Do NOT just swap the placeholder — REBUILD each hook
+around ONE concrete scroll-killer DEVICE, grounded in the product's REAL pain / benefit from the
+brief. Pick the device that fits the skeleton (ONE sharp device per hook, never stack 3):
+  • SPECIFIC > vague — a real number / timeframe / moment ("3 tahun…", "2 titik", "malam tu" /
+    "3 năm…", "2 giọt", "tối đó"). BAN empty payoffs: "result tak sangka / kết quả bất ngờ / khá
+    hơn / macam ni / pulih" with nothing concrete attached.
+  • PATTERN-INTERRUPT opener — a command, a number, a confession, or a visceral image. Do NOT open
+    with a flat "Aku…/Mình…/Tui…" review cadence on EVERY hook.
+  • CONTRARIAN / THE REAL REASON — deny what everyone believes ("sebab sebenar… BUKAN X" / "lý do
+    THẬT… KHÔNG phải X").
+  • STAKES / A NAMED ENEMY — the wrong thing the viewer DOES, or what it costs to ignore it
+    ("berhenti korek pakai cotton bud…" / "ngừng ngoáy tai bằng tăm bông…").
+  • VISCERAL SCENE the clip can show in second 1 — a relatable everyday moment / sensation
+    ("mak aku dah tak jerit APA…" / "mẹ hết hỏi lại GÌ CƠ…").
+A real buyer's thumb must STOP — the hook does not merely inform, it provokes. Stay native + casual.
+
 HARD RULES:
 - The hook MUST now clearly connect to the product (its job, its benefit, or what it
   IS) — a viewer should sense what's being sold, not a blank "điều này".

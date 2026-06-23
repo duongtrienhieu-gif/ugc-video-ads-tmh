@@ -249,6 +249,9 @@ export function validateSemanticAnswer(
 
 const RHETORICAL_NUMBERS = new Set([
   '1', '2', '3', '4', '5', '6', '7', '10', '15', '30',     // generic counts ("3 lý do")
+  // anecdotal first-person durations/quantities a real person says in a WOW hook
+  // ("3 năm berdengung", "14 hari challenge", "2 titik") — NOT fabricated stats.
+  '8', '9', '12', '14', '20', '21', '28',
 ])
 
 /** Normalize a number string: "740.000" → "740000", "96%" → "96", "10k" → "10000". */
