@@ -99,7 +99,17 @@ export async function generateGiftImage(
     signal: params.signal,
   })
 
-  const resp = await fetch(kieImageUrl)
+  // Tải ảnh kết quả có timeout 60s — tránh treo vô hạn nếu CDN kie.ai chậm.
+  const dlController = new AbortController()
+  const dlTimer = setTimeout(() => dlController.abort(), 60_000)
+  let resp: Response
+  try {
+    resp = await fetch(kieImageUrl, { signal: dlController.signal })
+  } catch (e) {
+    throw new Error(`TIMEOUT — tải ảnh kết quả quá lâu (${e instanceof Error ? e.name : 'network'}). Thử lại.`)
+  } finally {
+    clearTimeout(dlTimer)
+  }
   if (!resp.ok) throw new Error(`Tải ảnh AI thất bại (HTTP ${resp.status}).`)
   const blob = await resp.blob()
   const assetRef = await saveAsset(blob, 'image/jpeg')

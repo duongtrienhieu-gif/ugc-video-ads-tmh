@@ -41,13 +41,13 @@ function loadCache(): PersistShape {
       if (!Array.isArray(draft.tiers)) draft.tiers = []
       if (typeof draft.offerText !== 'string') draft.offerText = ''
       if (typeof draft.tiersSig !== 'string') draft.tiersSig = ''
-      return {
-        draft,
-        images: Array.isArray(parsed.images) && parsed.images.length === GIFT_IMAGE_KINDS.length
-          ? parsed.images
-          : freshImages(),
-        benefits: parsed.benefits ?? null,
-      }
+      const cachedImages = Array.isArray(parsed.images) && parsed.images.length === GIFT_IMAGE_KINDS.length
+        ? parsed.images
+        : freshImages()
+      // Không task nào sống qua reload/đổi tab → reset spinner 'generating' kẹt về 'idle'
+      // (nếu giữ nguyên, ô sẽ quay vô hạn dù chẳng có gen nào chạy).
+      const images = cachedImages.map((im) => (im.status === 'generating' ? { ...im, status: 'idle' as const } : im))
+      return { draft, images, benefits: parsed.benefits ?? null }
     }
   } catch { /* ignore corrupt cache */ }
   return { draft: emptyGiftDraft(), images: freshImages(), benefits: null }

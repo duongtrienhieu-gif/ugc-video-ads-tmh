@@ -32,14 +32,21 @@ export async function submitGpt4oImage(params: {
     body.filesUrl = params.filesUrl.slice(0, 5)
   }
 
-  const res = await fetch(`${KIE_BASE}/gpt4o-image/generate`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${params.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
+  // Submit có timeout 90s — nếu kie.ai treo khi nhận yêu cầu thì FAIL NHANH,
+  // thay vì treo vô hạn (vòng poll + timeout chỉ chạy SAU khi có taskId).
+  let res: Response
+  try {
+    res = await fetchWithTimeout(`${KIE_BASE}/gpt4o-image/generate`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${params.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    }, 90_000)
+  } catch (e) {
+    throw new Error(`TIMEOUT — KIE không phản hồi khi gửi yêu cầu tạo ảnh (submit: ${e instanceof Error ? e.name : 'network'}). Thử lại.`)
+  }
 
   if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
   if (!res.ok) {
