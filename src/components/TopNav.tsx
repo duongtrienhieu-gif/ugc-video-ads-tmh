@@ -121,19 +121,22 @@ export default function TopNav({ activeApp, onNavigate }: TopNavProps) {
         <div className="flex h-12 items-center justify-between gap-2 px-3 sm:h-14 sm:px-4 lg:px-6" ref={navRef}>
           {/* ── Left: logo + desktop nav ───────────────────────────── */}
           <div className="flex min-w-0 items-center gap-3 lg:gap-7">
-            <button onClick={() => onNavigate('home')} className="flex shrink-0 items-center gap-2" title={BRAND.company}>
+            <button onClick={() => onNavigate('home')} className="flex shrink-0 items-center gap-2 sm:gap-2.5" title={BRAND.company}>
               <span
-                className="flex h-7 w-7 items-center justify-center rounded-lg sm:h-8 sm:w-8"
+                className="flex h-8 w-8 items-center justify-center rounded-lg sm:h-9 sm:w-9"
                 style={{ backgroundColor: 'var(--color-accent)' }}
               >
-                <Gem className="h-4 w-4 sm:h-[18px] sm:w-[18px]" style={{ color: 'var(--color-accent-contrast)' }} strokeWidth={2} />
+                <Gem className="h-[18px] w-[18px] sm:h-5 sm:w-5" style={{ color: 'var(--color-accent-contrast)' }} strokeWidth={2.25} />
               </span>
               <span className="flex flex-col leading-none">
-                <span className="text-[13px] font-bold tracking-[0.14em] text-app-text sm:text-sm">{BRAND.name}</span>
+                {/* TMH GROUP = focal point: accent color + mono stamp font + heavy tracking */}
                 <span
-                  className="mt-0.5 hidden text-[8px] font-bold tracking-[0.18em] sm:block"
+                  className="font-[var(--font-mono)] text-[15px] font-bold tracking-[0.18em] sm:text-xl"
                   style={{ color: 'var(--color-accent)' }}
                 >
+                  {BRAND.name}
+                </span>
+                <span className="mt-1 hidden text-[8px] font-bold tracking-[0.26em] text-app-subtle sm:block">
                   {BRAND.tagline}
                 </span>
               </span>

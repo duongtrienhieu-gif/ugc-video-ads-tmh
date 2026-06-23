@@ -5,10 +5,12 @@
 // ─────────────────────────────────────────────────────────────────────
 
 export const BRAND = {
-  /** Primary wordmark shown big in the TopNav + hero. */
-  name: 'AUREA',
-  /** Small caps line under the wordmark. */
-  tagline: 'TMH GROUP · AI STUDIO',
+  /** PRIMARY wordmark — the focal point, rendered big + in the accent
+   *  (gold in studio) with a distinctive mono stamp font. TMH GROUP is
+   *  the hero of the lockup. */
+  name: 'TMH GROUP',
+  /** Secondary line under the wordmark (muted, small). */
+  tagline: 'AUREA · AI STUDIO',
   /** Parent company. */
   company: 'TMH GROUP',
   /** One-line positioning used on the Home hero subtitle. */
