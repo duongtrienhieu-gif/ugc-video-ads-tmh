@@ -155,16 +155,6 @@ export default function InputPanel({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="shrink-0 border-b border-black/8 px-4 py-3">
-        <h2 className="flex items-center gap-2 text-sm font-bold text-gray-900">
-          <Rocket className="h-4 w-4 text-violet-500" />
-          Super Ladipage
-        </h2>
-        <p className="mt-0.5 text-[11px] text-gray-500">
-          Chọn sản phẩm, chọn kiểu landing page, AI tạo toàn bộ copy + ảnh — sẵn sàng dán vào Ladipage.
-        </p>
-      </div>
-
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 md:space-y-4">
 
         <Section
@@ -200,14 +190,14 @@ export default function InputPanel({
           ) : (
             <button
               onClick={() => setPickerOpen(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-violet-300 bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-700 hover:bg-violet-100"
+              className="ui-accent-soft flex w-full items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-3 text-sm font-bold"
             >
               <Package className="h-4 w-4" />
               {productCount > 0 ? 'Chọn sản phẩm từ Project' : 'Chưa có sản phẩm'}
             </button>
           )}
           {productCount === 0 && (
-            <button onClick={handleOpenFinder} className="text-[11px] text-violet-600 underline">
+            <button onClick={handleOpenFinder} style={{ color: 'var(--color-accent)' }} className="text-[11px] underline">
               Mở Project để tạo sản phẩm
             </button>
           )}
@@ -261,7 +251,7 @@ export default function InputPanel({
                 title={l.hint}
                 className={`flex flex-col items-center gap-0.5 rounded-lg border py-2 text-[11px] transition-colors ${
                   language === l.id
-                    ? 'border-violet-400 bg-violet-50 text-violet-700'
+                    ? 'ui-accent-soft'
                     : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.03]'
                 }`}
               >
@@ -365,7 +355,7 @@ export default function InputPanel({
         <button
           onClick={handleClickGenerate}
           disabled={!canGenerate}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-3 md:py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-40"
+          className="ui-accent-solid flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 md:py-3.5 text-sm font-bold shadow-md transition-all disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isGenerating ? (
             <><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo landing pack...</>
@@ -409,7 +399,7 @@ function Section({
         onClick={() => onToggle(isExpanded ? null : step)}
         className={`md:hidden flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors ${
           isExpanded
-            ? 'border-violet-300 bg-violet-50/40'
+            ? 'ui-accent-soft'
             : 'border-black/10 bg-white hover:bg-black/[0.02]'
         }`}
         aria-expanded={isExpanded}
@@ -467,14 +457,14 @@ function FormCard({
         onClick={onSelect}
         className={`flex w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-all ${
           selected
-            ? 'border-violet-400 bg-violet-50/50 ring-2 ring-violet-200/60'
+            ? 'ui-accent-soft'
             : 'border-black/10 bg-white hover:border-black/20 hover:bg-black/[0.02]'
         }`}
       >
         <div className="flex items-start gap-2">
           <span className="text-lg leading-none">{option.icon}</span>
           <div className="flex-1 min-w-0">
-            <p className={`text-[12px] font-bold leading-tight ${selected ? 'text-violet-800' : 'text-gray-900'}`}>
+            <p className={`text-[12px] font-bold leading-tight ${selected ? '' : 'text-gray-900'}`}>
               {option.title}
             </p>
             <span className={`mt-0.5 inline-block rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none ${badgeCls}`}>
@@ -483,7 +473,7 @@ function FormCard({
           </div>
         </div>
 
-        <p className={`text-[10px] leading-snug ${selected ? 'text-violet-700' : 'text-gray-500'}`}>
+        <p className={`text-[10px] leading-snug ${selected ? '' : 'text-gray-500'}`}>
           {option.description}
         </p>
 
