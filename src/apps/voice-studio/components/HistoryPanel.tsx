@@ -341,14 +341,14 @@ export default function HistoryPanel({ items, onDelete }: HistoryPanelProps) {
               <div
                 key={item.id}
                 className={`group rounded-xl border bg-white p-3 shadow-sm transition-all hover:shadow-md ${
-                  isPlaying ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-slate-200'
+                  isPlaying ? 'ui-accent-soft' : 'border-slate-200'
                 }`}
               >
                 {/* Header row */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
-                    <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${isPlaying ? 'bg-indigo-500' : 'bg-slate-100'}`}>
-                      <Volume2 className={`h-3 w-3 ${isPlaying ? 'text-white' : 'text-slate-500'}`} strokeWidth={2} />
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md" style={isPlaying ? { backgroundColor: 'var(--color-accent)' } : undefined}>
+                      <Volume2 className={`h-3 w-3 ${isPlaying ? '' : 'text-slate-500'}`} style={isPlaying ? { color: 'var(--color-accent-contrast)' } : undefined} strokeWidth={2} />
                     </div>
                     <span className="truncate text-xs font-semibold text-slate-800">{item.voiceName}</span>
                   </div>
@@ -387,7 +387,7 @@ export default function HistoryPanel({ items, onDelete }: HistoryPanelProps) {
                     onClick={() => handlePlay(item)}
                     className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
                       isPlaying
-                        ? 'bg-indigo-500 text-white shadow-sm shadow-indigo-500/30'
+                        ? 'ui-accent-solid shadow-sm'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >

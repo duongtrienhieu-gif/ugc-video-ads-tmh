@@ -129,7 +129,7 @@ export default function EditorPanel({
         <button
           onClick={onGenerate}
           disabled={!canGenerate || isGenerating}
-          className="group relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 px-6 py-3.5 text-[13px] font-semibold tracking-tight text-white shadow-md shadow-indigo-500/20 transition-all hover:shadow-lg hover:shadow-indigo-500/30 active:scale-[0.99] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
+          className="ui-accent-solid group relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-xl px-6 py-3.5 text-[13px] font-bold tracking-tight shadow-md transition-all active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
         >
           {isGenerating ? (
             <>

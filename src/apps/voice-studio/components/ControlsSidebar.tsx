@@ -207,14 +207,14 @@ export default function ControlsSidebar({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="shrink-0 border-b border-slate-200 px-4 py-3 bg-gradient-to-r from-indigo-50/50 to-violet-50/50">
+      <div className="shrink-0 border-b border-app-border bg-app-card px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 shadow-sm">
-            <AudioLines className="h-4 w-4 text-white" strokeWidth={2} />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg shadow-sm" style={{ backgroundColor: 'var(--color-accent)' }}>
+            <AudioLines className="h-4 w-4" style={{ color: 'var(--color-accent-contrast)' }} strokeWidth={2} />
           </div>
           <div>
-            <h2 className="text-sm font-bold tracking-tight text-slate-800">Voice Studio</h2>
-            <p className="text-[10px] text-slate-500">ElevenLabs · Malaysian</p>
+            <h2 className="text-sm font-bold tracking-tight text-app-text">Cài đặt giọng</h2>
+            <p className="text-[10px] text-app-subtle">ElevenLabs · Malaysian</p>
           </div>
         </div>
       </div>
