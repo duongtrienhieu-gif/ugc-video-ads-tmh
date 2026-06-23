@@ -442,7 +442,10 @@ export async function renderCreatorKeyframe(
           `face, hair/hijab, OUTFIT and background as reference #1 — but now they are HOLDING the ` +
           `product from reference image #2 with both hands at CHEST height, presenting it toward the ` +
           `camera while talking (mouth slightly open, natural, friendly). The product is the EXACT ` +
-          `product from reference #2 — same packaging, colour, label; do NOT redesign or swap it. ` +
+          `product from reference #2 — same FORM / shape (if reference #2 is a bottle it STAYS a ` +
+          `bottle; NEVER turn it into a box, pouch, jar, sachet or carton), same packaging, colour ` +
+          `and label; do NOT redesign, reshape or swap it. Copy any on-pack text EXACTLY from ` +
+          `reference #2 — do NOT invent, add or re-spell brand / label / nutrition-panel words. ` +
           `Render-safe: product held steady against the body, NOT up near the face, NOT rotating, no ` +
           `floating object. HANDS anatomically correct — exactly five fingers per hand, natural relaxed ` +
           `grip, fingers do NOT pass through, merge with, or bend around the product; no extra, missing, ` +
