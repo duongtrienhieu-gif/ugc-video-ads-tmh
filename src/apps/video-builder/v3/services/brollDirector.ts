@@ -230,7 +230,7 @@ async function backfillWeakConcepts(
 ): Promise<void> {
   const weak = scenes
     .map((s, i) => ({ s, i }))
-    .filter(({ s }) => (s.role === 'broll' || s.role === 'mechanism3d') && isWeakConceptPrompt(s.conceptPrompt))
+    .filter(({ s }) => (s.role === 'broll' || s.role === 'mechanism3d') && isWeakConceptPrompt(s.conceptPrompt) && !isCtaLockCut(s))
   if (weak.length === 0) return
   const productContext = buildProductContextBlock(product)
   const list = weak
@@ -291,7 +291,9 @@ export async function groundOrphanScenes(
 ): Promise<void> {
   const orphans = scenes
     .map((s, i) => ({ s, i }))
-    .filter(({ s }) => s.role === 'broll' && isWeakConceptPrompt(s.conceptPrompt))
+    // Step 1 — never re-ground a locked CTA cut (offer / endorsement / gift), even if its concept
+    // looks weak; those are owned by the director's CTA lock. Same guard the split passes use.
+    .filter(({ s }) => s.role === 'broll' && isWeakConceptPrompt(s.conceptPrompt) && !isCtaLockCut(s))
   if (orphans.length === 0) return
   const productContext = buildProductContextBlock(product)
   const list = orphans.map(({ s }, n) => `${n + 1}. câu thoại: "${s.quote}"`).join('\n')
@@ -1701,7 +1703,11 @@ const MIN_CUT_SEC = 2.0
 // the director and must stay ATOMIC: never split / duplicated by the cap or density passes. A split
 // copies the same gift/offer concept onto BOTH halves → the "2 cảnh offer trùng" bug the user
 // audited. Detected by the deliberate shotIntent or the gift reference.
-function isCtaLockCut(s: TimedBrollScene): boolean {
+// THE single source of truth for "this is a deliberately-LOCKED closing CTA cut" — every late
+// pass (split, density, dedupe, orphan-grounding, backfill) MUST gate on THIS one function so they
+// can never disagree (the root of "fix one place, break another" around the CTA close). Accepts the
+// wide BrollScene type so the pre-timing passes can use it too (TimedBrollScene is assignable).
+function isCtaLockCut(s: BrollScene): boolean {
   return s.shotIntent === 'offer' || s.shotIntent === 'endorsement' || !!s.giftRef
 }
 
@@ -1870,8 +1876,10 @@ function dedupeScenePrompts(timed: TimedBrollScene[]): TimedBrollScene[] {
     // 3D animation (it became "POV hands using product") and the closing offer (it became an
     // "over-the-shoulder/selfie" shot) — the audited dedup damage. We still SEED their
     // signature (via the else-branch below) so every OTHER cut is forced to differ from them.
+    // Step 1 — unified CTA-lock guard (now also covers a gift cut via giftRef, which the old
+    // offer/endorsement-only check missed → a gift cut could be rewritten into a generic variant).
     const protectedShot =
-      s.role === 'mechanism3d' || s.shotIntent === 'offer' || s.shotIntent === 'endorsement' || OFFER_LOOK_RE.test(base)
+      s.role === 'mechanism3d' || isCtaLockCut(s) || OFFER_LOOK_RE.test(base)
     const dup = i !== lastIdx && !protectedShot && accepted.some((a) => jac(a, w) >= 0.55)   // never touch the locked CTA last cut
     if (dup) {
       // REPLACE (not append): appending "— DIFFERENT SHOT: macro" onto "creator massaging
