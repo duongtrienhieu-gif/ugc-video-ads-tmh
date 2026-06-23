@@ -53,9 +53,12 @@ function loadCache(): PersistShape {
       const parsed = JSON.parse(raw) as Partial<PersistShape>
       const draft = { ...emptyRebrandDraft(), ...(parsed.draft ?? {}) }
       if ((draft.labelModel as string) === 'nano4k') draft.labelModel = 'nano2k' // migrate model cũ
+      const cachedImages = Array.isArray(parsed.images) && parsed.images.length === REBRAND_IMAGE_KINDS.length ? parsed.images : freshImages()
+      // Không task nào sống qua reload → reset spinner 'generating' kẹt về 'idle'.
+      const images = cachedImages.map((im) => (im.status === 'generating' ? { ...im, status: 'idle' as const } : im))
       return {
         draft,
-        images: Array.isArray(parsed.images) && parsed.images.length === REBRAND_IMAGE_KINDS.length ? parsed.images : freshImages(),
+        images,
         identity: parsed.identity ?? null,
       }
     }
