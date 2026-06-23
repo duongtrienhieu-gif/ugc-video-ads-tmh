@@ -438,6 +438,11 @@ UNIVERSAL TIKTOK-NATIVE RULES:
 - TikTok RHYTHM: VARY sentence length — alternate PUNCH lines (3-7 words: "Trời ơi mê
   quá.", "Đỉnh thật.", "Chốt liền.") with FULLER lines (12-18 words). punch, full,
   punch, full. All-long = flat; all-short = jumpy. Imperfect conversational phrasing ok.
+  HARD CAP: keep EVERY sentence ≤ ~18 words / ≤ one breath (~5s spoken). Each sentence
+  is ONE filmable beat → it becomes ONE scene. NEVER write a run-on that needs a comma-
+  splice to breathe — split it into two short sentences at the natural clause break. A
+  sentence longer than one breath gets chopped mid-thought at render → an ugly 2-3s
+  scene with a dangling 4-5 word fragment. End each sentence on a complete thought.
 - BENEFITS AS HITS, NOT A LIST: stack as many strong benefits as you want (more
   benefits = more desire) — but land EACH as a SHARP, punchy hit with energy, NEVER
   a flat monotone recital. And say each idea ONCE: repeating the SAME benefit 3-4×

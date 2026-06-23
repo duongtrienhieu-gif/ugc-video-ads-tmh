@@ -1988,8 +1988,15 @@ function splitQuoteByParts(quote: string, parts: number): string[] {
     if (donor < 0) { buckets[i] = q; continue }
     const w = buckets[donor].split(/\s+/).filter(Boolean)
     const half = Math.ceil(w.length / 2)
-    buckets[donor] = w.slice(0, half).join(' ')
-    buckets[i] = w.slice(half).join(' ')
+    // A#3b — when forced to chop ONE long clause, cut at the punctuation boundary (a word ending
+    // in , ; : …) NEAREST the midpoint so both halves are whole clauses — not a word-sliced
+    // fragment ("…câu chưa xong" + "4-5 từ lẻ"). Fall back to the word midpoint when there's none.
+    let cut = half, bestD = Infinity
+    for (let k = 1; k < w.length; k++) {
+      if (/[,;:…]$/.test(w[k - 1])) { const d = Math.abs(k - half); if (d < bestD) { bestD = d; cut = k } }
+    }
+    buckets[donor] = w.slice(0, cut).join(' ')
+    buckets[i] = w.slice(cut).join(' ')
   }
   return buckets
 }
