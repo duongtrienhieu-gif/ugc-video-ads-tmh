@@ -115,7 +115,11 @@ export async function assembleHybridVideo(
   // slightly slower encode). 20/19 ≈ visually sharp; 'fast' preset compresses
   // better per bit than 'veryfast' for a small wasm-time cost.
   const crf = params.resolution === '1080p' ? '19' : '20'
-  const preset_x264 = 'fast'
+  // P6ay — SPEED: in ffmpeg.wasm the x264 PRESET is the dominant encode-time lever (per-segment
+  // re-encode = the whole 25-30min cost). 'veryfast' is ~2× faster than 'fast' for a NEGLIGIBLE
+  // quality change — sharpness is set by CRF (kept at 20), not the preset. The old veryfast→fast
+  // bump was paired with CRF 28 (the real blur cause, since fixed to 20), so we reclaim the speed.
+  const preset_x264 = 'veryfast'
   const allCaptions = params.captions ?? []
   // Caption: max width 92% (the rare over-long line shrinks to this), sat 12% above the
   // bottom so it clears the TikTok action bar. Consistent placement every chunk.
@@ -217,15 +221,9 @@ export async function assembleHybridVideo(
     // that came back SHORTER than the slot (Kling lips for a long Malay line; a ~5s
     // Seedance broll asked for >5s) produced a SHORT segment → every later scene slid
     // earlier vs the voice → cumulative lips-vs-voice drift (worst at the end, ~30-40%
-    // on MY). Probe the real clip length so the console shows the truth per cut.
-    const clipDur = await probeClipDurationSec(url)
-    if (clipDur > 0) {
-      const shortBy = dur - clipDur
-      console.log(
-        `[HYBRID_ASM] cảnh ${i} (${c.scene.role}) clipDur=${clipDur.toFixed(2)}s · slot=${dur.toFixed(2)}s` +
-        (shortBy > 0.15 ? ` · ⚠ NGẮN HƠN SLOT ${shortBy.toFixed(2)}s (${Math.round((shortBy / dur) * 100)}%)` : ''),
-      )
-    }
+    // on MY). The tpad pad-up + `-t dur` clamp below GUARANTEE segment length == slot regardless,
+    // so we no longer probe the clip duration just to log it (that network metadata load cost up
+    // to ~8s/clip on a slow/expired URL for ZERO effect on the output).
     const ptsExpr = `setpts=(PTS-STARTPTS)/${speed.toFixed(4)}`
     const baseChain =
       `scale=${evenW}:${evenH}:force_original_aspect_ratio=increase,` +
@@ -385,24 +383,3 @@ export async function assembleHybridVideo(
 // Date.now wrapper — keeps react-hooks/purity lint quiet at call sites that import
 // this in components, mirroring the pattern used elsewhere in v3.
 function nowMs(): number { return Date.now() }
-
-// P6d — measure a clip's REAL duration (browser metadata only, no decode) to diagnose
-// the lips-drift bug: a Kling/Seedance clip shorter than its slot used to render a short
-// segment → master-TTS drifted. Best-effort; returns 0 on any failure (caller just skips
-// the diagnostic log — the tpad/`-t` lock fixes the drift regardless of this number).
-async function probeClipDurationSec(url: string): Promise<number> {
-  try {
-    if (typeof document === 'undefined') return 0
-    return await new Promise<number>((resolve) => {
-      const v = document.createElement('video')
-      v.preload = 'metadata'
-      v.muted = true
-      let settled = false
-      const done = (d: number) => { if (settled) return; settled = true; try { v.removeAttribute('src'); v.load() } catch { /* noop */ } resolve(Number.isFinite(d) && d > 0 ? d : 0) }
-      v.onloadedmetadata = () => done(v.duration)
-      v.onerror = () => done(0)
-      setTimeout(() => done(0), 8000)   // never hang the assemble on a stuck probe
-      v.src = url
-    })
-  } catch { return 0 }
-}
