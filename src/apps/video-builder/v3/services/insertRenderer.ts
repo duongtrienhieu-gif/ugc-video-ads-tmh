@@ -326,9 +326,13 @@ function buildInsertKeyframePrompt(
   // merge / blend / swap / restyle one into the other. This is the hard product lock the
   // closing cuts (product+gift hero; creator holding both) depend on.
   if (giftRefIndex > 0) {
+    // C-fix — only name a product reference number when one was actually attached. Previously this
+    // printed "#1" even when productRefIndex===0 (no product ref) → "#1" pointed at the GIFT itself,
+    // telling the model the gift IS the product → hallucination (e.g. illustrated cards).
+    const productLabel = productRefIndex > 0 ? ` (#${productRefIndex})` : ''
     paragraphs.push(
       `GIFT LOCK: reference image #${giftRefIndex} is a SEPARATE FREE BONUS GIFT — a DIFFERENT ` +
-      `object from the product. The PRODUCT (#${productRefIndex || 1}) and the GIFT (#${giftRefIndex}) ` +
+      `object from the product. The PRODUCT${productLabel} and the GIFT (#${giftRefIndex}) ` +
       `appear TOGETHER in the frame but are TWO SEPARATE items, clearly apart — NEVER merge, blend, ` +
       `fuse, swap, or restyle one into the other; do NOT turn the product into the gift or vice-versa. ` +
       // FIX5 (merged in place) — anti-invent-packaging: the model dreamed up a fake box + garbled
@@ -430,8 +434,13 @@ function buildInsertKeyframePrompt(
   // 4. Hand behaviour. R-A: PRODUCT_CLOSEUP's preset handBehavior says "Product ALONE is the
   // subject" — that fights a gift bundle / multi-unit deal (>1 object in frame). For those, keep
   // only "No hands in frame." without the "alone" claim.
+  // A-fix — a PRODUCT_IN_ACTION endorsement that holds a GIFT needs BOTH hands (one product, one
+  // gift). The preset.handBehavior says "hands interact with the product only" → it CONTRADICTED the
+  // PRODUCT-IN-USE COHERENCE two-hands clause below. Make HANDS gift-aware here too (same as CLOSEUP).
   const handBehavior = (presetId === 'PRODUCT_CLOSEUP' && multiObject)
     ? 'No hands in frame.'
+    : (presetId === 'PRODUCT_IN_ACTION' && giftRefIndex > 0)
+    ? 'Both hands visible — one hand holds the product, the other holds the free gift; five correct fingers on each hand, a natural relaxed grip.'
     : preset.handBehavior
   paragraphs.push(`HANDS: ${handBehavior}`)
 
@@ -664,6 +673,25 @@ export async function renderInsert(
   const cameraMotion = preset.cameraPreset === 'static'
     ? 'Locked-off camera.'
     : 'Subtle handheld micro-motion.'
+  // D-fix — the strong anti-drift MOTION rule lived ONLY in the still-keyframe prompt; the i2v
+  // animator (Seedance) never heard it, so products still flew / people still moved randomly.
+  // Send a per-scene-type motion guard to the ACTUAL animator. Scoped so a PERSON scene keeps its
+  // natural human motion (NOT frozen) while a product scene is pinned:
+  //   • product macro (static)  → product dead-still, no person/hands enter the frame.
+  //   • product-in-use          → the ONLY motion is the using-action; product stays put.
+  //   • person / concept        → natural human motion, only anti-morph.
+  const motionGuard = isConcept
+    ? 'MOTION: natural, calm human movement that fits the moment; no morphing, no extra or vanishing limbs/fingers, no fast or chaotic motion.'
+    : params.presetId === 'PRODUCT_CLOSEUP'
+    ? 'MOTION: the product (and any bundled gift / extra unit) stays COMPLETELY STILL on the surface — not picked up, moved, rotated, thrown, floated, duplicated or morphed; NO person and NO hands enter the frame; only the gentle camera move.'
+    : params.presetId === 'PRODUCT_IN_ACTION'
+    ? 'MOTION: the ONLY movement is the hands performing the described action on the product (holding / applying / scooping / eating it); the product stays held or resting in place the WHOLE clip — never tossed, thrown, spun, flipped, floated, duplicated or morphed; no unrelated body or background motion.'
+    : 'MOTION: ONE slow, calm, physically-plausible movement only; the product stays held or on the surface the whole clip — never thrown, spun, floated, duplicated or morphed; no fast or chaotic motion.'
+  // A-fix mirror — keep the gift two-hands hint consistent in the i2v prompt too (preset.handBehavior
+  // alone says "product only", which fought the gift endorsement that holds product + gift).
+  const seedanceHands = (params.presetId === 'PRODUCT_IN_ACTION' && giftRefIndex > 0)
+    ? 'Both hands hold the items — one the product, one the free gift.'
+    : preset.handBehavior
 
   // ── STAGE 1: KEYFRAME ─────────────────────────────────────────────────
   params.onStageUpdate({ stage: 'keyframe' })
@@ -769,8 +797,8 @@ export async function renderInsert(
       apiKey: params.kieApiKey,
       jobModelId: 'bytedance/seedance-1.5-pro',
       prompt: (isConcept
-        ? `${motionScene} ${cameraMotion} No product packaging in frame.`
-        : `${motionScene} ${cameraMotion} ${preset.handBehavior}`) + noSpeech,
+        ? `${motionScene} ${cameraMotion} No product packaging in frame. ${motionGuard}`
+        : `${motionScene} ${cameraMotion} ${seedanceHands} ${motionGuard}`) + noSpeech,
       aspectRatio: '9:16',
       resolution: params.resolution,
       duration: videoDuration,

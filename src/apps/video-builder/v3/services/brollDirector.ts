@@ -563,6 +563,7 @@ function enforceProductHero(scenes: BrollScene[], product: Product | null | unde
     if (i === lastIdx) continue                 // CTA owned by the lock
     const s = scenes[i]
     if (s.role === 'mechanism3d') continue
+    if (isCtaLockCut(s)) continue               // offer/endorsement/gift — CTA lock owns it
     if (!DEMO_ACTION_RE.test(s.quote ?? '')) continue
     const isEating = EATING_ACTION_RE.test(s.quote ?? '')
     // Fix a lips/concept demo line always; ALSO fix an eating shot that isn't already
@@ -592,6 +593,7 @@ function enforceProductHero(scenes: BrollScene[], product: Product | null | unde
   for (let i = 0; i < scenes.length; i++) {
     if (i === lastIdx) continue
     const s = scenes[i]
+    if (isCtaLockCut(s)) continue               // offer/endorsement/gift — CTA lock owns it
     if (s.role !== 'broll' || s.kind !== 'concept') continue
     if (RESULT_BEHAVIOR_RE.test(s.conceptPrompt ?? '')) continue   // a "doing" concept → keep
     staticFaceKept++
@@ -626,6 +628,9 @@ function capEndorsement(scenes: BrollScene[]): void {
     const beat = (s.quote ?? '').slice(0, 70).replace(/"/g, '')
     s.kind = 'concept'
     s.cameraFraming = 'creator'
+    // B-fix — this is no longer a CTA endorsement: drop any stale shotIntent so isCtaLockCut
+    // stops protecting an ordinary mid-video result cut from later split/dedupe/density passes.
+    if (s.shotIntent === 'endorsement' || s.shotIntent === 'offer') s.shotIntent = undefined
     s.conceptPrompt =
       `The SAME creator in a real, candid everyday moment that SHOWS the result of "${beat}" through ` +
       `what they naturally DO (relaxed, free movement in its real-life setting) — NOT presenting the ` +
@@ -692,6 +697,7 @@ function capSocialProof(scenes: BrollScene[]): void {
   for (let i = 0; i < scenes.length; i++) {
     if (i === lastIdx) continue                              // CTA never a card
     const s = scenes[i]
+    if (isCtaLockCut(s)) continue                            // offer/endorsement/gift — never a proof card
     if (s.role === 'social_proof') {
       // P2 — trust Gemini's declared intent: a scene tagged role=social_proof AND
       // shotIntent=social_proof is a real proof beat even when the (rigid) cue regex
@@ -762,6 +768,7 @@ function enforceBeforeAfterSplit(scenes: BrollScene[], script: GeneratedScript):
   for (let i = 1; i < scenes.length - 1 && made < 2; i++) {   // never hook(0) / CTA(last)
     const s = scenes[i]
     if (s.role !== 'broll') continue                          // not lips / 3D / social_proof
+    if (isCtaLockCut(s)) continue                             // offer/endorsement/gift — CTA lock owns it
     if (!isBeforeAfterContrast(s.quote ?? '')) continue       // P6x — only a real before↔after reversal
     if (s.conceptPrompt && SPLIT_ALREADY_RE.test(s.conceptPrompt)) { made++; continue }  // director already split it
     s.kind = 'concept'
@@ -791,6 +798,7 @@ function enforceBeforeAfterSplit(scenes: BrollScene[], script: GeneratedScript):
   // "living the problem" here was wrong — it made a positive result line render as suffering.)
   for (let i = 1; i < scenes.length - 1; i++) {
     const s = scenes[i]
+    if (isCtaLockCut(s)) continue                        // offer/endorsement/gift — CTA lock owns it
     if (!s.conceptPrompt || !SPLIT_ALREADY_RE.test(s.conceptPrompt)) continue
     if (isBeforeAfterContrast(s.quote ?? '')) continue   // genuine reversal/contrast — keep the split
     s.kind = 'concept'
