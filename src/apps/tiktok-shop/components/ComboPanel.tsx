@@ -57,7 +57,7 @@ export default function ComboPanel() {
         <button
           onClick={handleAdd}
           disabled={!canAddMore}
-          className="flex items-center gap-1.5 rounded-md border border-violet-300 bg-violet-50 px-3 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+          className="ui-accent-soft flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[11px] font-bold transition-colors disabled:opacity-50"
         >
           <Plus className="h-3 w-3" />
           Thêm combo
@@ -88,7 +88,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       </p>
       <button
         onClick={onAdd}
-        className="mt-3 flex items-center gap-1.5 rounded-md bg-violet-600 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-violet-700"
+        className="ui-accent-solid mt-3 flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-bold transition-colors"
       >
         <Plus className="h-3 w-3" />
         Thêm combo đầu tiên
@@ -209,7 +209,7 @@ function ComboCard({ combo }: { combo: ComboOption }) {
             value={combo.productCount ?? 1}
             onChange={(e) => updateCombo(combo.id, { productCount: Math.max(1, parseInt(e.target.value, 10) || 1) })}
             title="Số lượng sản phẩm trong combo — AI sẽ render đúng số này"
-            className="w-14 rounded border border-violet-200 bg-violet-50 px-1 py-1 text-center text-[11px] font-bold text-violet-700 focus:border-violet-400 focus:outline-none"
+            className="ui-accent-soft w-14 rounded border px-1 py-1 text-center text-[11px] font-bold focus:outline-none"
           />
         </div>
 
@@ -242,7 +242,7 @@ function ComboCard({ combo }: { combo: ComboOption }) {
         <button
           onClick={handleGenerate}
           disabled={!canGenerate || isGenerating}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-violet-600 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-violet-700 disabled:bg-gray-300"
+          className="ui-accent-solid flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-bold transition-colors disabled:bg-gray-300"
         >
           {isGenerating ? (
             <Loader2 className="h-3 w-3 animate-spin" />

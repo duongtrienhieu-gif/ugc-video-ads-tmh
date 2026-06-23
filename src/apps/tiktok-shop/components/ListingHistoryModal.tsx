@@ -198,7 +198,7 @@ function ListingCard({
             <button
               onClick={onOpen}
               disabled={isCurrent}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-violet-700 disabled:bg-gray-300"
+              className="ui-accent-solid flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-bold transition-colors disabled:bg-gray-300"
             >
               <Eye className="h-3 w-3" />
               {isCurrent ? 'Đang mở' : 'Mở'}

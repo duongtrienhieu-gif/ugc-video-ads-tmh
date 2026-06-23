@@ -47,7 +47,7 @@ export default function CostEstimator({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-violet-600" />
+            <Sparkles className="h-4 w-4" style={{ color: 'var(--color-accent)' }} />
             <h3 className="text-sm font-semibold text-gray-900">{meta.title}</h3>
           </div>
           <button
@@ -64,10 +64,10 @@ export default function CostEstimator({
           <p className="text-xs text-gray-600">{meta.subtitle}</p>
 
           {/* Cost breakdown */}
-          <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
+          <div className="rounded-lg border border-app-border p-4" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
             <div className="flex items-baseline justify-between">
-              <span className="text-xs text-indigo-700">Chi phí ước tính</span>
-              <span className="text-2xl font-extrabold text-indigo-700 tabular-nums">
+              <span className="text-xs font-bold" style={{ color: 'var(--color-accent)' }}>Chi phí ước tính</span>
+              <span className="text-2xl font-extrabold tabular-nums" style={{ color: 'var(--color-accent)' }}>
                 {estimatedCredits.toLocaleString('vi-VN')}
                 <span className="ml-1 text-xs font-medium">credit</span>
               </span>
@@ -123,7 +123,7 @@ export default function CostEstimator({
           <button
             onClick={onConfirm}
             disabled={insufficient || busy}
-            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-violet-700 disabled:bg-gray-300"
+            className="ui-accent-solid flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-colors disabled:bg-gray-300"
           >
             <Sparkles className="h-3 w-3" />
             {busy ? 'Đang tạo...' : 'Tiếp tục'}

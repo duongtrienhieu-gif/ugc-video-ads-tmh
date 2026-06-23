@@ -135,7 +135,8 @@ export default function ImageSlot({ image }: Props) {
             <span className="text-[10px] text-gray-400">{image.aiGenPrompt.length} ký tự</span>
             <button
               onClick={handleCopyPrompt}
-              className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-violet-600 hover:bg-violet-50 hover:text-violet-800"
+              style={{ color: 'var(--color-accent)' }}
+              className="flex items-center gap-1 rounded px-2 py-1 text-[11px] hover:bg-app-card-elevated"
             >
               <Copy className="h-3 w-3" />
               Copy prompt
@@ -148,7 +149,7 @@ export default function ImageSlot({ image }: Props) {
       {/* Slot label header */}
       <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-3 py-1.5">
         <div className="flex items-center gap-1.5">
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-100 text-[10px] font-bold text-violet-700">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold" style={{ backgroundColor: 'var(--color-accent-dim)', color: 'var(--color-accent)' }}>
             {image.slot}
           </span>
           <span className="text-[11px] font-semibold text-gray-700">{image.config.intentLabel}</span>

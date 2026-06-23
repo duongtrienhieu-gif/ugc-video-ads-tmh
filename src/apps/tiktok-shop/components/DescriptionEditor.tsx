@@ -171,7 +171,7 @@ export default function DescriptionEditor() {
             onClick={handleTranslate}
             disabled={!output || translateState.loading}
             title={`Dịch sang ${otherLangLabel} (~1 credit)`}
-            className="flex flex-1 items-center justify-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-[11px] font-medium text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+            className="ui-accent-soft flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1 text-[11px] font-bold transition-colors disabled:opacity-50"
           >
             {translateState.loading
               ? <Loader2 className="h-3 w-3 animate-spin" />
@@ -270,7 +270,7 @@ function TranslateModal({
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-3">
           <div className="flex items-center gap-2">
-            <Languages className="h-4 w-4 text-violet-600" />
+            <Languages className="h-4 w-4" style={{ color: 'var(--color-accent)' }} />
             <h3 className="text-sm font-semibold text-gray-900">
               Bản dịch — {targetName}
             </h3>
@@ -288,7 +288,7 @@ function TranslateModal({
         <div className="flex-1 overflow-y-auto p-5">
           {loading ? (
             <div className="flex h-32 flex-col items-center justify-center gap-2 text-gray-500">
-              <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+              <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--color-accent)' }} />
               <span className="text-xs">Đang dịch sang {targetName}...</span>
             </div>
           ) : (
@@ -312,7 +312,7 @@ function TranslateModal({
             </button>
             <button
               onClick={onCopy}
-              className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-violet-700"
+              className="ui-accent-solid flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-colors"
             >
               <Copy className="h-3 w-3" />
               Sao chép bản dịch
@@ -343,7 +343,7 @@ function BlockCard({
 
   return (
     <div className={`group rounded-lg border bg-white p-3 transition-colors ${
-      editing ? 'border-violet-400 ring-1 ring-violet-200' : 'border-gray-200 hover:border-gray-300'
+      editing ? 'ui-accent-soft ring-1' : 'border-gray-200 hover:border-gray-300'
     }`}>
       <div className="mb-1.5 flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-gray-500">
