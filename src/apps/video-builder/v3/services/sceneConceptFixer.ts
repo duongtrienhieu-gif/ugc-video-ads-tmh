@@ -39,11 +39,13 @@ const INTENT_DEFAULT: Record<ShotIntent, { kind: BrollSceneKind; cameraFraming: 
   product_macro:   { kind: 'product_closeup', cameraFraming: 'hands_noface' },
   mechanism3d:     { kind: 'concept',         cameraFraming: 'hands_noface' },
   social_proof:    { kind: 'concept',         cameraFraming: 'creator' },
-  offer:           { kind: 'product_action',  cameraFraming: 'creator' },
+  // Fixer-3 — offer cut = PRODUCT-HERO close-up, NO hands (matches the director's offer design:
+  // product/units + gift on a surface). endorsement = creator holds the product (face).
+  offer:           { kind: 'product_closeup', cameraFraming: 'hands_noface' },
   endorsement:     { kind: 'product_action',  cameraFraming: 'creator' },
 }
-// Archetypes whose framing is HARD (the render breaks otherwise): macro/3D = no face.
-const FORCE_NOFACE = new Set<ShotIntent>(['product_macro', 'mechanism3d'])
+// Archetypes whose framing is HARD (the render breaks otherwise): macro/3D/offer = no face.
+const FORCE_NOFACE = new Set<ShotIntent>(['product_macro', 'mechanism3d', 'offer'])
 // Archetypes that MUST show the person living the beat.
 const FORCE_CREATOR = new Set<ShotIntent>(['lips', 'reaction', 'result_behavior', 'before_after'])
 
@@ -95,7 +97,9 @@ one that fits the line + the user's intent (default framing in []):
 If the USER chose a TARGET archetype, you MUST output that exact shotIntent.
 
 HARD RULES (must obey ALL — these match the renderer; breaking them breaks the clip):
-1. The shot MUST illustrate the EXACT spoken line — concrete + filmable, never generic.
+1. The shot must be concrete + filmable, never generic. BY DEFAULT it illustrates the spoken line —
+   BUT if the USER'S NOTE describes a specific shot, the NOTE WINS: build the conceptPrompt around
+   the note (you may go beyond the literal line to honor it).
 2. person vs no-person MUST match cameraFraming with NO contradiction:
    • "creator" → the SAME creator as the avatar reference is in frame — NEVER describe their
      gender/age/ethnicity/face; only what they DO + feel.
@@ -135,6 +139,14 @@ export async function fixSceneConceptPrompt(params: {
     ? params.fullScript.blocks.map((b) => b.text).join(' / ').slice(0, 600)
     : ''
   const intent = params.userIntent.trim()
+  // Fixer-1/2 — keep the scene's gift / multi-unit context so a fix never silently drops them
+  // (the gift image ref + unit count stay on the scene; the concept must still SHOW them).
+  const giftLine = s.giftRef
+    ? '\nGIFT (keep it): this scene shows the product TOGETHER WITH a bundled FREE GIFT — a SEPARATE object. Your conceptPrompt MUST keep BOTH the product and the free gift in frame (do NOT drop the gift).'
+    : ''
+  const unitsLine = (s.productUnits && s.productUnits > 1)
+    ? `\nUNITS (keep it): show ${s.productUnits} identical units of the product (a buy-X-get-Y deal) — not a single one.`
+    : ''
 
   const userMsg =
 `THIS SCENE'S SPOKEN LINE (${langName}): "${s.quote ?? ''}"
@@ -143,8 +155,10 @@ DIRECTOR'S CURRENT PLAN — this is WRONG, do NOT reproduce it:
 - shotIntent: ${s.shotIntent ?? '(none)'}
 - conceptPrompt: ${s.conceptPrompt?.trim() || '(empty)'}
 - kind: ${s.kind ?? '(none)'} · cameraFraming: ${s.cameraFraming ?? '(none)'}
-${params.targetIntent ? `\nTARGET ARCHETYPE the user chose: "${params.targetIntent}" — you MUST output this exact shotIntent.` : ''}
-USER'S INTENT (ground truth — what this scene must become):
+${params.targetIntent ? `\nTARGET ARCHETYPE the user chose: "${params.targetIntent}" — you MUST output this exact shotIntent.` : ''}${giftLine}${unitsLine}
+USER'S NOTE — THE #1 PRIORITY (this is EXACTLY the shot the user wants; build the conceptPrompt
+AROUND it; it WINS over the default archetype shot and you MAY go beyond the literal spoken line
+to honor it; only fall back to inferring from the line when this is empty):
 ${intent || '(none given — infer the most fitting archetype for the line; if the current plan is a product macro on a feeling/desire/fear line, switch it to a creator emotion moment)'}
 ${productContext}
 ${scriptDump ? `\nFULL VOICEOVER (context only):\n${scriptDump}` : ''}
