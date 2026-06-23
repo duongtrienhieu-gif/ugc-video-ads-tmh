@@ -6,6 +6,7 @@ import {
 import type { AdsContentResult, AdsContentVariation } from '../types'
 import { useAdsContentStore } from '../store'
 import { useAppStore } from '../../../stores/appStore'
+import { EyebrowLabel } from '../../../components/cinematic'
 import { TONE_OPTIONS, getPlatformById } from '../services/presets'
 
 interface OutputPanelProps {
@@ -17,24 +18,50 @@ interface OutputPanelProps {
 export default function OutputPanel({ result, isGenerating, onRegenerate }: OutputPanelProps) {
   if (isGenerating && !result) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-        <Loader2 className="h-8 w-8 animate-spin text-pink-500" />
-        <p className="text-sm font-medium text-gray-700">Đang viết 4 variations content...</p>
-        <p className="text-xs text-gray-400 max-w-sm">
-          Gemini đang viết caption đa biến thể bằng VN + Bahasa Melayu cho post của bạn
-        </p>
+      <div className="flex h-full flex-col p-5 sm:p-8">
+        <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-2 pt-6 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+            <Loader2 className="h-7 w-7 animate-spin" style={{ color: 'var(--color-accent)' }} />
+          </span>
+          <p className="mt-2 text-sm font-bold text-app-text">Đang viết 4 variations content…</p>
+          <p className="max-w-sm text-xs text-app-subtle">
+            Gemini đang viết caption đa biến thể 🇻🇳 VN + 🇲🇾 Bahasa Melayu cho post của bạn
+          </p>
+        </div>
+        <div className="mx-auto mt-6 grid w-full max-w-3xl flex-1 grid-cols-1 gap-3 lg:grid-cols-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex flex-col gap-2.5 rounded-2xl border border-app-border bg-app-card p-4">
+              <div className="skeleton h-3 w-1/3" />
+              <div className="skeleton h-2.5 w-full" />
+              <div className="skeleton h-2.5 w-[90%]" />
+              <div className="skeleton h-2.5 w-3/4" />
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
 
   if (!result) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-        <Megaphone className="h-10 w-10 text-gray-200" strokeWidth={1.5} />
-        <p className="text-sm text-gray-400">Chọn sản phẩm + preset rồi nhấn "Tạo content"</p>
-        <p className="text-xs text-gray-300 max-w-sm">
-          4 variations caption với góc hook khác nhau, mỗi cái có VN + Bahasa Melayu, sẵn sàng paste vào Facebook / TikTok / IG ads
-        </p>
+      <div className="flex h-full flex-col items-center justify-center p-6 sm:p-10">
+        <div className="w-full max-w-xl text-center">
+          <div className="mb-3 flex justify-center">
+            <EyebrowLabel rec>ADS ENGINE · CAPTION</EyebrowLabel>
+          </div>
+          <span className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+            <Megaphone className="h-8 w-8" style={{ color: 'var(--color-accent)' }} strokeWidth={1.75} />
+          </span>
+          <h2 className="text-xl font-bold leading-tight text-app-text sm:text-2xl">
+            4 caption thực chiến,
+            <br />
+            <span style={{ color: 'var(--color-accent)' }}>mỗi góc một hook</span>
+          </h2>
+          <p className="mx-auto mt-4 max-w-sm text-xs leading-relaxed text-app-subtle">
+            Chọn sản phẩm + góc tiếp cận → bấm <b className="text-app-muted">Tạo content</b>. Mỗi variation có
+            🇻🇳 VN + 🇲🇾 Bahasa Melayu, sẵn sàng paste vào Facebook / TikTok / IG ads.
+          </p>
+        </div>
       </div>
     )
   }
@@ -46,10 +73,10 @@ export default function OutputPanel({ result, isGenerating, onRegenerate }: Outp
       {/* Meta header */}
       <div className="shrink-0 border-b border-black/8 px-5 py-3">
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge color="pink"><span>{result.presetGlyph}</span> {result.presetLabel}</Badge>
+          <Badge color="accent"><span>{result.presetGlyph}</span> {result.presetLabel}</Badge>
           <Badge color="gray">{result.platformLabel}</Badge>
           <Badge color="gray">{result.lengthMode}</Badge>
-          <Badge color={result.ctaStrength === 'hard' ? 'rose' : result.ctaStrength === 'soft' ? 'emerald' : 'blue'}>
+          <Badge color={result.ctaStrength === 'hard' ? 'rose' : result.ctaStrength === 'soft' ? 'emerald' : 'accent'}>
             CTA: {result.ctaStrength === 'hard' ? 'Mạnh' : result.ctaStrength === 'soft' ? 'Mềm' : 'Cân bằng'}
           </Badge>
           {result.educationalMode && (
@@ -151,9 +178,9 @@ function VariationCard({
 
   return (
     <div className="rounded-xl border border-black/10 bg-white shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between gap-2 border-b border-black/8 bg-gradient-to-r from-pink-50/60 to-rose-50/40 px-4 py-2.5">
+      <div className="flex items-center justify-between gap-2 border-b border-app-border bg-app-surface px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-pink-600 px-2 py-0.5 text-[10px] font-bold text-white">
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-accent-contrast)' }}>
             Variation {index + 1}
           </span>
           <span className="text-[11px] font-medium text-gray-700">{variation.hookLabel}</span>
@@ -218,7 +245,7 @@ function VariationCard({
           className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-bold transition-colors ${
             saved
               ? 'bg-emerald-500/15 text-emerald-700'
-              : 'bg-pink-600 text-white hover:bg-pink-700 disabled:bg-gray-200 disabled:text-gray-400'
+              : 'ui-accent-solid disabled:bg-gray-200 disabled:text-gray-400'
           }`}
         >
           {saved ? <><Check className="h-3.5 w-3.5" /> Đã lưu</> : <><Save className="h-3.5 w-3.5" /> Lưu vào Project</>}
@@ -363,7 +390,7 @@ function SavedTextBlock({ flag, label, text }: { flag: string; label: string; te
     <div className="rounded-lg border border-black/8 bg-white">
       <div className="flex items-center justify-between border-b border-black/8 px-2.5 py-1">
         <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">{flag} {label}</span>
-        <button onClick={onCopy} className="text-[10px] text-pink-600 hover:underline">
+        <button onClick={onCopy} style={{ color: 'var(--color-accent)' }} className="text-[10px] hover:underline">
           {copied ? '✓ Đã chép' : 'Chép'}
         </button>
       </div>
@@ -376,15 +403,20 @@ function SavedTextBlock({ flag, label, text }: { flag: string; label: string; te
 
 // ── Badge helper ────────────────────────────────────────────────────────
 
-function Badge({ color, children }: { color: 'pink' | 'gray' | 'rose' | 'emerald' | 'blue'; children: React.ReactNode }) {
+function Badge({ color, children }: { color: 'accent' | 'gray' | 'rose' | 'emerald'; children: React.ReactNode }) {
+  if (color === 'accent') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ backgroundColor: 'var(--color-accent-dim)', color: 'var(--color-accent)' }}>
+        {children}
+      </span>
+    )
+  }
   const cls =
-    color === 'pink'    ? 'bg-pink-100 text-pink-700' :
     color === 'rose'    ? 'bg-rose-100 text-rose-700' :
     color === 'emerald' ? 'bg-emerald-100 text-emerald-700' :
-    color === 'blue'    ? 'bg-blue-100 text-blue-700' :
     'bg-gray-100 text-gray-600'
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${cls}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${cls}`}>
       {children}
     </span>
   )

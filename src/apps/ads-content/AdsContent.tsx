@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Sliders, X as XIcon } from 'lucide-react'
+import { Megaphone } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
@@ -9,6 +9,8 @@ import type {
 import { generateAdsContent } from './services/generateAdsContent'
 import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
+import AppHeader from '../../components/shell/AppHeader'
+import SegmentTabs from '../../components/shell/SegmentTabs'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
 
@@ -103,53 +105,60 @@ export default function AdsContent() {
     void runGeneration(lastParamsRef.current)
   }
 
-  // Mobile output-first (M5): auto-collapse input form when result lands so
-  // the user sees what they just generated, with a "Sửa" FAB to re-open.
-  const [mobileFormVisible, setMobileFormVisible] = useState(true)
+  // Mobile flow: [Thiết lập | Kết quả] segmented (replaces the old FAB).
+  // Auto-switch to "Kết quả" when content lands (null → set). Desktop = 2-pane.
+  const [mobileTab, setMobileTab] = useState<'setup' | 'result'>('setup')
   const prevResultRef = useRef<AdsContentResult | null>(null)
   useEffect(() => {
-    if (!prevResultRef.current && result) setMobileFormVisible(false)
+    if (!prevResultRef.current && result) setMobileTab('result')
     prevResultRef.current = result
   }, [result])
-  const showInputOnMobile = !result || mobileFormVisible
 
   return (
-    <div className="flex h-full flex-col lg:flex-row">
-      <div className={`${showInputOnMobile ? 'flex' : 'hidden'} lg:flex w-full lg:w-[380px] shrink-0 flex-col border-b lg:border-b-0 lg:border-r border-black/8`}>
-        <InputPanel
-          selectedProduct={selectedProduct}
-          onProductSelect={setSelectedProduct}
-          onGenerate={runGeneration}
-          isGenerating={isGenerating}
-          presetId={presetId}
-          onPresetIdChange={setPresetId}
-          langMode={langMode}
-          onLangModeChange={setLangMode}
+    <div className="flex h-full flex-col">
+      <AppHeader
+        icon={Megaphone}
+        eyebrow="ADS CONTENT · CAPTION"
+        title="Ads Content"
+        subtitle="Caption quảng cáo thực chiến — song ngữ MY / VN"
+        actions={<AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />}
+      />
+
+      {/* Mobile segmented control — replaces the floating FAB */}
+      <div className="shrink-0 border-b border-app-border px-3 py-2 lg:hidden">
+        <SegmentTabs
+          value={mobileTab}
+          onChange={setMobileTab}
+          options={[
+            { value: 'setup', label: 'Thiết lập' },
+            { value: 'result', label: 'Kết quả' },
+          ]}
         />
       </div>
 
-      <div className="flex w-full flex-1 flex-col min-h-[400px] lg:min-h-0 relative">
-        <div className="absolute right-4 top-3 z-30">
-          <AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        {/* Config rail */}
+        <div className={`${mobileTab === 'setup' ? 'flex' : 'hidden'} w-full shrink-0 flex-col lg:flex lg:w-[380px] lg:border-r lg:border-app-border`}>
+          <InputPanel
+            selectedProduct={selectedProduct}
+            onProductSelect={setSelectedProduct}
+            onGenerate={runGeneration}
+            isGenerating={isGenerating}
+            presetId={presetId}
+            onPresetIdChange={setPresetId}
+            langMode={langMode}
+            onLangModeChange={setLangMode}
+          />
         </div>
-        <OutputPanel
-          result={result}
-          isGenerating={isGenerating}
-          onRegenerate={handleRegenerate}
-        />
 
-        {result && (
-          <button
-            onClick={() => setMobileFormVisible((v) => !v)}
-            aria-label={showInputOnMobile ? 'Đóng cấu hình' : 'Sửa cấu hình'}
-            title={showInputOnMobile ? 'Đóng cấu hình' : 'Sửa cấu hình'}
-            className="lg:hidden fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-3 text-[12px] font-bold text-white shadow-lg shadow-violet-900/30 hover:bg-violet-700 active:scale-95 transition-transform"
-          >
-            {showInputOnMobile
-              ? <><XIcon className="h-4 w-4" /> Đóng</>
-              : <><Sliders className="h-4 w-4" /> Sửa</>}
-          </button>
-        )}
+        {/* Result canvas */}
+        <div className={`${mobileTab === 'result' ? 'flex' : 'hidden'} w-full min-h-0 flex-1 flex-col lg:flex`}>
+          <OutputPanel
+            result={result}
+            isGenerating={isGenerating}
+            onRegenerate={handleRegenerate}
+          />
+        </div>
       </div>
     </div>
   )

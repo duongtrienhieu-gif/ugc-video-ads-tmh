@@ -63,17 +63,6 @@ export default function InputPanel({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="shrink-0 border-b border-black/8 px-4 py-3">
-        <h2 className="flex items-center gap-2 text-sm font-bold text-gray-900">
-          <Megaphone className="h-4 w-4 text-pink-500" />
-          Ads Content — Caption thực chiến
-        </h2>
-        <p className="mt-0.5 text-[11px] text-gray-500">
-          Caption + tiêu đề cho Facebook / TikTok / IG ads — chọn 3 bước là xong.
-        </p>
-      </div>
-
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         {/* STEP 1 — Product */}
         <Section step={1} title="Chọn sản phẩm">
@@ -102,14 +91,14 @@ export default function InputPanel({
           ) : (
             <button
               onClick={() => setPickerOpen(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-pink-300 bg-pink-50 px-4 py-3 text-sm font-semibold text-pink-700 hover:bg-pink-100"
+              className="ui-accent-soft flex w-full items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-3 text-sm font-bold"
             >
               <Package className="h-4 w-4" />
               {productCount > 0 ? 'Chọn sản phẩm từ Project' : 'Chưa có sản phẩm'}
             </button>
           )}
           {productCount === 0 && (
-            <button onClick={handleOpenFinder} className="text-[11px] text-pink-600 underline">
+            <button onClick={handleOpenFinder} style={{ color: 'var(--color-accent)' }} className="text-[11px] underline">
               Mở Project để tạo sản phẩm
             </button>
           )}
@@ -126,12 +115,12 @@ export default function InputPanel({
                   onClick={() => setPresetId(a.id)}
                   title={a.hint}
                   className={`flex items-start gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors ${
-                    isActive ? 'border-pink-400 bg-pink-50' : 'border-black/10 bg-white hover:bg-black/[0.03]'
+                    isActive ? 'ui-accent-soft' : 'border-black/10 bg-white hover:bg-black/[0.03]'
                   }`}
                 >
                   <span className="text-lg leading-none">{a.glyph}</span>
                   <div className="min-w-0 flex-1">
-                    <p className={`text-[12px] font-semibold ${isActive ? 'text-pink-800' : 'text-gray-800'}`}>
+                    <p className={`text-[12px] font-semibold ${isActive ? '' : 'text-gray-800'}`}>
                       {a.label}
                     </p>
                     <p className="text-[10px] text-gray-500">{a.hint}</p>
@@ -151,7 +140,7 @@ export default function InputPanel({
                 onClick={() => setLangMode(l.value)}
                 className={`flex flex-col items-center gap-0.5 rounded-lg border py-2.5 text-[10px] transition-colors ${
                   langMode === l.value
-                    ? 'border-pink-400 bg-pink-50 text-pink-700'
+                    ? 'ui-accent-soft'
                     : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.03]'
                 }`}
               >
@@ -176,7 +165,7 @@ export default function InputPanel({
         <button
           onClick={handleClickGenerate}
           disabled={!canGenerate}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-pink-600 to-rose-600 px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-pink-700 hover:to-rose-700 disabled:cursor-not-allowed disabled:opacity-40"
+          className="ui-accent-solid flex w-full items-center justify-center gap-2 rounded-full px-6 py-3.5 text-sm font-bold shadow-md transition-all disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isGenerating ? (
             <><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo 4 variations...</>
@@ -201,8 +190,14 @@ export default function InputPanel({
 function Section({ step, title, children }: { step: number; title: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-        Bước {step} · {title}
+      <p className="mb-2 flex items-center gap-1.5">
+        <span
+          className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md text-[10px] font-bold"
+          style={{ backgroundColor: 'var(--color-accent-dim)', color: 'var(--color-accent)' }}
+        >
+          {step}
+        </span>
+        <span className="text-[11px] font-bold uppercase tracking-widest text-gray-500">{title}</span>
       </p>
       <div className="space-y-1.5">{children}</div>
     </div>
