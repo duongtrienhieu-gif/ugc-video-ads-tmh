@@ -1370,6 +1370,12 @@ HARD RULES:
   curiosity gap and only glances at the product reads like a real person. Prefer to
   OPEN on the pain or the hook's shock device, and slot the product reference where it
   falls naturally — it does NOT have to be the first words. Keep the skeleton's punch.
+- SHORTEST POSSIBLE PRODUCT REFERENCE — max ~2-3 words, the bare HEAD-NOUN + a deictic
+  ("gel ni", "benda ni", "pam ni"). DROP every qualifier: secondary conditions
+  ("& sakit tekak"), ingredient / herb / actives ("manuka herba", "ginseng"), and
+  form/brand adjectives. So "gel batuk & sakit tekak manuka herba" → just "gel batuk ni"
+  or "benda ni" in the hook. The viewer learns the FULL identity later in the video,
+  NEVER from a spec-dump in the hook (a long product phrase = instant "iklan" = scroll).
 - You MAY shorten the product name (e.g. "máy bơm mini" instead of the full long
   name). NEVER cram the full specs — a hook is a SCROLL-STOP, not a feature list.
 - LOCALIZE THE NAME (CRITICAL — every word of the name you say MUST be a real ${langName}

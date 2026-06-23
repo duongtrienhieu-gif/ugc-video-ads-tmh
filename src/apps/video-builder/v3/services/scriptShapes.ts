@@ -101,11 +101,16 @@ export const SHAPE_CONFIGS: Record<ScriptShape, ShapeConfig> = {
     emoji: '📅',
     blockOverrides: {
       pain:
-        'Pain block = SETUP ngày bắt đầu — "Hôm test ngày 1…", "Mình start hôm…", "Trước khi dùng…". ' +
-        '1 câu mô tả trạng thái xuất phát CỤ THỂ (point-of-contact khoảnh khắc đời thường).',
+        'Pain block = SETUP ngày bắt đầu. Trạng thái xuất phát = VẤN ĐỀ/triệu chứng người mua ĐÃ CÓ TỪ ' +
+        'TRƯỚC (KHI CHƯA có sản phẩm): "Trước khi có [sản phẩm], [vấn đề] vẫn dai dẳng…", "Hôm bắt đầu ' +
+        'test, cổ họng vẫn rát…". 1 câu CỤ THỂ (point-of-contact đời thường). ' +
+        '⛔ CẤM TUYỆT ĐỐI gán triệu chứng/khó chịu cho VIỆC DÙNG sản phẩm đích — sản phẩm đích là thứ ' +
+        'ĐANG TEST để GIẢI vấn đề, KHÔNG BAO GIỜ là nguyên nhân. Cấm kiểu "từ ngày dùng [sản phẩm] tôi ' +
+        'thấy mệt/chóng mặt/khó chịu" (đó là tự dìm sản phẩm mình bán). Vấn đề chỉ gán cho BỆNH hoặc CÁCH/SP CŨ.',
       discovery:
         'Discovery block = 2-3 mốc thời gian trong hành trình. "Ngày 3 thấy…", "Đến ngày 5…", "Tuần sau ' +
-        'cảm giác…". Mỗi mốc 1 câu, nêu 1 thay đổi sensory/visible CỤ THỂ. KHÔNG mơ hồ "thấy khá hơn".',
+        'cảm giác…". Mỗi mốc 1 câu, nêu 1 thay đổi sensory/visible CỤ THỂ theo hướng CẢI THIỆN. KHÔNG mơ ' +
+        'hồ "thấy khá hơn", và KHÔNG gán tác dụng xấu mới cho sản phẩm đích (journey = đường đi LÊN).',
       benefit:
         'Benefit block = REVEAL ngày cuối + state mới. "Đến ngày [N], mình…". 1-2 câu kết quả thật + ' +
         'empathy echo (so với ngày 1 trong pain block).',
