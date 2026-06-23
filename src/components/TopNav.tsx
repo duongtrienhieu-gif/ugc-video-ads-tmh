@@ -129,14 +129,15 @@ export default function TopNav({ activeApp, onNavigate }: TopNavProps) {
                 <Gem className="h-[18px] w-[18px] sm:h-5 sm:w-5" style={{ color: 'var(--color-accent-contrast)' }} strokeWidth={2.25} />
               </span>
               <span className="flex flex-col leading-none">
-                {/* TMH GROUP = focal point: accent color + mono stamp font + heavy tracking */}
+                {/* TMH GROUP = the identity: accent color + mono stamp font,
+                    extra-bold + large + heavy tracking so it dominates. */}
                 <span
-                  className="font-[var(--font-mono)] text-[15px] font-bold tracking-[0.18em] sm:text-xl"
-                  style={{ color: 'var(--color-accent)' }}
+                  className="font-[var(--font-mono)] text-[17px] tracking-[0.2em] sm:text-2xl"
+                  style={{ color: 'var(--color-accent)', fontWeight: 800 }}
                 >
                   {BRAND.name}
                 </span>
-                <span className="mt-1 hidden text-[8px] font-bold tracking-[0.26em] text-app-subtle sm:block">
+                <span className="mt-1 hidden text-[8px] font-bold tracking-[0.4em] text-app-subtle sm:block">
                   {BRAND.tagline}
                 </span>
               </span>
