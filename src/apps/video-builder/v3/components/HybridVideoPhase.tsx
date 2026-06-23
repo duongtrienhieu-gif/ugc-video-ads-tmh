@@ -27,10 +27,11 @@ import { calibrateSyllableRate } from '../services/voiceTimingEstimator'
 import { BROLL_RENDER_RES } from '../services/hybridConstants'
 import { estimateInsertCredits, V3_CREDIT_COST } from '../types'
 
-// P3s — KIE Kling AI Avatar Standard 720p is 8 cr/s (was incorrectly 14 — user
-// audited against KIE pricing page). The renderer already calls
-// `kling/ai-avatar-standard` (the right model id), only the UI estimate was wrong.
-const LIPS_CR_PER_SEC = 8
+// FIX — hybrid SEGMENT lips now render via InfiniteTalk 480p (~3 cr/s), not Kling
+// Avatar Standard (8 cr/s). Kling Avatar is the long-form model and choked on the
+// short 0.5–6s segments; InfiniteTalk is the short-audio lip-sync model. The full
+// creator-video path still uses Kling Avatar. Estimate matches the segment model.
+const LIPS_CR_PER_SEC = 3
 // P3s — render scenes concurrently (was: 1 at a time). KIE jobs are independent;
 // a fail on one doesn't cascade. P4a — bumped 2 → 3 for ~50% faster throughput.
 // 3 is safe: client polling load is trivial (3 fetch/5s), submission is 3 POSTs

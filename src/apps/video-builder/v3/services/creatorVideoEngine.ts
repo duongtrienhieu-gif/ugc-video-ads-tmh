@@ -561,14 +561,20 @@ export async function renderLipsyncSegment(params: {
   if (!keyframePublicUrl || !segAudioPublicUrl) {
     throw new Error('Không lấy được URL công khai (keyframe / segment audio)')
   }
+  // FIX — segments are SHORT (0.5–6s). Kling Avatar Standard is the LONG-FORM model
+  // (max 5 min) and consistently fails ("internal error, please try again later") on
+  // these micro-clips. InfiniteTalk is the SHORT-audio lip-sync model (≤15s, ~3cr/s)
+  // and is the right tool for per-scene segments. The FULL creator video keeps Kling
+  // Avatar (renderCreatorLipsync) — only the hybrid segment path switches here.
   const job = await generateLipSync({
     apiKey: params.kieApiKey,
-    modelId: 'kling/ai-avatar-standard',
+    modelId: 'infinitalk/from-audio',
     imageUrl: keyframePublicUrl,
     audioUrl: segAudioPublicUrl,
     prompt: buildLipsyncPrompt({ config: params.config }),
+    resolution: '480p',
   })
-  console.log(`[LIPSYNC-SEG] lipsync job ${job.taskId} submitted (dur≈${durSec.toFixed(1)}s)`)
+  console.log(`[LIPSYNC-SEG] infinitalk job ${job.taskId} submitted (dur≈${durSec.toFixed(1)}s, audio=${outArr.byteLength}B)`)
   const videoRef = await pollAndSaveLipsync({
     apiKey: params.kieApiKey,
     taskId: job.taskId,
