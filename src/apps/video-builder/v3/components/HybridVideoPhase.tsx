@@ -796,8 +796,7 @@ const FIX_ARCHETYPES: { value: string; intent?: ShotIntent; label: string; hint?
   { value: 'mechanism3d',     intent: 'mechanism3d',        label: '🧬 3D cơ chế' },
   { value: 'before_after',    intent: 'before_after',       label: '🔁 Trước / sau' },
   { value: 'social_proof',    intent: 'social_proof',       label: '🗯 Bằng chứng' },
-  { value: 'offer',           intent: 'offer',              label: '🎁 Combo / quà (không tay)', hint: 'OFFER hero close-up: the product (and the free gift / extra units if any) on a clean premium surface — NO person, NO hands. A "deal worth grabbing" framing.' },
-  { value: 'endorsement',     intent: 'endorsement',        label: '🛒 Creator cầm SP (kêu gọi mua)' },
+  { value: 'endorsement',     intent: 'endorsement',        label: '🛒 Ưu đãi / kêu gọi mua' },
 ]
 
 function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voiceUrl, gloss, conceptGloss, mismatch, credit, hasAssets, onRender, onSavePrompt, onAiFix }: {

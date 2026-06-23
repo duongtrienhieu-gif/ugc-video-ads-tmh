@@ -161,12 +161,8 @@ function buildInsertKeyframePrompt(
   _quote?: string,   // P6h — was used by the removed "after-time wardrobe" branch; kept positionally
   noFace = false,
   giftRefIndex = 0,   // Phase A — >0 means a bundled gift image rides as ref #giftRefIndex
-  productUnits = 1,   // Phase A — >1 means a multi-unit deal (offer) is shown
 ): string {
   const preset = ACTION_PRESETS[presetId]
-  // Phase A — a gift bundle OR a multi-unit deal means MORE than one object in frame; the
-  // "Product ALONE is the subject" wording must NOT fire for those (it would fight the bundle).
-  const multiObject = giftRefIndex > 0 || productUnits > 1
   const paragraphs: string[] = []
   // V4 — strip glow words from conceptPrompt for person scenes (3D mechanism
   // animations keep the glow because they're scientific renders, not people).
@@ -345,15 +341,10 @@ function buildInsertKeyframePrompt(
     // cuts. before/after stays exempt (two contrasting outfits in one frame).
     const isBeforeAfter = presetId === 'BEFORE_AFTER_REACTION' ||
       (!!conceptPrompt && BEFORE_AFTER_RE.test(conceptPrompt))
-    // FIX (Render-C): before/after needs DIFFERENT outfits per half → the IDENTITY LOCK must NOT
-    // also demand "same clothing" (that contradicted the wardrobe rule below). Lock only the FACE
-    // for before/after; lock face + clothing for every other scene.
     paragraphs.push(
       `IDENTITY LOCK: Person from reference image #${personRefIndex}. Preserve EXACTLY the FACE, ` +
-      `skin tone, gender, age and build — the SAME recognizable human being in every scene` +
-      (isBeforeAfter
-        ? `. (Clothing differs per half — see the before/after wardrobe rule below.)`
-        : ` — AND keep the SAME clothing + headwear as the reference (see the wardrobe rule below).`),
+      `skin tone, gender, age and build — the SAME recognizable human being in every scene — AND ` +
+      `keep the SAME clothing + headwear as the reference (see the wardrobe rule below).`,
     )
     if (isBeforeAfter) {
       // before/after split — two contrasting outfits in ONE frame (EXEMPT from the shared B,
@@ -427,13 +418,8 @@ function buildInsertKeyframePrompt(
     )
   }
 
-  // 4. Hand behaviour. FIX (Render-A): PRODUCT_CLOSEUP's preset handBehavior says "Product ALONE
-  // is the subject" — that fights a gift bundle / multi-unit deal (>1 object). For those, just
-  // keep "No hands in frame." without the "alone" claim.
-  const handBehavior = (presetId === 'PRODUCT_CLOSEUP' && multiObject)
-    ? 'No hands in frame.'
-    : preset.handBehavior
-  paragraphs.push(`HANDS: ${handBehavior}`)
+  // 4. Hand behaviour
+  paragraphs.push(`HANDS: ${preset.handBehavior}`)
 
   // 5. Realism
   paragraphs.push(
@@ -465,15 +451,12 @@ function buildInsertKeyframePrompt(
   // product is applied to / used on the body, lock it to the SAME body site + one anatomically-sane
   // hand + a stable single human, so "tay bôi lên người/mặt" never renders chaotic / wrong-logic.
   if (presetId === 'PRODUCT_IN_ACTION') {
-    // FIX (Render-B): the gift endorsement holds the product in ONE hand + the gift in the OTHER
-    // (TWO hands) — so the "ONE hand / no second hand" rule must NOT apply when a gift rides along.
-    const handsClause = giftRefIndex > 0
-      ? 'BOTH hands are anatomically correct — five fingers each, natural grip, each hand holding ONE distinct object (product in one, gift in the other).'
-      : 'If the product is applied to / rubbed on / used on a body part, apply it to the EXACT body area the action describes, on the SAME spot the whole shot — ONE hand, five correct fingers, a natural grip, one realistic gesture (no second hand appearing, no hand passing through the body).'
     paragraphs.push(
-      `PRODUCT-IN-USE COHERENCE: ${handsClause} The person stays ONE consistent human: face, skin tone, ` +
-      'hair and proportions do NOT morph, duplicate, smear or distort, and NO second face appears. ' +
-      'Realistic human anatomy only.',
+      'PRODUCT-IN-USE COHERENCE: if the product is applied to / rubbed on / used on a body part, apply ' +
+      'it to the EXACT body area the action describes, on the SAME spot the whole shot — ONE hand, five ' +
+      'correct fingers, a natural grip, one realistic gesture (no second hand appearing, no hand passing ' +
+      'through the body). The person stays ONE consistent human: face, skin tone, hair and proportions do ' +
+      'NOT morph, duplicate, smear or distort, and NO second face appears. Realistic human anatomy only.',
     )
   }
 
@@ -671,7 +654,6 @@ export async function renderInsert(
   const keyframePromptUsed = buildInsertKeyframePrompt(
     params.presetId, params.product, productRefIndex, personRefIndex,
     params.conceptPrompt, params.renderMode, is3D, params.quote, noFace, giftRefIndex,
-    params.productUnits ?? 1,
   )
   console.log(`[INSERT ${params.presetId}] Stage 1 keyframe prompt len=${keyframePromptUsed.length}, refs=${filesUrl.length}`)
 
