@@ -45,6 +45,12 @@ const CREATOR_IDENTITY_RULE =
 const PRODUCT_IDENTITY_RULE =
 `PRODUCT IDENTITY IS LOCKED DOWNSTREAM — refer to it ONLY as "the product". NEVER write the product's NAME or BRAND, and NEVER describe its packaging APPEARANCE (no colour "red tube", no shape/form "tube/bottle/jar/pouch", no label text, no on-pack graphics). The exact look AND all on-pack text come from the reference photo at render. If you put the NAME or the appearance into words, the image model renders a garbled FAKE label or invents its own package (the "sai sản phẩm / chữ bịa trên bao bì" bug). Describe ONLY the ACTION, the part/texture shown, the setting, and the ingredients around it — never the product's identity.`
 
+// 1 NGUỒN SỰ THẬT cho luật khoá QUÀ TẶNG. Câu thoại CTA hay ĐỌC TÊN quà ("percuma Pelekat Prostat")
+// → Gemini nhét tên đó vào concept → vừa render chữ bịa, vừa dính content-moderation (từ y khoa).
+// Quà chỉ được gọi "the free gift"; danh tính lấy từ ẢNH quà ở render. Dùng chung mọi cửa sinh concept.
+const GIFT_IDENTITY_RULE =
+`BUNDLED GIFT IS LOCKED DOWNSTREAM — when a free gift appears in a cut, refer to it ONLY as "the free gift" (or "the bonus gift"). NEVER write the gift's NAME, brand, or WHAT IT IS (e.g. "acupuncture prostate patch", "Pelekat Prostat", "túi chườm") — EVEN IF the spoken quote names it. The gift's exact look comes from the gift reference IMAGE at render; naming it makes the model render garbled FAKE label text, OR trips the content-moderation "sensitive" filter on medical/anatomical words (prostate, urinary…). Describe only "the product and the free gift together" + the shot — never the gift's identity.`
+
 // ── Output types ────────────────────────────────────────────────────────────
 
 export type BrollSceneRole = 'lips' | 'broll' | 'mechanism3d' | 'social_proof'
@@ -278,6 +284,7 @@ By role:
 UNIVERSAL — infer the action + setting from the product context; NEVER assume a niche.
 ${CREATOR_IDENTITY_RULE}
 ${PRODUCT_IDENTITY_RULE}
+${GIFT_IDENTITY_RULE}
 
 OUTPUT exactly ${weak.length} lines, ONE conceptPrompt per line, SAME order, no numbering, no quotes, no commentary.`
   const prompt = `Write a conceptPrompt for each scene (write in English):\n${list}\n\nOutput ${weak.length} lines, one per line, same order.`
@@ -340,6 +347,7 @@ always a filmable moment. UNIVERSAL — infer from the product context; never as
 niche.
 ${CREATOR_IDENTITY_RULE}
 ${PRODUCT_IDENTITY_RULE}
+${GIFT_IDENTITY_RULE}
 
 OUTPUT exactly ${orphans.length} lines, SAME order, each "TYPE | conceptPrompt",
 no numbering, no quotes, no extra commentary.`
@@ -1094,6 +1102,7 @@ RULES:
   product_closeup as each line demands, and NO-TWO-CUTS-ALIKE still holds across the video.
 - ${CREATOR_IDENTITY_RULE}
 - ${PRODUCT_IDENTITY_RULE}
+- ${GIFT_IDENTITY_RULE}
 - COVER 100%: the scenes' durations sum to ~${dur}s; every spoken beat has a cut;
   NO empty span.
 - GROUPING (the #1 rule — be FLEXIBLE, not mechanical):

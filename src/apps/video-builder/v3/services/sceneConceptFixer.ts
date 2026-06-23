@@ -112,7 +112,10 @@ HARD RULES (must obey ALL — these match the renderer; breaking them breaks the
    the product's NAME or brand — refer to it ONLY as "the product". The real product image is the
    lock; its name + label come from that reference at render. Putting the NAME into words makes the
    image model render a garbled FAKE label ("Hawthorn Prime" → "Havrtvion Drie"). NEVER mention
-   price/money/discount, a cert, a %, or a number.
+   price/money/discount, a cert, a %, or a number. A bundled FREE GIFT (if any) is referred to
+   ONLY as "the free gift" — NEVER its name / brand / what-it-is (e.g. "acupuncture prostate
+   patch"), even if the spoken line names it; its look comes from the gift reference image
+   (naming it = garbled fake text OR a content-moderation "sensitive" block on medical words).
 6. conceptPrompt MUST specify: SHOT TYPE + the concrete ACTION + WHICH PART is in frame + the
    real SETTING. One vivid shot, ≤ ~240 chars, written in ENGLISH (it is the literal render
    instruction) even though the spoken line is in ${langName}.
