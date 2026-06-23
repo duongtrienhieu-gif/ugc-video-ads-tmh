@@ -39,6 +39,12 @@ import { estimateReadDurationSec } from './voiceTimingEstimator'
 const CREATOR_IDENTITY_RULE =
 `CREATOR IDENTITY IS LOCKED DOWNSTREAM — NEVER describe WHO the person is. Any conceptPrompt that shows a person MUST refer to them as "the same creator from the avatar reference" (or "the same person from the avatar reference") and MUST NOT invent or state their GENDER, AGE, ETHNICITY, body type, or looks. Lines like "a Malaysian man in his early 30s" / "a woman in her late 20s" / "a woman …" / "a man …" are FORBIDDEN — the avatar reference supplies identity at render; if you name a gender/age you CONTRADICT the real avatar (a male avatar rendered as a woman). You MAY and SHOULD still describe what the person DOES + their EMOTION + the SETTING — just never who they are.`
 
+// 1 NGUỒN SỰ THẬT cho luật khoá SẢN PHẨM. Trước đây luật này chỉ nằm ở director chính +
+// còn cho phép ghi "(or its spoken name)" → tên SP lọt vào concept → gpt-4o-image vẽ tên đó
+// thành nhãn GIẢ méo mó ("Hawthorn Prime" → "Havrtvion Drie"). Dùng chung cho cả 3 prompt.
+const PRODUCT_IDENTITY_RULE =
+`PRODUCT IDENTITY IS LOCKED DOWNSTREAM — refer to it ONLY as "the product". NEVER write the product's NAME or BRAND, and NEVER describe its packaging APPEARANCE (no colour "red tube", no shape/form "tube/bottle/jar/pouch", no label text, no on-pack graphics). The exact look AND all on-pack text come from the reference photo at render. If you put the NAME or the appearance into words, the image model renders a garbled FAKE label or invents its own package (the "sai sản phẩm / chữ bịa trên bao bì" bug). Describe ONLY the ACTION, the part/texture shown, the setting, and the ingredients around it — never the product's identity.`
+
 // ── Output types ────────────────────────────────────────────────────────────
 
 export type BrollSceneRole = 'lips' | 'broll' | 'mechanism3d' | 'social_proof'
@@ -215,19 +221,18 @@ export function deriveConceptPrompt(args: {
   if (args.kind === 'concept') {
     return 'a real-world everyday moment that illustrates the idea, natural light, authentic UGC, no product packaging'
   }
-  const name = args.product?.productName?.trim() || 'the product'
   // P6af — product_closeup = a STATIC MACRO of the product detail (not a usage shot). The old
   // fallback wrote "hands using…" for closeups too → a demo, contradicting the "cận chi tiết"
   // intent. Now a closeup falls back to a clean macro; only product_action falls back to a usage shot.
   if (args.kind === 'product_closeup') {
-    return `a clean MACRO close-up of ${name} ALONE — its real texture / label / one key detail filling the frame, resting STATIC on a simple real surface, gentle slow push, soft studio light. NO hands, NO person, NOT held, NOT rotated.`
+    return `a clean MACRO close-up of the product ALONE — its real texture / label / one key detail filling the frame, resting STATIC on a simple real surface, gentle slow push, soft studio light. NO hands, NO person, NOT held, NOT rotated.`
   }
   // product_action — prefer the REAL usage SEEN in the photos (visualBrief.howUsed) over the
   // generic keyword-bucket usage, so even this last-resort fallback is physically correct
   // (e.g. "rub gel onto the knee" not a guessed "hold it"). Falls back to the niche usage.
   const vbUsed = args.product?.visualBrief?.match(/how it is physically used[^:]*:\s*([^\n]+)/i)?.[1]?.trim()
   const usage = vbUsed || (args.product ? detectProductNiche(args.product)?.usage : null)
-  return `hands naturally using ${name}${usage ? ` — ${usage}` : ''}, shown close-up in its real-world setting, authentic UGC iPhone footage, natural light`
+  return `hands naturally using the product${usage ? ` — ${usage}` : ''}, shown close-up in its real-world setting, authentic UGC iPhone footage, natural light`
 }
 
 /** Layer 2 — one targeted Gemini call to write a vivid conceptPrompt for every
@@ -268,6 +273,7 @@ By role:
 - mechanism3d → the internal mechanism as a clean 3D cross-section / macro (NO people, NO packaging).
 UNIVERSAL — infer the action + setting from the product context; NEVER assume a niche.
 ${CREATOR_IDENTITY_RULE}
+${PRODUCT_IDENTITY_RULE}
 
 OUTPUT exactly ${weak.length} lines, ONE conceptPrompt per line, SAME order, no numbering, no quotes, no commentary.`
   const prompt = `Write a conceptPrompt for each scene (write in English):\n${list}\n\nOutput ${weak.length} lines, one per line, same order.`
@@ -329,6 +335,7 @@ product + THIS exact line. Make each DISTINCT. NEVER abstract ("show the benefit
 always a filmable moment. UNIVERSAL — infer from the product context; never assume a
 niche.
 ${CREATOR_IDENTITY_RULE}
+${PRODUCT_IDENTITY_RULE}
 
 OUTPUT exactly ${orphans.length} lines, SAME order, each "TYPE | conceptPrompt",
 no numbering, no quotes, no extra commentary.`
@@ -401,15 +408,14 @@ function sceneShowsProduct(s: BrollScene): boolean {
 
 /** Convert a scene into a product shot. 'creator' = face + product (the opening
  *  hold-up — keeps the scroll-stop face); 'hands_noface' = hands showing it. */
-function makeProductScene(s: BrollScene, framing: CameraFraming, product: Product | null | undefined): void {
+function makeProductScene(s: BrollScene, framing: CameraFraming, _product?: Product | null): void {
   s.role = 'broll'
   s.kind = 'product_action'
   s.cameraFraming = framing
   if (isWeakConceptPrompt(s.conceptPrompt)) {
-    const name = product?.productName?.trim() || 'the product'
     s.conceptPrompt = framing === 'creator'
-      ? `The creator holds up ${name} to the camera at a natural eye level, presenting it with a friendly, confident expression — authentic UGC, natural light.`
-      : `Hands hold and show ${name} clearly in its real-world setting as the line refers to it — close-up, authentic UGC iPhone footage, natural light.`
+      ? `The creator holds up the product to the camera at a natural eye level, presenting it with a friendly, confident expression — authentic UGC, natural light.`
+      : `Hands hold and show the product clearly in its real-world setting as the line refers to it — close-up, authentic UGC iPhone footage, natural light.`
   }
 }
 
@@ -486,14 +492,13 @@ function separateLipsRuns(scenes: BrollScene[]): void {
 // well-supported PRODUCT hold. Universal — uses the product name, no niche. Usage
 // shots (hands_noface on a surface — sprinkling / pouring / dipping) are left as-is.
 const FLOATING_POSE_RE = /\b(bowl|plate|dish|tray|cup|saucer|platter|handful|overflowing|reaching\s+in(?:to)?|reach\s+into|balanced|scoop)\b|in (?:her|his|their) palm/i
-function enforceRenderSafeHolds(scenes: BrollScene[], product: Product | null | undefined): void {
-  const name = product?.productName?.trim() || 'the product'
+function enforceRenderSafeHolds(scenes: BrollScene[], _product?: Product | null): void {
   for (const s of scenes) {
     if (s.role !== 'broll' || s.cameraFraming !== 'creator') continue   // only present-to-camera holds
     if (!FLOATING_POSE_RE.test(s.conceptPrompt ?? '')) continue
     s.kind = 'product_action'
     s.conceptPrompt =
-      `The creator holds ${name} firmly with both hands at chest height, presenting it clearly to the camera with a warm, confident smile — a simple, well-supported grip (NOT a floating object, NOT a container reached into), authentic UGC, natural light.`
+      `The creator holds the product firmly with both hands at chest height, presenting it clearly to the camera with a warm, confident smile — a simple, well-supported grip (NOT a floating object, NOT a container reached into), authentic UGC, natural light.`
   }
 }
 
@@ -555,9 +560,8 @@ const ENDORSE_LOOK_RE = /thumbs[- ]?up|genuine endorsement|\brecommend|presentin
 const OFFER_LOOK_RE = /offer moment|the deal|tapping|pointing/i
 const isEndorsementLook = (cp: string): boolean => ENDORSE_LOOK_RE.test(cp) && !OFFER_LOOK_RE.test(cp)
 
-function enforceProductHero(scenes: BrollScene[], product: Product | null | undefined): void {
+function enforceProductHero(scenes: BrollScene[], _product?: Product | null): void {
   const lastIdx = scenes.length - 1
-  const name = product?.productName?.trim() || 'the product'
   // (a) a clear DEMO-ACTION line → must SHOW that action, never a talking head.
   for (let i = 0; i < scenes.length; i++) {
     if (i === lastIdx) continue                 // CTA owned by the lock
@@ -577,7 +581,7 @@ function enforceProductHero(scenes: BrollScene[], product: Product | null | unde
       // SAME person). Explicit concept so the model never renders a stray mouth/bowl.
       s.cameraFraming = 'creator'
       s.conceptPrompt =
-        `The SAME creator takes a natural, appetising bite of ${name} herself — her face and hand clearly in frame, eating it, a satisfied look. ONE person (the creator), real UGC, natural light. NOT a disembodied mouth, NOT a separate floating bowl.`
+        `The SAME creator takes a natural, appetising bite of the product herself — her face and hand clearly in frame, eating it, a satisfied look. ONE person (the creator), real UGC, natural light. NOT a disembodied mouth, NOT a separate floating bowl.`
     } else {
       s.cameraFraming = 'hands_noface'
       s.conceptPrompt = ''                       // weak → backfilled, grounded in this line
@@ -1085,14 +1089,7 @@ RULES:
   shot type. Cuts inside the SAME block still MIX creator / concept / product_action /
   product_closeup as each line demands, and NO-TWO-CUTS-ALIKE still holds across the video.
 - ${CREATOR_IDENTITY_RULE}
-- PRODUCT IDENTITY IS LOCKED DOWNSTREAM — NEVER describe the product's PACKAGING APPEARANCE in
-  a conceptPrompt: no colour ("red tube"), no shape/form ("tube / bottle / jar / squat"), no
-  label text, no "black/white text", no on-pack graphics. The product's EXACT look is pinned by
-  the reference photo + the PRODUCT LOCK at render — if you ALSO describe it in words, the model
-  invents its OWN package and you get the SAME product drifting into 3 different shapes across
-  cuts (the user audited this). Refer to it ONLY as "the product" (or its spoken name) and
-  describe just the ACTION, the part/texture being shown, the setting, and the ingredients
-  around it. (Same rule as the creator: describe what's DONE, never the IDENTITY.)
+- ${PRODUCT_IDENTITY_RULE}
 - COVER 100%: the scenes' durations sum to ~${dur}s; every spoken beat has a cut;
   NO empty span.
 - GROUPING (the #1 rule — be FLEXIBLE, not mechanical):
