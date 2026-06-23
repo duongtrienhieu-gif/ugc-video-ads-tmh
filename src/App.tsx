@@ -1,5 +1,5 @@
-﻿import { useEffect, useState } from 'react'
-import Sidebar from './components/Sidebar'
+﻿import { useEffect } from 'react'
+import TopNav from './components/TopNav'
 import ToastContainer from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
 import { useAppStore } from './stores/appStore'
@@ -17,11 +17,9 @@ import { useTikTokShopListingsStore } from './apps/tiktok-shop/listingsStore'
 import { useChatBotStore } from './apps/chat-bot/store'
 import AuthScreen from './components/AuthScreen'
 import RestoreSessionModal from './components/RestoreSessionModal'
-import { RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
 import { useSettingsStore } from './stores/settingsStore'
-import { getKieCredits } from './utils/kieai'
-import { directGeminiVision } from './utils/gemini'
 
+import Home from './apps/home/Home'
 import Finder from './apps/finder/Finder'
 import AdAnatomy from './apps/ad-anatomy/AdAnatomy'
 import ScriptArchitect from './apps/script-architect/ScriptArchitect'
@@ -42,6 +40,7 @@ import ChatBot from './apps/chat-bot/ChatBot'
 import ImageStudio from './apps/image-studio/ImageStudio'
 
 const APP_COMPONENTS: Record<string, React.ComponentType> = {
+  'home': Home,
   'finder': Finder,
   'ad-anatomy': AdAnatomy,
   'script-architect': ScriptArchitect,
@@ -70,6 +69,7 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
  *  user can wipe stale localStorage and reload when an app crashes.
  *  Cache key list mirrors the keys each app reads on mount. */
 const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> = {
+  'home':              { name: 'Trang chủ',      resetKeys: [] },
   'finder':            { name: 'Finder',         resetKeys: [] },
   'ad-anatomy':        { name: 'Phân tích QC',   resetKeys: ['ugc-ad-anatomy-cache'] },
   'script-architect':  { name: 'Script Architect', resetKeys: [] },
@@ -97,60 +97,28 @@ export default function App() {
   const openApp = useAppStore((s) => s.openApp)
   const { user, loading, setUser, setLoading } = useAuthStore()
   const loadAll = useBankStore((s) => s.loadAll)
-  const { kieApiKey, geminiApiKey, kieCredits, setKieCredits, theme } = useSettingsStore()
+  const { theme } = useSettingsStore()
 
-  // ── Theme: apply `data-theme="dark"` to <html> when user has opted in.
-  // Only 2 modes: 'light' (default — attribute removed) / 'dark' (attribute
-  // set). Existing users see no change until they toggle in Settings.
+  // ── Theme: 3 modes.
+  //   'light'  → no attributes (default, unchanged)
+  //   'dark'   → data-theme="dark"            (neutral Linear/Notion dark)
+  //   'studio' → data-theme="dark" + data-accent="studio"  (AUREA gold skin)
+  // 'studio' intentionally REUSES data-theme="dark" so every existing
+  // dark-mode compatibility override in index.css applies to the 14 inner
+  // apps; data-accent="studio" only re-skins the shell (deeper navy + gold).
   useEffect(() => {
     const root = document.documentElement
-    if (theme === 'dark') {
+    if (theme === 'dark' || theme === 'studio') {
       root.setAttribute('data-theme', 'dark')
     } else {
       root.removeAttribute('data-theme')
     }
-  }, [theme])
-  const [refreshingKie, setRefreshingKie] = useState(false)
-  const [geminiOk, setGeminiOk] = useState<boolean | null>(null)
-  const [checkingGemini, setCheckingGemini] = useState(false)
-
-  async function handleRefreshKie() {
-    if (!kieApiKey || refreshingKie) return
-    setRefreshingKie(true)
-    try {
-      const c = await getKieCredits(kieApiKey)
-      setKieCredits(c)
-    } catch { /* silent */ } finally {
-      setRefreshingKie(false)
-    }
-  }
-
-  async function handleCheckGemini() {
-    if (!geminiApiKey || checkingGemini) return
-    setCheckingGemini(true)
-    try {
-      await directGeminiVision({
-        apiKey: geminiApiKey,
-        parts: [{ text: 'Reply with the single word: ok' }],
-      })
-      setGeminiOk(true)
-    } catch {
-      setGeminiOk(false)
-    } finally {
-      setCheckingGemini(false)
-    }
-  }
-
-  // Auto-check Gemini key when it changes
-  useEffect(() => {
-    if (geminiApiKey) {
-      setGeminiOk(null)
-      handleCheckGemini()
+    if (theme === 'studio') {
+      root.setAttribute('data-accent', 'studio')
     } else {
-      setGeminiOk(null)
+      root.removeAttribute('data-accent')
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [geminiApiKey])
+  }, [theme])
 
   useEffect(() => {
     // On login, hydrate all per-user persistent state from Supabase:
@@ -191,7 +159,7 @@ export default function App() {
   }, [setUser, setLoading, loadAll])
 
   useEffect(() => {
-    openApp('finder')
+    openApp('home')
   }, [openApp])
 
   if (loading) {
@@ -205,81 +173,9 @@ export default function App() {
   if (!user) return <AuthScreen />
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#EEEEF2] text-gray-900 antialiased">
-      <Sidebar activeApp={activeApp} onNavigate={openApp} />
-      <main className="relative flex-1 overflow-hidden bg-white shadow-sm">
-        {/* API badges top-right.
-            Mobile (<768px): compact icon-only pills — hides "Gemini" word,
-            hides "Credit" suffix, drops the refresh button (status still
-            updates automatically on key change / refresh icon stays as
-            visual indicator). Saves ~50% horizontal space on phones.
-            Desktop (md+): full original layout unchanged. */}
-        <div className="absolute right-2 top-2 md:right-4 md:top-3 z-50 flex items-center gap-1.5 md:gap-2">
-          {/* Gemini badge — same preservation pattern as KIE: inner
-              refresh button only on desktop; mobile uses a full-pill
-              tap overlay so the smaller compact pill stays tappable. */}
-          {geminiApiKey && (
-            <div className="relative flex items-center gap-1 md:gap-1.5 rounded-full border border-emerald-200 bg-white px-1.5 py-1 md:px-3 md:py-1.5 shadow-sm">
-              {checkingGemini ? (
-                <RefreshCw className="h-3 w-3 animate-spin text-emerald-400" />
-              ) : geminiOk === true ? (
-                <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-              ) : geminiOk === false ? (
-                <AlertCircle className="h-3 w-3 text-red-400" />
-              ) : (
-                <div className="h-2 w-2 rounded-full bg-emerald-300" />
-              )}
-              <span className="hidden md:inline text-xs font-semibold text-emerald-600">Gemini</span>
-              <span className="md:hidden text-[10px] font-bold text-emerald-600">G</span>
-              <button
-                onClick={handleCheckGemini}
-                title="Kiểm tra Gemini key"
-                className="hidden md:inline-flex rounded-full p-0.5 text-emerald-400 transition-colors hover:text-emerald-600"
-              >
-                <RefreshCw className={`h-3 w-3 ${checkingGemini ? 'animate-spin' : ''}`} />
-              </button>
-              <button
-                onClick={handleCheckGemini}
-                aria-label="Kiểm tra Gemini key"
-                title="Kiểm tra Gemini key"
-                className="md:hidden absolute inset-0 rounded-full"
-              />
-            </div>
-          )}
-
-          {/* KIE badge — preserves the ORIGINAL desktop semantics
-              (outer div is non-clickable, inner refresh button handles
-              the action). On mobile the inner refresh icon is hidden
-              and a `md:hidden` button overlay is mounted instead so the
-              whole compact pill is tappable. */}
-          {kieApiKey && (
-            <div className="relative flex items-center gap-1 md:gap-1.5 rounded-full border border-indigo-200 bg-white px-1.5 py-1 md:px-3 md:py-1.5 shadow-sm">
-              <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-400">KIE</span>
-              <span className="text-[11px] md:text-xs font-semibold tabular-nums text-indigo-600">
-                {kieCredits !== null
-                  ? (kieCredits % 1 === 0 ? kieCredits.toLocaleString('vi-VN') : kieCredits.toFixed(2))
-                  : '--'}
-                <span className="hidden md:inline"> Credit</span>
-              </span>
-              <button
-                onClick={handleRefreshKie}
-                title="Làm mới KIE credits"
-                className="hidden md:inline-flex rounded-full p-0.5 text-indigo-400 transition-colors hover:text-indigo-600"
-              >
-                <RefreshCw className={`h-3 w-3 ${refreshingKie ? 'animate-spin' : ''}`} />
-              </button>
-              {/* Mobile-only full-pill tap target — replaces the hidden
-                  inner refresh button on small screens so users can still
-                  refresh credits with a single tap. */}
-              <button
-                onClick={handleRefreshKie}
-                aria-label="Làm mới KIE credits"
-                title="Làm mới KIE credits"
-                className="md:hidden absolute inset-0 rounded-full"
-              />
-            </div>
-          )}
-        </div>
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-app-base text-app-text antialiased">
+      <TopNav activeApp={activeApp} onNavigate={openApp} />
+      <main className="relative flex-1 overflow-hidden bg-app-card shadow-sm">
         {runningApps.map((appId) => {
           const Component = APP_COMPONENTS[appId]
           const isActive = activeApp === appId

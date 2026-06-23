@@ -83,7 +83,10 @@ export type PipelineVersion = 'v1' | 'v2' | 'v3'
 /** UI theme — only 'light' or 'dark'. (Earlier draft had a 'system'
  *  option but it was removed — users prefer an explicit toggle and the
  *  OS-follow path complicated cross-device sync semantics.) */
-export type ThemePreference = 'light' | 'dark'
+// 'studio' = AUREA cinematic skin = dark base + gold accent. App.tsx maps
+// it to <html data-theme="dark" data-accent="studio"> so it reuses every
+// existing dark-mode compatibility override (see index.css).
+export type ThemePreference = 'light' | 'dark' | 'studio'
 
 interface SettingsState {
   kieApiKey: string
@@ -159,7 +162,8 @@ function loadFromStorage(): StoredSettings {
           // Legacy: 'system' values from older settings → coerce to 'light'
           // so the toggle has a deterministic default after the OS option
           // was removed.
-          parsed.theme === 'dark' ? 'dark' : 'light'
+          parsed.theme === 'dark' ? 'dark' :
+          parsed.theme === 'studio' ? 'studio' : 'light'
         ),
       }
     }
@@ -315,7 +319,7 @@ async function hydrateFromCloud(setStore: (patch: Partial<StoredSettings>) => vo
         cloud.pipelineVersion === 'v1' ? 'v1' :
         'v3'
       ),
-      theme: (cloud.theme === 'dark' ? 'dark' : 'light'),
+      theme: (cloud.theme === 'dark' ? 'dark' : cloud.theme === 'studio' ? 'studio' : 'light'),
     }
     // Push merged into local state + mirror to IDB + localStorage cache
     // Suppress the cloud-push that follows so we don't echo back

@@ -35,6 +35,14 @@
   --color-text-faint:     rgba(0, 0, 0, 0.30);
   --color-hover-overlay:  rgba(0, 0, 0, 0.04);
   --color-active-overlay: rgba(0, 0, 0, 0.06);
+
+  /* Brand accent — neutral default (violet) so light/dark stay as before
+     until the user opts into the "studio" theme, which swaps this to gold. */
+  --color-accent:          #7C5CFF;
+  --color-accent-contrast: #FFFFFF;   /* text/icon color ON the accent fill */
+  --color-accent-dim:      rgba(124, 92, 255, 0.14);
+  --color-rec:             #FF4D6D;   /* the "● REC" recording dot */
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
 }
 
 [data-theme="dark"] {
@@ -50,6 +58,36 @@
   --color-text-faint:     rgba(255, 255, 255, 0.35);
   --color-hover-overlay:  rgba(255, 255, 255, 0.06);
   --color-active-overlay: rgba(255, 255, 255, 0.10);
+
+  /* Dark mode keeps the neutral violet accent unless studio is layered on. */
+  --color-accent:          #8B7BFF;
+  --color-accent-contrast: #0E0F11;
+  --color-accent-dim:      rgba(139, 123, 255, 0.18);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * STUDIO ACCENT SKIN ("AUREA" cinematic look — gold on deep navy-black)
+ *
+ * IMPORTANT: studio is NOT a separate data-theme. App.tsx sets BOTH
+ *   <html data-theme="dark" data-accent="studio">
+ * so it REUSES every `[data-theme="dark"]` compatibility override below
+ * (bg-white→card, text-gray→themed, etc.) — the inner 14 apps keep
+ * working untouched. This block only:
+ *   1. deepens the dark base/surface/card to the AUTOVIS navy-black ramp
+ *   2. swaps the brand accent to gold (#F5C84B)
+ * so the new shell surfaces (TopNav, Home) read as a premium gold studio.
+ * ─────────────────────────────────────────────────────────────────── */
+[data-accent="studio"] {
+  --color-base:           #0B0C14;
+  --color-surface:        #12131D;
+  --color-card:           #1A1B28;
+  --color-card-elevated:  #222336;
+  --color-border:         rgba(255, 255, 255, 0.08);
+  --color-border-strong:  rgba(255, 255, 255, 0.14);
+
+  --color-accent:          #F5C84B;   /* aurea = gold */
+  --color-accent-contrast: #0B0C14;   /* near-black text on gold */
+  --color-accent-dim:      rgba(245, 200, 75, 0.14);
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -70,6 +108,11 @@
   --color-app-muted:          var(--color-text-secondary);
   --color-app-subtle:         var(--color-text-tertiary);
   --color-app-faint:          var(--color-text-faint);
+  --color-accent:             var(--color-accent);
+  --color-accent-contrast:    var(--color-accent-contrast);
+  --color-accent-dim:         var(--color-accent-dim);
+  --color-rec:                var(--color-rec);
+  --font-mono:                var(--font-mono);
 }
 
 html {
