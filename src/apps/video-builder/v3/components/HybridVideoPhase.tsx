@@ -115,6 +115,7 @@ export default function HybridVideoPhase(_props: Props) {
   const setHybridPlan  = useAdsVideoStore((s) => s.setHybridPlan)
   const setHybridClip  = useAdsVideoStore((s) => s.setHybridClip)
   const setSceneConceptPrompt = useAdsVideoStore((s) => s.setSceneConceptPrompt)
+  const toggleSceneLips = useAdsVideoStore((s) => s.toggleSceneLips)
   const setHybridAssets= useAdsVideoStore((s) => s.setHybridCreatorAssets)
   const setHybridLipsHoldProduct = useAdsVideoStore((s) => s.setHybridLipsHoldProduct)
   const setAssetsGenStartedAt = useAdsVideoStore((s) => s.setAssetsGenStartedAt)
@@ -693,6 +694,7 @@ export default function HybridVideoPhase(_props: Props) {
                 credit={sceneCredit(s)} hasAssets={hasAssets}
                 onRender={() => renderScene(i)}
                 onSavePrompt={(prompt, plan) => setSceneConceptPrompt(i, prompt, plan)}
+                onToggleLips={() => toggleSceneLips(i)}
                 onAiFix={(intent, targetIntent) => fixSceneConceptPrompt({
                   geminiKey, scene: s, product: state.inputs.product,
                   lang: state.scriptBrain.outputLang, fullScript: script, userIntent: intent, targetIntent,
@@ -806,9 +808,10 @@ const FIX_ARCHETYPES: { value: string; intent?: ShotIntent; label: string; hint?
   { value: 'before_after',    intent: 'before_after',       label: '🔁 Trước / sau' },
   { value: 'social_proof',    intent: 'social_proof',       label: '🗯 Bằng chứng' },
   { value: 'endorsement',     intent: 'endorsement',        label: '🛒 Ưu đãi / kêu gọi mua' },
+  { value: 'offer',           intent: 'offer',              label: '🎁 Combo / quà (không tay)', hint: 'OFFER product-hero close-up: the product (with the bundled free gift / extra units if any) as the clear HERO on a clean premium surface, framed as a deal worth grabbing. NO hands, NO person, NO on-screen price.' },
 ]
 
-function SceneCard({ i, scene, clipRef, rendering, queued, failed, failMsg, progress, voiceUrl, gloss, conceptGloss, mismatch, credit, hasAssets, onRender, onSavePrompt, onAiFix }: {
+function SceneCard({ i, scene, clipRef, rendering, queued, failed, failMsg, progress, voiceUrl, gloss, conceptGloss, mismatch, credit, hasAssets, onRender, onSavePrompt, onToggleLips, onAiFix }: {
   i: number; scene: TimedBrollScene; clipRef?: string; rendering: boolean; queued: boolean; failed: boolean; failMsg?: string
   progress?: { pollCount: number; elapsedSec: number }
   voiceUrl?: string
@@ -817,6 +820,7 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, failMsg, prog
   mismatch?: string | null   // P6z — cờ nghi lệch deterministic (display-only)
   credit: number; hasAssets: boolean; onRender: () => void
   onSavePrompt: (prompt: string, plan?: { kind?: TimedBrollScene['kind']; cameraFraming?: 'creator' | 'hands_noface'; shotIntent?: ShotIntent }) => void
+  onToggleLips: () => void
   onAiFix: (intent: string, targetIntent?: ShotIntent) => Promise<SceneFix>
 }) {
   const url = useAssetUrl(clipRef ?? undefined)
@@ -979,6 +983,15 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, failMsg, prog
         <p className="text-[12px] font-medium leading-snug text-sky-700 line-clamp-3" title="Cảnh sẽ quay (giải nghĩa từ prompt) — so với thoại ở trên xem có khớp không">
           🎬 {conceptLineFor(scene, conceptGloss)}
         </p>
+        {/* A#2 — escape hatch: cảnh B-roll i2v không đẻ được → đổi sang talking-head (creator nói câu
+            này), render bằng lip-sync ổn định. Đảo lại được. Sau khi đổi nhớ bấm "Render lại". */}
+        {(scene.role === 'broll' || scene.lipsManual) && (
+          <button onClick={onToggleLips} type="button"
+            title="Cảnh khó render thành B-roll? Đổi sang creator nói trực tiếp câu này (lip-sync ổn định). Đổi xong bấm Render lại."
+            className={`self-start rounded px-1.5 py-0.5 text-[10px] font-semibold ${scene.lipsManual ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>
+            {scene.lipsManual ? '↩ Về B-roll' : '🎤 Chuyển sang Lipsync (creator nói)'}
+          </button>
+        )}
         {/* P6z — cờ nghi lệch (heuristic, không tự sửa) → bấm "Nhờ AI sửa" nếu đúng là lệch. */}
         {mismatch && (
           <p className="rounded bg-amber-50 px-1.5 py-1 text-[11px] font-semibold leading-snug text-amber-700" title="Cảnh báo tự động — không tự sửa. Kiểm tra rồi bấm Nhờ AI sửa nếu lệch thật.">

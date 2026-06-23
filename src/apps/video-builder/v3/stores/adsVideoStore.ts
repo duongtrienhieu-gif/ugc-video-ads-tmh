@@ -86,6 +86,9 @@ interface AdsVideoStoreState {
    *  emotion shot); pass them together so the prompt never fights the framing.
    *  Both optional → the manual textarea edit (conceptPrompt only) is unchanged. */
   setSceneConceptPrompt:  (idx: number, conceptPrompt: string, plan?: { kind?: BrollSceneKind; cameraFraming?: 'creator' | 'hands_noface'; shotIntent?: ShotIntent }) => void
+  /** A#2 — flip a cut to a talking-head LIPS (escape hatch) and back. ON → role='lips' + lipsManual;
+   *  OFF → restore role='broll'. kind/cameraFraming/conceptPrompt are preserved for a clean revert. */
+  toggleSceneLips:        (idx: number) => void
   /** P3x — mark the creator-assets (giọng + mặt) generation in flight. Persisted
    *  so navigating away + back keeps the "đang tạo" lock (no double-charge).
    *  Pass a timestamp to start, undefined to clear. */
@@ -471,6 +474,20 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
         ...(plan?.cameraFraming ? { cameraFraming: plan.cameraFraming } : {}),
         ...(plan?.shotIntent ? { shotIntent: plan.shotIntent } : {}),   // P6t — keep the scene on the intent spine + tag truthful
       }
+      return { ...s, hybrid: { ...s.hybrid, scenes } }
+    }),
+
+  toggleSceneLips: (idx) =>
+    commit(set, get, (s) => {
+      const cur = s.hybrid.scenes
+      if (!cur) return s
+      const scenes = cur.slice()
+      if (idx < 0 || idx >= scenes.length) return s
+      const sc = scenes[idx]
+      const toLips = sc.role !== 'lips'
+      // ON → talking-head lips (render routes to renderLipsyncSegment). OFF → back to a broll cut.
+      // kind/cameraFraming/conceptPrompt are kept untouched so flipping back restores the shot.
+      scenes[idx] = { ...sc, role: toLips ? 'lips' : 'broll', lipsManual: toLips }
       return { ...s, hybrid: { ...s.hybrid, scenes } }
     }),
 

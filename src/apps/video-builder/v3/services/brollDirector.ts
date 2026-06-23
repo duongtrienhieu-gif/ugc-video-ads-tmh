@@ -91,6 +91,10 @@ export interface BrollScene {
    *  creator HOLDING the product) instead of the plain talking-head KF-A. At most one lips per
    *  video carries this (set by assignLipsProductKeyframe). */
   lipsHoldsProduct?: boolean
+  /** A#2 — user manually flipped this cut to a talking-head lips (escape hatch for a B-roll
+   *  the i2v model won't render well). When ON, role is forced to 'lips'; flipping OFF restores
+   *  role 'broll'. The original kind/cameraFraming/conceptPrompt are PRESERVED so the revert is clean. */
+  lipsManual?: boolean
   /** Phase A — asset:xxx of a bundled GIFT image to send as an EXTRA render
    *  reference (alongside the product) for this cut. Set ONLY on the two closing
    *  cuts when a gift is enabled (penult product+gift hero; final creator holding
