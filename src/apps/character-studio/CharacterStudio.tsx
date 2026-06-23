@@ -1,11 +1,13 @@
 ﻿import { useState, useEffect, useRef } from 'react'
-import { User, MapPin, Move, Camera, X, Sliders } from 'lucide-react'
+import { User, MapPin, Move, Camera } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import type { CharacterProfile, TabId } from './types'
 import { createEmptyProfile, TABS } from './types'
 import ControlsPanel from './components/ControlsPanel'
 import OutputPanel from './components/OutputPanel'
 import CloneStudio from './components/CloneStudio'
+import AppHeader from '../../components/shell/AppHeader'
+import SegmentTabs from '../../components/shell/SegmentTabs'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
 import { generateCharacter } from './services/generateCharacter'
@@ -123,39 +125,36 @@ export default function CharacterStudio() {
     return { filled, total: tab.fields.length }
   }
 
-  // Mobile output-first (M5): once a character has been generated, hide the
-  // controls panel (long form across multiple tabs) so the output preview
-  // owns the viewport. FAB toggles controls back open for re-tweaks.
-  const [mobileControlsVisible, setMobileControlsVisible] = useState(true)
+  // Mobile flow: [Tùy chỉnh | Kết quả] segmented (replaces the old FAB). When a
+  // character lands (null → set) auto-switch to "Kết quả". Desktop shows both.
+  const [mobileTab, setMobileTab] = useState<'setup' | 'result'>('setup')
   const prevResultRef = useRef<GenerationResult | null>(null)
   useEffect(() => {
-    if (!prevResultRef.current && result) setMobileControlsVisible(false)
+    if (!prevResultRef.current && result) setMobileTab('result')
     prevResultRef.current = result
   }, [result])
-  const showControlsOnMobile = !result || mobileControlsVisible
 
   return (
-    <div className="flex h-full flex-col relative">
-      {/* Auto-save chip — top right, above everything */}
-      <div className="absolute right-4 top-3 z-30">
-        <AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />
-      </div>
+    <div className="flex h-full flex-col">
+      <AppHeader
+        icon={User}
+        eyebrow="CHARACTER STUDIO · KOL"
+        title="Avatar AI"
+        actions={<AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />}
+      />
 
       {/* ── Mode toggle: Random (attribute-driven) vs Clone (keep uploaded face) ── */}
-      <div className="shrink-0 border-b border-black/8 px-4 pt-3">
-        <div className="inline-flex rounded-xl border border-black/10 bg-black/[0.02] p-0.5">
-          <button
-            onClick={() => setMode('random')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${mode === 'random' ? 'bg-violet-600 text-white shadow' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            Tạo Avatar Random
-          </button>
-          <button
-            onClick={() => setMode('clone')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${mode === 'clone' ? 'bg-violet-600 text-white shadow' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            Tạo Avatar Clone
-          </button>
+      <div className="shrink-0 border-b border-app-border px-4 py-2">
+        <div className="inline-flex rounded-xl border border-app-border bg-app-card p-0.5">
+          {([['random', 'Tạo Avatar Random'], ['clone', 'Tạo Avatar Clone']] as const).map(([m, label]) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${mode === m ? 'ui-accent-solid shadow' : 'text-app-muted hover:text-app-text'}`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -167,10 +166,18 @@ export default function CharacterStudio() {
 
       {/* Random mode — also kept mounted; only one is visible at a time. */}
       <div className={`min-h-0 flex-1 flex-col ${mode === 'random' ? 'flex' : 'hidden'}`}>
-      {/* ── Main 3-column layout ── */}
+      {/* Mobile segmented — replaces the floating FAB */}
+      <div className="shrink-0 border-b border-app-border px-3 py-2 lg:hidden">
+        <SegmentTabs
+          value={mobileTab}
+          onChange={setMobileTab}
+          options={[{ value: 'setup', label: 'Tùy chỉnh' }, { value: 'result', label: 'Kết quả' }]}
+        />
+      </div>
+      {/* ── Main 3-column layout — output canvas is the hero (form is a fixed rail) ── */}
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {/* Side tabs — hidden on mobile alongside controls (tabs are useless without the form) */}
-        <div className={`${showControlsOnMobile ? 'flex' : 'hidden'} lg:flex lg:w-44 shrink-0 flex-row lg:flex-col gap-1 overflow-x-auto lg:overflow-x-visible border-b lg:border-b-0 lg:border-r border-black/8 bg-black/[0.02] px-2 py-2 lg:py-3`}>
+        {/* Side tabs */}
+        <div className={`${mobileTab === 'setup' ? 'flex' : 'hidden'} lg:flex lg:w-44 shrink-0 flex-row lg:flex-col gap-1 overflow-x-auto lg:overflow-x-visible border-b border-app-border lg:border-b-0 lg:border-r bg-app-surface px-2 py-2 lg:py-3`}>
           {TABS.map((tab) => {
             const Icon = TAB_ICONS[tab.id]
             const isActive = activeTab === tab.id
@@ -179,14 +186,14 @@ export default function CharacterStudio() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[11px] font-medium transition-colors ${isActive
-                  ? 'bg-sky-500/15 text-sky-400'
-                  : 'text-gray-500 hover:bg-black/[0.04] hover:text-gray-700'
+                className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[11px] font-bold transition-colors ${isActive
+                  ? 'ui-accent-soft'
+                  : 'text-app-muted hover:bg-app-card hover:text-app-text'
                   }`}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
                 <span className="truncate">{tab.label}</span>
-                <span className={`ml-auto text-[10px] tabular-nums ${isActive ? 'text-sky-400/60' : 'text-gray-300'}`}>
+                <span className={`ml-auto text-[10px] tabular-nums ${isActive ? 'opacity-70' : 'text-app-faint'}`}>
                   {filled}/{total}
                 </span>
               </button>
@@ -194,8 +201,8 @@ export default function CharacterStudio() {
           })}
         </div>
 
-        {/* Controls panel — hidden on mobile after first generation */}
-        <div className={`${showControlsOnMobile ? 'flex' : 'hidden'} lg:flex w-full lg:w-1/2 shrink-0 flex-col border-b lg:border-b-0 lg:border-r border-black/8`}>
+        {/* Controls panel — fixed-width rail so the image canvas gets the room */}
+        <div className={`${mobileTab === 'setup' ? 'flex' : 'hidden'} lg:flex w-full lg:w-[380px] shrink-0 flex-col border-b border-app-border lg:border-b-0 lg:border-r`}>
           <ControlsPanel
             profile={profile}
             onProfileChange={setProfile}
@@ -203,8 +210,8 @@ export default function CharacterStudio() {
           />
         </div>
 
-        {/* Output panel */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden min-h-[300px] lg:min-h-0">
+        {/* Output panel — the hero */}
+        <div className={`${mobileTab === 'result' ? 'flex' : 'hidden'} lg:flex min-w-0 flex-1 flex-col overflow-hidden min-h-0`}>
           <OutputPanel
             result={result}
             isGenerating={isGenerating}
@@ -216,18 +223,6 @@ export default function CharacterStudio() {
           />
         </div>
       </div>
-      {result && (
-        <button
-          onClick={() => setMobileControlsVisible((v) => !v)}
-          aria-label={showControlsOnMobile ? 'Đóng tuỳ chỉnh' : 'Mở tuỳ chỉnh'}
-          title={showControlsOnMobile ? 'Đóng tuỳ chỉnh' : 'Mở tuỳ chỉnh'}
-          className="lg:hidden fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-3 text-[12px] font-bold text-white shadow-lg shadow-violet-900/30 hover:bg-violet-700 active:scale-95 transition-transform"
-        >
-          {showControlsOnMobile
-            ? <><X className="h-4 w-4" /> Đóng</>
-            : <><Sliders className="h-4 w-4" /> Tuỳ chỉnh</>}
-        </button>
-      )}
       </div>
     </div>
   )

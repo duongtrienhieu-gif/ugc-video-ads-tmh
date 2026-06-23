@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAppStore } from '../../../stores/appStore'
 import type { GenerationResult } from '../services/generateCharacter'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
+import { EyebrowLabel } from '../../../components/cinematic'
 import { IMAGE_MODELS } from '../../../utils/kieai'
 import type { ImageResolution } from '../../../utils/kieai'
 import { generateExtra3Angles, generateOneVariant, EXTRA_3_RECIPES } from '../services/generateVariants'
@@ -219,19 +220,19 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
         <div className="flex gap-1.5">
           <button
             onClick={() => onAspectRatioChange('Portrait (9:16)')}
-            className={`flex flex-1 items-center justify-center gap-1 rounded-lg border py-1.5 text-[11px] font-medium transition-colors ${aspectRatio.includes('9:16') ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
+            className={`flex flex-1 items-center justify-center gap-1 rounded-lg border py-1.5 text-[11px] font-medium transition-colors ${aspectRatio.includes('9:16') ? 'ui-accent-soft' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
           >
             <span>📱</span> Dọc 9:16
           </button>
           <button
             onClick={() => onAspectRatioChange('Square (1:1)')}
-            className={`flex flex-1 items-center justify-center gap-1 rounded-lg border py-1.5 text-[11px] font-medium transition-colors ${aspectRatio.includes('1:1') ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
+            className={`flex flex-1 items-center justify-center gap-1 rounded-lg border py-1.5 text-[11px] font-medium transition-colors ${aspectRatio.includes('1:1') ? 'ui-accent-soft' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
           >
             <span>⬜</span> Vuông 1:1
           </button>
           <button
             onClick={() => onAspectRatioChange('Landscape (16:9)')}
-            className={`flex flex-1 items-center justify-center gap-1 rounded-lg border py-1.5 text-[11px] font-medium transition-colors ${aspectRatio === 'Landscape (16:9)' ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
+            className={`flex flex-1 items-center justify-center gap-1 rounded-lg border py-1.5 text-[11px] font-medium transition-colors ${aspectRatio === 'Landscape (16:9)' ? 'ui-accent-soft' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
           >
             <span>🖥</span> Ngang 16:9
           </button>
@@ -263,18 +264,19 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
                   <button
                     key={m.id}
                     onClick={() => { setSelectedModel(m); setModelDropOpen(false) }}
-                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors ${isSelected ? 'bg-sky-500/10' : 'hover:bg-black/[0.03]'}`}
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-black/[0.03]"
+                    style={isSelected ? { backgroundColor: 'var(--color-accent-dim)' } : undefined}
                   >
                     <ProviderIcon provider={m.provider} />
-                    <span className={`flex-1 text-xs font-medium ${isSelected ? 'text-sky-400' : 'text-gray-700'}`}>
+                    <span className="flex-1 text-xs font-medium" style={isSelected ? { color: 'var(--color-accent)' } : { color: 'var(--color-text-secondary)' }}>
                       {m.name}
                     </span>
                     {m.starred && <span className="text-[10px] text-yellow-400">⭐</span>}
                     <span className="text-[10px] text-gray-400">{m.provider}</span>
-                    <span className={`ml-2 text-[10px] tabular-nums ${isSelected ? 'text-sky-400/70' : 'text-gray-400'}`}>
+                    <span className="ml-2 text-[10px] tabular-nums text-gray-400">
                       {m.credits[resolution]} Credit
                     </span>
-                    {isSelected && <Check className="ml-1 h-3 w-3 text-sky-400" />}
+                    {isSelected && <Check className="ml-1 h-3 w-3" style={{ color: 'var(--color-accent)' }} />}
                   </button>
                 )
               })}
@@ -288,7 +290,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
             <button
               key={r}
               onClick={() => setResolution(r)}
-              className={`flex flex-1 items-center justify-center gap-1 rounded-lg border py-1.5 text-[11px] transition-colors ${resolution === r ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
+              className={`flex flex-1 items-center justify-center gap-1 rounded-lg border py-1.5 text-[11px] transition-colors ${resolution === r ? 'ui-accent-soft' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
             >
               <span className="font-semibold">{r}</span>
               <span className="text-[10px] opacity-70">· {selectedModel.credits[r]} Credit</span>
@@ -302,7 +304,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
         <button
           onClick={() => onGenerate(selectedModel.id, resolution)}
           disabled={!canGenerate || isGenerating}
-          className="flex w-full items-center justify-center gap-2 rounded-full border border-black/12 bg-sky-500 px-6 py-2.5 text-[13px] font-medium tracking-tight text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] transition-all hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-40"
+          className="ui-accent-solid flex w-full items-center justify-center gap-2 rounded-full px-6 py-2.5 text-[13px] font-bold tracking-tight shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isGenerating ? (
             <>
@@ -333,12 +335,12 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
           <div>
             <div className="mb-1.5 flex items-center justify-between">
               <span className="text-xs text-gray-500">Đang tạo ảnh...</span>
-              <span className="text-xs font-semibold tabular-nums text-sky-500">{Math.round(progress)}%</span>
+              <span className="text-xs font-bold tabular-nums" style={{ color: 'var(--color-accent)' }}>{Math.round(progress)}%</span>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
               <div
-                className="h-full rounded-full bg-sky-400 transition-all duration-500 ease-out"
-                style={{ width: `${progress}%` }}
+                className="h-full rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${progress}%`, backgroundColor: 'var(--color-accent)' }}
               />
             </div>
           </div>
@@ -358,14 +360,20 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   if (!result) {
     return (
       <div className="flex h-full flex-col">
-        <div className="relative flex flex-1 flex-col items-center justify-center gap-3 p-8">
-          <div className="absolute right-4 top-4 flex items-center gap-1 rounded-full border border-black/10 bg-black/[0.04] px-2.5 py-1">
-            <span className="text-[9px] font-medium uppercase tracking-widest text-gray-400">Powered by</span>
-            <span className="text-[9px] font-bold uppercase tracking-widest text-sky-400">kie.ai</span>
-          </div>
-          <UserRound className="h-10 w-10 text-gray-200" strokeWidth={1.5} />
-          <p className="text-sm text-gray-300">Điền thông tin để tạo Avatar AI</p>
-          <p className="text-xs text-gray-200">Hình ảnh Avatar AI sẽ hiển thị ở đây</p>
+        <div className="relative flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <span className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border border-app-border px-2.5 py-1">
+            <span className="text-[9px] font-medium uppercase tracking-widest text-app-faint">Powered by</span>
+            <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'var(--color-accent)' }}>kie.ai</span>
+          </span>
+          <EyebrowLabel rec>CHARACTER STUDIO · KOL</EyebrowLabel>
+          <span className="flex h-16 w-16 items-center justify-center rounded-2xl" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+            <UserRound className="h-8 w-8" style={{ color: 'var(--color-accent)' }} strokeWidth={1.5} />
+          </span>
+          <h2 className="text-lg font-bold text-app-text">Avatar AI của bạn hiện ở đây</h2>
+          <p className="max-w-xs text-xs leading-relaxed text-app-subtle">
+            Điền thông tin bên trái → bấm <b className="text-app-muted">Tạo Avatar AI</b>.
+            Tạo xong có thể sinh thêm <b className="text-app-muted">3 góc mặt cùng người</b>.
+          </p>
         </div>
         <BottomControls />
       </div>
@@ -393,9 +401,9 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
           // 2x2 grid: main top-left + 3 angles
           <div className="grid grid-cols-2 gap-2">
             {/* Main (top-left) */}
-            <div className="group relative aspect-[9/16] overflow-hidden rounded-xl border-2 border-sky-300 bg-black">
+            <div className="group relative aspect-[9/16] overflow-hidden rounded-xl border-2 bg-black" style={{ borderColor: 'var(--color-accent)' }}>
               <img src={resolvedImageUrl} alt="Main" className="h-full w-full object-cover" />
-              <span className="absolute left-1.5 top-1.5 rounded bg-sky-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">CHÍNH</span>
+              <span className="absolute left-1.5 top-1.5 rounded px-1.5 py-0.5 text-[9px] font-bold" style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-accent-contrast)' }}>CHÍNH</span>
             </div>
             {/* 3 angle slots */}
             {extraAngles.map((variant, idx) => (
@@ -450,7 +458,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
               className="flex w-full items-center justify-between px-3 py-2 text-left transition-colors hover:bg-black/[0.03]"
             >
               <div className="flex items-center gap-2">
-                <Braces className="h-3.5 w-3.5 text-sky-400" />
+                <Braces className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} />
                 <span className="text-[11px] font-medium text-gray-700">JSON Prompt</span>
               </div>
               <div className="flex items-center gap-2">
@@ -484,7 +492,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
               onClick={handleGenerateExtras}
               disabled={!kieApiKey}
               title={!kieApiKey ? 'Cần KIE.ai API key trong Cài đặt' : 'Lấy ảnh gốc làm reference, tạo 3 biến thể cùng người qua KIE GPT Image (image-edit, không phải text-to-image)'}
-              className="flex w-full items-center justify-center gap-2 rounded-full border border-violet-300 bg-violet-50 px-6 py-2 text-[13px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+              className="ui-accent-soft flex w-full items-center justify-center gap-2 rounded-full border px-6 py-2 text-[13px] font-bold transition-colors disabled:opacity-50"
             >
               <Sparkles className="h-4 w-4" />
               ✨ Tạo 3 biến thể cùng người {!kieApiKey && '— cần KIE key'}
@@ -493,15 +501,15 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
 
           {/* Progress bar while gen extras */}
           {isGeneratingExtras && (
-            <div className="rounded-xl border border-violet-200 bg-violet-50 p-3">
+            <div className="rounded-xl border border-app-border p-3" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
               <div className="mb-1.5 flex items-center justify-between text-xs">
-                <span className="font-medium text-violet-700">Đang tạo biến thể: {extraProgress.label}</span>
-                <span className="font-bold tabular-nums text-violet-700">{extraProgress.done}/{extraProgress.total}</span>
+                <span className="font-bold" style={{ color: 'var(--color-accent)' }}>Đang tạo biến thể: {extraProgress.label}</span>
+                <span className="font-bold tabular-nums" style={{ color: 'var(--color-accent)' }}>{extraProgress.done}/{extraProgress.total}</span>
               </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-violet-100">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10">
                 <div
-                  className="h-full rounded-full bg-violet-500 transition-all duration-500"
-                  style={{ width: `${(extraProgress.done / Math.max(extraProgress.total, 1)) * 100}%` }}
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${(extraProgress.done / Math.max(extraProgress.total, 1)) * 100}%`, backgroundColor: 'var(--color-accent)' }}
                 />
               </div>
             </div>
@@ -572,10 +580,10 @@ function AngleSlot({
 }) {
   const url = useAssetUrl(variant?.imageUrl)
   return (
-    <div className="group relative aspect-[9/16] overflow-hidden rounded-xl border border-violet-200 bg-gray-100">
+    <div className="group relative aspect-[9/16] overflow-hidden rounded-xl border border-app-border bg-gray-100">
       {isRegenerating ? (
         <div className="flex h-full items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-violet-400" />
+          <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--color-accent)' }} />
         </div>
       ) : variant && url ? (
         <>
@@ -587,7 +595,7 @@ function AngleSlot({
             onClick={onRegen}
             title={`Tạo lại biến thể ${label}`}
             aria-label={`Tạo lại biến thể ${label}`}
-            className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white backdrop-blur-sm opacity-100 md:opacity-0 transition-opacity hover:bg-violet-600 md:group-hover:opacity-100"
+            className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white backdrop-blur-sm opacity-100 md:opacity-0 transition-opacity hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-contrast)] md:group-hover:opacity-100"
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
@@ -598,7 +606,7 @@ function AngleSlot({
           <span className="text-[10px]">Lỗi — </span>
           <button
             onClick={onRegen}
-            className="rounded-md bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-violet-700"
+            className="ui-accent-solid rounded-md px-2 py-0.5 text-[10px] font-bold"
           >
             Tạo lại
           </button>

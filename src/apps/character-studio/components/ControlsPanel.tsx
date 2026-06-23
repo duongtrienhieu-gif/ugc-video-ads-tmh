@@ -44,7 +44,7 @@ export default function ControlsPanel({ profile, onProfileChange, activeTab }: C
             <button
               key={opt.key}
               onClick={() => selectCountry(opt.key)}
-              className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${country === opt.key ? 'bg-violet-600 text-white' : 'bg-black/[0.04] text-gray-600 hover:bg-black/[0.06] hover:text-gray-800'}`}
+              className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors ${country === opt.key ? 'ui-accent-solid' : 'bg-black/[0.04] text-gray-600 hover:bg-black/[0.06] hover:text-gray-800'}`}
             >
               {opt.label}
             </button>
@@ -107,7 +107,7 @@ export default function ControlsPanel({ profile, onProfileChange, activeTab }: C
                   }
                 }}
                 disabled={!saveName.trim()}
-                className="rounded-full bg-sky-500/15 px-2.5 py-1 text-[11px] font-medium text-sky-400 transition-colors hover:bg-sky-500/25 disabled:opacity-40"
+                className="ui-accent-solid rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors disabled:opacity-40"
               >
                 Lưu
               </button>
@@ -121,7 +121,7 @@ export default function ControlsPanel({ profile, onProfileChange, activeTab }: C
           ) : (
             <button
               onClick={() => setShowSaveForm(true)}
-              className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${saved ? 'bg-green-500/10 text-green-400' : 'bg-black/[0.04] text-gray-600 hover:bg-sky-500/10 hover:text-sky-400'}`}
+              className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors ${saved ? 'bg-green-500/10 text-green-400' : 'bg-black/[0.04] text-gray-600 hover:bg-[var(--color-accent-dim)] hover:text-[var(--color-accent)]'}`}
             >
               <Save className="h-3 w-3" />
               {saved ? 'Đã lưu!' : 'Lưu preset'}
