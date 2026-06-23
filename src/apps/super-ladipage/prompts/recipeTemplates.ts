@@ -299,7 +299,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     concept.productInScene ? sizeLockBlock('foreground-dominant') : '',
     labels,
     visualModeBlock('product-showcase'),
-    `LAYOUT: title top${identity.coBrandBadges.length > 0 ? ` + brand badge "${identity.coBrandBadges.join(' + ')}"` : ''} + product center (SHAPE LOCK) + 5-8 icon+label grid. Each: DOMINANT name + max 5w benefit. No paragraphs.`,
+    `LAYOUT: title top${identity.coBrandBadges.length > 0 ? ` + brand badge "${identity.coBrandBadges.join(' + ')}"` : ''} + product center (SHAPE LOCK) + icon+label grid (N items = actual labels từ concept, typically 1-8). Each: DOMINANT name + max 5w benefit. No paragraphs. ⛔ Render exactly N items, KHÔNG pad thêm filler items.`,
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
     `STRICT: icon labels legible.`,

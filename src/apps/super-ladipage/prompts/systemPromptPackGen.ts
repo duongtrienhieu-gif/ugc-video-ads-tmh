@@ -171,7 +171,7 @@ R9. SECTION-SPECIFIC BRIEFS (concise per-section overrides)
 
 §7 product-discovery (n=1, recipe A — same as hero style): UGC photo WITH product + subjectLockKey="primary" (hijab) + text overlay (headline + 2-3 trust badge chips like "KKM Disahkan", "HALAL", "Best Seller"). NO price.
 
-§8 ingredients (n=1, recipe D): 1 image showing ALL 5-8 key ingredients with strain codes + labels around product center.
+§8 ingredients (n=1, recipe D): 1 image showing ALL ingredients ACTUAL có trong identity.ingredients (typically 1-8 items). ⛔ DO NOT invent/pad thêm ingredients (no "various nuts/seeds/fruits" generic filler). Số items hiển thị = số thật trong identity. Render strain codes + labels around product center.
 
 §9 mechanism (n=1, recipe C): science diagram + brand badge from identity.coBrandBadges (skip badge if empty) + product at bottom. (Language for textOverlayBlocks: see R3.)
 
