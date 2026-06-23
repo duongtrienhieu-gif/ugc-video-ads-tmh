@@ -1169,13 +1169,13 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
 
         {/* Multi-screenshot upload — grid of MAX_SCREENSHOTS slots. User can
             upload 1-5 ảnh; không bắt buộc đủ 5 mới analyze được. */}
-        <div className="grid grid-cols-5 gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {Array.from({ length: MAX_SCREENSHOTS }).map((_, i) => {
             const file = stagedScreenshots[i]
             if (file) {
               const url = URL.createObjectURL(file)
               return (
-                <div key={i} className="relative aspect-square rounded-lg overflow-hidden border bg-white" style={{ borderColor: 'var(--color-accent)' }}>
+                <div key={i} className="relative h-20 w-20 shrink-0 rounded-lg overflow-hidden border bg-white" style={{ borderColor: 'var(--color-accent)' }}>
                   <img src={url} alt="" className="h-full w-full object-cover" onLoad={() => URL.revokeObjectURL(url)} />
                   <button
                     type="button"
@@ -1196,7 +1196,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
                 type="button"
                 onClick={isNextSlot ? () => screenshotRef.current?.click() : undefined}
                 disabled={!isNextSlot || isFetching || isAnalyzing}
-                className={`aspect-square rounded-lg border border-dashed flex items-center justify-center transition-colors ${
+                className={`h-20 w-20 shrink-0 rounded-lg border border-dashed flex items-center justify-center transition-colors ${
                   isNextSlot
                     ? 'ui-accent-soft cursor-pointer'
                     : 'border-black/8 bg-black/[0.02] text-gray-300 cursor-not-allowed'
