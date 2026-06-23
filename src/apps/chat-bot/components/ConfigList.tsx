@@ -21,7 +21,7 @@ export default function ConfigList({ onPick }: { onPick: (productId: string) => 
         </h2>
         <button
           onClick={() => setCreating((v) => !v)}
-          className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-600"
+          className="ui-accent-solid flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-colors"
         >
           <Plus className="h-3.5 w-3.5" /> Tạo cấu hình mới
         </button>

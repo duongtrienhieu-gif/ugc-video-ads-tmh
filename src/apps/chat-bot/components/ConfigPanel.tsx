@@ -232,7 +232,7 @@ export default function ConfigPanel({ productId, onSaved }: { productId: string;
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-50"
+          className="ui-accent-solid flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold transition-colors disabled:opacity-50"
         >
           <Save className="h-4 w-4" /> Lưu cấu hình
         </button>
