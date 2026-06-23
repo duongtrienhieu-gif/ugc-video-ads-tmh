@@ -21,7 +21,7 @@ export interface GenerateGiftBenefitsParams {
 
 /** Hash nhẹ để phát hiện benefits stale khi input đổi. */
 export function benefitsSig(giftImageRef: string, giftName: string, giftValueRM: number | null, lang: Market): string {
-  return `${giftImageRef}|${giftName.trim().toLowerCase()}|${giftValueRM ?? ''}|${lang}`
+  return `v2|${giftImageRef}|${giftName.trim().toLowerCase()}|${giftValueRM ?? ''}|${lang}`
 }
 
 async function refToBase64(assetRef: string): Promise<{ data: string; mimeType: string }> {
@@ -46,11 +46,12 @@ const SCHEMA: Record<string, unknown> = {
   properties: {
     wowHook: { type: 'string' },
     headline: { type: 'string' },
+    giftNameLocalized: { type: 'string' },
     bullets: { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 3 },
     fomoLines: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 2 },
     valueLine: { type: 'string' },
   },
-  required: ['wowHook', 'headline', 'bullets', 'fomoLines', 'valueLine'],
+  required: ['wowHook', 'headline', 'giftNameLocalized', 'bullets', 'fomoLines', 'valueLine'],
 }
 
 export async function generateGiftBenefits(
@@ -72,6 +73,7 @@ export async function generateGiftBenefits(
     `RULES:\n` +
     `- wowHook: <= 8 words, an excited attention-grabbing line about getting this gift FREE.\n` +
     `- headline: <= 6 words, names the gift in an appealing way.\n` +
+    `- giftNameLocalized: the given gift name translated FAITHFULLY into ${langName} as a clean, natural product name (just the name, NO marketing words). E.g. Vietnamese "Snack quả táo gai" -> Bahasa Malaysia "Snek Buah Hawthorn". Short.\n` +
     `- bullets: 2-3 items, each <= 7 words, each a CONCRETE use/benefit grounded in what you SEE.\n` +
     `- fomoLines: 1-2 items, each <= 6 words, scarcity / urgency / don't-miss-out (e.g. "Stok terhad", "Hanya hari ini", "Jangan lepaskan").\n` +
     `- valueLine: <= 9 words, emphasises the gift's VALUE received for free.\n` +
@@ -110,6 +112,7 @@ export async function generateGiftBenefits(
   return {
     wowHook: clean(parsed.wowHook) || headline,
     headline,
+    giftNameLocalized: clean((parsed as { giftNameLocalized?: string }).giftNameLocalized) || giftName.trim(),
     bullets,
     fomoLines: fomoLines.length ? fomoLines : [lang === 'ms' ? 'Stok terhad' : 'Số lượng có hạn'],
     valueLine: clean(parsed.valueLine),

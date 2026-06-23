@@ -83,6 +83,8 @@ export interface GiftBenefits {
   wowHook: string
   /** 1 dòng headline ngắn cho món quà (định vị/tên hấp dẫn). */
   headline: string
+  /** Tên quà ĐÃ DỊCH sang ngôn ngữ đích (tên sạch, cho nhãn "N× tên quà"). */
+  giftNameLocalized: string
   /** 2-3 gạch đầu dòng công dụng ngắn. */
   bullets: string[]
   /** 1-2 dòng FOMO / khan hiếm / sợ bỏ lỡ. */

@@ -87,7 +87,9 @@ export function buildGiftPrompt(params: BuildGiftPromptParams): string {
   const { kind, product, giftName, giftValueRM, tiers, benefits, lang } = params
   const L = giftLabels(lang)
   const valueText = giftValueRM != null ? L.valueLabel(giftValueRM) : ''
-  const head = [identityBlock(product, lang), giftIdentityBlock(giftName), STYLE, textRenderRules(L.langName)]
+  // Tên quà render trong ảnh = bản ĐÃ DỊCH sang ngôn ngữ đích (fallback tên thô).
+  const giftLabel = (benefits.giftNameLocalized || giftName).trim()
+  const head = [identityBlock(product, lang), giftIdentityBlock(giftLabel), STYLE, textRenderRules(L.langName)]
 
   // Tier rẻ nhất (primary) cho banner.
   const primary = tiers[0]
@@ -119,7 +121,7 @@ export function buildGiftPrompt(params: BuildGiftPromptParams): string {
       const corner = TIER_CORNER_BADGES[i] || ''
       const color = TIER_COLORS[i] || TIER_COLORS[TIER_COLORS.length - 1]
       const giftBlock = t.giftQty > 0
-        ? `FREE GIFT=${quote(`${t.giftQty}× ${giftName.trim()}`)} with tag ${quote(L.freeGiftBadge)}${p.giftTotalValue > 0 ? ` + value ${quote(L.valueLabel(p.giftTotalValue))}` : ''}`
+        ? `FREE GIFT=${quote(`${t.giftQty}× ${giftLabel}`)} with tag ${quote(L.freeGiftBadge)}${p.giftTotalValue > 0 ? ` + value ${quote(L.valueLabel(p.giftTotalValue))}` : ''}`
         : `NO bonus gift in this tier (do NOT show a gift here)`
       const parts = [
         `Tier ${i + 1}: package badge=${quote(L.packageBadge(i + 1))}`,
