@@ -572,7 +572,7 @@ export async function renderLipsyncSegment(params: {
     imageUrl: keyframePublicUrl,
     audioUrl: segAudioPublicUrl,
     prompt: buildLipsyncPrompt({ config: params.config }),
-    resolution: '480p',
+    resolution: '720p',   // net — mặt creator phải sắc
   })
   console.log(`[LIPSYNC-SEG] infinitalk job ${job.taskId} submitted (dur≈${durSec.toFixed(1)}s, audio=${outArr.byteLength}B)`)
   const videoRef = await pollAndSaveLipsync({
