@@ -865,6 +865,27 @@ should look like a real Malaysian creator filmed it, NOT a generic Asian setting
     PJ shopping mall.
   • "weekend" → kopitiam / mall / home couch with TV.
   • "musim hujan" → exterior shot through a window with rain streaks.
+` : params.lang === 'vi' ? `
+VIETNAMESE VISUAL CULTURE (this script targets Vietnam — every conceptPrompt should look like a
+real Vietnamese creator filmed it on a phone, NOT a generic Asian / Western stock setting):
+- LIGHTING: warm tropical daylight, soft natural shadows; morning light through a window; the
+  warm look of "tan làm về chiều"; occasional rainy-season window look for moody beats.
+- LOCATIONS (pick what fits the script's point-of-contact moment): a Vietnamese apartment /
+  nhà trọ bedroom (ceiling fan, maybe a small wall AC unit); a small home kitchen (bếp ga / nồi
+  cơm điện / ấm siêu tốc on the counter); a modern open-plan office in HCMC / Hà Nội; a quán cà
+  phê (cà phê sữa đá, ghế nhựa or a trendy café); a quán ăn / vỉa hè with low plastic stools; a
+  motorbike / Grab-bike or car interior; a city street with bảng hiệu; a residential gym; a
+  convenience store (Bách Hoá Xanh / Circle K) aisle for the buying beat.
+- PEOPLE: Vietnamese Gen Z / millennial casual wear — áo thun + quần short at home, smart-casual
+  at the office. Natural, relatable, không make-up đậm; never a glossy fashion-model look.
+- FOOD CUES (only when script names food / kitchen / breakfast moments): phở, bánh mì, cà phê
+  sữa đá, cơm tấm, trà đá, bánh tráng — everyday VN food iconography.
+- AVOID (these break the Vietnamese feel): snow / winter / autumn leaves; Western European
+  suburbs / brownstones; alcohol bottles in frame; formal Hollywood-corporate suits + ties
+  (a VN office is smart-casual).
+- SPECIFIC cues the body script likes: "sáng ngủ dậy" → bed with ceiling fan, morning light,
+  creator stretches; "giờ nghỉ trưa ở công ty" → desk or a quán cơm with phone + a plate; "tan
+  làm về" → Grab-bike / motorbike / parking lot at dusk; "cuối tuần" → quán cà phê / sofa nhà.
 ` : ''
 
   // P4l — sticker register for Malaysia. The universal sticker rule says "no
@@ -1021,6 +1042,11 @@ RULES:
   short MICRO-SEQUENCE of 2-3 complementary cuts (action → result/taste → the
   satisfied human reaction) instead of one flat shot — that is real directing.
   Each cut still gets its own quote slice + conceptPrompt.
+- GENTLE PRODUCT ACTION (anti-drift): a product-use conceptPrompt must describe ONE slow, calm,
+  everyday handling — hold / apply / scoop / place / a slow turn. NEVER describe vigorous, fast,
+  or acrobatic motion (shaking hard, tossing, throwing, flipping, spinning, juggling, "flying"
+  product) — the i2v model exaggerates those into chaos (the product bay tứ tung / morphs). The
+  product stays in the hand or on a surface; the motion is minimal and physically calm.
 - BLOCK ROLE → DEFAULT VISUAL INTENT (a soft BIAS to help role/kind selection, NOT a lock):
   every line above is tagged with its block — [hook] / [pain] / [discovery] / [benefit] /
   [cta]. When the LINE ITSELF is ambiguous about what to show, lean on the block's default:

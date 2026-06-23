@@ -434,10 +434,17 @@ function buildInsertKeyframePrompt(
   )
   // P6f — motion-drift guard (one shared place): the i2v step morphs/warps on complex or
   // implausible motion. Pin ONE simple physically-coherent movement + a stable product shape.
+  // P6az — HARD anti-"product bay tứ tung": i2v flings/duplicates/floats the product on action
+  // cuts. Pin it: the product STAYS in the hand or on the surface for the WHOLE clip — never
+  // tossed, thrown, spun, flipped, bounced, or floating; its position + scale + orientation stay
+  // steady; the ONLY motion is a slow, calm, everyday gesture. Universal VN / MS.
   paragraphs.push(
-    'MOTION: one simple, continuous, physically-plausible movement only — natural human pace, ' +
-    'no morphing, no warping, no extra or vanishing limbs/fingers; the product keeps a STABLE ' +
-    'shape, size and identity throughout (it never melts, bends or changes form).',
+    'MOTION: ONE simple, slow, calm, physically-plausible movement only — natural human pace, ' +
+    'no morphing, no warping, no extra or vanishing limbs/fingers. The PRODUCT stays HELD in the ' +
+    'hand (or resting on the surface) the WHOLE shot — it is NEVER thrown, tossed, spun, flipped, ' +
+    'bounced, floating, flying, or duplicated; exactly ONE product, steady position + scale + ' +
+    'orientation, stable shape, size and identity (it never melts, bends, drifts, or changes form). ' +
+    'No fast or chaotic motion.',
   )
   // FIX B — PRODUCT-IN-USE coherence (demo cuts keep hands BY DESIGN, but must not drift). When the
   // product is applied to / used on the body, lock it to the SAME body site + one anatomically-sane
