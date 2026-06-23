@@ -201,8 +201,8 @@ export default function CharacterStudio() {
           })}
         </div>
 
-        {/* Controls panel — fixed-width rail so the image canvas gets the room */}
-        <div className={`${mobileTab === 'setup' ? 'flex' : 'hidden'} lg:flex w-full lg:w-[380px] shrink-0 flex-col border-b border-app-border lg:border-b-0 lg:border-r`}>
+        {/* Controls panel — split ~half so the form + output stay balanced */}
+        <div className={`${mobileTab === 'setup' ? 'flex' : 'hidden'} lg:flex w-full lg:w-1/2 shrink-0 flex-col border-b border-app-border lg:border-b-0 lg:border-r`}>
           <ControlsPanel
             profile={profile}
             onProfileChange={setProfile}

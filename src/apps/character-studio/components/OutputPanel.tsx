@@ -215,7 +215,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   // vertical real-estate without removing any control.
   function BottomControls() {
     return (
-      <div className="shrink-0 border-t border-black/8 p-2.5 md:p-3 space-y-2">
+      <div className="mx-auto w-full max-w-lg shrink-0 border-t border-black/8 p-2.5 md:p-3 space-y-2">
         {/* Aspect ratio selector */}
         <div className="flex gap-1.5">
           <button
@@ -324,7 +324,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
     return (
       <div className="flex h-full flex-col">
         {/* Dark image area */}
-        <div className="flex min-h-0 flex-1 flex-col p-4">
+        <div className="mx-auto w-full max-w-lg flex min-h-0 flex-1 flex-col p-4">
           <div className={`flex items-center justify-center overflow-hidden rounded-xl border border-black/8 bg-black ${isPortrait ? 'h-full' : 'w-full aspect-video'}`}>
             <Loader2 className="h-8 w-8 animate-spin text-white/20" />
           </div>
@@ -395,7 +395,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2.5 md:p-3">
+      <div className="mx-auto w-full max-w-lg flex min-h-0 flex-1 flex-col overflow-y-auto p-2.5 md:p-3">
         {/* ── Main image + 3 angle thumbnails (2x2 when extras present) ── */}
         {hasExtras ? (
           // 2x2 grid: main top-left + 3 angles
@@ -424,7 +424,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
           // without forcing a long scroll. Centered horizontally.
           <div className="flex justify-center">
             <div
-              className={`group relative w-full max-w-[360px] ${aspectClass} overflow-hidden rounded-xl border border-black/10 bg-black shrink-0`}
+              className={`group relative w-full max-w-[420px] ${aspectClass} overflow-hidden rounded-xl border border-black/10 bg-black shrink-0`}
             >
               <img
                 src={resolvedImageUrl}
