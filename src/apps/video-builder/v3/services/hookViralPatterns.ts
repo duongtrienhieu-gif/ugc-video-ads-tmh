@@ -126,7 +126,7 @@ export const VIRAL_HOOK_REFERENCES_VI_LISTICLE: string[] = [
 // 24 comparison-shape hooks (A vs B / side-by-side).
 export const VIRAL_HOOK_REFERENCES_VI_COMPARISON: string[] = [
   'Mình so sánh cả hai và kết quả hoàn toàn khác dự đoán.',
-  'Cái 200k với cái 99k, mình thử cả hai để nói thật.',
+  'Cách cũ mình làm cả năm vs cách mới — cái nào đỡ cực hơn?',
   'Mình mua cả hai về test, sự khác biệt rõ luôn.',
   'Bên trái mắc gấp đôi, bên phải rẻ hơn — đoán cái nào thắng.',
   'Mình lấy cái này so với cái mình dùng 2 năm, ngạc nhiên thật.',
@@ -145,7 +145,7 @@ export const VIRAL_HOOK_REFERENCES_VI_COMPARISON: string[] = [
   'Cùng một việc, mình thử 2 cách — cách nào nhanh hơn?',
   'Bạn mình team cái kia, mình team cái này — thử thì biết.',
   'Mình mua bản rẻ trước, rồi bản xịn, kể thật khác biệt.',
-  'Hàng chính hãng với hàng trôi nổi, đặt cạnh là thấy.',
+  'Loại mình bỏ lâu rồi vs loại đang xài — đặt cạnh quay luôn.',
   'So với thứ mình xài 3 năm nay, cái này hơn ở đâu?',
   'Một bên mọi người khen, một bên mình tự thử — kết quả?',
   'Giá gấp ba lần nhưng có đáng gấp ba không? Mình test.',
@@ -347,7 +347,7 @@ export const VIRAL_HOOK_REFERENCES_MS_LISTICLE: string[] = [
 ]
 
 export const VIRAL_HOOK_REFERENCES_MS_COMPARISON: string[] = [
-  'Aku compare RM20 vs RM200, result tak sangka.',
+  'Cara lama aku buat vs cara guna benda ni — mana lagi senang?',
   'Aku test side by side, korang tengok sendiri.',
   'Yang murah vs yang mahal, satu menang clear.',
   'Aku beli dua-dua dan check sendiri.',
@@ -367,7 +367,7 @@ export const VIRAL_HOOK_REFERENCES_MS_COMPARISON: string[] = [
   'Satu kerja, dua cara — mana lagi laju?',
   'Member aku team yang tu, aku team yang ni.',
   'Aku beli versi murah dulu, lepas tu versi mahal.',
-  'Original vs tiruan, letak sebelah nampak terus.',
+  'Dulu aku ikut cara biasa, sekarang aku buat lain — result?',
   'Banding dengan yang aku guna 3 tahun, lagi best tak?',
   'Sebelah orang puji, sebelah aku test sendiri.',
   'Harga tiga kali ganda, berbaloi tiga kali tak?',
@@ -453,13 +453,36 @@ export function pickShapedViralHooks(args: {
   const count = args.count ?? 6
   const exclude = new Set((args.exclude ?? []).map((s) => s.trim()))
   const shaped = shapedPoolForLang(args.shape, args.lang).filter((h) => !exclude.has(h.trim()))
-  // Shuffle (Fisher-Yates) and pick
-  const pool = shaped.slice()
-  for (let i = 0; i < pool.length - 1; i++) {
-    const j = i + Math.floor(Math.random() * (pool.length - i))
-    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  const shuffle = (arr: string[]): string[] => {
+    const a = arr.slice()
+    for (let i = 0; i < a.length - 1; i++) {
+      const j = i + Math.floor(Math.random() * (a.length - i))
+      ;[a[i], a[j]] = [a[j], a[i]]
+    }
+    return a
   }
-  let picked = pool.slice(0, count)
+  // C — STRATIFIED pick: the pools are ordered in sub-archetype BLOCKS (curiosity / pain /
+  // buying / comparison-subtype …). A pure shuffle can cluster 4-of-6 in one block → 6 hooks
+  // that "feel the same". Instead split the pool into `count` contiguous segments and take ONE
+  // random hook per segment, so the batch spans DIFFERENT registers. Falls back to a plain
+  // shuffle when the pool is too small to stratify.
+  let picked: string[]
+  if (shaped.length >= count) {
+    const seg = shaped.length / count
+    picked = []
+    for (let k = 0; k < count; k++) {
+      const slice = shaped.slice(Math.floor(k * seg), Math.max(Math.floor((k + 1) * seg), Math.floor(k * seg) + 1))
+      const cand = slice[Math.floor(Math.random() * slice.length)]
+      if (cand && !picked.includes(cand)) picked.push(cand)
+    }
+    // fill gaps (a dup landed across segments) from the remainder
+    if (picked.length < count) {
+      picked = picked.concat(shuffle(shaped.filter((h) => !picked.includes(h))).slice(0, count - picked.length))
+    }
+    picked = shuffle(picked)   // hide the segment order
+  } else {
+    picked = shuffle(shaped).slice(0, count)
+  }
   // Top-up from the general narrative pool if the shaped pool didn't have enough.
   if (picked.length < count) {
     const general = libraryForLang(args.lang)
