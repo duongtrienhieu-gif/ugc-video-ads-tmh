@@ -440,10 +440,11 @@ function buildInsertKeyframePrompt(
   // steady; the ONLY motion is a slow, calm, everyday gesture. Universal VN / MS.
   paragraphs.push(
     'MOTION: ONE simple, slow, calm, physically-plausible movement only — natural human pace, ' +
-    'no morphing, no warping, no extra or vanishing limbs/fingers. The PRODUCT stays HELD in the ' +
-    'hand (or resting on the surface) the WHOLE shot — it is NEVER thrown, tossed, spun, flipped, ' +
-    'bounced, floating, flying, or duplicated; exactly ONE product, steady position + scale + ' +
-    'orientation, stable shape, size and identity (it never melts, bends, drifts, or changes form). ' +
+    'no morphing, no warping, no extra or vanishing limbs/fingers. EVERY object in frame (the ' +
+    'product — plus any extra unit or bundled gift the scene shows) stays HELD in the hand or ' +
+    'resting on the surface the WHOLE shot — NEVER thrown, tossed, spun, flipped, bounced, ' +
+    'floating or flying; steady position + scale + orientation, stable shape, size and identity ' +
+    '(never melts, bends, drifts or changes form). Do NOT add or remove objects mid-shot. ' +
     'No fast or chaotic motion.',
   )
   // FIX B — PRODUCT-IN-USE coherence (demo cuts keep hands BY DESIGN, but must not drift). When the

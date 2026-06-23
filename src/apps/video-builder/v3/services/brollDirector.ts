@@ -1354,8 +1354,10 @@ OUTPUT strict JSON only (no markdown fences):
       // Phase A (option C) — creator holds the PRODUCT and the GIFT, one in each hand,
       // both presented to camera. HARD product lock — two SEPARATE objects, never merged.
       lastScene.giftRef = params.gift!.imageRef
+      // Render layer enforces gift fidelity + "two distinct objects" (GIFT LOCK, neo'd to the ref);
+      // the concept only DESCRIBES the shot — no duplicate lock text.
       lastScene.conceptPrompt =
-        'The creator holds the PRODUCT in one hand and the FREE GIFT in the other, presenting BOTH up to camera with a warm smile and a nod — a genuine endorsement at the call to buy. CRITICAL: the product and the gift are TWO SEPARATE, DISTINCT objects held apart — do NOT merge, blend, swap, or restyle either one; keep each exactly as in its reference. No on-screen price or numbers.'
+        'The creator holds the PRODUCT in one hand and the FREE GIFT in the other, presenting BOTH up to camera with a warm smile and a nod — a genuine endorsement at the call to buy. No on-screen price or numbers.'
     } else {
       lastScene.conceptPrompt =
         'The creator holds the product up beside their face and gives an enthusiastic thumbs-up to camera, smiling — a genuine endorsement at the call to buy.'
@@ -1394,24 +1396,21 @@ OUTPUT strict JSON only (no markdown fences):
     const hasOffer = !!(params.product?.offer && params.product.offer.trim())
     // The product unit phrase — renders the REAL deal quantity (capped 4) when >1.
     if (offerQty > 1) penult.productUnits = offerQty
-    const units = offerQty > 1 ? `${offerQty} IDENTICAL units of the product, neatly grouped together` : 'the product'
-    const sameUnitsClause = offerQty > 1
-      ? ` Render ALL ${offerQty} product units IDENTICAL to the product reference (same form, color, label).`
-      : ''
+    const units = offerQty > 1 ? `${offerQty} IDENTICAL units of the product, neatly grouped` : 'the product'
+    // The concept only DESCRIBES the shot. The render layer enforces the rest, neo'd to ref #s:
+    // PRODUCT_CLOSEUP → no person / no hands / static; PRODUCT LOCK → product fidelity (no invent);
+    // GIFT LOCK → gift fidelity + two distinct objects; MOTION → stability. So NO duplicate locks here.
     if (giftOn) {
-      // Phase A (option A) — the gift IS the offer beat: product unit(s) + free gift, NO person.
-      // Takes priority over deal / urgency flavours. Distinct objects, hard product lock.
       penult.giftRef = params.gift!.imageRef
       penult.conceptPrompt =
-        `PRODUCT-HERO close-up — NO person, NO hands, NO action: ${units} together with the FREE GIFT, arranged side by side STATIC on a clean premium surface in good light — a "buy now, get this free too" bundle worth grabbing. The FREE GIFT must be rendered EXACTLY as its reference image — do NOT invent it, do NOT render it from its name/text, do NOT redesign its packaging. CRITICAL: the product unit(s) and the gift are SEPARATE, DISTINCT objects placed apart — never merge, blend, swap, or restyle any of them; keep each exactly as in its reference.${sameUnitsClause} No on-screen price or numbers.`
+        `PRODUCT-HERO close-up: ${units} together with the FREE GIFT on a clean premium surface in good light — a "buy now, get this free too" bundle worth grabbing.`
     } else if (offerQty > 1) {
-      // Offer with a real quantity, no gift → show the true number of units (the deal).
       penult.conceptPrompt =
-        `PRODUCT-HERO shot — NO person, NO face: ${units} on a clean premium surface in good light — a generous "buy more, get more" deal worth grabbing.${sameUnitsClause} No on-screen price or numbers.`
+        `PRODUCT-HERO close-up: ${units} on a clean premium surface in good light — a generous "buy more, get more" deal worth grabbing.`
     } else {
       penult.conceptPrompt = hasOffer
-        ? 'PRODUCT-HERO close-up — NO person, NO hands, NO action: the product sits ALONE, static and centred + premium on a clean surface in good light, framed as a special DEAL / offer moment. Make it look worth grabbing. No on-screen price or numbers.'
-        : 'PRODUCT-HERO close-up — NO person, NO hands, NO action: the product sits ALONE, static and premium on a clean surface in good light — a "selling fast, last one, get it now" urgency feel from the framing alone. No on-screen text.'
+        ? 'PRODUCT-HERO close-up: the product as the clear HERO on a clean premium surface in good light, framed as a special DEAL / offer moment — make it look worth grabbing.'
+        : 'PRODUCT-HERO close-up: the product as the clear HERO on a clean premium surface in good light — a "selling fast, last one" urgency feel.'
     }
 
     // D2' — if the offer beat is TOO LONG for ONE i2v clip (~7.5s spoken), one cut would have to
@@ -1424,23 +1423,25 @@ OUTPUT strict JSON only (no markdown fences):
     if (penult && estimateReadDurationSec(penult.quote, params.lang) > 7.5) {
       const [qA, qB] = splitQuoteByTime(penult.quote, params.lang)
       const unitsA = offerQty > 1 ? `${offerQty} IDENTICAL units of the product` : 'the product'
-      const sameUnitsA = offerQty > 1 ? ` Render ALL ${offerQty} units IDENTICAL to the product reference.` : ''
-      // Cut A — DEAL GRAB: hands only (NO face), product (+units) + gift, BACKGROUND A. PRODUCT_IN_ACTION
-      // (kind product_action + hands_noface) → hands, no face. Overrides the no-hands gift set above.
+      // Concepts only DESCRIBE the shot. Render enforces the rest neo'd to ref #s: cut A is
+      // product_action + hands_noface → HANDS-ONLY FRAMING (hands, no face) + MOTION + GIFT LOCK;
+      // cut B is product_closeup → PRODUCT-ONLY FRAMING (no hands) + GIFT LOCK. No duplicate locks.
+      // Cut A — DEAL GRAB: hands present the deal, BACKGROUND A (the #13 energy). product_action +
+      // hands_noface overrides the no-hands gift set above.
       penult.quote = qA
       penult.kind = 'product_action'
       penult.cameraFraming = 'hands_noface'
       penult.conceptPrompt = giftOn
-        ? `DEAL-GRAB shot — HANDS ONLY, NO face, NO full person: a person's hands presenting / picking up ${unitsA} together with the FREE GIFT on a clean BRIGHT MARBLE / STONE countertop (BACKGROUND A), an over-the-hands phone angle — the "grab this deal" moment. The FREE GIFT rendered EXACTLY as its reference image (do NOT invent it or render it from its name). Product and gift are SEPARATE, DISTINCT objects — never merge/swap/restyle. Anatomically correct hands (one or two hands, five fingers each, natural grip, no extra/melted fingers).${sameUnitsA} No on-screen price or numbers.`
-        : `DEAL-GRAB shot — HANDS ONLY, NO face, NO full person: a person's hands presenting / picking up ${unitsA} on a clean BRIGHT MARBLE / STONE countertop (BACKGROUND A), an over-the-hands phone angle — the "grab this deal" moment. Anatomically correct hands (five fingers, natural grip, no extra/melted fingers).${sameUnitsA} No on-screen price or numbers.`
-      // Cut B — clean no-hands MACRO, a DIFFERENT angle + a DIFFERENT background B (warm wood / linen).
+        ? `DEAL-GRAB shot: a person's hands presenting / picking up ${unitsA} together with the FREE GIFT on a clean BRIGHT MARBLE / STONE countertop (BACKGROUND A), an over-the-hands phone angle — the "grab this deal" moment.`
+        : `DEAL-GRAB shot: a person's hands presenting / picking up ${unitsA} on a clean BRIGHT MARBLE / STONE countertop (BACKGROUND A), an over-the-hands phone angle — the "grab this deal" moment.`
+      // Cut B — clean MACRO detail, a DIFFERENT angle + a DIFFERENT background B (warm wood / linen).
       const cutB: BrollScene = {
         role: 'broll', kind: 'product_closeup', cameraFraming: 'hands_noface', shotIntent: 'offer',
         quote: qB, durationSec: penult.durationSec,
         giftRef: giftOn ? params.gift!.imageRef : undefined,
         conceptPrompt: giftOn
-          ? 'MACRO close-up — NO person, NO hands, NO action: a tight DETAIL shot of the FREE GIFT alone, a DIFFERENT angle, resting STATIC on a WARM WOODEN / LINEN surface (BACKGROUND B — clearly different from the previous cut). Render the gift EXACTLY as its reference image (same form / colour / label); if it is loose / has no packaging keep it loose — do NOT invent a box, label, or text, do NOT render it from its name. No on-screen price or numbers.'
-          : 'MACRO close-up — NO person, NO hands, NO action: a tight DETAIL shot of the product, a DIFFERENT angle, resting STATIC on a WARM WOODEN / LINEN surface (BACKGROUND B — clearly different from the previous cut). The product stays EXACTLY as its reference (same colour, shape, label). No on-screen price or numbers.',
+          ? 'MACRO close-up: a tight DETAIL shot of the FREE GIFT, a DIFFERENT angle, on a WARM WOODEN / LINEN surface (BACKGROUND B — clearly different from the previous cut).'
+          : 'MACRO close-up: a tight DETAIL shot of the product, a DIFFERENT angle, on a WARM WOODEN / LINEN surface (BACKGROUND B — clearly different from the previous cut).',
       }
       // Insert Cut B right AFTER the penult (i.e., directly BEFORE the last endorsement cut).
       scenes.splice(scenes.length - 1, 0, cutB)
