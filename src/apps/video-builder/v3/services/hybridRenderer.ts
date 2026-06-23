@@ -107,9 +107,17 @@ export async function renderOneHybridScene(
   // conceptPrompt routes to PRODUCT_IN_ACTION so the director's vivid concept is
   // actually used as the ACTION. PRODUCT_CLOSEUP is the fallback ONLY when the
   // concept is empty (a clean product shot is better than a blank Grok frame).
+  // FIX — a 'concept' cut whose conceptPrompt actually SHOWS / HOLDS / PRESENTS the product must
+  // NOT go to CONCEPT_SCENE (needsProduct=false → NO product ref attached → model invents a BLANK
+  // generic pouch, the "render ra túi trắng, ko nối ảnh input" bug). Route it to PRODUCT_IN_ACTION
+  // so resolveRefs attaches the real product image. A normal product-FREE concept (feeling/result,
+  // "no product") stays CONCEPT_SCENE.
+  const conceptShowsProduct =
+    /\bthe product\b/i.test(conceptPrompt) &&
+    /\b(hold|holding|holds|present|presenting|presents|show|showing|shows|raise|raising|lift|lifting|up to (?:the )?camera|up close)\b/i.test(conceptPrompt)
   const presetId: ActionPresetId =
     scene.role === 'mechanism3d' ? 'CONCEPT_SCENE'
-    : scene.kind === 'concept' ? 'CONCEPT_SCENE'
+    : (scene.kind === 'concept' && !conceptShowsProduct) ? 'CONCEPT_SCENE'
     // P6ag — "cận sản phẩm / chi tiết" (product_closeup) = product ALONE, NO hands. Hands
     // holding + rotating a product is exactly what makes i2v DRIFT/morph the packaging, so a
     // macro/detail cut goes to PRODUCT_CLOSEUP (no-hands preset), never PRODUCT_IN_ACTION (which
