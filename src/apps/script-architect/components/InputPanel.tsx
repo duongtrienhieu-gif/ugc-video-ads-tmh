@@ -282,8 +282,14 @@ export default function InputPanel({
 function Section({ step, title, children }: { step: number; title: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-        Bước {step} · {title}
+      <p className="mb-2 flex items-center gap-1.5">
+        <span
+          className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md text-[10px] font-bold"
+          style={{ backgroundColor: 'var(--color-accent-dim)', color: 'var(--color-accent)' }}
+        >
+          {step}
+        </span>
+        <span className="text-[11px] font-bold uppercase tracking-widest text-gray-500">{title}</span>
       </p>
       <div className="space-y-1.5">{children}</div>
     </div>
