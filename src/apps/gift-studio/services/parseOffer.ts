@@ -45,9 +45,9 @@ const SYSTEM =
   `- buyMainQty: how many MAIN products the customer BUYS (the boxes/kotak/hộp/units being purchased).\n` +
   `- freeMainQty: how many MAIN products are given FREE (the "buy X free X" / "FREE N KOTAK" part). 0 if none.\n` +
   `- giftQty: how many BONUS GIFT items (a DIFFERENT product, e.g. a snack/sample/accessory) are given. 0 if the tier gives no bonus gift.\n` +
-  `- price: the selling price as a NUMBER only (e.g. "RM89" -> 89).\n` +
+  `- price: the PRODUCT selling price as a NUMBER only — take the FIRST RM amount on the line (the combo's product price), e.g. "RM89" -> 89.\n` +
   `RULES:\n` +
-  `- IGNORE shipping entirely (free shipping / +RM10 shipping etc.) — do NOT encode it anywhere.\n` +
+  `- CRITICAL: shipping is NOT part of the price. IGNORE shipping completely — whether it is free shipping / freeship OR a numeric fee like "+ RM10 Shipping". NEVER add a shipping amount into price. Examples: "RM49 + RM10 Shipping" -> price = 49 (NOT 59); "RM79 + FREESHIP" -> price = 79.\n` +
   `- The MAIN product is the primary item being bought repeatedly; the BONUS GIFT is a smaller, different add-on item named in the line.\n` +
   `- If a tier clearly has no separate bonus gift, giftQty = 0.\n` +
   `- Preserve tier order as written. Output ONLY the JSON.`
