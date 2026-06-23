@@ -1133,9 +1133,10 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       </div>
 
       {/* Auto-fill */}
-      <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.04] p-3 flex flex-col gap-2.5">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-sky-400/80">
-          Tự động điền thông tin
+      <div className="flex flex-col gap-2.5 rounded-xl border border-app-border p-3" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+        <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--color-accent)' }}>
+          <Sparkles className="h-3 w-3" /> Tự động điền bằng AI
+          <span className="font-medium normal-case tracking-normal text-app-subtle">— dán link hoặc tải ảnh chụp trang (KHÔNG phải ảnh sản phẩm)</span>
         </p>
         {/* URL input */}
         <div className="flex gap-2">
@@ -1145,13 +1146,13 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
             onChange={(e) => setProductUrl(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleFetchInfo() } }}
             placeholder="ladipage.vn/... hoặc link sản phẩm bất kỳ"
-            className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-sky-400/40"
+            className="min-w-0 flex-1 rounded-lg border border-app-border bg-app-card px-3 py-2 text-sm text-app-text placeholder-app-faint outline-none transition-colors focus:border-app-border-strong"
           />
           <button
             type="button"
             onClick={handleFetchInfo}
             disabled={isFetching || isAnalyzing || !productUrl.trim()}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-40"
+            className="ui-accent-solid flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40"
           >
             {isFetching
               ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Đang lấy...</>
@@ -1161,9 +1162,9 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         </div>
         {/* Divider */}
         <div className="flex items-center gap-2">
-          <div className="h-px flex-1 bg-sky-500/15" />
-          <span className="text-[10px] text-sky-400/60">hoặc tải ảnh ({stagedScreenshots.length}/{MAX_SCREENSHOTS})</span>
-          <div className="h-px flex-1 bg-sky-500/15" />
+          <div className="h-px flex-1 bg-app-border" />
+          <span className="text-[10px] text-app-subtle">hoặc tải ảnh ({stagedScreenshots.length}/{MAX_SCREENSHOTS})</span>
+          <div className="h-px flex-1 bg-app-border" />
         </div>
 
         {/* Multi-screenshot upload — grid of MAX_SCREENSHOTS slots. User can
@@ -1174,7 +1175,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
             if (file) {
               const url = URL.createObjectURL(file)
               return (
-                <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-sky-400/30 bg-white">
+                <div key={i} className="relative aspect-square rounded-lg overflow-hidden border bg-white" style={{ borderColor: 'var(--color-accent)' }}>
                   <img src={url} alt="" className="h-full w-full object-cover" onLoad={() => URL.revokeObjectURL(url)} />
                   <button
                     type="button"
@@ -1197,7 +1198,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
                 disabled={!isNextSlot || isFetching || isAnalyzing}
                 className={`aspect-square rounded-lg border border-dashed flex items-center justify-center transition-colors ${
                   isNextSlot
-                    ? 'border-sky-400/40 bg-white/50 text-sky-500 hover:bg-sky-500/5 cursor-pointer'
+                    ? 'ui-accent-soft cursor-pointer'
                     : 'border-black/8 bg-black/[0.02] text-gray-300 cursor-not-allowed'
                 }`}
               >
@@ -1212,7 +1213,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
             type="button"
             onClick={handleAnalyzeScreenshots}
             disabled={isFetching || isAnalyzing}
-            className="flex items-center justify-center gap-2 rounded-lg bg-sky-500 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-40"
+            className="ui-accent-solid flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40"
           >
             {isAnalyzing
               ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Đang phân tích {stagedScreenshots.length} ảnh...</>
@@ -1249,9 +1250,15 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
             />
           ))}
         </div>
-        <span className="text-[10px] text-gray-400">
-          {form.productImages.filter((s) => s && s.trim() !== '').length}/4 ảnh
-        </span>
+        {(() => {
+          const n = form.productImages.filter((s) => s && s.trim() !== '').length
+          const ok = n >= 4
+          return (
+            <span className="text-[10px] font-bold" style={{ color: ok ? '#10b981' : 'var(--color-accent)' }}>
+              {ok ? '✓ Đủ 4 ảnh' : `${n}/4 ảnh — cần đủ 4 để lưu`}
+            </span>
+          )
+        })()}
       </div>
 
       {/* Masonry-style columns: short fields pack tightly under tall ones —
@@ -1280,21 +1287,23 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         ))}
       </div>
 
-      <button
-        type="button"
-        onClick={handleCleanGarbage}
-        className="mt-1 rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
-        title="Strip CTA text khỏi Ingredients + shipping text khỏi Offer"
-      >
-        🧹 Dọn text quảng cáo / shipping khỏi các trường
-      </button>
-
-      <button
-        type="submit"
-        className="mt-1 rounded-full bg-black/8 px-4 py-2 text-sm font-medium text-gray-800 transition-colors hover:bg-black/10"
-      >
-        {item ? 'Lưu thay đổi' : 'Thêm sản phẩm'}
-      </button>
+      {/* Sticky action bar — primary save stands out */}
+      <div className="sticky bottom-0 -mx-5 mt-2 flex flex-col gap-2 border-t border-app-border bg-app-card/95 px-5 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+        <button
+          type="button"
+          onClick={handleCleanGarbage}
+          className="rounded-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700 transition-colors hover:bg-amber-100"
+          title="Strip CTA text khỏi Ingredients + shipping text khỏi Offer"
+        >
+          🧹 Dọn text quảng cáo / shipping
+        </button>
+        <button
+          type="submit"
+          className="ui-accent-solid flex items-center justify-center gap-1.5 rounded-full px-6 py-2.5 text-sm font-bold shadow-md transition-all sm:min-w-[200px]"
+        >
+          {item ? 'Lưu thay đổi' : 'Thêm sản phẩm'}
+        </button>
+      </div>
     </form>
   )
 }

@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useCallback } from 'react'
-import { Plus, Package, UserRound, FileText, Mic, Film, Megaphone } from 'lucide-react'
+import { Plus, Package, UserRound, FileText, Mic, Film, Megaphone, LayoutGrid } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
+import AppHeader from '../../components/shell/AppHeader'
 import { useBankStore } from '../../stores/bankStore'
 import { useAdsContentStore } from '../ads-content/store'
 import type { BankType } from '../../utils/constants'
@@ -144,9 +145,11 @@ export default function Finder() {
   const editingBRoll = editingId ? brolls.find((b) => b.id === editingId) : null
 
   return (
-    <div className="flex flex-col lg:flex-row h-full">
+    <div className="flex h-full flex-col bg-app-base">
+      <AppHeader icon={LayoutGrid} eyebrow="PROJECT · DỮ LIỆU" title="Dự án" />
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
       {/* Sidebar — horizontal scrollable pills on mobile, vertical on desktop */}
-      <div className="flex lg:w-52 shrink-0 flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible border-b lg:border-b-0 lg:border-r border-black/8 bg-black/[0.02] py-2 lg:py-3 px-2 lg:px-0 gap-1 lg:gap-0">
+      <div className="flex lg:w-52 shrink-0 flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible border-b lg:border-b-0 lg:border-r border-app-border bg-app-surface py-2 lg:py-3 px-2 lg:px-0 gap-1 lg:gap-0">
         <span className="hidden lg:block mb-3 px-4 text-[11px] font-medium uppercase tracking-widest text-gray-400">
           Project dữ liệu
         </span>
@@ -158,7 +161,7 @@ export default function Finder() {
               key={bank}
               onClick={() => { setActiveBank(bank); closeForm() }}
               className={`lg:mx-2 flex items-center gap-2 lg:gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm transition-colors ${isActive
-                  ? 'bg-black/[0.06] text-gray-800'
+                  ? 'ui-accent-soft'
                   : 'text-gray-500 hover:bg-black/[0.03] hover:text-gray-700'
                 }`}
             >
@@ -173,13 +176,13 @@ export default function Finder() {
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-black/8 px-5 py-3">
-          <h2 className="text-sm font-semibold tracking-tight text-gray-800">
+        <div className="flex items-center justify-between border-b border-app-border px-5 py-3">
+          <h2 className="text-sm font-bold tracking-tight text-app-text">
             {BANK_CONFIG[activeBank].label}
           </h2>
           <button
             onClick={handleAdd}
-            className="flex items-center gap-1.5 rounded-full bg-black/[0.06] px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-black/8"
+            className="ui-accent-solid flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
             Thêm
@@ -210,6 +213,7 @@ export default function Finder() {
             <BankList bankType={activeBank} onEdit={handleEdit} onAdd={handleAdd} />
           )}
         </div>
+      </div>
       </div>
     </div>
   )
