@@ -146,6 +146,8 @@ export default function HybridVideoPhase(_props: Props) {
   // their turn (FIFO) and auto-launch as a slot frees up.
   const [queuedIdx, setQueuedIdx] = useState<number[]>([])
   const [failedIdx, setFailedIdx] = useState<Set<number>>(new Set())
+  // P6aw — lỗi đầy đủ của từng cảnh fail, in thẳng lên thẻ ✗ để user chụp gửi (chẩn đoán render).
+  const [failMsgByIdx, setFailMsgByIdx] = useState<Record<number, string>>({})
   // P3s — running tally of credits KIE consumed on scenes that then failed.
   // Shown as a warning banner so the user knows how much they've lost to the
   // pre-flight bugs (B/D) before the retry succeeds. NOT refundable — KIE keeps
@@ -228,6 +230,7 @@ export default function HybridVideoPhase(_props: Props) {
       await groundOrphanScenes(timed, product, geminiKey)
       setHybridPlan(timed, res.scenes)
       setFailedIdx(new Set())
+      setFailMsgByIdx({})
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e); setError(msg); addToast(`Đạo diễn lỗi: ${msg.slice(0, 120)}`, 'error')
     } finally { setPlanning(false) }
@@ -396,6 +399,7 @@ export default function HybridVideoPhase(_props: Props) {
     ACTIVE_RENDERS.add(i)                                   // P3z — this JS session owns it
     setRenderingIdx((set) => new Set(set).add(i))
     setFailedIdx((set) => { const n = new Set(set); n.delete(i); return n })
+    setFailMsgByIdx((m) => { const n = { ...m }; delete n[i]; return n })
     setProgressByIdx((p) => ({ ...p, [i]: { pollCount: 0, elapsedSec: 0 } }))
     patchSceneRender(i, { startedAt: Date.now() })          // P3z — persist "đang render"
     try {
@@ -411,7 +415,9 @@ export default function HybridVideoPhase(_props: Props) {
       setHybridClip(i, videoRef)
     } catch (e) {
       console.error(`[HYBRID_UI] cảnh ${i} lỗi:`, e)
+      const fullMsg = e instanceof Error ? (e.stack || e.message) : String(e)
       setFailedIdx((set) => new Set(set).add(i))
+      setFailMsgByIdx((m) => ({ ...m, [i]: fullMsg }))
       // KIE keeps credits on failure → tally the loss for the visibility banner.
       setLostCredits((c) => c + sceneCredit(s))
       addToast(`Cảnh #${i + 1} lỗi: ${(e instanceof Error ? e.message : String(e)).slice(0, 100)}`, 'error')
@@ -447,6 +453,7 @@ export default function HybridVideoPhase(_props: Props) {
     } catch (e) {
       console.warn(`[HYBRID_UI] resume cảnh ${i} lỗi:`, e)
       setFailedIdx((set) => new Set(set).add(i))
+      setFailMsgByIdx((m) => ({ ...m, [i]: e instanceof Error ? (e.stack || e.message) : String(e) }))
     } finally {
       ACTIVE_RENDERS.delete(i)
       patchSceneRender(i, null)
@@ -557,6 +564,7 @@ export default function HybridVideoPhase(_props: Props) {
       ACTIVE_RENDERS.delete(i)
       patchSceneRender(i, null)
       setFailedIdx((s) => { const n = new Set(s); n.delete(i); return n })
+      setFailMsgByIdx((m) => { const n = { ...m }; delete n[i]; return n })
       setQueue((q) => q.filter((x) => x !== i))
     }
     // P6ao — gate on the REAL live count (ACTIVE_RENDERS, the module truth) not renderingIdx
@@ -678,7 +686,7 @@ export default function HybridVideoPhase(_props: Props) {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {scenes.map((s, i) => (
               <SceneCard key={i} i={i} scene={s} clipRef={hybrid.clips[i]}
-                rendering={renderingIdx.has(i)} queued={queuedIdx.includes(i)} failed={failedIdx.has(i)}
+                rendering={renderingIdx.has(i)} queued={queuedIdx.includes(i)} failed={failedIdx.has(i)} failMsg={failMsgByIdx[i]}
                 progress={progressByIdx[i]} voiceUrl={masterVoiceUrl} gloss={sceneGloss[i]}
                 conceptGloss={conceptGloss[i]} mismatch={suspectMismatch(s, i === scenes.length - 1)}
                 credit={sceneCredit(s)} hasAssets={hasAssets}
@@ -799,8 +807,8 @@ const FIX_ARCHETYPES: { value: string; intent?: ShotIntent; label: string; hint?
   { value: 'endorsement',     intent: 'endorsement',        label: '🛒 Ưu đãi / kêu gọi mua' },
 ]
 
-function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voiceUrl, gloss, conceptGloss, mismatch, credit, hasAssets, onRender, onSavePrompt, onAiFix }: {
-  i: number; scene: TimedBrollScene; clipRef?: string; rendering: boolean; queued: boolean; failed: boolean
+function SceneCard({ i, scene, clipRef, rendering, queued, failed, failMsg, progress, voiceUrl, gloss, conceptGloss, mismatch, credit, hasAssets, onRender, onSavePrompt, onAiFix }: {
+  i: number; scene: TimedBrollScene; clipRef?: string; rendering: boolean; queued: boolean; failed: boolean; failMsg?: string
   progress?: { pollCount: number; elapsedSec: number }
   voiceUrl?: string
   gloss?: string   // P6x — VN translation of the quote (display-only, never rendered)
@@ -944,6 +952,12 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
       </div>
       {/* quote + concept + re-render */}
       <div className="flex flex-1 flex-col gap-1 p-2">
+        {/* P6aw — lỗi render đầy đủ in thẳng lên thẻ để user chụp gửi (chẩn đoán). */}
+        {failed && failMsg && (
+          <pre className="max-h-24 select-all overflow-auto whitespace-pre-wrap break-words rounded bg-rose-50 px-1.5 py-1 text-[10px] font-medium leading-snug text-rose-700" title="Lỗi render — bôi đen copy hoặc chụp gửi để sửa">
+            ✗ {failMsg}
+          </pre>
+        )}
         <div className="flex items-start gap-1">
           <p className="flex-1 text-[11px] font-semibold leading-tight text-gray-800 line-clamp-2">“{scene.quote}”</p>
           {/* P3x-G — nghe thoại của riêng cảnh này (slice master TTS) */}
