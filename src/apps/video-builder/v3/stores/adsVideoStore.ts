@@ -487,8 +487,12 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
       const toLips = sc.role !== 'lips'
       // ON → talking-head lips (render routes to renderLipsyncSegment). OFF → back to a broll cut.
       // kind/cameraFraming/conceptPrompt are kept untouched so flipping back restores the shot.
-      scenes[idx] = { ...sc, role: toLips ? 'lips' : 'broll', lipsManual: toLips }
-      return { ...s, hybrid: { ...s.hybrid, scenes } }
+      // lipsHoldsProduct is cleared so a manual lips never renders the (now-irrelevant) KF-B.
+      scenes[idx] = { ...sc, role: toLips ? 'lips' : 'broll', lipsManual: toLips, lipsHoldsProduct: false }
+      // Drop the stale clip: the old broll clip no longer matches the new shot → force a re-render
+      // (else the card would show the previous clip + a ✓ as if the flip were already rendered).
+      const clips = { ...s.hybrid.clips }; delete clips[idx]
+      return { ...s, hybrid: { ...s.hybrid, scenes, clips, finalVideoRef: undefined } }
     }),
 
   setAssetsGenStartedAt: (ts) =>

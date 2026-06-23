@@ -1608,8 +1608,13 @@ function sanitizeScenes(raw: RawScene[] | undefined): BrollScene[] {
       const onBody = APPLIES_PRODUCT_TO_BODY_RE.test(cp)
       scene.cameraFraming = wantsNoFace && role === 'broll' && scene.kind !== 'concept' && !onBody ? 'hands_noface' : 'creator'
     }
-    // P6m (P1) — capture Gemini's declared intent.
-    if (SHOT_INTENTS.includes(r.shotIntent as ShotIntent)) scene.shotIntent = r.shotIntent as ShotIntent
+    // P6m (P1) — capture Gemini's declared intent. FIX — but NEVER trust 'offer'/'endorsement'
+    // from Gemini: those are assigned DETERMINISTICALLY by the CTA locks (penult/last) only. A
+    // mid-video scene wrongly tagged offer/endorsement would make isCtaLockCut protect it →
+    // later split/dedupe/density passes skip it (the stale-lock bug). Scrub them at the source.
+    if (SHOT_INTENTS.includes(r.shotIntent as ShotIntent) && r.shotIntent !== 'offer' && r.shotIntent !== 'endorsement') {
+      scene.shotIntent = r.shotIntent as ShotIntent
+    }
     // FIX A — a CLEAN-MACRO intent must render HANDS-FREE. The renderer keys hands off `kind`
     // (product_closeup = no hands, product_action = hands), but Gemini sometimes tags a spec/
     // detail line shotIntent='product_macro' while leaving kind='product_action' (or the L1513

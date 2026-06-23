@@ -239,20 +239,22 @@ export async function generateScript(
     for (const id of SCRIPT_BLOCK_IDS) {
       if (blockMap[id]) blockMap[id] = stripOfferLadder(stripMoney(blockMap[id]))
     }
-    // Phase A — DETERMINISTIC gift-CTA ordering. The prompt asks the model to end on the
-    // urgency buy-push with the gift just before it, but Gemini often appends the gift as
-    // the LAST sentence (burying the close — the user audited this). Force the order:
-    // [...other CTA sentences] → [gift] → [urgency LAST]. No-op when gift is off or it
-    // can't confidently find both a gift + an urgency sentence (never mangles a normal CTA).
-    if (params.gift?.name?.trim() && blockMap.cta) {
-      // (a) GUARANTEE the gift is present (Gemini drop / refit trim) — inject if missing.
-      blockMap.cta = ensureGiftInCta(blockMap.cta, params.gift.name, params.gift.benefitLine, params.lang)
-      // (b) order it: [...] → [gift] → [urgency LAST].
-      blockMap.cta = reorderGiftBeforeFinalCta(blockMap.cta, params.gift.name)
-    }
     // Keep the user's picked hook verbatim through any refit.
     if ((params.chosenHook ?? '').trim()) blockMap.hook = params.chosenHook!.trim()
     parsed = { ...parsed, blocks: blockMap }
+  }
+
+  // Phase A — DETERMINISTIC gift-CTA ordering. Runs for BOTH paths (incl. own-script / pasted
+  // script): the prompt asks the model to end on the urgency buy-push with the gift just before
+  // it, but Gemini often appends the gift LAST (burying the close — the user audited this), and
+  // the own-script path used to SKIP this entirely → the gift silently vanished. Force the order:
+  // [...other CTA sentences] → [gift] → [urgency LAST]. No-op when gift is off or it can't
+  // confidently find both a gift + an urgency sentence (never mangles a normal CTA).
+  if (params.gift?.name?.trim() && parsed.blocks.cta) {
+    // (a) GUARANTEE the gift is present (Gemini drop / refit trim / own-script omission) — inject if missing.
+    const ctaWithGift = ensureGiftInCta(parsed.blocks.cta, params.gift.name, params.gift.benefitLine, params.lang)
+    // (b) order it: [...] → [gift] → [urgency LAST].
+    parsed = { ...parsed, blocks: { ...parsed.blocks, cta: reorderGiftBeforeFinalCta(ctaWithGift, params.gift.name) } }
   }
 
   const blocks: ScriptBlock[] = SCRIPT_BLOCK_IDS.map((id) => ({
