@@ -64,15 +64,9 @@ SCHEMA:
 
 ═══ FIELD INSTRUCTIONS ═══
 
-1. productNameExact — PRIORITY ORDER:
-   (a) If user supplied "productName" in input → use it VERBATIM (exact casing,
-       exact spelling). DO NOT override based on reference image labels.
-   (b) ONLY if user productName missing/empty → fallback to verbatim label
-       text from product packaging (reference image).
-   Reasoning: user may upload reference images of DIFFERENT products as
-   inspiration/context (different brand, similar shape). Their typed
-   productName is the source of truth. DO NOT translate or paraphrase.
-   If label says "INFINITY PROBIOTICS PLUS" output that exact casing.
+1. productNameExact — verbatim brand+product name as on packaging. DO NOT
+   translate or paraphrase. If label says "INFINITY PROBIOTICS PLUS" output
+   that exact casing.
 
 2. packagingDescription — 60-150 words ENG describing the actual physical
    product packaging: label layout, logo placement, text on label, key
