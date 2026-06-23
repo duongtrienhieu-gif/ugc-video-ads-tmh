@@ -629,6 +629,10 @@ function softenForModeration(prompt: string): string {
     .replace(/\b(bacteria|pathogens?|germs?)\b/gi, 'impurities')
     .replace(/\bblood cells?\b/gi, 'nutrient flow')
     .replace(/\bnerves?\b/gi, 'the area')
+    // P6ax — anatomical / clinical product terms that trip the "sensitive" filter (health
+    // niches: prostate / urinary / bladder gifts). Neutralise to a generic wellness reference.
+    .replace(/\bprostat(e|a)?\b/gi, 'wellness')
+    .replace(/\b(genital|urinary|bladder|kidney|liver|sexual|intim(ate|acy))\b/gi, 'the area')
   return `${soft} Keep it a CLEAN, ABSTRACT, NON-graphic wellness visualisation — no medical/anatomical realism, no gore, no distressing imagery.`
 }
 
@@ -798,46 +802,51 @@ export async function renderInsert(
   const noSpeech = personPresent
     ? ' IMPORTANT: the person does NOT speak, talk, or mouth any words — no dialogue, no lip-syncing of speech, no conversation. The mouth may still open naturally as the physical action requires (e.g. brushing teeth, applying the product, an open relaxed smile); it simply never forms words. The creator voiceover owns all speech.'
     : ''
-  try {
-    const fullSubmission = await generateVideoJob({
+  const i2vPrompt = (isConcept
+    ? `${motionScene} ${cameraMotion} No product packaging in frame. ${motionGuard}`
+    : `${motionScene} ${cameraMotion} ${seedanceHands} ${motionGuard}`) + noSpeech
+  // Seedance i2v: keyframe = FIRST FRAME (face+product lock carries into the clip). One attempt.
+  const runI2v = async (prompt: string) => {
+    const sub = await generateVideoJob({
       apiKey: params.kieApiKey,
       jobModelId: 'bytedance/seedance-1.5-pro',
-      prompt: (isConcept
-        ? `${motionScene} ${cameraMotion} No product packaging in frame. ${motionGuard}`
-        : `${motionScene} ${cameraMotion} ${seedanceHands} ${motionGuard}`) + noSpeech,
+      prompt,
       aspectRatio: '9:16',
       resolution: params.resolution,
       duration: videoDuration,
-      // Seedance i2v: the keyframe is the FIRST FRAME (first_frame_image_url) so the
-      // GPT-4o face+product lock carries into the clip (Grok used referenceImageUrls).
       startFrameUrl: keyframePublicUrl,
     })
-    console.log(`[INSERT ${params.presetId}] Seedance submitted taskId=${fullSubmission.taskId.slice(0, 12)} dur=${videoDuration}s`)
-    params.onStageUpdate({
-      stage: 'video_full', keyframeRef, keyframePromptUsed,
-      fullTaskId: fullSubmission.taskId,
-    })
-
+    console.log(`[INSERT ${params.presetId}] Seedance submitted taskId=${sub.taskId.slice(0, 12)} dur=${videoDuration}s`)
+    params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed, fullTaskId: sub.taskId })
     const videoRef = await pollAndSaveInsertVideo({
       apiKey: params.kieApiKey,
-      taskId: fullSubmission.taskId,
+      taskId: sub.taskId,
       timeoutMs: 10 * 60 * 1000,  // 10min ceiling for a 5s i2v clip
       logTag: `${params.presetId}/full`,
       onProgress: params.onProgress,
     })
-
+    return { videoRef, taskId: sub.taskId }
+  }
+  try {
+    // P6ax — i2v MODERATION guard (health niche): a "sensitive / flagged" block used to fail
+    // FOREVER (every "Lại" resent the same prompt). Mirror the keyframe step: on a moderation
+    // block, retry ONCE with a softened, non-anatomical prompt. NOTE: if the flag is on the INPUT
+    // IMAGE itself (e.g. a prostate / medical gift photo), softening the PROMPT can't fix it —
+    // the user must swap a neutral gift image OR flip the scene to Lipsync (bypasses i2v).
+    let res: { videoRef: string; taskId: string }
+    try {
+      res = await runI2v(i2vPrompt)
+    } catch (e) {
+      if (params.signal?.aborted || !isModerationError(e)) throw e
+      console.warn(`[INSERT ${params.presetId}] i2v bị moderation → thử lại với prompt đã làm nhẹ`)
+      res = await runI2v(softenForModeration(i2vPrompt))
+    }
     params.onStageUpdate({
       stage: 'completed',
       keyframeRef, keyframePromptUsed,
-      fullTaskId: fullSubmission.taskId, videoRef,
+      fullTaskId: res.taskId, videoRef: res.videoRef,
     })
-
-    return {
-      keyframeRef,
-      keyframePromptUsed,
-      videoRef,
-      fullTaskId: fullSubmission.taskId,
-    }
+    return { keyframeRef, keyframePromptUsed, videoRef: res.videoRef, fullTaskId: res.taskId }
   } catch (videoErr) {
     if (params.signal?.aborted) throw videoErr  // user cancelled — surface as-is
     // Z98 V5 — NO MORE silent fallback to a static-image clip. The old fallback
