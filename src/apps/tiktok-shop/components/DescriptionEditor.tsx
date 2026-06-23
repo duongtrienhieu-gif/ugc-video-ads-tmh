@@ -113,7 +113,7 @@ export default function DescriptionEditor() {
   const otherLangLabel = draft.market === 'ms' ? 'Tiếng Việt' : 'Bahasa Malaysia'
 
   return (
-    <div className="flex h-full w-[360px] shrink-0 flex-col overflow-hidden border-l border-gray-200 bg-[#FAFAFA]">
+    <div className="flex h-full w-full flex-col overflow-hidden border-l border-gray-200 bg-[#FAFAFA]">
       {/* Header */}
       <div className="flex shrink-0 flex-col gap-2 border-b border-gray-200 bg-white px-4 py-3">
         <div className="flex items-center justify-between">

@@ -23,7 +23,7 @@ export default function ImageGrid() {
   const output = draft.output ?? (showMock ? buildMockListing() : null)
 
   return (
-    <div className="flex h-full flex-1 flex-col overflow-hidden bg-white">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-white">
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-5 py-3">
         <div className="flex items-center gap-2">

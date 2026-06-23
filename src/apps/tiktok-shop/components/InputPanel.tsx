@@ -218,7 +218,7 @@ export default function InputPanel() {
   }
 
   return (
-    <div className="flex h-full w-[320px] shrink-0 flex-col gap-4 overflow-y-auto border-r border-gray-200 bg-[#FAFAFA] p-4">
+    <div className="flex h-full w-full flex-col gap-4 overflow-y-auto border-r border-gray-200 bg-[#FAFAFA] p-4">
       {/* ── New listing + History buttons ───────────────────────────── */}
       <div className="flex gap-2">
         <button

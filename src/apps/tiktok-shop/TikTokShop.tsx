@@ -5,10 +5,13 @@
 //     so refresh doesn't lose work
 //   • Debounced auto-save of draft.output to Supabase (2s after last change)
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { ShoppingBag } from 'lucide-react'
 import InputPanel from './components/InputPanel'
 import ImageGrid from './components/ImageGrid'
 import DescriptionEditor from './components/DescriptionEditor'
+import AppHeader from '../../components/shell/AppHeader'
+import SegmentTabs from '../../components/shell/SegmentTabs'
 import { useTikTokShopStore } from './store'
 import { useTikTokShopListingsStore } from './listingsStore'
 
@@ -62,11 +65,45 @@ export default function TikTokShop() {
     }
   }, [draftOutput, saveListing, getMostRecent])
 
+  // Mobile: 3 panes can't sit side-by-side on a phone → a [Thiết lập · 9 Ảnh ·
+  // Mô tả] segmented shows one at a time. Auto-jump to "9 Ảnh" the moment a
+  // listing output appears (initializeListingOutput creates the 9 stubs at gen
+  // start) so the user watches the grid fill. Desktop keeps all 3 side-by-side.
+  const [mobileTab, setMobileTab] = useState<'input' | 'images' | 'desc'>('input')
+  const prevOutRef = useRef(false)
+  useEffect(() => {
+    const has = !!draftOutput
+    if (!prevOutRef.current && has) setMobileTab('images')
+    prevOutRef.current = has
+  }, [draftOutput])
+
   return (
-    <div className="flex h-full w-full overflow-hidden bg-white">
-      <InputPanel />
-      <ImageGrid />
-      <DescriptionEditor />
+    <div className="flex h-full w-full flex-col overflow-hidden bg-app-card">
+      <AppHeader icon={ShoppingBag} eyebrow="TIKTOK SHOP · LISTING" title="Listing 9 ảnh + mô tả" />
+
+      <div className="shrink-0 border-b border-app-border px-3 py-2 lg:hidden">
+        <SegmentTabs
+          value={mobileTab}
+          onChange={setMobileTab}
+          options={[
+            { value: 'input', label: 'Thiết lập' },
+            { value: 'images', label: '9 Ảnh' },
+            { value: 'desc', label: 'Mô tả' },
+          ]}
+        />
+      </div>
+
+      <div className="flex min-h-0 w-full flex-1 overflow-hidden">
+        <div className={`${mobileTab === 'input' ? 'flex' : 'hidden'} min-h-0 w-full lg:flex lg:w-[320px] lg:shrink-0`}>
+          <InputPanel />
+        </div>
+        <div className={`${mobileTab === 'images' ? 'flex' : 'hidden'} min-h-0 w-full min-w-0 lg:flex lg:flex-1`}>
+          <ImageGrid />
+        </div>
+        <div className={`${mobileTab === 'desc' ? 'flex' : 'hidden'} min-h-0 w-full lg:flex lg:w-[360px] lg:shrink-0`}>
+          <DescriptionEditor />
+        </div>
+      </div>
     </div>
   )
 }
