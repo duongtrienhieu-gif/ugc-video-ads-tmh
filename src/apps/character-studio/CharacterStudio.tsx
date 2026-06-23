@@ -223,6 +223,19 @@ export default function CharacterStudio() {
           />
         </div>
       </div>
+      {/* Mobile only: the Generate button lives in the output (Kết quả) tab, so
+          give the setup tab a sticky jump CTA — never strand the user on the
+          form with no way to reach "Tạo". */}
+      {mobileTab === 'setup' && (
+        <div className="shrink-0 border-t border-app-border bg-app-surface p-3 lg:hidden">
+          <button
+            onClick={() => setMobileTab('result')}
+            className="ui-accent-solid flex w-full items-center justify-center gap-1.5 rounded-full py-3 text-sm font-bold"
+          >
+            Xem &amp; Tạo Avatar AI →
+          </button>
+        </div>
+      )}
       </div>
     </div>
   )

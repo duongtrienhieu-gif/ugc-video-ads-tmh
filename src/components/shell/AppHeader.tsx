@@ -27,7 +27,7 @@ export default function AppHeader({ icon: Icon, eyebrow, rec, title, subtitle, c
   return (
     <header className="shrink-0 border-b border-app-border bg-app-surface px-3 py-1.5 sm:px-5 sm:py-2">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 shrink-0 items-center gap-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
           {Icon && (
             <span
               className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:flex"
