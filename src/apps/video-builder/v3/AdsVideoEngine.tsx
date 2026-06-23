@@ -120,10 +120,10 @@ function PhaseStepper({
               className="flex shrink-0 flex-col items-center gap-1.5 disabled:cursor-not-allowed"
             >
               <span
-                className={`flex h-8 w-8 items-center justify-center rounded-full text-[13px] font-bold transition-colors ${circleCls}`}
+                className={`flex h-7 w-7 items-center justify-center rounded-full text-[12px] font-bold transition-colors ${circleCls}`}
                 style={circleStyle}
               >
-                {isPast ? <Check className="h-4 w-4" /> : i + 1}
+                {isPast ? <Check className="h-3.5 w-3.5" /> : i + 1}
               </span>
               <span className={`whitespace-nowrap text-[10px] sm:text-[11px] ${labelCls}`} style={labelStyle}>
                 {V3_PHASE_LABEL_VI[p]}
@@ -131,7 +131,7 @@ function PhaseStepper({
             </button>
             {!last && (
               <span
-                className="mt-4 h-px flex-1 self-start"
+                className="mt-3.5 h-px flex-1 self-start"
                 style={{ backgroundColor: isPast ? '#34d399' : 'var(--color-border-strong)' }}
                 aria-hidden
               />
@@ -280,7 +280,6 @@ export default function AdsVideoEngine(_props: Props) {
         icon={Film}
         eyebrow="VIDEO ENGINE · HYBRID"
         title="Xưởng Video AI"
-        subtitle="Creator-first · Preview-first · tiết kiệm credit"
         actions={
           <>
             <HdrBtn onClick={saveActiveProject} disabled={!hasWork} icon={Save} label="Lưu"
@@ -298,7 +297,7 @@ export default function AdsVideoEngine(_props: Props) {
       />
 
       {/* ── Phase stepper ────────────────────────────────────────────────── */}
-      <div className="shrink-0 border-b border-app-border bg-app-surface px-4 py-3">
+      <div className="shrink-0 border-b border-app-border bg-app-surface px-4 py-2">
         <PhaseStepper
           phase={state.phase}
           reachable={reachable}

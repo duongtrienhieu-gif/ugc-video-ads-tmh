@@ -610,16 +610,8 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="h-full overflow-y-auto p-6">
+    <div className="h-full overflow-y-auto p-4 sm:p-5">
       <div className="mx-auto max-w-4xl">
-        <div className="mb-4">
-          <h2 className="text-lg font-bold text-gray-900">Bước 1 — Input</h2>
-          <p className="text-[12px] text-gray-500">
-            Chọn <strong>avatar</strong> + <strong>sản phẩm</strong>, dán <strong>kịch bản</strong> và chọn <strong>giọng</strong>.
-            App tự chia kịch bản + ước tính nhịp phía sau — bạn không cần chỉnh tay.
-          </p>
-        </div>
-
         {/* ── Avatar + Product ──────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-3">
           <AssetTile
@@ -709,7 +701,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
           <button
             onClick={() => setGenTab('quick')}
             className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-all ${
-              genTab === 'quick' ? 'bg-violet-600 text-white shadow' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              genTab === 'quick' ? 'ui-accent-solid shadow' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
             }`}
           >
             ⚡ Tạo nhanh
@@ -717,14 +709,15 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
           <button
             onClick={() => setGenTab('own')}
             className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-all ${
-              genTab === 'own' ? 'bg-violet-600 text-white shadow' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              genTab === 'own' ? 'ui-accent-solid shadow' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
             }`}
           >
             📝 Dán kịch bản
           </button>
           <button
             onClick={() => setPickerMode('script')}
-            className="ml-auto text-[10px] font-semibold text-violet-600 hover:text-violet-700"
+            style={{ color: 'var(--color-accent)' }}
+            className="ml-auto text-[10px] font-semibold hover:underline"
           >
             Chọn kịch bản có sẵn →
           </button>
@@ -779,7 +772,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
               <button
                 onClick={handleRegenerateScript}
                 disabled={brain.isGeneratingScript || !geminiKey}
-                className="mt-2 flex items-center gap-1.5 rounded-full border border-violet-300 bg-violet-50 px-3 py-1.5 text-[11px] font-bold text-violet-700 transition-all hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
+                className="ui-accent-soft mt-2 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50"
                 title="Giữ nguyên hook đã chọn, viết lại kịch bản mới hoàn toàn (khác bản hiện tại)"
               >
                 {brain.isGeneratingScript
@@ -835,7 +828,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                     onClick={() => { setLangTouched(true); setOutputLang(lng) }}
                     className={`rounded-lg border px-2 py-2 text-center text-[12px] font-bold transition-all ${
                       brain.outputLang === lng
-                        ? 'border-violet-400 bg-violet-100 text-violet-800'
+                        ? 'ui-accent-soft'
                         : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
                     }`}
                   >
@@ -894,7 +887,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                       onClick={() => setTargetDurationSec(d)}
                       className={`rounded-lg border px-2 py-2 text-center text-[12px] font-bold transition-all ${
                         brain.targetDurationSec === d
-                          ? 'border-violet-400 bg-violet-100 text-violet-800'
+                          ? 'ui-accent-soft'
                           : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
                       }`}
                     >
@@ -920,7 +913,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                       title={cfg.descriptionVi}
                       className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold transition-all ${
                         isActive
-                          ? 'border-violet-400 bg-violet-100 text-violet-800'
+                          ? 'ui-accent-soft'
                           : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
                       }`}
                     >
@@ -942,7 +935,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                 <button
                   onClick={handleGenerateHooks}
                   disabled={!inputsOk || !geminiKey || isGeneratingHooks}
-                  className="flex shrink-0 items-center gap-1 rounded-full bg-violet-600 px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="ui-accent-solid flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isGeneratingHooks
                     ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang tạo...</>
@@ -959,7 +952,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                         key={i}
                         onClick={() => pickHookVariant(i)}
                         className={`rounded-lg border p-2 text-left transition-all ${
-                          picked ? 'border-violet-500 bg-violet-50 ring-1 ring-violet-300' : 'border-gray-200 bg-white hover:bg-gray-50'
+                          picked ? 'ui-accent-soft' : 'border-gray-200 bg-white hover:bg-gray-50'
                         }`}
                       >
                         <div className="mb-1 flex items-center justify-between gap-2">
@@ -968,7 +961,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                               {arche.emoji} {arche.labelVi}
                             </span>
                           )}
-                          {picked && <Check className="h-3.5 w-3.5 text-violet-600" />}
+                          {picked && <Check className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} />}
                         </div>
                         <p className="text-[12px] leading-snug text-gray-800">{h.text}</p>
                         {brain.outputLang !== 'vi' && h.viGloss && (
@@ -988,7 +981,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
             pace (1.2× via atempo, Z81) for everyone. User only picks the voice. */}
         <div className="mt-3 rounded-xl border border-black/10 bg-white p-3">
           <div className="flex items-center gap-3">
-            <Mic2 className="h-5 w-5 text-violet-500" />
+            <Mic2 className="h-5 w-5" style={{ color: 'var(--color-accent)' }} />
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-bold text-gray-900">Giọng đọc</p>
               <p className="text-[11px] text-gray-500">
@@ -1030,7 +1023,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
               )}
               <button
                 onClick={() => setVoicePanelOpen((o) => !o)}
-                className="ml-auto rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11px] font-bold text-violet-700 transition-all hover:bg-violet-100"
+                className="ui-accent-soft ml-auto rounded-full border px-3 py-1 text-[11px] font-bold transition-all"
               >
                 {voicePanelOpen ? 'Đóng' : 'Chọn giọng…'}
               </button>
@@ -1042,7 +1035,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                   <button
                     onClick={() => setVoiceTab('mine')}
                     className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold transition-all ${
-                      voiceTab === 'mine' ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      voiceTab === 'mine' ? 'ui-accent-solid' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                   >
                     <UserCircle2 className="h-3.5 w-3.5" /> Giọng của tôi
@@ -1050,7 +1043,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                   <button
                     onClick={() => setVoiceTab('library')}
                     className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold transition-all ${
-                      voiceTab === 'library' ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      voiceTab === 'library' ? 'ui-accent-solid' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                   >
                     <Library className="h-3.5 w-3.5" /> Thư viện ElevenLabs
@@ -1117,7 +1110,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                             <button
                               onClick={() => { setVoiceId(v.voice_id); addToast(`✓ Đã chọn giọng "${v.name}"`, 'success') }}
                               className={`rounded-full px-2.5 py-1 text-[10px] font-bold transition-all ${
-                                isSel ? 'bg-emerald-600 text-white' : 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                                isSel ? 'bg-emerald-600 text-white' : 'ui-accent-soft'
                               }`}
                             >
                               {isSel ? 'Đang chọn' : 'Chọn'}
@@ -1198,7 +1191,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                               onClick={() => handleAddSharedVoice(v)}
                               disabled={addingId === v.voice_id || isSel}
                               className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold transition-all disabled:opacity-60 ${
-                                isSel ? 'bg-emerald-600 text-white' : 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                                isSel ? 'bg-emerald-600 text-white' : 'ui-accent-soft'
                               }`}
                             >
                               {addingId === v.voice_id ? <Loader2 className="h-3 w-3 animate-spin" /> : isSel ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
@@ -1236,8 +1229,8 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
           </div>
         )}
 
-        {/* ── Action bar ────────────────────────────────────────────────────── */}
-        <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-pink-50 p-4">
+        {/* ── Action bar (sticky bottom) ────────────────────────────────────── */}
+        <div className="sticky bottom-2 z-10 mt-4 flex items-center justify-between gap-3 rounded-xl border border-app-border bg-app-card p-3 shadow-lg">
           <div className="min-w-0">
             <p className="text-sm font-bold text-gray-900">
               {genTab === 'own' ? 'Dùng kịch bản của bạn' : 'AI viết kịch bản nhanh'}
@@ -1252,7 +1245,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
             <button
               onClick={onContinue}
               disabled={!acknowledgedCerts}
-              className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="ui-accent-solid flex items-center gap-2 rounded-full px-5 py-2 text-sm font-bold shadow-md transition-all disabled:cursor-not-allowed disabled:opacity-50"
             >
               Vẫn tiếp tục → Action Inserts <ChevronRight className="h-4 w-4" />
             </button>
@@ -1261,7 +1254,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
               onClick={handleGenerateAndContinue}
               disabled={!canGenerateScript}
               title={genTab === 'quick' && brain.pickedHookIdx < 0 ? 'Tạo hook và chọn 1 cái trước' : undefined}
-              className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="ui-accent-solid flex items-center gap-2 rounded-full px-5 py-2 text-sm font-bold shadow-md transition-all disabled:cursor-not-allowed disabled:opacity-50"
             >
               {brain.isGeneratingScript
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Đang xử lý...</>
@@ -1310,12 +1303,12 @@ function AssetTile({
       </div>
       <button
         onClick={onPick}
-        className="group aspect-[4/3] w-full overflow-hidden rounded-lg border border-dashed border-black/10 bg-black/[0.02] transition-colors hover:border-violet-400 hover:bg-violet-50/30"
+        className="group aspect-[4/3] w-full overflow-hidden rounded-lg border border-dashed border-black/10 bg-black/[0.02] transition-colors hover:border-[var(--color-accent)] hover:bg-app-card-elevated"
       >
         {display ? (
           <img src={display} alt={label} className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-gray-300 group-hover:text-violet-400">
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-gray-300 group-hover:text-[var(--color-accent)]">
             <Icon className="h-8 w-8" strokeWidth={1.2} />
             <span className="text-[11px] font-semibold">Chọn từ Project</span>
           </div>
