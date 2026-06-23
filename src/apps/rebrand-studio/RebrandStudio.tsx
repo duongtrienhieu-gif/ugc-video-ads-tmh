@@ -38,6 +38,13 @@ const KIND_HINT: Record<RebrandImageKind, string> = {
   'set': 'AI · đúng 1 bao bì + sản phẩm',
   'combo': 'AI · tháp chính diện + nguyên liệu',
 }
+// Nhắc thứ tự phụ thuộc khi ô chưa có ảnh.
+const CELL_ORDER_HINT: Record<RebrandImageKind, string> = {
+  'label': 'Tạo đầu tiên (nút bên trái).',
+  'product': 'Cần Nhãn (1) xong trước.',
+  'set': 'Cần Nhãn (1) xong trước.',
+  'combo': 'Cần Nhãn (1) + Sản phẩm (2) xong trước.',
+}
 
 function AssetImg({ refId, alt }: { refId: string | undefined | null; alt: string }) {
   const url = useAssetUrl(refId)
@@ -172,33 +179,30 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
     }
   }
 
-  async function handleGenerateAll() {
+  // Nút chính CHỈ tạo Nhãn (ảnh 1). 3 ảnh còn lại user bấm tạo thủ công trên từng ô.
+  async function handleGenerateLabel() {
     if (!canGenerate || busy) return
     setBusy(true)
     try {
-      const id = identity!
-      const name = draft.chosenName!
       const codes = ensureCode()
-      // Sinh NHÃN gộp trước → lấy làm ref cho product/set (pouch mặc đúng nhãn).
-      const labelRef = await generateOne('label', id, name, undefined, undefined, codes)
-      // product + set song song; combo CHỜ product xong để lấy pouch sạch làm ref.
-      const [productRef] = await Promise.all([
-        generateOne('product', id, name, labelRef),
-        generateOne('set', id, name, labelRef),
-      ])
-      await generateOne('combo', id, name, labelRef, productRef)
+      await generateOne('label', identity!, draft.chosenName!, undefined, undefined, codes)
     } finally {
       setBusy(false)
     }
   }
 
-  async function handleRegenerate(kind: RebrandImageKind) {
-    if (!canGenerate || busy) return
+  // Tạo / tạo lại 1 ảnh thủ công. Chặn theo phụ thuộc: product/set cần Nhãn (1);
+  // combo cần Nhãn (1) + Sản phẩm (2) — thiếu thì báo lỗi rõ thay vì render bậy.
+  async function handleGenerateCell(kind: RebrandImageKind) {
+    if (busy) return
+    if (!canGenerate) { addToast('Cần phân tích & chọn tên brand trước.', 'error'); return }
+    const labelRef = images.find((im) => im.kind === 'label')?.assetRef
+    if (kind !== 'label' && !labelRef) { addToast('Hãy tạo Nhãn (ảnh 1) trước.', 'error'); return }
+    const productRef = images.find((im) => im.kind === 'product')?.assetRef
+    if (kind === 'combo' && !productRef) { addToast('Hãy tạo "Sản phẩm nhãn mới" (ảnh 2) trước khi tạo Tháp combo.', 'error'); return }
     setBusy(true)
     try {
-      // product/set/combo tạo lại → dùng nhãn gộp hiện có; combo thêm pouch sạch (#2).
-      const labelRef = images.find((im) => im.kind === 'label')?.assetRef
-      const comboBaseRef = kind === 'combo' ? images.find((im) => im.kind === 'product')?.assetRef : undefined
+      const comboBaseRef = kind === 'combo' ? productRef : undefined
       const codes = kind === 'label' ? ensureCode() : undefined
       await generateOne(kind, identity!, draft.chosenName!, labelRef, comboBaseRef, codes)
     } finally { setBusy(false) }
@@ -224,7 +228,6 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
     ? `${cmToPx(draft.widthCm)}×${cmToPx(draft.heightCm)} px @300DPI`
     : ''
   const labelCredit = draft.labelModel === 'nano2k' ? 12 : 6
-  const totalCredit = labelCredit + 18 // product 6 + set 6 + combo 6
 
   return (
     <div className="flex h-full flex-col bg-[#F6F6F8]">
@@ -438,20 +441,20 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
             </div>
           )}
 
-          {/* Bước 2: tạo */}
-          <button onClick={handleGenerateAll} disabled={!canGenerate || busy}
+          {/* Bước 2: tạo NHÃN trước; 3 ảnh còn lại bấm tạo thủ công trên từng ô */}
+          <button onClick={handleGenerateLabel} disabled={!canGenerate || busy}
             className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-colors ${canGenerate && !busy ? 'bg-indigo-500 text-white hover:bg-indigo-600' : 'cursor-not-allowed bg-gray-200 text-gray-400'}`}>
             {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {busy ? 'Đang tạo bộ rebrand…' : `2 · Tạo bộ rebrand · ~${totalCredit} credit`}
+            {busy ? 'Đang tạo…' : `2 · Tạo Nhãn (ảnh 1) · ~${labelCredit} credit`}
           </button>
-          <p className="text-[10px] text-gray-400">4 ảnh AI (~{totalCredit} credit): nhãn gộp + sản phẩm + bao bì + tháp combo (ads). Pouch/combo mặc đúng nhãn. Nhãn tải về đưa bên in (~{draft.widthCm ?? '?'}×{draft.heightCm ?? '?'}cm). ⚠️ Số bảng dinh dưỡng là AI ước lượng — kiểm tra lại trước khi in.</p>
+          <p className="text-[10px] text-gray-400">Tạo <b>Nhãn</b> trước (~{labelCredit}cr). Sau đó bấm <b>Tạo ảnh này</b> trên từng ô bên phải để làm 3 ảnh còn lại (mỗi ảnh ~6cr) theo thứ tự: Sản phẩm → Bao bì → Tháp combo. Nhãn tải về đưa bên in (~{draft.widthCm ?? '?'}×{draft.heightCm ?? '?'}cm). ⚠️ Số bảng dinh dưỡng là AI ước lượng — kiểm tra lại trước khi in.</p>
         </div>
 
         {/* Output */}
         <div className="grid min-w-0 flex-1 grid-cols-1 gap-4 sm:grid-cols-2">
           {images.map((im) => (
             <RebrandCell key={im.kind} kind={im.kind} status={im.status} assetRef={im.assetRef} error={im.error}
-              busy={busy} onRegenerate={() => handleRegenerate(im.kind)} onDownload={handleDownload} />
+              busy={busy} hint={CELL_ORDER_HINT[im.kind]} onGenerate={() => handleGenerateCell(im.kind)} onDownload={handleDownload} />
           ))}
         </div>
       </div>
@@ -465,11 +468,13 @@ function RebrandCell(props: {
   assetRef?: string
   error?: string
   busy: boolean
-  onRegenerate: () => void
+  hint: string
+  onGenerate: () => void
   onDownload: (kind: RebrandImageKind, url: string) => void
 }) {
-  const { kind, status, assetRef, error, busy, onRegenerate, onDownload } = props
+  const { kind, status, assetRef, error, busy, hint, onGenerate, onDownload } = props
   const url = useAssetUrl(assetRef)
+  const done = status === 'completed' && !!url
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border border-black/10 bg-white">
       <div className="flex items-center justify-between border-b border-black/5 px-3 py-2">
@@ -478,21 +483,26 @@ function RebrandCell(props: {
           <div className="text-[10px] text-gray-400">{KIND_HINT[kind]}</div>
         </div>
         <div className="flex items-center gap-1">
-          {status === 'completed' && url && (
-            <button onClick={() => onDownload(kind, url)} title="Tải ảnh" className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"><Download className="h-3.5 w-3.5" /></button>
+          {done && (
+            <button onClick={() => onDownload(kind, url!)} title="Tải ảnh" className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"><Download className="h-3.5 w-3.5" /></button>
           )}
-          <button onClick={onRegenerate} disabled={busy} title="Tạo lại" className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-40"><RefreshCw className={`h-3.5 w-3.5 ${status === 'generating' ? 'animate-spin' : ''}`} /></button>
+          <button onClick={onGenerate} disabled={busy} title={done ? 'Tạo lại' : 'Tạo'} className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-40"><RefreshCw className={`h-3.5 w-3.5 ${status === 'generating' ? 'animate-spin' : ''}`} /></button>
         </div>
       </div>
       <div className="w-full bg-gray-50">
         {status === 'generating' ? (
           <div className="flex min-h-[180px] w-full flex-col items-center justify-center gap-2 text-gray-400"><RefreshCw className="h-6 w-6 animate-spin" /><span className="text-xs">Đang tạo…</span></div>
-        ) : status === 'failed' ? (
-          <div className="flex min-h-[180px] w-full flex-col items-center justify-center gap-1 p-3 text-center text-red-400"><AlertCircle className="h-6 w-6" /><span className="text-[11px]">{error ?? 'Lỗi'}</span></div>
-        ) : url ? (
-          <img src={url} alt={KIND_LABEL[kind]} className="block h-auto w-full" />
+        ) : done ? (
+          <img src={url!} alt={KIND_LABEL[kind]} className="block h-auto w-full" />
         ) : (
-          <div className="flex min-h-[180px] w-full items-center justify-center text-xs text-gray-300">Chưa có ảnh</div>
+          <div className="flex min-h-[180px] w-full flex-col items-center justify-center gap-2 p-3 text-center">
+            {status === 'failed' && <span className="flex items-center gap-1 text-[11px] text-red-400"><AlertCircle className="h-3.5 w-3.5" />{error ?? 'Lỗi'}</span>}
+            <button onClick={onGenerate} disabled={busy}
+              className="flex items-center gap-1.5 rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-40">
+              <Sparkles className="h-3.5 w-3.5" /> {status === 'failed' ? 'Tạo lại' : 'Tạo ảnh này'}
+            </button>
+            <span className="text-[10px] text-gray-400">{hint}</span>
+          </div>
         )}
       </div>
     </div>
