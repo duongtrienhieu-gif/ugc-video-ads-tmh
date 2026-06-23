@@ -280,6 +280,7 @@ export default function AdsVideoEngine(_props: Props) {
         icon={Film}
         eyebrow="VIDEO ENGINE · HYBRID"
         title="Xưởng Video AI"
+        center={<PhaseStepper phase={state.phase} reachable={reachable} onPhaseClick={setPhase} />}
         actions={
           <>
             <HdrBtn onClick={saveActiveProject} disabled={!hasWork} icon={Save} label="Lưu"
@@ -296,8 +297,8 @@ export default function AdsVideoEngine(_props: Props) {
         }
       />
 
-      {/* ── Phase stepper ────────────────────────────────────────────────── */}
-      <div className="shrink-0 border-b border-app-border bg-app-surface px-4 py-2">
+      {/* ── Phase stepper — mobile only (desktop shows it inline in AppHeader) ── */}
+      <div className="shrink-0 border-b border-app-border bg-app-surface px-4 py-2 lg:hidden">
         <PhaseStepper
           phase={state.phase}
           reachable={reachable}
