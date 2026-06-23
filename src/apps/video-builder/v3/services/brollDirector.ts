@@ -31,6 +31,14 @@ import { computeQuoteTimestampFromAlignment, computeQuoteTimestamp } from './ins
 import { buildShapeDirectorHint } from './scriptShapes'
 import { estimateReadDurationSec } from './voiceTimingEstimator'
 
+// ── Shared prompt rules ───────────────────────────────────────────────────────
+// 1 NGUỒN SỰ THẬT cho luật "cấm nói WHO the creator is". Trước đây luật này CHỈ nằm
+// trong prompt director chính → 2 hàm điền concept (backfillWeakConcepts /
+// groundOrphanScenes) không có nó nên Gemini viết "a woman…" mâu thuẫn avatar.
+// Mọi prompt sinh/điền concept dùng CHUNG hằng này để không bao giờ lệch lại.
+const CREATOR_IDENTITY_RULE =
+`CREATOR IDENTITY IS LOCKED DOWNSTREAM — NEVER describe WHO the person is. Any conceptPrompt that shows a person MUST refer to them as "the same creator from the avatar reference" (or "the same person from the avatar reference") and MUST NOT invent or state their GENDER, AGE, ETHNICITY, body type, or looks. Lines like "a Malaysian man in his early 30s" / "a woman in her late 20s" / "a woman …" / "a man …" are FORBIDDEN — the avatar reference supplies identity at render; if you name a gender/age you CONTRADICT the real avatar (a male avatar rendered as a woman). You MAY and SHOULD still describe what the person DOES + their EMOTION + the SETTING — just never who they are.`
+
 // ── Output types ────────────────────────────────────────────────────────────
 
 export type BrollSceneRole = 'lips' | 'broll' | 'mechanism3d' | 'social_proof'
@@ -259,6 +267,7 @@ By role:
 - broll + concept (no creator) → a real-world moment illustrating the line (NO product packaging).
 - mechanism3d → the internal mechanism as a clean 3D cross-section / macro (NO people, NO packaging).
 UNIVERSAL — infer the action + setting from the product context; NEVER assume a niche.
+${CREATOR_IDENTITY_RULE}
 
 OUTPUT exactly ${weak.length} lines, ONE conceptPrompt per line, SAME order, no numbering, no quotes, no commentary.`
   const prompt = `Write a conceptPrompt for each scene (write in English):\n${list}\n\nOutput ${weak.length} lines, one per line, same order.`
@@ -319,6 +328,7 @@ conceptPrompt rules: ONE vivid English sentence — SHOT TYPE (macro / wide / PO
 product + THIS exact line. Make each DISTINCT. NEVER abstract ("show the benefit") —
 always a filmable moment. UNIVERSAL — infer from the product context; never assume a
 niche.
+${CREATOR_IDENTITY_RULE}
 
 OUTPUT exactly ${orphans.length} lines, SAME order, each "TYPE | conceptPrompt",
 no numbering, no quotes, no extra commentary.`
@@ -1066,14 +1076,7 @@ RULES:
   ⚠ DIVERSITY UNCHANGED — this biases role/kind PER LINE, it does NOT make a whole block one
   shot type. Cuts inside the SAME block still MIX creator / concept / product_action /
   product_closeup as each line demands, and NO-TWO-CUTS-ALIKE still holds across the video.
-- CREATOR IDENTITY IS LOCKED DOWNSTREAM — NEVER describe WHO the creator is. Any conceptPrompt
-  that shows a person MUST refer to them as "the same creator from the avatar reference" (or
-  "the same person from the avatar reference") and MUST NOT invent or state their GENDER, AGE,
-  ETHNICITY, body type, or looks. Lines like "a Malaysian man in his early 30s" / "a woman in
-  her late 20s" are FORBIDDEN — the avatar reference supplies identity at render; if you name a
-  gender/age you will CONTRADICT the real avatar (a female avatar rendered as a man). You MAY
-  and SHOULD still describe what the person DOES + their EMOTION + the SETTING (that is the
-  visual density) — just never who they are.
+- ${CREATOR_IDENTITY_RULE}
 - PRODUCT IDENTITY IS LOCKED DOWNSTREAM — NEVER describe the product's PACKAGING APPEARANCE in
   a conceptPrompt: no colour ("red tube"), no shape/form ("tube / bottle / jar / squat"), no
   label text, no "black/white text", no on-pack graphics. The product's EXACT look is pinned by
