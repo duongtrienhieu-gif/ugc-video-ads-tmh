@@ -530,8 +530,11 @@ export async function submitNanoBanana2(params: {
     prompt: params.prompt,
     aspect_ratio: params.aspectRatio ?? '1:1',
     resolution: params.resolution ?? '1K',
-    output_format: params.outputFormat ?? 'jpeg',
   }
+  // FIX — KIE now REJECTS output_format:'jpeg' on nano-banana-2 ("output_format is not
+  // within the range of allowed options"), which broke the keyframe fallback. OMIT it by
+  // default (KIE uses its own default format); only send it if a caller explicitly asks.
+  if (params.outputFormat) input.output_format = params.outputFormat
   if (params.imageInput?.length) {
     input.image_input = params.imageInput
   }
