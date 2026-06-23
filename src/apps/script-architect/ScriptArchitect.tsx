@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Sliders, X as XIcon } from 'lucide-react'
+import { PenLine } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
@@ -8,6 +8,8 @@ import type {
 } from './types'
 import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
+import AppHeader from '../../components/shell/AppHeader'
+import SegmentTabs from '../../components/shell/SegmentTabs'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
 import { generateUGCScript } from './services/generateScript'
@@ -117,63 +119,69 @@ export default function ScriptArchitect() {
     void runGeneration(lastParamsRef.current)
   }
 
-  // Mobile output-first (M5): auto-collapse the input form when the result
-  // transitions null → set, so the user actually sees the generated script
-  // instead of staring at the input form they just submitted. Floating FAB
-  // re-opens the form on demand. Desktop unchanged.
-  const [mobileFormVisible, setMobileFormVisible] = useState(true)
+  // Mobile flow (unified pattern): a [Thiết lập | Kết quả] segmented control
+  // replaces the old floating FAB. When a result lands (null → set) we auto-
+  // switch to "Kết quả" so the user sees the script. Desktop shows both panes.
+  const [mobileTab, setMobileTab] = useState<'setup' | 'result'>('setup')
   const prevResultRef = useRef<ScriptGenerationResult | null>(null)
   useEffect(() => {
-    if (!prevResultRef.current && result) setMobileFormVisible(false)
+    if (!prevResultRef.current && result) setMobileTab('result')
     prevResultRef.current = result
   }, [result])
-  const showInputOnMobile = !result || mobileFormVisible
 
   return (
-    <div className="flex h-full flex-col lg:flex-row">
-      <div className={`${showInputOnMobile ? 'flex' : 'hidden'} lg:flex w-full lg:w-[360px] shrink-0 flex-col border-b lg:border-b-0 lg:border-r border-black/8`}>
-        <InputPanel
-          selectedProduct={selectedProduct}
-          onProductSelect={setSelectedProduct}
-          onGenerate={runGeneration}
-          isGenerating={isGenerating}
-          presetId={presetId}
-          onPresetIdChange={setPresetId}
-          lengthSec={lengthSec}
-          onLengthSecChange={setLengthSec}
-          hookStrength={hookStrength}
-          onHookStrengthChange={setHookStrength}
-          toneModifiers={toneModifiers}
-          onToneModifiersChange={setToneModifiers}
-          educationalMode={educationalMode}
-          onEducationalModeChange={setEducationalMode}
+    <div className="flex h-full flex-col">
+      <AppHeader
+        icon={PenLine}
+        eyebrow="KỊCH BẢN UGC"
+        title="Script Architect"
+        subtitle="Script video ads theo công thức quảng cáo thực chiến"
+        actions={<AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />}
+      />
+
+      {/* Mobile segmented control — replaces the floating FAB */}
+      <div className="shrink-0 border-b border-app-border px-3 py-2 lg:hidden">
+        <SegmentTabs
+          value={mobileTab}
+          onChange={setMobileTab}
+          options={[
+            { value: 'setup', label: 'Thiết lập' },
+            { value: 'result', label: 'Kết quả' },
+          ]}
         />
       </div>
 
-      <div className="flex w-full flex-1 flex-col min-h-[400px] lg:min-h-0 relative">
-        <div className="absolute right-4 top-3 z-30">
-          <AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        {/* Config rail */}
+        <div className={`${mobileTab === 'setup' ? 'flex' : 'hidden'} w-full shrink-0 flex-col lg:flex lg:w-[360px] lg:border-r lg:border-app-border`}>
+          <InputPanel
+            selectedProduct={selectedProduct}
+            onProductSelect={setSelectedProduct}
+            onGenerate={runGeneration}
+            isGenerating={isGenerating}
+            presetId={presetId}
+            onPresetIdChange={setPresetId}
+            lengthSec={lengthSec}
+            onLengthSecChange={setLengthSec}
+            hookStrength={hookStrength}
+            onHookStrengthChange={setHookStrength}
+            toneModifiers={toneModifiers}
+            onToneModifiersChange={setToneModifiers}
+            educationalMode={educationalMode}
+            onEducationalModeChange={setEducationalMode}
+          />
         </div>
-        <OutputPanel
-          result={result}
-          productId={selectedProduct?.id ?? null}
-          productName={selectedProduct?.productName ?? null}
-          isGenerating={isGenerating}
-          onRegenerate={handleRegenerate}
-        />
 
-        {result && (
-          <button
-            onClick={() => setMobileFormVisible((v) => !v)}
-            aria-label={showInputOnMobile ? 'Đóng cấu hình' : 'Sửa cấu hình'}
-            title={showInputOnMobile ? 'Đóng cấu hình' : 'Sửa cấu hình'}
-            className="lg:hidden fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-3 text-[12px] font-bold text-white shadow-lg shadow-violet-900/30 hover:bg-violet-700 active:scale-95 transition-transform"
-          >
-            {showInputOnMobile
-              ? <><XIcon className="h-4 w-4" /> Đóng</>
-              : <><Sliders className="h-4 w-4" /> Sửa</>}
-          </button>
-        )}
+        {/* Result canvas */}
+        <div className={`${mobileTab === 'result' ? 'flex' : 'hidden'} w-full min-h-0 flex-1 flex-col lg:flex`}>
+          <OutputPanel
+            result={result}
+            productId={selectedProduct?.id ?? null}
+            productName={selectedProduct?.productName ?? null}
+            isGenerating={isGenerating}
+            onRegenerate={handleRegenerate}
+          />
+        </div>
       </div>
     </div>
   )

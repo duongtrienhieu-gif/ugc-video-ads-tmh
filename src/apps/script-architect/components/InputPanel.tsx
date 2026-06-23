@@ -93,14 +93,6 @@ export default function InputPanel({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="shrink-0 border-b border-black/8 px-4 py-3">
-        <h2 className="text-sm font-bold text-gray-900">AI Tạo Kịch bản UGC Chuyển đổi cao</h2>
-        <p className="mt-0.5 text-[11px] text-gray-500">
-          Tạo script video ads dựa trên công thức quảng cáo thực chiến.
-        </p>
-      </div>
-
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         {/* STEP 1 — Product */}
         <Section step={1} title="Chọn sản phẩm">
@@ -129,14 +121,14 @@ export default function InputPanel({
           ) : (
             <button
               onClick={() => setProductPickerOpen(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+              className="ui-accent-soft flex w-full items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-3 text-sm font-semibold"
             >
               <Package className="h-4 w-4" />
               {productCount > 0 ? 'Chọn sản phẩm từ Project' : 'Chưa có sản phẩm — tạo trong Project'}
             </button>
           )}
           {productCount === 0 && (
-            <button onClick={handleOpenFinder} className="text-[11px] text-blue-600 underline">
+            <button onClick={handleOpenFinder} style={{ color: 'var(--color-accent)' }} className="text-[11px] underline">
               Mở Project để tạo sản phẩm
             </button>
           )}
@@ -170,7 +162,7 @@ export default function InputPanel({
                 onClick={() => setLengthSec(opt.value)}
                 className={`flex flex-col items-center rounded-lg border py-2 text-xs transition-colors ${
                   lengthSec === opt.value
-                    ? 'border-blue-500/40 bg-blue-50 text-blue-700'
+                    ? 'ui-accent-soft'
                     : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.03]'
                 }`}
               >
@@ -194,7 +186,7 @@ export default function InputPanel({
                       ? 'border-rose-400 bg-rose-50 text-rose-700'
                       : opt.value === 'safe'
                         ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
-                        : 'border-blue-400 bg-blue-50 text-blue-700'
+                        : 'ui-accent-soft'
                     : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.03]'
                 }`}
               >
@@ -232,7 +224,8 @@ export default function InputPanel({
         <Section step={6} title="Tone (nâng cao)">
           <button
             onClick={() => setShowAdvanced((v) => !v)}
-            className="mb-2 text-[11px] text-blue-600 hover:underline"
+            style={{ color: 'var(--color-accent)' }}
+            className="mb-2 text-[11px] hover:underline"
           >
             {showAdvanced ? '− Ẩn' : '+ Thêm tone modifiers'}
           </button>
@@ -244,7 +237,7 @@ export default function InputPanel({
                   onClick={() => toggleTone(t.id)}
                   className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
                     toneModifiers.includes(t.id)
-                      ? 'border-blue-400 bg-blue-50 text-blue-700'
+                      ? 'ui-accent-soft'
                       : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.03]'
                   }`}
                 >
@@ -264,7 +257,7 @@ export default function InputPanel({
         <button
           onClick={handleClickGenerate}
           disabled={!canGenerate}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-violet-600 px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-blue-700 hover:to-violet-700 disabled:cursor-not-allowed disabled:opacity-40"
+          className="ui-accent-solid flex w-full items-center justify-center gap-2 rounded-full px-6 py-3.5 text-sm font-bold shadow-md transition-all disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isGenerating ? (
             <><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo kịch bản...</>
@@ -354,7 +347,7 @@ function PresetCard({
         active
           ? preset.category === 'educational'
             ? 'border-emerald-400 bg-emerald-50'
-            : 'border-blue-400 bg-blue-50'
+            : 'ui-accent-soft'
           : 'border-black/10 bg-white hover:bg-black/[0.03]'
       }`}
       onClick={onClick}
@@ -364,7 +357,7 @@ function PresetCard({
     >
       <span className="text-lg leading-none">{preset.glyph}</span>
       <div className="min-w-0 flex-1 pr-4">
-        <p className={`truncate text-[11px] font-semibold ${active ? (preset.category === 'educational' ? 'text-emerald-800' : 'text-blue-800') : 'text-gray-800'}`}>
+        <p className={`truncate text-[11px] font-semibold ${active ? (preset.category === 'educational' ? 'text-emerald-800' : '') : 'text-gray-800'}`}>
           {preset.label}
         </p>
         <p className="truncate text-[10px] text-gray-500">{preset.hint}</p>

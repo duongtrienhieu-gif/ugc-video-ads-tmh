@@ -119,6 +119,25 @@ html {
   font-size: 20px; /* tăng 2 size: 16px (base) → 20px, tất cả rem scale theo */
 }
 
+/* ─────────────────────────────────────────────────────────────────────
+ * ACCENT UTILITIES — theme-following primary surfaces. Apps use these
+ * instead of hardcoded blue/violet so active chips + primary buttons
+ * follow the brand accent (violet in light/dark, gold in studio).
+ *   .ui-accent-solid → filled primary button (accent bg + contrast text)
+ *   .ui-accent-soft  → selected chip (accent border + dim fill + accent text)
+ * Keep SEMANTIC colors (emerald=success/educational, rose=danger) as-is.
+ * ─────────────────────────────────────────────────────────────────── */
+.ui-accent-solid {
+  background-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+.ui-accent-solid:hover:not(:disabled) { filter: brightness(1.06); }
+.ui-accent-soft {
+  border-color: var(--color-accent) !important;
+  background-color: var(--color-accent-dim) !important;
+  color: var(--color-accent) !important;
+}
+
 html,
 body,
 #root {
