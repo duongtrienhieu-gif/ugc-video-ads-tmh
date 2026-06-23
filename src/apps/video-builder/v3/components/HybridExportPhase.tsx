@@ -173,15 +173,12 @@ export default function HybridExportPhase() {
   }
 
   return (
-    <div className="h-full overflow-y-auto p-6">
+    <div className="h-full overflow-y-auto p-4 sm:p-5">
       <div className="mx-auto max-w-3xl">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">Export MP4</h2>
-            <p className="text-[12px] text-gray-500">Bấm <strong>Tạo video</strong> để ghép các cảnh đã render thành MP4 cuối, xem + tải. Ghép = 0 credit.</p>
-          </div>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <p className="text-[12px] text-app-subtle">Bấm <strong className="text-app-muted">Tạo video</strong> để ghép các cảnh đã render thành MP4 cuối, xem + tải. Ghép = 0 credit.</p>
           <button onClick={() => setPhase('action-inserts')}
-            className="flex shrink-0 items-center gap-1.5 rounded-full border border-gray-300 bg-white px-3 py-2 text-[12px] font-semibold text-gray-600 hover:bg-gray-50">
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-app-border bg-app-card px-3 py-2 text-[12px] font-bold text-app-muted hover:bg-app-card-elevated">
             <ArrowLeft className="h-3.5 w-3.5" /> Sửa cảnh
           </button>
         </div>
@@ -210,7 +207,7 @@ export default function HybridExportPhase() {
                 <button key={id} onClick={() => setHybridCaption({ captionPreset: id })}
                   className={`flex flex-col items-stretch gap-1 rounded-lg border p-1.5 text-[11px] font-bold transition-all ${
                     captionPreset === id
-                      ? 'border-violet-400 bg-violet-100 text-violet-800'
+                      ? 'ui-accent-soft'
                       : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
                   }`}>
                   <CaptionPresetPreview presetId={id} />
@@ -246,7 +243,7 @@ export default function HybridExportPhase() {
                   placeholder="Nhập câu hook cho banner…"
                   className="min-w-0 flex-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-[13px] text-gray-900 focus:border-violet-400 focus:outline-none" />
                 <button onClick={suggestBanner} disabled={suggesting || !scriptHookText}
-                  className="flex shrink-0 items-center gap-1 rounded-lg border border-violet-300 bg-violet-50 px-2.5 py-1.5 text-[12px] font-bold text-violet-700 hover:bg-violet-100 disabled:opacity-50">
+                  className="ui-accent-soft flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[12px] font-bold disabled:opacity-50">
                   {suggesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Gợi ý
                 </button>
               </div>
@@ -264,7 +261,7 @@ export default function HybridExportPhase() {
                 <button key={id} onClick={() => setHybridCaption({ bannerPreset: id })}
                   className={`flex flex-col items-stretch gap-1 rounded-lg border p-1.5 text-[11px] font-bold transition-all ${
                     bannerPreset === id
-                      ? 'border-violet-400 bg-violet-100 text-violet-800'
+                      ? 'ui-accent-soft'
                       : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
                   }`}>
                   <BannerPresetPreview presetId={id} slogan={bannerPreviewText} />
@@ -282,7 +279,7 @@ export default function HybridExportPhase() {
             <video src={finalUrl} controls className="mx-auto max-h-[60vh] rounded-lg bg-black" />
             <div className="mt-3 flex flex-wrap justify-center gap-2">
               <a href={finalUrl} download={`ugc-hybrid-${now()}.mp4`}
-                className="flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-2 text-[12px] font-bold text-white hover:bg-violet-700">
+                className="ui-accent-solid flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-bold">
                 <Download className="h-3.5 w-3.5" /> Tải MP4 ({resolution})
               </a>
               <button onClick={makeVideo} disabled={assembling || !allDone}
@@ -314,7 +311,7 @@ export default function HybridExportPhase() {
               {allDone ? `Đã render ${doneCount}/${scenes.length} cảnh — bấm Tạo video để ghép.` : `Quay lại "Tạo Video", render hết ${scenes.length || ''} cảnh trước.`}
             </p>
             <button onClick={makeVideo} disabled={assembling || !allDone}
-              className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2.5 text-[13px] font-bold text-white shadow-sm hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50">
+              className="ui-accent-solid inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-[13px] font-bold shadow-sm disabled:opacity-50">
               {assembling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clapperboard className="h-4 w-4" />} Tạo video (0cr)
             </button>
 
@@ -345,12 +342,12 @@ export default function HybridExportPhase() {
             <div className="flex items-center gap-2">
               {pickedThumbUrl && (
                 <a href={pickedThumbUrl} download={`thumb-${now()}.jpg`}
-                  className="flex items-center gap-1.5 rounded-full bg-violet-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-violet-700">
+                  className="ui-accent-solid flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold">
                   <Download className="h-3 w-3" /> Tải thumbnail
                 </a>
               )}
               <button onClick={genThumbnails} disabled={ev.isGeneratingThumbnails}
-                className="flex items-center gap-1.5 rounded-full border border-violet-300 bg-white px-3 py-1.5 text-[11px] font-bold text-violet-700 hover:bg-violet-50 disabled:opacity-50">
+                className="ui-accent-soft flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold disabled:opacity-50">
                 {ev.isGeneratingThumbnails ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
                 {ev.aiThumbnails.length ? `Tạo lại ${THUMBNAIL_ARCHETYPE_ORDER.length}` : `Tạo ${THUMBNAIL_ARCHETYPE_ORDER.length} thumbnail`} (~{THUMBNAIL_ARCHETYPE_ORDER.length * 6}cr)
               </button>
@@ -434,7 +431,7 @@ function AiThumbCard({ thumb, picked, onPick, onRegen }: { thumb: AiThumbnail; p
   const url = useAssetUrl(thumb.imageRef ?? undefined)
   const busy = thumb.status === 'rendering'
   return (
-    <div className={`overflow-hidden rounded-lg border transition-all ${picked ? 'border-violet-500 ring-2 ring-violet-300' : 'border-gray-200'}`}>
+    <div className={`overflow-hidden rounded-lg border-2 transition-all ${picked ? 'ui-accent-soft' : 'border-gray-200'}`}>
       <button onClick={onPick} disabled={thumb.status !== 'completed'} className="block aspect-[9/16] w-full bg-gray-100">
         {busy && <span className="flex h-full items-center justify-center text-[10px] text-gray-400"><Loader2 className="mr-1 h-3 w-3 animate-spin" /> Đang tạo...</span>}
         {thumb.status === 'failed' && <span className="flex h-full items-center justify-center px-1 text-center text-[9px] text-rose-500">Lỗi: {thumb.error?.slice(0, 40)}</span>}

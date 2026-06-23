@@ -599,19 +599,11 @@ export default function HybridVideoPhase(_props: Props) {
   }
 
   return (
-    <div className="h-full overflow-y-auto p-6">
+    <div className="h-full overflow-y-auto p-4 sm:p-5">
       <div className="mx-auto max-w-5xl">
-        <div className="mb-4">
-          <h2 className="text-lg font-bold text-gray-900">Tạo Video — Hybrid</h2>
-          <p className="text-[12px] text-gray-500">
-            Render <strong>từng cảnh</strong> trên khung 9:16 để xem + kiểm chất lượng (credit hiện trên nút). Render hết rồi
-            bấm <strong>Tiếp tục → Export</strong> để ghép + tải.
-          </p>
-        </div>
-
         {/* ── Toolbar ───────────────────────────────────────────────────────── */}
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-pink-50 p-3">
-          <Film className="h-5 w-5 shrink-0 text-violet-600" />
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-app-border bg-app-card p-3">
+          <Film className="h-5 w-5 shrink-0" style={{ color: 'var(--color-accent)' }} />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-gray-900">
               {(assetsBusy || assetsGenRunning) ? 'Đang tạo giọng + khuôn mặt…'
@@ -626,8 +618,8 @@ export default function HybridVideoPhase(_props: Props) {
             title={!hasAssets ? 'Đợi giọng + mặt tạo xong (đang tự chạy)' : 'Chia kịch bản thành cảnh theo giọng (0 credit Gemini)'}
             className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-bold shadow-sm disabled:opacity-50 ${
               hasAssets && scenes.length === 0
-                ? 'bg-gradient-to-r from-violet-600 to-pink-600 text-white'   // primary call-to-action once voice is ready
-                : 'border border-violet-300 bg-white text-violet-700 hover:bg-violet-50'
+                ? 'ui-accent-solid'   // primary call-to-action once voice is ready
+                : 'ui-accent-soft border'
             }`}>
             {planning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
             {scenes.length > 0 ? 'Đạo diễn lại' : 'Đạo diễn'}
@@ -641,14 +633,14 @@ export default function HybridVideoPhase(_props: Props) {
           {scenes.length > 0 && hasAssets && pendingIdx.length > 0 && (
             <button onClick={renderAll} disabled={busy || renderingNow}
               title={renderingNow ? 'Đang có cảnh đang render — đợi xong rồi bấm' : ''}
-              className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:from-violet-700 hover:to-pink-700 disabled:opacity-50">
+              className="ui-accent-solid flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-bold shadow-sm disabled:opacity-50">
               <Sparkles className="h-3.5 w-3.5" /> Tạo tất cả (~{pendingCredit}cr)
             </button>
           )}
           {scenes.length > 0 && (
             <button onClick={() => setPhase('export')}
               title={allDone ? 'Sang Export để ghép + tải' : 'Nên render hết các cảnh trước'}
-              className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:from-emerald-700 hover:to-teal-700">
+              className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:bg-emerald-700">
               Tiếp tục → Export <ChevronRight className="h-3.5 w-3.5" />
             </button>
           )}
@@ -706,14 +698,14 @@ export default function HybridVideoPhase(_props: Props) {
         {scenes.length === 0 && (
           <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-[12px] text-gray-400">
             {assetsBusy || assetsGenRunning || planning ? (
-              <><Loader2 className="mx-auto mb-2 h-7 w-7 animate-spin text-violet-400" />
+              <><Loader2 className="mx-auto mb-2 h-7 w-7 animate-spin" style={{ color: 'var(--color-accent)' }} />
                 {(assetsBusy || assetsGenRunning) ? 'Đang tạo giọng + khuôn mặt thật…' : 'Đang đạo diễn (chia cảnh theo giọng)…'} Giữ tab mở nhé.</>
             ) : hasAssets ? (
               <>
-                <Sparkles className="mx-auto mb-2 h-7 w-7 text-violet-300" />
+                <Sparkles className="mx-auto mb-2 h-7 w-7" style={{ color: 'var(--color-accent)' }} />
                 <p className="mb-2">Giọng + khuôn mặt đã sẵn sàng. Bấm để AI chia kịch bản thành cảnh (0 credit Gemini):</p>
                 <button onClick={runPlan} disabled={busy}
-                  className="mx-auto flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-pink-600 px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50">
+                  className="ui-accent-solid mx-auto flex items-center gap-1.5 rounded-lg px-4 py-2 text-[12px] font-bold disabled:opacity-50">
                   <Wand2 className="h-3.5 w-3.5" /> Đạo diễn (chia cảnh)
                 </button>
               </>
@@ -932,10 +924,10 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, failMsg, prog
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             <button onClick={onRender} disabled={!hasAssets}
-              className="flex flex-col items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-3 text-white shadow-lg hover:bg-violet-700 disabled:opacity-40">
-              <Play className="h-5 w-5 fill-white" />
+              className="ui-accent-solid flex flex-col items-center gap-1.5 rounded-xl px-4 py-3 shadow-lg disabled:opacity-40">
+              <Play className="h-5 w-5" style={{ fill: 'currentColor' }} />
               <span className="text-[12px] font-bold">Render</span>
-              <span className="text-[10px] text-white/80">~{credit}cr</span>
+              <span className="text-[10px] opacity-80">~{credit}cr</span>
             </button>
           </div>
         )}
