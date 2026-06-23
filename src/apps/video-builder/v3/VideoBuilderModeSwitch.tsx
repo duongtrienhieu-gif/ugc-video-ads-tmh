@@ -34,35 +34,24 @@ export default function VideoBuilderModeSwitch({ onSwitchToV2, onSwitchToV1 }: P
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* ── Mode switch bar — the single entry point for both modes ───────── */}
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-black/10 bg-gray-900 px-4 py-1.5">
-        <span className="mr-2 text-[11px] font-bold uppercase tracking-widest text-white/40">Chế độ</span>
-        <button
-          type="button"
-          onClick={() => setMode('engine')}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-            mode === 'engine' ? 'bg-white text-gray-900' : 'text-white/70 hover:bg-white/10'
-          }`}
-        >
-          🎬 Tạo Video (Kịch bản → Video)
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode('studio')}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-            mode === 'studio' ? 'bg-white text-gray-900' : 'text-white/70 hover:bg-white/10'
-          }`}
-        >
-          🎞️ Xưởng B-roll
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode('personified')}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-            mode === 'personified' ? 'bg-white text-gray-900' : 'text-white/70 hover:bg-white/10'
-          }`}
-        >
-          👹 Nhân Vật Hoá
-        </button>
+      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-app-border bg-app-base px-3 py-2">
+        <span className="mr-1.5 hidden text-[10px] font-bold uppercase tracking-widest text-app-faint sm:inline">Chế độ</span>
+        {([
+          { id: 'engine', label: '🎬 Tạo Video' },
+          { id: 'studio', label: '🎞️ Xưởng B-roll' },
+          { id: 'personified', label: '👹 Nhân Vật Hoá' },
+        ] as const).map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => setMode(m.id)}
+            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+              mode === m.id ? 'ui-accent-solid' : 'text-app-muted hover:bg-app-card'
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
       </div>
 
       {/* ── Body — exactly one mode is mounted at a time ─────────────────── */}

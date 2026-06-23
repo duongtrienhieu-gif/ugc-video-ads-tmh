@@ -24,11 +24,12 @@
 import { useState, useEffect } from 'react'
 import {
   Sparkles, FlaskConical, UserRound, FileText,
-  ChevronRight, ArrowLeft, RotateCcw, Lock, Zap, Star,
+  ChevronRight, ArrowLeft, RotateCcw, Lock, Zap, Star, Check,
   Film, Wand2, Download, Info, FolderOpen, Save, Plus, Pencil, Trash2,
 } from 'lucide-react'
 import { useAppStore } from '../../../stores/appStore'
 import { useAdsVideoStore } from './stores/adsVideoStore'
+import AppHeader from '../../../components/shell/AppHeader'
 import ScriptVoicePhase from './components/ScriptVoicePhase'
 import HybridVideoPhase from './components/HybridVideoPhase'
 import HybridExportPhase from './components/HybridExportPhase'
@@ -88,36 +89,85 @@ function PhaseStepper({
 }) {
   const activeIdx = PHASE_ORDER.indexOf(phase)
   return (
-    <div className="flex items-center gap-1 overflow-x-auto px-1">
+    <div className="mx-auto flex max-w-2xl items-start px-2">
       {PHASE_ORDER.map((p, i) => {
-        const Icon = PHASE_ICON[p]
         const isActive = i === activeIdx
         const isPast = i < activeIdx
         const isReachable = reachable.has(p)
-        const baseCls = isActive
-          ? 'bg-violet-600 text-white'
+        const last = i === PHASE_ORDER.length - 1
+
+        // Circle styling per state
+        const circleStyle: React.CSSProperties = isActive
+          ? { backgroundColor: 'var(--color-accent)', color: 'var(--color-accent-contrast)' }
           : isPast
-            ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-            : isReachable
-              ? 'bg-black/[0.04] text-gray-600 hover:bg-violet-50 hover:text-violet-700'
-              : 'bg-black/[0.04] text-gray-400 cursor-not-allowed'
+            ? { backgroundColor: 'rgba(16,185,129,0.18)', borderColor: '#34d399', color: '#34d399', borderWidth: 1.5 }
+            : {}
+        const circleCls = isActive || isPast
+          ? ''
+          : isReachable
+            ? 'border-[1.5px] border-app-border-strong text-app-muted'
+            : 'border-[1.5px] border-app-border text-app-faint'
+        const labelStyle: React.CSSProperties | undefined = isActive ? { color: 'var(--color-accent)' } : undefined
+        const labelCls = isActive ? 'font-bold' : isPast || isReachable ? 'text-app-muted' : 'text-app-faint'
+
         return (
-          <div key={p} className="flex shrink-0 items-center">
+          <div key={p} className={`flex items-start ${last ? '' : 'flex-1'}`}>
             <button
               type="button"
               onClick={() => { if (isReachable) onPhaseClick(p) }}
               disabled={!isReachable}
-              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${baseCls}`}
-              title={isActive ? `Đang ở: ${V3_PHASE_LABEL_VI[p]}` : V3_PHASE_LABEL_VI[p]}
+              title={V3_PHASE_LABEL_VI[p]}
+              className="flex shrink-0 flex-col items-center gap-1.5 disabled:cursor-not-allowed"
             >
-              <Icon className="h-3.5 w-3.5" />
-              <span>{V3_PHASE_LABEL_VI[p]}</span>
+              <span
+                className={`flex h-8 w-8 items-center justify-center rounded-full text-[13px] font-bold transition-colors ${circleCls}`}
+                style={circleStyle}
+              >
+                {isPast ? <Check className="h-4 w-4" /> : i + 1}
+              </span>
+              <span className={`whitespace-nowrap text-[10px] sm:text-[11px] ${labelCls}`} style={labelStyle}>
+                {V3_PHASE_LABEL_VI[p]}
+              </span>
             </button>
-            {i < PHASE_ORDER.length - 1 && <ChevronRight className="h-3 w-3 shrink-0 text-gray-300" />}
+            {!last && (
+              <span
+                className="mt-4 h-px flex-1 self-start"
+                style={{ backgroundColor: isPast ? '#34d399' : 'var(--color-border-strong)' }}
+                aria-hidden
+              />
+            )}
           </div>
         )
       })}
     </div>
+  )
+}
+
+/** Compact header action button — icon always, label only on lg+. */
+function HdrBtn({
+  onClick, disabled, icon: Icon, label, title, danger = false,
+}: {
+  onClick: () => void
+  disabled?: boolean
+  icon: React.ElementType
+  label: string
+  title: string
+  danger?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] font-bold transition-colors disabled:opacity-40 ${
+        danger
+          ? 'border-red-500/30 text-red-500 hover:bg-red-500/10'
+          : 'border-app-border text-app-muted hover:bg-app-card-elevated'
+      }`}
+    >
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span className="hidden lg:inline">{label}</span>
+    </button>
   )
 }
 
@@ -225,67 +275,30 @@ export default function AdsVideoEngine(_props: Props) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* ── Top banner — NEW BRANDING (Z30) ──────────────────────────────── */}
-      {/* pr reserves room for the global Gemini/KIE-Credit badges (App.tsx —
-          absolute right-4 top-3 z-50) so the banner's own buttons aren't
-          covered by them. */}
-      <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 py-3 pl-6 pr-3 text-white md:pr-[260px]">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <div className="flex items-center gap-2">
-            <Zap className="h-5 w-5" />
-            <div>
-              <h1 className="text-sm font-bold">Ads Video — AI UGC Ad Engine</h1>
-              <p className="text-[11px] text-white/80">
-                Creator-first · Preview-first · Low-cost iteration
-              </p>
-            </div>
-          </div>
-          {/* Z98 — action buttons sit right after the title (center-left) so the
-              global Gemini/KIE-Credit badges (absolute top-right) can't cover them. */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* P6au — multi-project: Lưu / Dự án (mở-sửa) / Mới. */}
-            <button
-              onClick={saveActiveProject}
-              disabled={!hasWork}
-              title="Lưu project video hiện tại (kịch bản + cảnh + clip đã render + giọng). Mở lại sửa được."
-              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25 disabled:opacity-40"
-            >
-              <Save className="h-3.5 w-3.5" /> Lưu project
-            </button>
-            <button
-              onClick={() => { refreshProjects(); setRestoreOpen(true) }}
-              title="Mở / sửa các project video đã lưu (đồng bộ trên cloud)"
-              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
-            >
-              <FolderOpen className="h-3.5 w-3.5" /> Dự án của tôi
-            </button>
-            <button
-              onClick={handleNewProject}
-              title="Lưu project hiện tại rồi mở một project MỚI (trống)"
-              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
-            >
-              <Plus className="h-3.5 w-3.5" /> Project mới
-            </button>
-            <button
-              onClick={() => setLibraryOpen(true)}
-              title="Thư viện video đã ghép hoàn chỉnh — tải lại 0 credit, còn kể cả sau Tạo lại từ đầu"
-              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
-            >
-              <Film className="h-3.5 w-3.5" /> Video đã xuất
-            </button>
-            <button
-              onClick={() => setResetConfirmOpen(true)}
-              title="Xoá sạch tiến trình ĐANG mở + bắt đầu lại từ bước 1 (KHÔNG đụng các project đã lưu)"
-              className="flex items-center gap-1.5 rounded-lg border border-white/30 bg-red-500/30 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm transition-colors hover:bg-red-500/50"
-            >
-              <RotateCcw className="h-3.5 w-3.5" /> Tạo lại từ đầu
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* ── App header (replaces the old gradient banner) ─────────────────── */}
+      <AppHeader
+        icon={Film}
+        eyebrow="VIDEO ENGINE · HYBRID"
+        title="Xưởng Video AI"
+        subtitle="Creator-first · Preview-first · tiết kiệm credit"
+        actions={
+          <>
+            <HdrBtn onClick={saveActiveProject} disabled={!hasWork} icon={Save} label="Lưu"
+              title="Lưu project video hiện tại (kịch bản + cảnh + clip đã render + giọng). Mở lại sửa được." />
+            <HdrBtn onClick={() => { refreshProjects(); setRestoreOpen(true) }} icon={FolderOpen} label="Dự án"
+              title="Mở / sửa các project video đã lưu (đồng bộ trên cloud)" />
+            <HdrBtn onClick={handleNewProject} icon={Plus} label="Mới"
+              title="Lưu project hiện tại rồi mở một project MỚI (trống)" />
+            <HdrBtn onClick={() => setLibraryOpen(true)} icon={Film} label="Đã xuất"
+              title="Thư viện video đã ghép hoàn chỉnh — tải lại 0 credit" />
+            <HdrBtn onClick={() => setResetConfirmOpen(true)} icon={RotateCcw} label="Tạo lại" danger
+              title="Xoá sạch tiến trình ĐANG mở + bắt đầu lại từ bước 1 (KHÔNG đụng các project đã lưu)" />
+          </>
+        }
+      />
 
       {/* ── Phase stepper ────────────────────────────────────────────────── */}
-      <div className="shrink-0 border-b border-black/8 bg-white px-6 py-2.5">
+      <div className="shrink-0 border-b border-app-border bg-app-surface px-4 py-3">
         <PhaseStepper
           phase={state.phase}
           reachable={reachable}
@@ -315,8 +328,8 @@ export default function AdsVideoEngine(_props: Props) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => setRestoreOpen(false)}>
           <div className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-100">
-                <FolderOpen className="h-5 w-5 text-violet-600" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+                <FolderOpen className="h-5 w-5" style={{ color: 'var(--color-accent)' }} />
               </div>
               <div className="flex-1">
                 <h3 className="text-base font-bold text-gray-900">Dự án của tôi</h3>
@@ -327,7 +340,7 @@ export default function AdsVideoEngine(_props: Props) {
               <button
                 onClick={() => { saveActiveProject(); }}
                 disabled={!hasWork}
-                className="flex shrink-0 items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-40"
+                className="ui-accent-solid flex shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold disabled:opacity-40"
               >
                 <Save className="h-3.5 w-3.5" /> Lưu hiện tại
               </button>
@@ -346,14 +359,14 @@ export default function AdsVideoEngine(_props: Props) {
                   return (
                     <div
                       key={p.id}
-                      className={`mb-2 flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 ${isActive ? 'border-violet-400 bg-violet-50' : 'border-gray-200 bg-gray-50'}`}
+                      className={`mb-2 flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 ${isActive ? 'ui-accent-soft' : 'border-app-border bg-app-surface'}`}
                     >
                       <button onClick={() => handleOpen(p)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 truncate text-sm font-semibold text-gray-900">
                             {p.isWinner && <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" />}
                             {p.name}
-                            {isActive && <span className="rounded bg-violet-200 px-1.5 py-0.5 text-[9px] font-bold text-violet-700">ĐANG MỞ</span>}
+                            {isActive && <span className="rounded px-1.5 py-0.5 text-[9px] font-bold" style={{ backgroundColor: 'var(--color-accent-dim)', color: 'var(--color-accent)' }}>ĐANG MỞ</span>}
                           </div>
                           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
                             <span>{new Date(p.lastEditedAt).toLocaleString('vi-VN')}</span>
@@ -364,7 +377,7 @@ export default function AdsVideoEngine(_props: Props) {
                         </div>
                       </button>
                       <div className="flex shrink-0 items-center gap-1">
-                        <button onClick={() => handleOpen(p)} title="Mở để sửa" className="rounded-lg bg-violet-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-violet-700">Mở</button>
+                        <button onClick={() => handleOpen(p)} title="Mở để sửa" className="ui-accent-solid rounded-lg px-2.5 py-1.5 text-[11px] font-bold">Mở</button>
                         <button onClick={() => handleRename(p)} title="Đổi tên" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700"><Pencil className="h-3.5 w-3.5" /></button>
                         <button onClick={() => handleDelete(p)} title="Xoá bản lưu" className="rounded-lg p-1.5 text-gray-400 hover:bg-rose-100 hover:text-rose-600"><Trash2 className="h-3.5 w-3.5" /></button>
                       </div>
@@ -421,3 +434,6 @@ void Star
 void Info
 void ArrowLeft
 void Sparkles
+void Zap
+void ChevronRight
+void PHASE_ICON
