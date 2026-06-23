@@ -108,8 +108,11 @@ HARD RULES (must obey ALL — these match the renderer; breaking them breaks the
    "product_action"; a clean macro/texture/ingredient detail → "product_closeup".
 4. INGREDIENT lines → "product_macro": show the REAL raw ingredients NAMED in the line (herbs/
    fruit/roots/spices/etc) arranged around the product as the hero, natural flat-lay, no face.
-5. NEVER describe the packaging's look (color/shape/label) and NEVER invent a package — the real
-   product image is the lock. NEVER mention price/money/discount, a cert, a %, or a number.
+5. NEVER describe the packaging's look (color/shape/label), NEVER invent a package, and NEVER write
+   the product's NAME or brand — refer to it ONLY as "the product". The real product image is the
+   lock; its name + label come from that reference at render. Putting the NAME into words makes the
+   image model render a garbled FAKE label ("Hawthorn Prime" → "Havrtvion Drie"). NEVER mention
+   price/money/discount, a cert, a %, or a number.
 6. conceptPrompt MUST specify: SHOT TYPE + the concrete ACTION + WHICH PART is in frame + the
    real SETTING. One vivid shot, ≤ ~240 chars, written in ENGLISH (it is the literal render
    instruction) even though the spoken line is in ${langName}.
