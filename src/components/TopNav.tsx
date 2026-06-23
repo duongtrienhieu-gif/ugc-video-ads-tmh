@@ -259,7 +259,7 @@ export default function TopNav({ activeApp, onNavigate }: TopNavProps) {
 
         {/* ── Mobile drawer (in-flow so it adds height, no position:fixed) ── */}
         {mobileOpen && (
-          <div className="border-t border-app-border bg-app-surface px-3 pb-4 pt-2 lg:hidden">
+          <div className="max-h-[calc(100dvh-3rem)] overflow-y-auto border-t border-app-border bg-app-surface px-3 pb-4 pt-2 lg:hidden">
             <button
               onClick={() => { onNavigate('home'); setMobileOpen(false) }}
               className={`mb-1 flex w-full items-center gap-2.5 rounded-lg px-3 py-3 text-sm font-bold ${
