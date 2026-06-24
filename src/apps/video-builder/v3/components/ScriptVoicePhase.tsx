@@ -921,15 +921,9 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
               <PickerCard title="Kiểu kịch bản (framework)" icon={Lightbulb}>
                 {(['instant', 'lead'] as const).map((g) => {
                   const groupLabel = g === 'instant' ? '🚀 Vào thẳng sản phẩm' : '📖 Dẫn dắt sản phẩm'
-                  const groupHint = g === 'instant'
-                    ? 'Sản phẩm xuất hiện ngay trong hook (giây 0-2). Tốt cho cold reach.'
-                    : 'Sản phẩm reveal giữa video sau khi build cảm xúc / niềm tin.'
                   return (
-                    <div key={g} className={g === 'lead' ? 'mt-3' : ''}>
-                      <div className="mb-1 flex items-baseline gap-2">
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">{groupLabel}</p>
-                        <p className="text-[9px] text-gray-400">{groupHint}</p>
-                      </div>
+                    <div key={g} className={g === 'lead' ? 'mt-2' : ''}>
+                      <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-gray-500">{groupLabel}</p>
                       <div className="grid grid-cols-2 gap-1.5">
                         {AD_STRUCTURES_BY_GROUP[g].map((s) => {
                           const cfg = AD_STRUCTURES[s]
@@ -964,7 +958,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                     <button
                       key={d}
                       onClick={() => setTargetDurationSec(d)}
-                      className={`rounded-lg border px-2 py-2 text-center text-[12px] font-bold transition-all ${
+                      className={`rounded-lg border px-2 py-1.5 text-center text-[12px] font-bold transition-all ${
                         brain.targetDurationSec === d
                           ? 'ui-accent-soft'
                           : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
@@ -978,9 +972,6 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
             </div>
 
             <PickerCard title="Dạng kịch bản (shape)" icon={Lightbulb}>
-              <p className="mb-2 text-[10px] text-gray-500">
-                Cấu trúc thân kịch bản. Mặc định "Kể chuyện" — đổi sang Liệt kê / So sánh / Hành trình nếu nội dung hợp hơn.
-              </p>
               <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
                 {SCRIPT_SHAPE_ORDER.map((sh) => {
                   const cfg = SHAPE_CONFIGS[sh]
