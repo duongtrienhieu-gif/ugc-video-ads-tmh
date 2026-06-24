@@ -1449,14 +1449,16 @@ OUTPUT strict JSON only (no markdown fences):
       // Concepts only DESCRIBE the shot. Render enforces the rest neo'd to ref #s: cut A is
       // product_action + hands_noface → HANDS-ONLY FRAMING (hands, no face) + MOTION + GIFT LOCK;
       // cut B is product_closeup → PRODUCT-ONLY FRAMING (no hands) + GIFT LOCK. No duplicate locks.
-      // Cut A — DEAL GRAB: hands present the deal, BACKGROUND A (the #13 energy). product_action +
-      // hands_noface overrides the no-hands gift set above.
+      // #3 — Cut A is now a PRODUCT-HERO close-up (NO person, NO hands) on BACKGROUND A, mirroring
+      // cut B. The old "a person's hands presenting the deal" turned this no-hands offer beat into a
+      // person + a 2nd floating gift object (i2v flung them). Both halves are now clean product+gift
+      // hero shots on two DIFFERENT backgrounds → no person, no float.
       penult.quote = qA
-      penult.kind = 'product_action'
+      penult.kind = 'product_closeup'
       penult.cameraFraming = 'hands_noface'
       penult.conceptPrompt = giftOn
-        ? `DEAL-GRAB shot: a person's hands presenting / picking up ${unitsA} together with the FREE GIFT on a clean BRIGHT MARBLE / STONE countertop (BACKGROUND A), an over-the-hands phone angle — the "grab this deal" moment.`
-        : `DEAL-GRAB shot: a person's hands presenting / picking up ${unitsA} on a clean BRIGHT MARBLE / STONE countertop (BACKGROUND A), an over-the-hands phone angle — the "grab this deal" moment.`
+        ? `PRODUCT-HERO close-up: ${unitsA} together with the FREE GIFT on a clean BRIGHT MARBLE / STONE surface (BACKGROUND A) in good light — NO hands, NO person; a "grab this deal" hero shot.`
+        : `PRODUCT-HERO close-up: ${unitsA} on a clean BRIGHT MARBLE / STONE surface (BACKGROUND A) in good light — NO hands, NO person; a "grab this deal" hero shot.`
       // Cut B — clean MACRO detail, a DIFFERENT angle + a DIFFERENT background B (warm wood / linen).
       const cutB: BrollScene = {
         role: 'broll', kind: 'product_closeup', cameraFraming: 'hands_noface', shotIntent: 'offer',
@@ -1636,6 +1638,18 @@ function sanitizeScenes(raw: RawScene[] | undefined): BrollScene[] {
     ) {
       scene.kind = 'product_closeup'
       scene.cameraFraming = 'hands_noface'
+    }
+    // #7 — a PURE EMOTION beat (shotIntent='reaction') must be a person/feeling shot, never a
+    // product shot. Gemini sometimes tags 'reaction' but leaves kind at the product default →
+    // a feeling line renders as a product cut. Force concept + creator (reaction = face only).
+    if (scene.role === 'broll' && scene.shotIntent === 'reaction' && scene.kind !== 'concept') {
+      scene.kind = 'concept'
+      scene.cameraFraming = 'creator'
+    }
+    // #7 — a mechanism3d INTENT left on role='broll' never fires the 3D wrap at render (which keys
+    // off role==='mechanism3d') → it renders as an ordinary cut. Promote the role so it's a real 3D.
+    if (scene.shotIntent === 'mechanism3d' && scene.role === 'broll') {
+      scene.role = 'mechanism3d'
     }
     scene.reason = typeof r.reason === 'string' ? r.reason : undefined
     out.push(scene)
