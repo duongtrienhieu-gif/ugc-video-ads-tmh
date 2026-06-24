@@ -1053,9 +1053,6 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         {/* ── Specific voice picker ─────────────────────────────────────────
             Tone preset row removed — engine reads at one realistic TikTok
             pace (1.2× via atempo, Z81) for everyone. User only picks the voice. */}
-        {voiceSection}
-        {/* eslint-disable-next-line no-constant-binary-expression */}
-        {false && (
         <div className="mt-3 rounded-xl border border-black/10 bg-white p-3">
           <div className="flex items-center gap-3">
             <Mic2 className="h-5 w-5" style={{ color: 'var(--color-accent)' }} />
