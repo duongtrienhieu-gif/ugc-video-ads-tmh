@@ -62,12 +62,27 @@ function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxW: number, ma
   return lines
 }
 
-/** A stable, generic pseudo-name derived from the comment (no Math.random → same comment = same
- *  name on re-export). Reads like a real TikTok username; impersonates no one. */
+// A pool of realistic TikTok-style handles (Malay + Vietnamese + neutral, romanized — looks real on
+// either market). Combined with a separator + optional digits → hundreds of unique handles, so at
+// scale it does NOT read as "the same user asking on every video" (the audited fake-tell), while a
+// real person is never impersonated. Latin only (renders everywhere).
+const HANDLE_NAMES = [
+  'aisyah', 'nurul', 'farah', 'siti', 'amira', 'fatin', 'sofea', 'hana', 'liyana', 'aina',
+  'nadia', 'mira', 'dahlia', 'izzah', 'najwa', 'intan', 'balqis', 'suria', 'zara', 'rina',
+  'faiz', 'amir', 'danish', 'irfan', 'syafiq', 'haziq', 'adib', 'hakim', 'aziz', 'iskandar',
+  'linh', 'trang', 'huong', 'ngoc', 'thao', 'myle', 'vy', 'nhi', 'chi', 'lan',
+  'minh', 'tuan', 'quan', 'duy', 'khoa', 'phuc', 'mai', 'hanh', 'an', 'thu',
+]
+const HANDLE_SEP = ['_', '.', '', '_', '']
+/** Build a stable, realistic, VARIED handle from the comment (deterministic → preview matches the
+ *  burned card + re-export is stable; varies across different comments so it never looks repeated). */
 function deriveName(comment: string): string {
   let h = 0
   for (let i = 0; i < comment.length; i++) h = (h * 31 + comment.charCodeAt(i)) >>> 0
-  return `user${1000 + (h % 9000)}`
+  const name = HANDLE_NAMES[h % HANDLE_NAMES.length]
+  const sep = HANDLE_SEP[(h >>> 8) % HANDLE_SEP.length]
+  const tail = ['', String((h >>> 12) % 100), String(90 + ((h >>> 16) % 10)), String((h >>> 4) % 1000)][(h >>> 20) % 4]
+  return `${name}${sep}${tail}`
 }
 
 /** Render the TikTok "Reply to … comment" sticker to a transparent canvas. */
@@ -112,13 +127,17 @@ export async function renderCommentCardCanvas(comment: string): Promise<HTMLCanv
   ctx.closePath()
   ctx.fill()
 
-  // Avatar — gray circle + a simple head/shoulders silhouette.
+  // Avatar — TikTok default placeholder: light-gray circle + a clean head+shoulders silhouette
+  // CLIPPED to the circle (the shoulders are cut by the rim, not a blob spilling outside it).
   const acx = ox + PADX + AV_R, acy = oy + PADTOP + AV_R
-  ctx.fillStyle = '#E3E3E6'
+  ctx.fillStyle = '#E8E8EA'
   ctx.beginPath(); ctx.arc(acx, acy, AV_R, 0, Math.PI * 2); ctx.fill()
-  ctx.fillStyle = '#B9BAC0'
-  ctx.beginPath(); ctx.arc(acx, acy - AV_R * 0.16, AV_R * 0.36, 0, Math.PI * 2); ctx.fill()        // head
-  ctx.beginPath(); ctx.arc(acx, acy + AV_R * 0.64, AV_R * 0.6, Math.PI, Math.PI * 2); ctx.fill()   // shoulders
+  ctx.save()
+  ctx.beginPath(); ctx.arc(acx, acy, AV_R, 0, Math.PI * 2); ctx.clip()
+  ctx.fillStyle = '#BCBDC4'
+  ctx.beginPath(); ctx.arc(acx, acy - AV_R * 0.22, AV_R * 0.32, 0, Math.PI * 2); ctx.fill()        // head
+  ctx.beginPath(); ctx.arc(acx, acy + AV_R * 0.55, AV_R * 0.62, Math.PI, Math.PI * 2); ctx.fill()  // shoulders (clipped by rim)
+  ctx.restore()
 
   // Header: "Reply to " (gray) + "<name>'s comment" (bold dark), centred on the avatar row.
   ctx.textBaseline = 'middle'
