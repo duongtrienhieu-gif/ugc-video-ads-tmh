@@ -643,8 +643,10 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="h-full overflow-y-auto p-4 sm:p-5">
-      <div className="mx-auto max-w-4xl">
+    <div className="flex h-full flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto lg:flex lg:overflow-hidden">
+        {/* ── LEFT — Thiết lập: sản phẩm · avatar · quà · comment ──────────── */}
+        <div className="w-full shrink-0 p-4 lg:w-[380px] lg:overflow-y-auto lg:border-r lg:border-app-border">
         {/* ── Avatar + Product ──────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-3">
           <AssetTile
@@ -769,9 +771,12 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
             </div>
           )}
         </div>
+        </div>{/* ── close LEFT ── */}
 
+        {/* ── RIGHT — Kịch bản: tab · cấu hình · hook · giọng đọc ──────────── */}
+        <div className="w-full p-4 lg:flex-1 lg:overflow-y-auto">
         {/* ── Kịch bản — Tab ⚡ Tạo nhanh (AI viết) / 📝 Dán ────────────────── */}
-        <div className="mt-3 flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={() => setGenTab('quick')}
             className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-all ${
@@ -1303,47 +1308,48 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
           </div>
         )}
 
-        {/* ── Action bar (sticky bottom) ────────────────────────────────────── */}
-        <div className="sticky bottom-2 z-10 mt-4 flex items-center justify-between gap-3 rounded-xl border border-app-border bg-app-card p-3 shadow-lg">
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-gray-900">
-              {genTab === 'own' ? 'Dùng kịch bản của bạn' : 'AI viết kịch bản nhanh'}
-            </p>
-            <p className="text-[11px] text-gray-500">
-              {genTab === 'own'
-                ? `Giữ nguyên câu chữ · ${SCRIPT_LANG_LABEL_VI[brain.outputLang]}${liveDurationSec != null ? ` · ~${liveDurationSec.toFixed(1)}s` : ''}`
-                : `${SCRIPT_LANG_LABEL_VI[brain.outputLang]} · ${AD_STRUCTURES[brain.structure].labelVi} · ${brain.targetDurationSec}s · ${brain.pickedHookIdx >= 0 ? 'đã chọn hook ✓' : 'chưa chọn hook'}`}
-            </p>
-          </div>
-          {brain.script && certClaims.length > 0 ? (
-            <button
-              onClick={onContinue}
-              disabled={!acknowledgedCerts}
-              className="ui-accent-solid flex items-center gap-2 rounded-full px-5 py-2 text-sm font-bold shadow-md transition-all disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Vẫn tiếp tục → Action Inserts <ChevronRight className="h-4 w-4" />
-            </button>
-          ) : (
-            <button
-              onClick={handleGenerateAndContinue}
-              disabled={!canGenerateScript}
-              title={genTab === 'quick' && brain.pickedHookIdx < 0 ? 'Tạo hook và chọn 1 cái trước' : undefined}
-              className="ui-accent-solid flex items-center gap-2 rounded-full px-5 py-2 text-sm font-bold shadow-md transition-all disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {brain.isGeneratingScript
-                ? <><Loader2 className="h-4 w-4 animate-spin" /> Đang xử lý...</>
-                : genTab === 'quick'
-                  ? <><Sparkles className="h-4 w-4" /> Tạo kịch bản</>
-                  : <>Tiếp tục → Action Inserts <ChevronRight className="h-4 w-4" /></>}
-            </button>
-          )}
-        </div>
-
         {brain.error && (
           <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-[12px] text-red-800">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
             <div><strong>Lỗi:</strong> {brain.error}</div>
           </div>
+        )}
+        </div>{/* ── close RIGHT ── */}
+      </div>{/* ── close 2-col workspace ── */}
+
+      {/* ── Action bar — full-width footer ────────────────────────────────── */}
+      <div className="flex shrink-0 items-center justify-between gap-3 border-t border-app-border bg-app-card px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-gray-900">
+            {genTab === 'own' ? 'Dùng kịch bản của bạn' : 'AI viết kịch bản nhanh'}
+          </p>
+          <p className="text-[11px] text-gray-500">
+            {genTab === 'own'
+              ? `Giữ nguyên câu chữ · ${SCRIPT_LANG_LABEL_VI[brain.outputLang]}${liveDurationSec != null ? ` · ~${liveDurationSec.toFixed(1)}s` : ''}`
+              : `${SCRIPT_LANG_LABEL_VI[brain.outputLang]} · ${AD_STRUCTURES[brain.structure].labelVi} · ${brain.targetDurationSec}s · ${brain.pickedHookIdx >= 0 ? 'đã chọn hook ✓' : 'chưa chọn hook'}`}
+          </p>
+        </div>
+        {brain.script && certClaims.length > 0 ? (
+          <button
+            onClick={onContinue}
+            disabled={!acknowledgedCerts}
+            className="ui-accent-solid flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold shadow-md transition-all disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Vẫn tiếp tục → Action Inserts <ChevronRight className="h-4 w-4" />
+          </button>
+        ) : (
+          <button
+            onClick={handleGenerateAndContinue}
+            disabled={!canGenerateScript}
+            title={genTab === 'quick' && brain.pickedHookIdx < 0 ? 'Tạo hook và chọn 1 cái trước' : undefined}
+            className="ui-accent-solid flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold shadow-md transition-all disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {brain.isGeneratingScript
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Đang xử lý...</>
+              : genTab === 'quick'
+                ? <><Sparkles className="h-4 w-4" /> Tạo kịch bản</>
+                : <>Tiếp tục → Action Inserts <ChevronRight className="h-4 w-4" /></>}
+          </button>
         )}
       </div>
 
