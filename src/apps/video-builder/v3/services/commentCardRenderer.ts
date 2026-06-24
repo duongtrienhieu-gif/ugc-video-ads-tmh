@@ -1,29 +1,32 @@
 // ── Reply-to-comment card renderer (P5) ──────────────────────────────────────
-// Draws a TikTok-style "comment being replied to" card onto a canvas and exports a
-// TRANSPARENT PNG — same 0-credit path as captions/banner. The card holds the comment
-// the creator is answering (the comment IS the hook in reply mode); the assembler
-// composites it near the TOP of the OPENING segments only, then it disappears.
-// Universal vi/ms/en (system font covers all three). No real person is impersonated —
-// the handle is a generic, derived pseudo-username.
+// Draws the TikTok "Reply to … comment" STICKER (white speech bubble with a tail) onto a canvas
+// and exports a TRANSPARENT PNG — same 0-credit path as captions/banner. Matches the real TikTok
+// sticker: a gray avatar + "Reply to <name>'s comment" header line, then the comment in BIG BOLD
+// text, and a speech-bubble tail bottom-left. NO heart, NO like-count, NO timestamp (TikTok's reply
+// sticker shows none). The assembler composites it near the TOP of the OPENING segments only.
+// Universal vi/ms/en + emoji (system font covers all). No real person is impersonated — the name is
+// a generic, derived pseudo-username.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { ensureCaptionFonts } from './captionRenderer'
 
 // Logical canvas units (rendered at dpr=2). Width is fixed; height grows with the text.
-const W = 960
-const PAD = 44
-const AV_R = 38                 // avatar circle radius
-const NAME_PX = 34
-const BODY_PX = 40
-const BODY_LH = 54              // body line height
-const MAX_LINES = 5             // cap a very long comment (with ellipsis) so the card stays compact
-const MARG = 10                 // transparent margin around the card
+const W = 980
+const PADX = 46
+const PADTOP = 40
+const PADBOTTOM = 46
+const AV_R = 30                 // avatar circle radius
+const HEADER_PX = 30            // "Reply to <name>'s comment" line
+const BODY_PX = 50              // the comment — BIG + BOLD (the TikTok look)
+const BODY_LH = 62              // body line height
+const MAX_LINES = 4             // cap a very long comment (ellipsis) so the bubble stays compact
+const MARG = 12                 // transparent margin around the bubble
+const TAIL_H = 34               // speech-bubble tail height below the card
 
-// TikTok comment palette (light card).
+// TikTok reply-sticker palette (white bubble).
 const CARD_BG = '#FFFFFF'
-const CARD_BORDER = 'rgba(0,0,0,0.06)'
-const INK = '#161823'           // primary text (TikTok ink)
-const SUB = '#8A8B91'           // username @, timestamp, heart/count (muted)
+const INK = '#161823'           // the comment text + bold name (TikTok ink)
+const SUB = '#73747B'           // the "Reply to" prefix (muted gray)
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   const rr = Math.min(r, w / 2, h / 2)
@@ -36,28 +39,22 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath()
 }
 
-/** Wrap `text` into ≤ maxLines lines that each fit `maxW`; the last line gets an ellipsis
- *  if the text overflows. `ctx.font` must already be set to the body font. */
+/** Wrap `text` into ≤ maxLines lines that each fit `maxW`; last line gets an ellipsis on overflow.
+ *  `ctx.font` must already be set to the body font. */
 function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxW: number, maxLines: number): string[] {
   const words = text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean)
   const lines: string[] = []
   let cur = ''
   for (const w of words) {
     const trial = cur ? `${cur} ${w}` : w
-    if (ctx.measureText(trial).width <= maxW || !cur) {
-      cur = trial
-    } else {
-      lines.push(cur)
-      cur = w
-      if (lines.length === maxLines) break
-    }
+    if (ctx.measureText(trial).width <= maxW || !cur) cur = trial
+    else { lines.push(cur); cur = w; if (lines.length === maxLines) break }
   }
   if (lines.length < maxLines && cur) lines.push(cur)
-  // Overflow → ellipsis on the last kept line.
   if (lines.length === maxLines) {
-    let last = lines[maxLines - 1]
-    const joined = lines.join(' ')
-    if (joined.replace(/\s+/g, ' ').trim().length < text.replace(/\s+/g, ' ').trim().length) {
+    const full = text.replace(/\s+/g, ' ').trim()
+    if (lines.join(' ').length < full.length) {
+      let last = lines[maxLines - 1]
       while (last && ctx.measureText(`${last}…`).width > maxW) last = last.replace(/\s+\S*$/, '')
       lines[maxLines - 1] = `${last}…`
     }
@@ -65,51 +62,33 @@ function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxW: number, ma
   return lines
 }
 
-/** A stable, generic pseudo-handle derived from the comment (no Math.random → same comment =
- *  same handle on re-export). Reads like a real TikTok username; impersonates no one. */
-function deriveHandle(comment: string): string {
+/** A stable, generic pseudo-name derived from the comment (no Math.random → same comment = same
+ *  name on re-export). Reads like a real TikTok username; impersonates no one. */
+function deriveName(comment: string): string {
   let h = 0
   for (let i = 0; i < comment.length; i++) h = (h * 31 + comment.charCodeAt(i)) >>> 0
-  return `@user${1000 + (h % 9000)}`
+  return `user${1000 + (h % 9000)}`
 }
 
-/** Draw a small TikTok-style heart (liked = filled red) at (x, baseline y), height `s`. */
-function drawHeart(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, color: string): void {
-  ctx.save()
-  ctx.fillStyle = color
-  ctx.beginPath()
-  const t = y - s
-  ctx.moveTo(x + s / 2, y)
-  ctx.bezierCurveTo(x + s / 2, y - s * 0.35, x, t - s * 0.05, x, t + s * 0.3)
-  ctx.bezierCurveTo(x, t + s * 0.62, x + s * 0.28, t + s * 0.8, x + s / 2, y)
-  ctx.bezierCurveTo(x + s - s * 0.28, t + s * 0.8, x + s, t + s * 0.62, x + s, t + s * 0.3)
-  ctx.bezierCurveTo(x + s, t - s * 0.05, x + s / 2, t - s * 0.35, x + s / 2, y)
-  ctx.closePath()
-  ctx.fill()
-  ctx.restore()
-}
-
-/** Render the reply-to-comment card to a transparent canvas. */
+/** Render the TikTok "Reply to … comment" sticker to a transparent canvas. */
 export async function renderCommentCardCanvas(comment: string): Promise<HTMLCanvasElement> {
   await ensureCaptionFonts()
-  const text = (comment ?? '').replace(/\s+/g, ' ').trim().slice(0, 220) || '...'
-  const handle = deriveHandle(text)
+  const text = (comment ?? '').replace(/\s+/g, ' ').trim().slice(0, 200) || '...'
+  const name = deriveName(text)
 
-  const nameFont = `700 ${NAME_PX}px 'Montserrat', 'Be Vietnam Pro', system-ui, sans-serif`
-  const bodyFont = `400 ${BODY_PX}px system-ui, 'Segoe UI', 'Be Vietnam Pro', Roboto, sans-serif`
+  const headerFont = `500 ${HEADER_PX}px system-ui, 'Segoe UI', 'Be Vietnam Pro', Roboto, sans-serif`
+  const headerBold = `800 ${HEADER_PX}px system-ui, 'Segoe UI', 'Be Vietnam Pro', Roboto, sans-serif`
+  const bodyFont = `800 ${BODY_PX}px system-ui, 'Segoe UI', 'Be Vietnam Pro', Roboto, sans-serif`
 
-  // Measure wrapped body lines on a scratch context.
+  // Measure wrapped body lines.
   const scratch = document.createElement('canvas').getContext('2d')!
   scratch.font = bodyFont
-  const bodyMaxW = W - PAD * 2
+  const bodyMaxW = W - PADX * 2
   const lines = wrapLines(scratch, text, bodyMaxW, MAX_LINES)
 
-  const headerH = AV_R * 2
-  const bodyTop = PAD + headerH + 30
-  const bodyH = lines.length * BODY_LH
-  const footerTop = bodyTop + bodyH + 22
-  const cardH = footerTop + 40 + PAD - PAD * 0.2   // heart row (~40) + bottom padding
-  const H = Math.ceil(cardH + MARG * 2)
+  const bodyTop = PADTOP + AV_R * 2 + 26
+  const cardH = bodyTop + lines.length * BODY_LH + PADBOTTOM
+  const H = Math.ceil(cardH + TAIL_H + MARG * 2)
 
   const dpr = 2
   const canvas = document.createElement('canvas')
@@ -117,45 +96,47 @@ export async function renderCommentCardCanvas(comment: string): Promise<HTMLCanv
   canvas.height = Math.ceil(H * dpr)
   const ctx = canvas.getContext('2d')!
   ctx.scale(dpr, dpr)
-  ctx.textBaseline = 'middle'
   ctx.textAlign = 'left'
 
-  // Card background (rounded, faint border).
-  ctx.fillStyle = CARD_BG
-  roundRect(ctx, MARG, MARG, W, cardH, 30)
-  ctx.fill()
-  ctx.lineWidth = 1.5
-  ctx.strokeStyle = CARD_BORDER
-  ctx.stroke()
-
   const ox = MARG, oy = MARG
+  const cardBottom = oy + cardH
 
-  // Avatar (gray circle + a simple head/shoulders glyph).
-  const acx = ox + PAD + AV_R, acy = oy + PAD + AV_R
+  // White speech bubble + a tail at the bottom-left (drawn first, merged with the card fill).
+  ctx.fillStyle = CARD_BG
+  roundRect(ctx, ox, oy, W, cardH, 34)
+  ctx.fill()
+  ctx.beginPath()
+  ctx.moveTo(ox + 46, cardBottom - 6)
+  ctx.lineTo(ox + 46 + 58, cardBottom - 6)
+  ctx.lineTo(ox + 38, cardBottom + TAIL_H)
+  ctx.closePath()
+  ctx.fill()
+
+  // Avatar — gray circle + a simple head/shoulders silhouette.
+  const acx = ox + PADX + AV_R, acy = oy + PADTOP + AV_R
   ctx.fillStyle = '#E3E3E6'
   ctx.beginPath(); ctx.arc(acx, acy, AV_R, 0, Math.PI * 2); ctx.fill()
   ctx.fillStyle = '#B9BAC0'
-  ctx.beginPath(); ctx.arc(acx, acy - AV_R * 0.18, AV_R * 0.34, 0, Math.PI * 2); ctx.fill()       // head
-  ctx.beginPath(); ctx.arc(acx, acy + AV_R * 0.62, AV_R * 0.58, Math.PI, Math.PI * 2); ctx.fill() // shoulders
+  ctx.beginPath(); ctx.arc(acx, acy - AV_R * 0.16, AV_R * 0.36, 0, Math.PI * 2); ctx.fill()        // head
+  ctx.beginPath(); ctx.arc(acx, acy + AV_R * 0.64, AV_R * 0.6, Math.PI, Math.PI * 2); ctx.fill()   // shoulders
 
-  // Username + timestamp.
-  ctx.font = nameFont
+  // Header: "Reply to " (gray) + "<name>'s comment" (bold dark), centred on the avatar row.
+  ctx.textBaseline = 'middle'
+  const hx = acx + AV_R + 18
+  ctx.font = headerFont
   ctx.fillStyle = SUB
-  const nameX = acx + AV_R + 20
-  ctx.fillText(`${handle}  ·  3h`, nameX, acy)
+  ctx.fillText('Reply to ', hx, acy)
+  const prefixW = ctx.measureText('Reply to ').width
+  ctx.font = headerBold
+  ctx.fillStyle = INK
+  ctx.fillText(`${name}'s comment`, hx + prefixW, acy)
 
-  // Comment body.
+  // Comment — BIG BOLD, dark, left-aligned, full width.
   ctx.font = bodyFont
   ctx.fillStyle = INK
-  let y = oy + bodyTop + BODY_LH / 2
-  for (const ln of lines) { ctx.fillText(ln, ox + PAD, y); y += BODY_LH }
-
-  // Footer: a (liked) heart + count.
-  const hy = oy + footerTop + 20
-  drawHeart(ctx, ox + PAD, hy + 8, 26, '#FE2C55')
-  ctx.font = `600 26px 'Montserrat', system-ui, sans-serif`
-  ctx.fillStyle = SUB
-  ctx.fillText(`${1 + (deriveHandle(text).length % 9)}.${(text.length % 9)}K`, ox + PAD + 40, hy)
+  ctx.textBaseline = 'alphabetic'
+  let y = oy + bodyTop + BODY_PX * 0.82
+  for (const ln of lines) { ctx.fillText(ln, ox + PADX, y); y += BODY_LH }
 
   return canvas
 }
@@ -169,10 +150,10 @@ export async function renderCommentCardBlob(comment: string): Promise<Blob> {
 }
 
 // Dev helper — eyeball the card FREE from the console:
-//   __testCommentCard('Weh aku ni asyik pening je, lepas tu cepat semput. Risau pulak jantung aku ni…')
+//   __testCommentCard('Write any comment and see what happens 😊')
 if (typeof window !== 'undefined') {
   ;(window as unknown as Record<string, unknown>).__testCommentCard = async (comment: string) => {
-    const blob = await renderCommentCardBlob(comment ?? 'Weh aku ni asyik pening je, lepas tu cepat semput. Risau pulak jantung ni…')
+    const blob = await renderCommentCardBlob(comment ?? 'Aku ni selalu pening, letih je… macam mana nak bagi bertenaga balik eh? 🤔')
     const url = URL.createObjectURL(blob)
     window.open(url, '_blank')
     return url
