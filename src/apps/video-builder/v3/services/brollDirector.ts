@@ -589,11 +589,11 @@ function enforceProductHero(scenes: BrollScene[], _product?: Product | null): vo
     if (!needsFix) continue
     s.role = 'broll'; s.kind = 'product_action'
     if (isEating) {
-      // Eating → the AVATAR eats it herself, face visible (creator framing locks the
+      // Eating → the AVATAR eats it, face visible (creator framing locks the
       // SAME person). Explicit concept so the model never renders a stray mouth/bowl.
       s.cameraFraming = 'creator'
       s.conceptPrompt =
-        `The SAME creator takes a natural, appetising bite of the product herself — her face and hand clearly in frame, eating it, a satisfied look. ONE person (the creator), real UGC, natural light. NOT a disembodied mouth, NOT a separate floating bowl.`
+        `The SAME creator from the avatar reference takes a natural, appetising bite of the product — their face and hand clearly in frame, eating it, a satisfied look. ONE person (the creator), real UGC, natural light. NOT a disembodied mouth, NOT a separate floating bowl.`
     } else {
       s.cameraFraming = 'hands_noface'
       s.conceptPrompt = ''                       // weak → backfilled, grounded in this line

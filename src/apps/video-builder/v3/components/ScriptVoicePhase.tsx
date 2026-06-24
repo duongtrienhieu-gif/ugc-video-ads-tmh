@@ -802,6 +802,9 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
           </button>
         </div>
 
+        {/* ── Giọng đọc — đưa lên đầu cột phải (chung cho cả 2 tab) ──────────── */}
+        {voiceSection}
+
         {genTab === 'own' ? (
           /* ── Tab B: dán kịch bản của bạn (giữ nguyên câu chữ) ── */
           <>
