@@ -641,6 +641,243 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     genTab === 'own' ? hasScriptText : brain.pickedHookIdx >= 0
   )
 
+  // Voice picker — extracted to a variable so it can render at the TOP of the
+  // right column (above the script config) while staying ONE shared instance
+  // for both the Tạo nhanh + Dán tabs. Logic unchanged.
+  const voiceSection = (
+    <div className="mt-2 rounded-xl border border-black/10 bg-white p-3">
+      <div className="flex items-center gap-3">
+        <Mic2 className="h-5 w-5" style={{ color: 'var(--color-accent)' }} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-bold text-gray-900">Giọng đọc</p>
+          <p className="text-[11px] text-gray-500">
+            {brain.outputLang === 'ms'
+              ? 'Tốc độ chuẩn TikTok creator (Malay 1.15×) — chậm hơn chút cho khớp khẩu hình, tự nhiên.'
+              : 'Tốc độ chuẩn TikTok creator (1.2×) — nhanh, tự nhiên, tiết kiệm credit lipsync.'}
+          </p>
+        </div>
+      </div>
+
+      {/* Specific voice */}
+      <div className="mt-3 border-t border-black/5 pt-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Giọng cụ thể:</span>
+          {selectedVoiceId ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-800">
+              <Check className="h-3 w-3" />
+              {selectedVoiceName ?? 'giọng đã chọn'}
+              <button
+                onClick={() => { setVoiceId(null); addToast('Đã trở về giọng mặc định', 'info') }}
+                title="Bỏ chọn — dùng giọng mặc định"
+                className="ml-1 rounded-full p-0.5 hover:bg-emerald-200"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ) : (
+            <span className="text-[11px] text-gray-500">Đang dùng giọng mặc định.</span>
+          )}
+          {selectedVoiceId && (
+            <button
+              onClick={() => handleTtsPreview(selectedVoiceId)}
+              disabled={ttsPreviewingId === selectedVoiceId}
+              title="Nghe thử giọng đang chọn (tạo mẫu bằng đúng giọng render)"
+              className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-white px-2 py-1 text-[11px] font-bold text-violet-700 hover:bg-violet-50 disabled:opacity-50"
+            >
+              {ttsPreviewingId === selectedVoiceId ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />} Nghe thử
+            </button>
+          )}
+          <button
+            onClick={() => setVoicePanelOpen((o) => !o)}
+            className="ui-accent-soft ml-auto rounded-full border px-3 py-1 text-[11px] font-bold transition-all"
+          >
+            {voicePanelOpen ? 'Đóng' : 'Chọn giọng…'}
+          </button>
+        </div>
+
+        {voicePanelOpen && (
+          <div className="mt-3 border-t border-black/5 pt-3">
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setVoiceTab('mine')}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold transition-all ${
+                  voiceTab === 'mine' ? 'ui-accent-solid' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <UserCircle2 className="h-3.5 w-3.5" /> Giọng của tôi
+              </button>
+              <button
+                onClick={() => setVoiceTab('library')}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold transition-all ${
+                  voiceTab === 'library' ? 'ui-accent-solid' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Library className="h-3.5 w-3.5" /> Thư viện ElevenLabs
+              </button>
+              {/* P4m — clone a voice from an uploaded MP3 sample */}
+              <label
+                title="Tải file MP3 mẫu (30s–2 phút) để clone giọng"
+                className={`inline-flex items-center gap-1.5 rounded-full border border-violet-300 px-3 py-1 text-[11px] font-bold text-violet-700 transition-all ${
+                  cloning || !elevenLabsKey ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-violet-50'
+                }`}
+              >
+                {cloning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                {cloning ? 'Đang clone…' : 'Clone từ MP3'}
+                <input
+                  type="file" accept="audio/*" className="hidden"
+                  disabled={cloning || !elevenLabsKey}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleCloneVoice(f); e.target.value = '' }}
+                />
+              </label>
+            </div>
+            <p className="mt-1.5 text-[10px] text-gray-400">
+              Clone: tải MP3 mẫu giọng (rõ, 30s–2 phút) → ElevenLabs tạo giọng riêng rồi chọn luôn cho video. Cần gói Starter ($5/mo) trở lên.
+            </p>
+
+            {!elevenLabsKey && (
+              <p className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-700">
+                <AlertCircle className="h-3.5 w-3.5" /> Thiếu ElevenLabs API key — thêm trong Cài đặt để dùng tính năng này.
+              </p>
+            )}
+
+            {voiceTab === 'mine' && (
+              <div className="mt-3">
+                <button
+                  onClick={handleLoadMyVoices}
+                  disabled={loadingMine || !elevenLabsKey}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-gray-900 px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-gray-700 disabled:opacity-50"
+                >
+                  {loadingMine ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  Tải giọng trong tài khoản
+                </button>
+                <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {myVoices.map((v) => {
+                    const isSel = v.voice_id === selectedVoiceId
+                    return (
+                      <div
+                        key={v.voice_id}
+                        className={`flex items-center gap-2 rounded-lg border p-2 ${
+                          isSel ? 'border-emerald-300 bg-emerald-50' : 'border-black/10 bg-white'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[12px] font-bold text-gray-900">{v.name}</p>
+                          <p className="text-[10px] text-gray-500">
+                            {v.category}{v.labels?.gender ? ` · ${v.labels.gender}` : ''}{v.labels?.accent ? ` · ${v.labels.accent}` : ''}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => v.preview_url ? playPreview(v.preview_url) : handleTtsPreview(v.voice_id)}
+                          disabled={ttsPreviewingId === v.voice_id}
+                          title={v.preview_url ? 'Nghe thử' : 'Nghe thử (tạo mẫu giọng)'}
+                          className="rounded-full p-1 text-violet-600 hover:bg-violet-100 disabled:opacity-50">
+                          {ttsPreviewingId === v.voice_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          onClick={() => { setVoiceId(v.voice_id); addToast(`✓ Đã chọn giọng "${v.name}"`, 'success') }}
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-bold transition-all ${
+                            isSel ? 'bg-emerald-600 text-white' : 'ui-accent-soft'
+                          }`}
+                        >
+                          {isSel ? 'Đang chọn' : 'Chọn'}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {voiceTab === 'library' && (
+              <div className="mt-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={libLang}
+                    onChange={(e) => setLibLang(e.target.value)}
+                    className="rounded-lg border border-black/10 bg-white px-2 py-1 text-[11px] focus:border-violet-400 focus:outline-none"
+                  >
+                    <option value="ms">Malay (ms)</option>
+                    <option value="id">Indonesia (id)</option>
+                    <option value="en">English (en)</option>
+                    <option value="vi">Vietnamese (vi)</option>
+                    <option value="">Mọi ngôn ngữ</option>
+                  </select>
+                  <select
+                    value={libGender}
+                    onChange={(e) => setLibGender(e.target.value as '' | 'male' | 'female')}
+                    className="rounded-lg border border-black/10 bg-white px-2 py-1 text-[11px] focus:border-violet-400 focus:outline-none"
+                  >
+                    <option value="">Mọi giới tính</option>
+                    <option value="female">Nữ</option>
+                    <option value="male">Nam</option>
+                  </select>
+                  <div className="relative flex-1 min-w-[140px]">
+                    <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                    <input
+                      value={libSearch}
+                      onChange={(e) => setLibSearch(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleSearchLibrary() }}
+                      placeholder="Tìm tên giọng…"
+                      className="w-full rounded-lg border border-black/10 bg-white py-1 pl-7 pr-2 text-[11px] focus:border-violet-400 focus:outline-none"
+                    />
+                  </div>
+                  <button
+                    onClick={handleSearchLibrary}
+                    disabled={loadingShared || !elevenLabsKey}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-gray-900 px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-gray-700 disabled:opacity-50"
+                  >
+                    {loadingShared ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                    Tìm
+                  </button>
+                </div>
+                <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {sharedVoices.map((v) => {
+                    const isSel = v.voice_id === selectedVoiceId
+                    return (
+                      <div
+                        key={`${v.public_owner_id}-${v.voice_id}`}
+                        className={`flex items-center gap-2 rounded-lg border p-2 ${
+                          isSel ? 'border-emerald-300 bg-emerald-50' : 'border-black/10 bg-white'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[12px] font-bold text-gray-900">{v.name}</p>
+                          <p className="truncate text-[10px] text-gray-500">
+                            {v.language}{v.accent ? ` · ${v.accent}` : ''}{v.gender ? ` · ${v.gender}` : ''}{v.use_case ? ` · ${v.use_case}` : ''}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => v.preview_url ? playPreview(v.preview_url) : handleTtsPreview(v.voice_id)}
+                          disabled={ttsPreviewingId === v.voice_id}
+                          title={v.preview_url ? 'Nghe thử' : 'Nghe thử (tạo mẫu giọng)'}
+                          className="rounded-full p-1 text-violet-600 hover:bg-violet-100 disabled:opacity-50">
+                          {ttsPreviewingId === v.voice_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          onClick={() => handleAddSharedVoice(v)}
+                          disabled={addingId === v.voice_id || isSel}
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold transition-all disabled:opacity-60 ${
+                            isSel ? 'bg-emerald-600 text-white' : 'ui-accent-soft'
+                          }`}
+                        >
+                          {addingId === v.voice_id ? <Loader2 className="h-3 w-3 animate-spin" /> : isSel ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                          {isSel ? 'Đã chọn' : 'Thêm & chọn'}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="mt-2 text-[10px] text-gray-400">
+                  "Thêm & chọn" sẽ thêm giọng từ thư viện vào tài khoản ElevenLabs của bạn rồi chọn luôn cho video này.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-full flex-col">
@@ -1053,10 +1290,10 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
           </div>
         )}
 
-        {/* ── Specific voice picker ─────────────────────────────────────────
-            Tone preset row removed — engine reads at one realistic TikTok
-            pace (1.2× via atempo, Z81) for everyone. User only picks the voice. */}
-        <div className="mt-3 rounded-xl border border-black/10 bg-white p-3">
+        {/* ── Giọng đọc đã chuyển lên đầu cột phải (voiceSection) ──────────────
+            Khối cũ bên dưới được ẩn (display:none) để KHÔNG hiển thị trùng mà vẫn
+            giữ nguyên cây JSX/biến — tránh rủi ro xoá thủ công ~230 dòng. ─────── */}
+        <div className="hidden" aria-hidden>
           <div className="flex items-center gap-3">
             <Mic2 className="h-5 w-5" style={{ color: 'var(--color-accent)' }} />
             <div className="min-w-0 flex-1">
