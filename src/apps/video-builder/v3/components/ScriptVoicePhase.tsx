@@ -682,6 +682,9 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   // needs a non-empty comment instead of a picked hook.
   const replyEnabled = !!state.replyComment?.enabled
   const replyCommentText = (state.replyComment?.comment ?? '').trim()
+  // When BOTH optional inputs (gift + reply-comment) are ON, lay them side-by-side
+  // on a wider left column instead of a tall vertical stack.
+  const bothInputCards = !!state.gift?.enabled && replyEnabled
   // Quick tab needs a picked hook (or a comment in reply mode); own tab needs pasted text.
   const canGenerateScript = canGenerate && (
     genTab === 'own' ? hasScriptText : (replyEnabled ? !!replyCommentText : brain.pickedHookIdx >= 0)
@@ -929,7 +932,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto lg:flex lg:overflow-hidden">
         {/* ── LEFT — Thiết lập: sản phẩm · avatar · quà · comment ──────────── */}
-        <div className="w-full shrink-0 p-4 lg:w-[380px] lg:overflow-y-auto lg:border-r lg:border-app-border">
+        <div className={`w-full shrink-0 p-4 lg:overflow-y-auto lg:border-r lg:border-app-border ${bothInputCards ? 'lg:w-[420px] xl:w-[620px]' : 'lg:w-[380px]'}`}>
         {/* ── Avatar + Product ──────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-3">
           <AssetTile
@@ -950,8 +953,10 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
           />
         </div>
 
+        {/* ── Optional inputs: gift + reply-comment. Side-by-side when BOTH on. ── */}
+        <div className={`mt-3 grid grid-cols-1 items-start gap-3 ${bothInputCards ? 'xl:grid-cols-2' : ''}`}>
         {/* ── Quà tặng kèm (tùy chọn) — Phase A ─────────────────────────────── */}
-        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/40 p-3">
+        <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-3">
           <label className="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
@@ -1015,7 +1020,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         </div>
 
         {/* ── Trả lời comment (TikTok "Reply to comment") — comment LÀ hook ──── */}
-        <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50/40 p-3">
+        <div className="rounded-xl border border-sky-200 bg-sky-50/40 p-3">
           <label className="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
@@ -1078,6 +1083,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
             </div>
           )}
         </div>
+        </div>{/* ── close optional inputs grid ── */}
         </div>{/* ── close LEFT ── */}
 
         {/* ── RIGHT — Kịch bản: tab · cấu hình · hook · giọng đọc ──────────── */}
