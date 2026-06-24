@@ -899,30 +899,52 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         ) : (
           /* ── Tab A: ⚡ Tạo nhanh — AI viết quanh hook bạn chọn ── */
           <div className="mt-2 flex flex-col gap-3">
-            <PickerCard title="Ngôn ngữ đích" icon={Globe}>
-              <div className="grid grid-cols-3 gap-1.5">
-                {(['vi', 'ms', 'en'] as ScriptLang[]).map((lng) => (
-                  <button
-                    key={lng}
-                    onClick={() => { setLangTouched(true); setOutputLang(lng) }}
-                    className={`rounded-lg border px-2 py-2 text-center text-[12px] font-bold transition-all ${
-                      brain.outputLang === lng
-                        ? 'ui-accent-soft'
-                        : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                    }`}
-                  >
-                    {SCRIPT_LANG_LABEL_VI[lng]}
-                  </button>
-                ))}
-              </div>
-            </PickerCard>
+            {/* Hàng: Ngôn ngữ + Thời lượng (cặp "tiếng nói" + độ dài) */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <PickerCard title="Ngôn ngữ đích" icon={Globe}>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(['vi', 'ms', 'en'] as ScriptLang[]).map((lng) => (
+                    <button
+                      key={lng}
+                      onClick={() => { setLangTouched(true); setOutputLang(lng) }}
+                      className={`rounded-lg border px-2 py-1.5 text-center text-[12px] font-bold transition-all ${
+                        brain.outputLang === lng
+                          ? 'ui-accent-soft'
+                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      {SCRIPT_LANG_LABEL_VI[lng]}
+                    </button>
+                  ))}
+                </div>
+              </PickerCard>
 
-            <div className="grid gap-3 lg:grid-cols-2">
-              <PickerCard title="Kiểu kịch bản (framework)" icon={Lightbulb}>
+              <PickerCard title="Thời lượng" icon={Clock}>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {([40, 50, 60, 70, 80] as ScriptTargetDurationSec[]).map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setTargetDurationSec(d)}
+                      className={`rounded-lg border px-1 py-1.5 text-center text-[12px] font-bold transition-all ${
+                        brain.targetDurationSec === d
+                          ? 'ui-accent-soft'
+                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      {d}s
+                    </button>
+                  ))}
+                </div>
+              </PickerCard>
+            </div>
+
+            {/* Kiểu kịch bản (framework) — full width; mô tả trong tooltip nút */}
+            <PickerCard title="Kiểu kịch bản (framework)" icon={Lightbulb}>
+              <div className="grid gap-3 sm:grid-cols-2">
                 {(['instant', 'lead'] as const).map((g) => {
                   const groupLabel = g === 'instant' ? '🚀 Vào thẳng sản phẩm' : '📖 Dẫn dắt sản phẩm'
                   return (
-                    <div key={g} className={g === 'lead' ? 'mt-2' : ''}>
+                    <div key={g}>
                       <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-gray-500">{groupLabel}</p>
                       <div className="grid grid-cols-2 gap-1.5">
                         {AD_STRUCTURES_BY_GROUP[g].map((s) => {
@@ -950,26 +972,8 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                     </div>
                   )
                 })}
-              </PickerCard>
-
-              <PickerCard title="Thời lượng" icon={Clock}>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {([40, 50, 60, 70, 80] as ScriptTargetDurationSec[]).map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => setTargetDurationSec(d)}
-                      className={`rounded-lg border px-2 py-1.5 text-center text-[12px] font-bold transition-all ${
-                        brain.targetDurationSec === d
-                          ? 'ui-accent-soft'
-                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      {d}s
-                    </button>
-                  ))}
-                </div>
-              </PickerCard>
-            </div>
+              </div>
+            </PickerCard>
 
             <PickerCard title="Dạng kịch bản (shape)" icon={Lightbulb}>
               <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
@@ -1013,7 +1017,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                 </button>
               </div>
               {brain.hookVariants.length > 0 && (
-                <div className="flex flex-col gap-1.5">
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                   {brain.hookVariants.map((h, i) => {
                     const picked = brain.pickedHookIdx === i
                     const arche = h.archetype ? HOOK_ARCHETYPES[h.archetype] : null
