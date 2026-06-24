@@ -436,10 +436,19 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
     })),
 
   setReplyComment: (patch) =>
-    commit(set, get, (s) => ({
-      ...s,
-      replyComment: { ...(s.replyComment ?? { enabled: false, comment: '' }), ...patch },
-    })),
+    commit(set, get, (s) => {
+      // P6bi — the comment card is BURNED at assemble time. When the comment text or the toggle
+      // changes, the cached final video is stale (still shows the OLD card). Drop finalVideoRef so
+      // the UI stops showing the stale MP4 and the user re-assembles (0 credit) → the card renders
+      // fresh. Mirrors how setHybridPlan invalidates the final on a re-plan.
+      const changed = ('comment' in patch && patch.comment !== s.replyComment?.comment) ||
+                      ('enabled' in patch && patch.enabled !== s.replyComment?.enabled)
+      return {
+        ...s,
+        replyComment: { ...(s.replyComment ?? { enabled: false, comment: '' }), ...patch },
+        hybrid: changed && s.hybrid.finalVideoRef ? { ...s.hybrid, finalVideoRef: undefined } : s.hybrid,
+      }
+    }),
 
   setCreatorVideo: (clip) =>
     commit(set, get, (s) => ({ ...s, creatorVideo: clip, autoEdit: invalidatePlan(s.autoEdit) })),
