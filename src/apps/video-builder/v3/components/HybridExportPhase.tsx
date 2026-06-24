@@ -114,6 +114,8 @@ export default function HybridExportPhase() {
         onProgress: (r) => setHybridAssemble({ assembleRatio: r }),
         onStage: (label) => setHybridAssemble({ assembleStage: label }),
         bannerSlogan: bannerText,
+        // P5 reply-to-comment — burn the TikTok comment card over the opening when reply mode is on.
+        replyComment: state.replyComment?.enabled ? (state.replyComment.comment ?? '').trim() : undefined,
       })
       setHybridFinal(videoRef)
       // P6y — auto-save the FINAL into the standalone library (survives "Tạo lại từ đầu") so a

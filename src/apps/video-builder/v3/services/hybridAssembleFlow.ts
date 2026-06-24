@@ -9,6 +9,7 @@ import { assembleHybridVideo, type HybridSceneClip, type HybridCaptionPlacement 
 import { resetFFmpeg } from './ffmpegLoader'
 import { renderCaptionBlob, deriveCaptionHighlights, ensureCaptionFonts } from './captionRenderer'
 import { renderBannerBlob, deriveBannerSlogan } from './bannerRenderer'
+import { renderCommentCardBlob } from './commentCardRenderer'
 import { BANNER_PRESETS, DEFAULT_BANNER_PRESET } from './bannerPresets'
 import { buildCaptionChunks } from './captionChunker'
 import './socialProofRenderer'   // P5v — registers __testSocialProof + bundles the card renderer (wired in a later step)
@@ -89,7 +90,7 @@ export async function assembleFromHybridState(
   // The UI shows a real % bar + the stage label instead of a blind spinner.
   // P5x — `bannerSlogan` is the top-banner text computed by the caller (product name ·
   // benefit) so the export preview chip and the rendered banner are identical.
-  opts?: { onProgress?: (ratio: number) => void; onStage?: (label: string) => void; bannerSlogan?: string },
+  opts?: { onProgress?: (ratio: number) => void; onStage?: (label: string) => void; bannerSlogan?: string; replyComment?: string },
 ): Promise<string> {
   const sc = hybrid.scenes ?? []
   if (!hybrid.voiceRef) throw new Error('Chưa có giọng (Tạo giọng + mặt trước)')
@@ -109,9 +110,12 @@ export async function assembleFromHybridState(
   const captions = captionsOn
     ? await buildCaptionPlacements(hybrid.voiceAlignment, script, realDur, presetId, cardWindows, highlightTerms, hybrid.captionKaraoke !== false, opts?.onStage)
     : []
+  // P5 reply-to-comment — when answering a comment, the comment card IS the opening hook, so the
+  // persistent top slogan banner is suppressed (they'd clash at the top) and the card is rendered.
+  const replyMode = !!(opts?.replyComment && opts.replyComment.trim())
   // P5x — top hook banner: a short slogan from the script's KEY (anchor → hook fallback),
   // rendered as ONE PNG and held over every non-card segment. Default ON; 0 credit.
-  const bannerOn = hybrid.bannerOn !== false
+  const bannerOn = hybrid.bannerOn !== false && !replyMode
   let banner: { pngRef: string; fullWidth: boolean } | undefined
   if (bannerOn) {
     // Prefer the caller-computed slogan (product name · benefit); fall back to the
@@ -125,6 +129,15 @@ export async function assembleFromHybridState(
       } catch { /* a bad banner never breaks the assemble */ }
     }
   }
+  // P5 reply-to-comment — render the TikTok comment card (0 credit) shown near the top during the
+  // OPENING ~4.5s (the creator's spoken reply window), then it disappears.
+  let commentCard: { pngRef: string; durationSec: number } | undefined
+  if (replyMode) {
+    try {
+      const blob = await renderCommentCardBlob(opts!.replyComment!.trim())
+      commentCard = { pngRef: await saveAsset(blob, 'image/png'), durationSec: Math.min(realDur, 4.5) }
+    } catch { /* a bad card never breaks the assemble */ }
+  }
   // P6ar — assemble with ONE retry on a FRESH ffmpeg worker. A wasm worker can die
   // mid-export (OOM after a long session, or a corrupt/expired clip) → "ErrnoError:
   // FS error", and the dead singleton then fails EVERY later attempt until a page
@@ -135,7 +148,7 @@ export async function assembleFromHybridState(
     try {
       const r = await assembleHybridVideo({
         clips, voiceRef: hybrid.voiceRef, voiceDurationSec: realDur, resolution,
-        captions, banner,
+        captions, banner, commentCard,
         onProgress: opts?.onProgress,
         onStage: opts?.onStage,
       })

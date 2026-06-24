@@ -52,6 +52,9 @@ export interface HybridAssembleParams {
   /** P5x — one persistent top hook banner PNG, held over EVERY non-card segment.
    *  `fullWidth` = a ribbon flush to the top edge; false = a centred pill. */
   banner?: { pngRef: string; fullWidth: boolean }
+  /** P5 reply-to-comment — the TikTok comment card PNG, shown near the TOP only during the
+   *  OPENING window [0 .. durationSec] (the creator's spoken reply), then it disappears. */
+  commentCard?: { pngRef: string; durationSec: number }
   /** Output height; width is derived 9:16 vertical. Default 480p. */
   resolution?: '480p' | '720p' | '1080p'
   onStage?: (msg: string) => void
@@ -139,6 +142,10 @@ export async function assembleHybridVideo(
   const BANNER_MAX_W = Math.round((evenW * 0.92) / 2) * 2
   const BANNER_K = (evenH * 0.030) / 128
   const BANNER_TOP = Math.round((evenH * 0.035) / 2) * 2
+  // P5 reply-comment card — ~84% frame width, sat in the upper third (~12% from top), shown
+  // only during the OPENING window (the banner is suppressed in reply mode so they don't clash).
+  const COMMENT_W = Math.round((evenW * 0.84) / 2) * 2
+  const COMMENT_TOP = Math.round((evenH * 0.12) / 2) * 2
   const normFiles: string[] = []
   const failedIdx: number[] = []
 
@@ -243,8 +250,12 @@ export async function assembleHybridVideo(
     // P5x — the top banner rides EVERY non-card segment (cards already `continue`d
     // above). It has no time window — it's held the whole segment.
     const segBanner = params.banner ?? null
+    // P5 reply-comment card — overlaps this segment when its opening window [0..durationSec]
+    // reaches past the segment's start (the window always begins at t=0).
+    const segComment = (params.commentCard && params.commentCard.durationSec > c.scene.startSec)
+      ? params.commentCard : null
     try {
-    if (segCaptions.length === 0 && !segBanner) {
+    if (segCaptions.length === 0 && !segBanner && !segComment) {
       await ffmpeg.exec([
         '-i', inFile,
         '-vf', baseChain,
@@ -259,9 +270,11 @@ export async function assembleHybridVideo(
       // segment) first, then captions (bottom-centre, fixed-scale, OUTPUT-local enable window).
       type Overlay =
         | { mode: 'banner'; pngRef: string; fullWidth: boolean }
+        | { mode: 'comment'; pngRef: string; durationSec: number }
         | { mode: 'caption'; pngRef: string; atSec: number; durationSec: number }
       const overlays: Overlay[] = [
         ...(segBanner ? [{ mode: 'banner' as const, pngRef: segBanner.pngRef, fullWidth: segBanner.fullWidth }] : []),
+        ...(segComment ? [{ mode: 'comment' as const, pngRef: segComment.pngRef, durationSec: segComment.durationSec }] : []),
         ...segCaptions.map((s) => ({ mode: 'caption' as const, pngRef: s.pngRef, atSec: s.atSec, durationSec: s.durationSec })),
       ]
       const inputs: string[] = ['-i', inFile]
@@ -287,6 +300,19 @@ export async function assembleHybridVideo(
             : `scale='min(iw*${BANNER_K.toFixed(4)},${BANNER_MAX_W})':-2`
           parts.push(`[${inIdx}:v]format=rgba,${scaleExpr},setsar=1[ov${j}]`)
           parts.push(`[${last}][ov${j}]overlay=x=(W-w)/2:y=${by}[${next}]`)
+          last = next
+          continue
+        }
+        if (s.mode === 'comment') {
+          // P5 reply card — fixed ~84% width (scaled by WIDTH only → no distortion), centred in
+          // the upper third, shown ONLY for the opening window. The window starts at t=0, so the
+          // output-local enable is [0 .. remaining window inside THIS segment].
+          const endW = Math.min(dur, s.durationSec - c.scene.startSec)
+          parts.push(`[${inIdx}:v]format=rgba,scale=${COMMENT_W}:-2,setsar=1[ov${j}]`)
+          parts.push(
+            `[${last}][ov${j}]overlay=x=(W-w)/2:y=${COMMENT_TOP}:` +
+            `enable='between(t,0,${endW.toFixed(2)})'[${next}]`,
+          )
           last = next
           continue
         }
