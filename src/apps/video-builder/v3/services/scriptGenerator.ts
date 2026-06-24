@@ -751,7 +751,8 @@ function buildUserPrompt(args: {
 COMMENT: "${args.replyComment.trim()}"
 - The HOOK block (first spoken line) MUST be the creator REPLYING to this comment out loud — open by directly answering / reacting to the EXACT worry, doubt or question in it (talk straight to that commenter), then bridge immediately into the story.
 - Do NOT restate the comment word-for-word; respond to it naturally, as if you just read it and are answering. Keep it punchy + native, no greeting filler.
-- The reply IS the hook — do NOT write a separate generic hook. Everything after flows as the normal body below.\n`
+- The reply IS the hook — do NOT write a separate generic hook. Everything after flows as the normal body below.
+- CONTINUITY (critical): the NEXT block (pain) MUST CONTINUE the reply's exact thread — pick up the SAME pain / question the comment raised and the promise the reply just made. Do NOT pivot to a generic, unrelated opener ("Mình hay…" / "Dạo này…" / "Aku selalu…" / "Korang tau…") that ignores what was just answered. The whole body must keep delivering on the reply's promise through to the CTA.\n`
     : ''
   // Phase A — gift directive scoped to the CTA block ONLY. The name is already
   // localised; the benefit line is given. The 4 hero blocks must NOT mention it.
