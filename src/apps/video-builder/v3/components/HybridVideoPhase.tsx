@@ -225,6 +225,7 @@ export default function HybridVideoPhase(_props: Props) {
         product: applyLocalizedName(product, state.scriptBrain.outputLang), voiceDurationSec: voiceDur,
         shape: state.scriptBrain.shape,
         gift: state.gift,   // Phase A — closing cuts show the gift when enabled
+        replyMode: !!state.replyComment?.enabled,   // P6bf — reply mode → cảnh mở đầu ép lips (creator trả lời)
       })
       const timed = assignSceneTiming(res.scenes, h.voiceAlignment, script, voiceDur)
       // P4g — brain pass over the deterministic filler cuts (split/density) so a

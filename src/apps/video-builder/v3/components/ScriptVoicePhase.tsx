@@ -39,7 +39,8 @@ import { SHAPE_CONFIGS, SCRIPT_SHAPE_ORDER } from '../services/scriptShapes'
 import { recomputeBlockDurations, estimateReadDurationForVoice } from '../services/voiceTimingEstimator'
 import { generateScript, generateHooks, translateScriptToVietnamese, detectCertClaims } from '../services/scriptGenerator'
 import { giftBenefitForVideo } from '../services/giftBenefitForVideo'
-import { replyCommentForVideo } from '../services/replyCommentForVideo'
+import { replyCommentForVideo, glossReplyCommentToVietnamese } from '../services/replyCommentForVideo'
+import { renderCommentCardBlob } from '../services/commentCardRenderer'
 import {
   listVoices, listSharedVoices, addSharedVoice, cloneVoice, textToSpeech,
   type ElevenLabsVoice, type SharedVoice,
@@ -124,6 +125,11 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const [giftSuggesting, setGiftSuggesting] = useState(false)
   const [replySuggesting, setReplySuggesting] = useState(false)
   const [prevReplyComments, setPrevReplyComments] = useState<string[]>([])
+  // P5b — reply-comment editor extras: VN gloss (display-only) + a live preview of the comment CARD.
+  const [replyGloss, setReplyGloss] = useState('')
+  const [replyGlossing, setReplyGlossing] = useState(false)
+  const [replyCardUrl, setReplyCardUrl] = useState<string | null>(null)
+  const [replyCardBusy, setReplyCardBusy] = useState(false)
   // #6 — Vietnamese translation for DISPLAY only (target lang ≠ vi). Never written
   // into state.inputs.script — the real script stays in the target language.
   const [viTranslation, setViTranslation] = useState<string | null>(null)
@@ -314,6 +320,10 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
       if (c) {
         setReplyComment({ comment: c })
         setPrevReplyComments((p) => [...p, c].slice(-8))
+        setReplyCardUrl(null)   // P5b — stale preview no longer matches the new comment
+        // P5b — auto-gloss to VN so the user understands an MS/EN comment (display-only). Skip for VN.
+        if (brain.outputLang !== 'vi') glossReplyCommentToVietnamese(c, geminiKey).then(setReplyGloss).catch(() => {})
+        else setReplyGloss('')
         addToast('✓ Đã gợi ý comment', 'success')
       } else {
         addToast('AI chưa ra comment — thử lại', 'info')
@@ -323,6 +333,26 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     } finally {
       setReplySuggesting(false)
     }
+  }
+
+  // P5b — manual VN gloss of the current comment (for a user-typed one).
+  const handleGlossReplyComment = async () => {
+    const c = (state.replyComment?.comment ?? '').trim()
+    if (!c || !geminiKey) return
+    setReplyGlossing(true)
+    try { setReplyGloss(await glossReplyCommentToVietnamese(c, geminiKey)) }
+    finally { setReplyGlossing(false) }
+  }
+  // P5b — render the actual TikTok comment CARD (the overlay burned on the video) for preview.
+  const handlePreviewReplyCard = async () => {
+    const c = (state.replyComment?.comment ?? '').trim()
+    if (!c) { addToast('Nhập comment trước khi xem thẻ', 'info'); return }
+    setReplyCardBusy(true)
+    try {
+      const blob = await renderCommentCardBlob(c)
+      setReplyCardUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob) })
+    } catch (e) { addToast(`Tạo thẻ lỗi: ${e instanceof Error ? e.message : String(e)}`, 'error') }
+    finally { setReplyCardBusy(false) }
   }
 
   // ── #6 hook layer — generate 6 hooks (one per archetype) for the user to pick ─
@@ -1012,6 +1042,28 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                 rows={2}
                 className="w-full resize-none rounded-lg border border-sky-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-sky-400"
               />
+              {/* P5b — dịch VN để hiểu (display-only) + xem trước THẺ comment thật burn lên video */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {brain.outputLang !== 'vi' && (
+                  <button onClick={handleGlossReplyComment} disabled={replyGlossing || !(state.replyComment?.comment ?? '').trim()}
+                    className="flex items-center gap-1 text-[10px] font-semibold text-sky-700 hover:underline disabled:opacity-40">
+                    {replyGlossing ? <Loader2 className="h-3 w-3 animate-spin" /> : <span>🇻🇳</span>} Dịch để hiểu
+                  </button>
+                )}
+                <button onClick={handlePreviewReplyCard} disabled={replyCardBusy || !(state.replyComment?.comment ?? '').trim()}
+                  className="flex items-center gap-1 text-[10px] font-semibold text-sky-700 hover:underline disabled:opacity-40">
+                  {replyCardBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <span>👁</span>} Xem thẻ comment
+                </button>
+              </div>
+              {replyGloss && brain.outputLang !== 'vi' && (
+                <p className="text-[11px] italic leading-snug text-gray-500">🇻🇳 {replyGloss}</p>
+              )}
+              {replyCardUrl && (
+                <div className="rounded-lg border border-sky-200 bg-white p-2">
+                  <p className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-sky-600">Xem trước thẻ — hiện ~4.5s đầu video</p>
+                  <img src={replyCardUrl} alt="thẻ comment" className="w-full max-w-[260px] rounded" />
+                </div>
+              )}
               <p className="text-[10px] leading-relaxed text-sky-700">
                 Bật = video mở bằng <b>thẻ comment</b> + creator trả lời thẳng → <b>bỏ hook kịch bản</b> (comment là hook), body nối mượt vào câu trả lời. "AI gợi ý" đọc sản phẩm + insight khách, mỗi lần ra góc khác.
               </p>

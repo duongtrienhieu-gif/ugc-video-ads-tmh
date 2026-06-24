@@ -138,6 +138,10 @@ export interface BrollDirectorParams {
   /** Phase A — OPTIONAL bundled gift (already resolved: localised name + image
    *  ref). When enabled, the two closing cuts show the gift. undefined → no-op. */
   gift?: import('../types').VideoGift
+  /** P6bf — reply-to-comment mode. When TRUE, the FIRST cut is forced to lips (creator talking to
+   *  camera) so the on-screen comment card overlays a real talking head — the authentic "I'm replying
+   *  to you" look. ONLY set when the user picked reply mode; a normal video leaves it undefined → no-op. */
+  replyMode?: boolean
 }
 
 // ── Lips count ladder (user spec — NOT a niche hardcode) ────────────────────
@@ -1495,6 +1499,12 @@ OUTPUT strict JSON only (no markdown fences):
   capEndorsement(scenes)
   // P6av — mark ≤1 product-mention lips to render from KF-B (creator holding the product).
   assignLipsProductKeyframe(scenes, params.product)
+
+  // P6bf — reply-comment: force the OPENING cut to lips (creator talking) so the comment card overlays
+  // a real talking head. Only when reply mode is picked; idempotent if scene[0] is already lips.
+  if (params.replyMode && scenes[0] && scenes[0].role !== 'lips') {
+    scenes[0] = { ...scenes[0], role: 'lips', shotIntent: 'lips', lipsHoldsProduct: false }
+  }
 
   const coveredSec = scenes.reduce((s, x) => s + x.durationSec, 0)
   const lipsScenes = scenes.filter((s) => s.role === 'lips')

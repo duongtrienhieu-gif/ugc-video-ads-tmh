@@ -85,6 +85,31 @@ Write ONE scroll-stopping ${langName} viewer comment now.`
   }
 }
 
+// ── VN gloss of the on-screen comment (P5b) ──────────────────────────────────
+// A short, spirit-translation of the comment into Vietnamese so a VN user understands an MS/EN
+// comment in the editor. DISPLAY-ONLY — never burned on the video (the card shows the original).
+// Cached by source text; '' on any failure.
+const glossCache = new Map<string, string>()
+export async function glossReplyCommentToVietnamese(comment: string, apiKey: string): Promise<string> {
+  const src = (comment ?? '').trim()
+  if (!src || !apiKey) return ''
+  const hit = glossCache.get(src)
+  if (hit !== undefined) return hit
+  try {
+    const out = await directGeminiText({
+      apiKey,
+      systemInstruction:
+        'Dịch câu comment mạng xã hội sau sang tiếng Việt ĐỜI THƯỜNG, ĐÚNG TINH THẦN (giữ giọng + cảm xúc, ' +
+        'KHÔNG dịch word-by-word). CHỈ xuất bản dịch tiếng Việt, không thêm gì.',
+      prompt: src,
+      maxOutputTokens: 120, temperature: 0.3, thinkingBudget: 0,
+    })
+    const cleaned = (out ?? '').split('\n').map((l) => l.trim()).find((l) => l.length > 0)?.slice(0, 180) ?? ''
+    glossCache.set(src, cleaned)
+    return cleaned
+  } catch { return '' }
+}
+
 // ── Dev helper — test from the console (Phase 1 sanity), FREE of UI ──────────
 //   __testReplyComment("Vitamin B Complex", "Pain points: mệt mỏi, mất tập trung…", "ms")
 if (typeof window !== 'undefined') {
