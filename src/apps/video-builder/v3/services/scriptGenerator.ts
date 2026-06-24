@@ -793,12 +793,19 @@ PER-BLOCK rough split (sum ~${args.targetDurationSec}s, just a guide):
 - BENEFIT:   ~${args.budgets.benefit}s
 - CTA:       ~${args.budgets.cta}s
 
-MUST INCLUDE (pull from the brief — this is what makes it persuasive, not basic):
+ONE VIDEO = ONE ANGLE (critical for a multi-benefit product): the hook/opening commits to
+ONE promise (e.g. blood pressure). The WHOLE body must serve THAT one angle — pick ONLY the
+pain, ingredient, mechanism and benefits that support it (blood-pressure hook → only the
+"K/Mg → relax vessels → BP" thread). DROP every other benefit the product also has (digestion,
+skin, energy, sleep…) even if the brief lists them — they belong to a DIFFERENT video, not
+this one. Scattering across unrelated benefits = the script feels random and sells nothing.
+
+MUST INCLUDE (pull from the brief — but ONLY the parts that serve the ONE angle above):
 - the SPECIFIC pain + who it's for, so the right viewer feels seen (early);
-- the NAMED key ingredient(s) / active(s) the brief lists (not "công nghệ gì đó");
-- a ONE-LINE simple mechanism — how it actually works;
+- the NAMED key ingredient(s) / active(s) the brief lists THAT DRIVE THIS ANGLE (not "công nghệ gì đó");
+- a ONE-LINE simple mechanism — how it works FOR THIS ANGLE;
 - a concrete USAGE moment — the act of using it (filmable);
-- a believable result (NO "3 giây" / miracle / filler-botox claims).
+- a believable result ON THIS ANGLE (NO "3 giây" / miracle / filler-botox claims).
 If the brief has no ingredient/mechanism info, do not invent — lean on the pain,
 the usage moment and the honest result instead.
 
@@ -1033,6 +1040,10 @@ HARD CONTRACT (must hold across all 4 blocks):
   CLOSE the gap the hook opened — a "N lý do / N reasons" hook delivers all N; a
   question hook is fully answered; a teased result / transformation is actually shown.
   Never open the curiosity gap then drift to a generic pitch that ignores it.
+- ANGLE-LOCK: the hook fixes ONE angle. Use ONLY the ingredients / mechanism / benefits
+  that serve THAT angle, and DROP every unrelated benefit the product also has — even if
+  the brief lists them. (Hook về huyết áp → chỉ mạch K/Mg→mạch máu→huyết áp; KHÔNG lôi
+  tiêu hóa / da / năng lượng vào.) One video sells ONE message.
 - Reproduce the GIVEN hook VERBATIM in the "hook" field — do not edit a word.`
 
   // P5e — "Tạo lại kịch bản": when a previous version is supplied, force a genuinely

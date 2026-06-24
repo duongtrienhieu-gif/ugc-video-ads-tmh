@@ -110,7 +110,10 @@ export const SHAPE_CONFIGS: Record<ScriptShape, ShapeConfig> = {
       discovery:
         'Discovery block = 2-3 mốc thời gian trong hành trình. "Ngày 3 thấy…", "Đến ngày 5…", "Tuần sau ' +
         'cảm giác…". Mỗi mốc 1 câu, nêu 1 thay đổi sensory/visible CỤ THỂ theo hướng CẢI THIỆN. KHÔNG mơ ' +
-        'hồ "thấy khá hơn", và KHÔNG gán tác dụng xấu mới cho sản phẩm đích (journey = đường đi LÊN).',
+        'hồ "thấy khá hơn", và KHÔNG gán tác dụng xấu mới cho sản phẩm đích (journey = đường đi LÊN). ' +
+        '⛔ MỌI mốc ngày phải bám ĐÚNG 1 vấn đề/kết quả của GÓC HOOK (vd hook huyết áp → mọi ngày đều xoay ' +
+        'quanh huyết áp/mạch máu cải thiện dần). CẤM mỗi ngày nhảy 1 triệu chứng KHÁC không liên quan ' +
+        '(ngày này tiêu hóa, ngày kia da, ngày nọ đau đầu) — đó là tản mát, không phải 1 hành trình.',
       benefit:
         'Benefit block = REVEAL ngày cuối + state mới. "Đến ngày [N], mình…". 1-2 câu kết quả thật + ' +
         'empathy echo (so với ngày 1 trong pain block).',
