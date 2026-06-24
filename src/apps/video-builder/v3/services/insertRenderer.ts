@@ -702,6 +702,13 @@ export async function renderInsert(
   const seedanceHands = (params.presetId === 'PRODUCT_IN_ACTION' && giftRefIndex > 0)
     ? 'Both hands hold the items — one the product, one the free gift.'
     : preset.handBehavior
+  // (a) — GIFT endorsement anti-morph: the motionGuard above pins "the product" (singular), so
+  // Seedance felt free to MORPH the SECOND held object (the gift package) mid-clip — the audited
+  // "đúng quà 2s đầu rồi bùm đổi sang package khác ở giây 3-5". When a gift is in frame, pin BOTH
+  // objects to their first-frame identity for the whole clip (only the creator's smile/nod moves).
+  const motionGuardFull = giftRefIndex > 0
+    ? `${motionGuard} CRITICAL: BOTH the product AND the free gift package each keep the EXACT same label, shape, colour and text as the FIRST FRAME for the ENTIRE clip — NEITHER object morphs, redesigns, re-letters, swaps, or turns into a different package at any second; the only motion is the creator's small smile and gentle nod.`
+    : motionGuard
 
   // ── STAGE 1: KEYFRAME ─────────────────────────────────────────────────
   params.onStageUpdate({ stage: 'keyframe' })
@@ -803,8 +810,8 @@ export async function renderInsert(
     ? ' IMPORTANT: the person does NOT speak, talk, or mouth any words — no dialogue, no lip-syncing of speech, no conversation. The mouth may still open naturally as the physical action requires (e.g. brushing teeth, applying the product, an open relaxed smile); it simply never forms words. The creator voiceover owns all speech.'
     : ''
   const i2vPrompt = (isConcept
-    ? `${motionScene} ${cameraMotion} No product packaging in frame. ${motionGuard}`
-    : `${motionScene} ${cameraMotion} ${seedanceHands} ${motionGuard}`) + noSpeech
+    ? `${motionScene} ${cameraMotion} No product packaging in frame. ${motionGuardFull}`
+    : `${motionScene} ${cameraMotion} ${seedanceHands} ${motionGuardFull}`) + noSpeech
   // Seedance i2v: keyframe = FIRST FRAME (face+product lock carries into the clip). One attempt.
   const runI2v = async (prompt: string) => {
     const sub = await generateVideoJob({
