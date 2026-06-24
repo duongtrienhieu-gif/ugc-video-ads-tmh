@@ -227,7 +227,7 @@ export function deriveConceptPrompt(args: {
   role: string; kind?: string; cameraFraming?: string; product?: Product | null
 }): string {
   if (args.role === 'mechanism3d') {
-    return 'a clean cross-section / macro showing how the product works on the inside, soft studio light, no people, no packaging'
+    return 'a clean 3D cross-section of the relevant organ / body site showing how the active works INSIDE the body, soft studio light, no people, no packaging, NO product, NO fruit / food'
   }
   if (args.kind === 'concept' && args.cameraFraming === 'creator') {
     return 'a real person with an authentic, natural facial expression and body language reacting in the moment, candid UGC, soft natural light, no product packaging'
@@ -284,7 +284,7 @@ By role:
   NOT sneak in relief, a smile, the product, or any "and then it got better" payoff. The pain scene
   sells the problem; resolution belongs to a LATER beat.
 - broll + concept (no creator) → a real-world moment illustrating the line (NO product packaging).
-- mechanism3d → the internal mechanism as a clean 3D cross-section / macro (NO people, NO packaging).
+- mechanism3d → the internal mechanism as a clean 3D cross-section of the organ / body site / active (NO people, NO packaging, NO product, NO fruit / food — never show the product itself; that is for the real-ingredient shot only).
 UNIVERSAL — infer the action + setting from the product context; NEVER assume a niche.
 ${CREATOR_IDENTITY_RULE}
 ${PRODUCT_IDENTITY_RULE}
@@ -1237,11 +1237,11 @@ RULES:
     • A SYNTHETIC / compound active with NO real plant form (glucosamine, chondroitin, MSM,
       collagen, peptide, hyaluronic acid, niacinamide, a lettered vitamin…) is NOT a powder macro
       (a spoon of white powder reads like flour — meaningless). Make it a 3D beat instead: set
-      role="mechanism3d", and write the conceptPrompt as the PRODUCT as hero in the centre with the
-      active's glowing molecules / particles flowing & orbiting around it (premium science look) —
-      NOT a flat powder, NOT inside a body. Only a NATURAL ingredient with a real visible form
-      (ginger, turmeric root, leaves, flowers, seeds, fruit, honey…) uses the real-ingredient MACRO
-      hero above.
+      role="mechanism3d", and write the conceptPrompt as the active's glowing molecules / particles
+      flowing & ACTING INSIDE the relevant body site / organ (premium science look) — NO product, NO
+      packaging, NOT a flat powder, NEVER the product as hero. Only a NATURAL ingredient with a real
+      visible form (ginger, turmeric root, leaves, flowers, seeds, fruit, honey…) uses the
+      real-ingredient MACRO hero above (that is the ONLY scene type that shows a fruit / plant / food).
     • Only an EDIBLE product (food / drink / snack) gets the "fresh, appetising, on a board" look.
       A NON-edible product (gel / cream / serum / device / supplement) shows the botanical SOURCE
       or the active in powder / oil / capsule form beside the product — NEVER an appetising food plate.

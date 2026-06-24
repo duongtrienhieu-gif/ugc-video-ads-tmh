@@ -142,12 +142,11 @@ export async function renderOneHybridScene(
   // started with "3D " (→ skipped wrap) yet wasn't "3D ANIMATION" (→ is3D=false) → 3D scene rendered
   // a PERSON. Now both checks key off the SAME string → no gap.
   if (scene.role === 'mechanism3d' && !/^\s*3D (MECHANISM )?ANIMATION/i.test(conceptPrompt)) {
-    // P6ae — 3D covers TWO modes: (1) a cross-section of the internal mechanism (how the active
-    // works inside the body), OR (2) an INGREDIENT-3D — the PRODUCT as hero in the centre with the
-    // active's molecules/particles orbiting it (for synthetic/abstract actives that have no real
-    // plant form). The conceptPrompt (written by the director per ingredient type) leads; we no
-    // longer force "INSIDE the subject / no packaging" so the molecules-around-product shot works.
-    conceptPrompt = `3D ANIMATION (no people, no hands, no on-screen text): clean photorealistic studio 3D render — ${conceptPrompt}. Keep the EXACT body site / subject named above — do NOT substitute a different or generic organ. EITHER a cross-section / macro of that internal mechanism, OR the PRODUCT as hero in the centre with the active's glowing molecules / particles flowing and orbiting around it. Soft clinical light. P6as — STYLISED, NON-graphic wellness visualisation: no gore, no blood, no distressing or explicit medical realism (keeps the image-model content filter from blocking it).`
+    // P6bg — 3D = the INTERNAL MECHANISM ONLY (user rule): grounded in the voice line → which organ /
+    // system / active compound, shown acting INSIDE the body. NEVER the product / packaging / a fruit
+    // / food / snack in the 3D (that belongs in a separate real-ingredient shot). Backstop here is the
+    // last word before render, so even if the director slips a product into the concept, it's stripped.
+    conceptPrompt = `3D ANIMATION (no people, no hands, no on-screen text, NO product, NO packaging, NO fruit / food / snack): clean photorealistic studio 3D render — ${conceptPrompt}. Show ONLY the internal mechanism — a cross-section / macro of the EXACT organ / body site / active compound named above, with the active's glowing molecules / particles flowing and acting THERE. Keep the EXACT body site / subject named — do NOT substitute a different or generic organ, and NEVER place the product or any fruit / food / snack in the scene. Soft clinical light. P6as — STYLISED, NON-graphic wellness visualisation: no gore, no blood, no distressing or explicit medical realism (keeps the image-model content filter from blocking it).`
   }
 
   const r = await renderInsert({
