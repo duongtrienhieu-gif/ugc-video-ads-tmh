@@ -20,7 +20,7 @@ import { useMemo, useEffect, useState, useRef } from 'react'
 import {
   Loader2, Sparkles, RefreshCw, ChevronRight, AlertCircle,
   Clock, Mic2, Lightbulb, Globe, Package, UserRound,
-  Library, UserCircle2, Search, Check, Play, Plus, X, Upload, Gift,
+  Library, UserCircle2, Search, Check, Play, Plus, X, Upload, Gift, MessageSquare,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
@@ -39,6 +39,7 @@ import { SHAPE_CONFIGS, SCRIPT_SHAPE_ORDER } from '../services/scriptShapes'
 import { recomputeBlockDurations, estimateReadDurationForVoice } from '../services/voiceTimingEstimator'
 import { generateScript, generateHooks, translateScriptToVietnamese, detectCertClaims } from '../services/scriptGenerator'
 import { giftBenefitForVideo } from '../services/giftBenefitForVideo'
+import { replyCommentForVideo } from '../services/replyCommentForVideo'
 import {
   listVoices, listSharedVoices, addSharedVoice, cloneVoice, textToSpeech,
   type ElevenLabsVoice, type SharedVoice,
@@ -86,6 +87,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const setAvatar  = useAdsVideoStore((s) => s.setAvatar)
   const setProduct = useAdsVideoStore((s) => s.setProduct)
   const setGift    = useAdsVideoStore((s) => s.setGift)
+  const setReplyComment = useAdsVideoStore((s) => s.setReplyComment)
   const setAdStructure = useAdsVideoStore((s) => s.setAdStructure)
   const setAdShape = useAdsVideoStore((s) => s.setAdShape)
   const setTargetDurationSec = useAdsVideoStore((s) => s.setTargetDurationSec)
@@ -120,6 +122,8 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   // Phase A — gift input transient flags.
   const [giftUploading, setGiftUploading] = useState(false)
   const [giftSuggesting, setGiftSuggesting] = useState(false)
+  const [replySuggesting, setReplySuggesting] = useState(false)
+  const [prevReplyComments, setPrevReplyComments] = useState<string[]>([])
   // #6 — Vietnamese translation for DISPLAY only (target lang ≠ vi). Never written
   // into state.inputs.script — the real script stays in the target language.
   const [viTranslation, setViTranslation] = useState<string | null>(null)
@@ -289,6 +293,35 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
       addToast(`Gợi ý lợi ích lỗi: ${err instanceof Error ? err.message : String(err)}`, 'error')
     } finally {
       setGiftSuggesting(false)
+    }
+  }
+
+  // Reply-comment — "✨ AI gợi ý" → reads the product brief, writes a shock/curiosity
+  // on-screen comment (temp 0.9; excludes prior ones so each re-roll differs).
+  const handleSuggestReplyComment = async () => {
+    if (!geminiKey) { addToast('Chưa có Gemini API key trong Settings', 'error'); return }
+    if (!state.inputs.product) { addToast('Chọn sản phẩm trước khi gợi ý', 'error'); return }
+    setReplySuggesting(true)
+    try {
+      const brief = buildProductBrief()
+      const c = await replyCommentForVideo({
+        apiKey: geminiKey,
+        productName: brief.productName,
+        productPitch: brief.productPitch,
+        lang: brain.outputLang,
+        previous: prevReplyComments,
+      })
+      if (c) {
+        setReplyComment({ comment: c })
+        setPrevReplyComments((p) => [...p, c].slice(-8))
+        addToast('✓ Đã gợi ý comment', 'success')
+      } else {
+        addToast('AI chưa ra comment — thử lại', 'info')
+      }
+    } catch (err) {
+      addToast(`Gợi ý comment lỗi: ${err instanceof Error ? err.message : String(err)}`, 'error')
+    } finally {
+      setReplySuggesting(false)
     }
   }
 
@@ -691,6 +724,47 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
 
               <p className="text-[10px] leading-relaxed text-amber-700">
                 Chỉ nhập <b>TÊN quà</b> — đừng ghi giá / giá trị (video không hiển thị tiền). Quà sẽ vào câu CTA + 2 cảnh đóng (áp chót khoe sản phẩm + quà, cảnh cuối creator cầm cả hai).
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* ── Trả lời comment (TikTok "Reply to comment") — comment LÀ hook ──── */}
+        <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50/40 p-3">
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={!!state.replyComment?.enabled}
+              onChange={(e) => setReplyComment({ enabled: e.target.checked })}
+              className="h-4 w-4 accent-sky-600"
+            />
+            <MessageSquare className="h-4 w-4 text-sky-600" />
+            <span className="text-[13px] font-bold text-sky-800">Trả lời comment</span>
+            <span className="text-[10px] font-medium text-sky-600">(mở kiểu "Reply to comment" — comment chính là hook)</span>
+          </label>
+
+          {state.replyComment?.enabled && (
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold text-sky-700">Comment trên màn (creator sẽ trả lời)</span>
+                <button
+                  onClick={handleSuggestReplyComment}
+                  disabled={replySuggesting || !state.inputs.product}
+                  className="flex items-center gap-1 rounded-md bg-sky-600 px-2 py-1 text-[11px] font-bold text-white transition-colors hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {replySuggesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                  AI gợi ý
+                </button>
+              </div>
+              <textarea
+                value={state.replyComment?.comment ?? ''}
+                onChange={(e) => setReplyComment({ comment: e.target.value })}
+                placeholder='Comment người xem — gõ hoặc bấm "AI gợi ý". Đây là cái creator trả lời: 1 nỗi đau / câu hỏi gây tò mò, KHÔNG nêu tên sản phẩm.'
+                rows={2}
+                className="w-full resize-none rounded-lg border border-sky-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-sky-400"
+              />
+              <p className="text-[10px] leading-relaxed text-sky-700">
+                Bật = video mở bằng <b>thẻ comment</b> + creator trả lời thẳng → <b>bỏ hook kịch bản</b> (comment là hook), body nối mượt vào câu trả lời. "AI gợi ý" đọc sản phẩm + insight khách, mỗi lần ra góc khác.
               </p>
             </div>
           )}

@@ -688,6 +688,21 @@ export function createEmptyVideoGift(): VideoGift {
   return { enabled: false, name: '' }
 }
 
+// Reply-comment mode: the video opens as a TikTok "Reply to comment" — an on-screen
+// comment card the creator answers. When enabled, the scripted hook is SKIPPED (the
+// comment IS the hook) and the body opens with a short reply-bridge. The comment is
+// AI-suggested (replyCommentForVideo, temp 0.9) or user-typed.
+export interface VideoReplyComment {
+  /** Master on/off. false / undefined → normal pipeline (hook picker shown). */
+  enabled: boolean
+  /** The on-screen comment the creator replies to (AI-suggested or typed). */
+  comment: string
+}
+
+export function createEmptyVideoReplyComment(): VideoReplyComment {
+  return { enabled: false, comment: '' }
+}
+
 // ── Top-level pipeline state ────────────────────────────────────────────────
 
 export interface V3PipelineState {
@@ -716,6 +731,9 @@ export interface V3PipelineState {
 
   /** Phase A — OPTIONAL bundled gift (CTA-only). undefined / disabled → no-op. */
   gift?: VideoGift
+
+  /** Reply-comment mode (TikTok "Reply to comment"). undefined / disabled → no-op. */
+  replyComment?: VideoReplyComment
 
   /** Z32 — user's creator-video picks BEFORE rendering. Survives across
    *  edits even when creatorVideo (the render output) is null. */
@@ -838,6 +856,7 @@ export function createEmptyV3State(): V3PipelineState {
     },
     scriptBrain: createEmptyScriptBrain(),
     gift: createEmptyVideoGift(),
+    replyComment: createEmptyVideoReplyComment(),
     creatorVideoConfig: createDefaultCreatorVideoConfig(),
     creatorVideo: null,
     voiceFirst: null,
@@ -1530,6 +1549,8 @@ export interface SavedProject {
     scriptBrain: ScriptBrain
     /** Phase A — bundled gift config. Optional so legacy projects still load. */
     gift?: VideoGift
+    /** Reply-comment mode config. Optional so legacy projects still load. */
+    replyComment?: VideoReplyComment
     creatorVideoConfig: CreatorVideoConfig
     creatorVideo: CreatorVideoClip | null
     inserts: ActionInsertClip[]

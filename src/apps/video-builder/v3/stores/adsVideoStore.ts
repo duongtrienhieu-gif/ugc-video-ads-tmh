@@ -26,6 +26,7 @@ import {
   type GeneratedScript, type HookVariant, type VoiceCategoryId,
   type VoiceRecord,
   type VideoGift,
+  type VideoReplyComment,
   // Z32 — Creator Video Engine
   type CreatorPresetId, type CreatorVideoConfig,
   // Z33 — Action Inserts
@@ -66,6 +67,8 @@ interface AdsVideoStoreState {
   setVoiceId: (voiceId: string | null) => void
   /** Phase A — patch the optional bundled-gift config (CTA-only feature). */
   setGift:    (patch: Partial<VideoGift>) => void
+  /** Reply-comment mode — patch the on/off + comment text. */
+  setReplyComment: (patch: Partial<VideoReplyComment>) => void
 
   // ── Creator video ───────────────────────────────────────────────────────
 
@@ -430,6 +433,12 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
     commit(set, get, (s) => ({
       ...s,
       gift: { ...(s.gift ?? { enabled: false, name: '' }), ...patch },
+    })),
+
+  setReplyComment: (patch) =>
+    commit(set, get, (s) => ({
+      ...s,
+      replyComment: { ...(s.replyComment ?? { enabled: false, comment: '' }), ...patch },
     })),
 
   setCreatorVideo: (clip) =>
