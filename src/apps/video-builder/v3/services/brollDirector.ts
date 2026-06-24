@@ -1738,6 +1738,11 @@ const MAX_LIPS_SEC = 5
 const MAX_BROLL_SEC = 6.0   // P5u — hard cap: no cut > ~6s (capSplitScenes splits longer ones)
 // 2s minimum so a leftover cut never flashes < 2s and disrupts the eye.
 const MIN_CUT_SEC = 2.0
+// P6bc — hard cap for the FINAL endorsement cut. assignSceneTiming runs the last scene to `dur`
+// (the full voice), so when the endorsement quote anchors early but the voice tail runs long the
+// closing cut balloons to a 20-25s frozen monster (the audited "cảnh cuối 45-70s"). The endorsement
+// finale may breathe a touch longer than a regular broll, but never hold for the whole tail.
+const MAX_CTA_SEC = 8.0
 
 // FIX1 — the two CLOSING CTA cuts (penult offer / product-hero, final endorsement) are LOCKED by
 // the director and must stay ATOMIC: never split / duplicated by the cap or density passes. A split
@@ -1790,9 +1795,29 @@ function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
     // would render the SAME quote as TWO identical cards = double credit + ugly repeat).
     // Hold the single card for its whole span even if that exceeds MAX_BROLL_SEC.
     if (s.role === 'social_proof') { out.push(s); continue }
-    // FIX1 — never split the locked closing CTA cuts (offer / endorsement); hold them whole
-    // even past MAX_BROLL_SEC so the gift/offer concept is NOT duplicated onto two cuts.
-    if (isCtaLockCut(s)) { out.push(s); continue }
+    // FIX1 — the OFFER / gift-hero cut stays WHOLE & atomic: splitting it would duplicate the
+    // gift/offer concept onto two cuts (the "2 cảnh offer trùng" bug). Hold it past MAX_BROLL_SEC.
+    // P6bc — but a runaway ENDORSEMENT (quote anchored early, voice tail ran long → assignSceneTiming
+    // gave it everything up to `dur` → a 20-25s monster) must NOT hold for 25s. Keep the endorsement
+    // ATOMIC as the FINAL beat (last ≤ MAX_CTA_SEC, gift preserved via ...s) and turn the EARLIER
+    // overflow into distinct closing creator beats — intent cleared so they are NOT duplicate
+    // endorsements (dedupe/grounding give each its own shot). Offer/gift cuts never enter this branch.
+    if (isCtaLockCut(s)) {
+      if (s.shotIntent === 'endorsement' && L > MAX_CTA_SEC + 0.4) {
+        const endoStart = round2(s.endSec - MAX_CTA_SEC)
+        const overflowParts = Math.max(1, Math.ceil((endoStart - s.startSec) / MAX_BROLL_SEC))
+        const quoteParts = splitQuoteByParts(s.quote, overflowParts + 1)
+        const ostep = (endoStart - s.startSec) / overflowParts
+        for (let k = 0; k < overflowParts; k++) {
+          const a = round2(s.startSec + k * ostep)
+          const b = round2(k === overflowParts - 1 ? endoStart : s.startSec + (k + 1) * ostep)
+          out.push({ role: 'broll', kind: 'concept', cameraFraming: 'creator', quote: quoteParts[k], conceptPrompt: '', durationSec: round2(b - a), startSec: a, endSec: b })
+        }
+        out.push({ ...s, startSec: endoStart, quote: quoteParts[overflowParts], durationSec: MAX_CTA_SEC })
+        continue
+      }
+      out.push(s); continue
+    }
     if (s.role === 'lips') {
       if (L <= MAX_LIPS_SEC + 0.4) { out.push(s); continue }
       // Hard-cap the lips ABSOLUTELY: cut it at MAX_LIPS_SEC, but pull the cut a
