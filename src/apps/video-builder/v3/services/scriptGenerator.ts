@@ -84,6 +84,11 @@ export interface GenerateScriptParams {
    *  When present, the AI weaves "tặng kèm {name} — {benefitLine}" into the CTA
    *  block ONLY; the 4 hero blocks are untouched. No price ever (guard strips it). */
   gift?: { name: string; benefitLine: string }
+  /** Reply-to-comment mode — the on-screen TikTok comment this video answers. When set,
+   *  there is NO picked hook: the comment IS the hook (rendered as a card), and the FIRST
+   *  spoken line (hook block) is written as the creator REPLYING to this comment, then
+   *  bridging into the body. The comment itself is never spoken. */
+  replyComment?: string
 }
 
 export interface GenerateScriptResult {
@@ -173,6 +178,7 @@ export async function generateScript(
       angleLabel: angle.labelVi,
       lang,
       gift: params.gift,
+      replyComment: params.replyComment,
     })
 
     // Z31-fix: schema-constrained decoding + auto-retry on parse failure.
@@ -733,9 +739,19 @@ function buildUserPrompt(args: {
   angleLabel: string
   lang: string
   gift?: { name: string; benefitLine: string }
+  replyComment?: string
 }): string {
   const creatorLine = args.creatorDescription
     ? `\nCREATOR PROFILE (write in this voice):\n${args.creatorDescription}\n`
+    : ''
+  // P4 reply-to-comment — the comment IS the hook (shown on screen, NOT spoken). Reshape ONLY the
+  // HOOK block into the creator's spoken REPLY to it; the other 4 blocks are untouched.
+  const replyLine = args.replyComment && args.replyComment.trim()
+    ? `\nREPLY-TO-COMMENT MODE — this video answers a TikTok comment shown on screen (the comment is the HOOK; it is NOT spoken):
+COMMENT: "${args.replyComment.trim()}"
+- The HOOK block (first spoken line) MUST be the creator REPLYING to this comment out loud — open by directly answering / reacting to the EXACT worry, doubt or question in it (talk straight to that commenter), then bridge immediately into the story.
+- Do NOT restate the comment word-for-word; respond to it naturally, as if you just read it and are answering. Keep it punchy + native, no greeting filler.
+- The reply IS the hook — do NOT write a separate generic hook. Everything after flows as the normal body below.\n`
     : ''
   // Phase A — gift directive scoped to the CTA block ONLY. The name is already
   // localised; the benefit line is given. The 4 hero blocks must NOT mention it.
@@ -757,7 +773,7 @@ ${args.productPitch}
 ${creatorLine}
 SELECTED STRUCTURE: ${args.structureLabel}
 SELECTED ANGLE: ${args.angleLabel}
-
+${replyLine}
 LENGTH — aim for about ${args.targetDurationSec}s spoken: tight, punchy, to the
 point. Do NOT ramble, repeat, or over-explain — a concise ad holds attention far
 better than a long one. The length is auto-checked and trimmed afterward, so err

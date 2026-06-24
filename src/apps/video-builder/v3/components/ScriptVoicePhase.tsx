@@ -377,10 +377,15 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     if (ep !== state.inputs.product) setProduct(ep)
 
     const isQuick = genTab === 'quick'
-    const chosenHook = isQuick && brain.pickedHookIdx >= 0
+    // P4 reply-to-comment — when ON, the comment IS the hook: skip the hook-pick requirement and
+    // feed the comment to generateScript (the body's first spoken line replies to it).
+    const replyOn = isQuick && !!state.replyComment?.enabled
+    const replyText = (state.replyComment?.comment ?? '').trim()
+    if (isQuick && replyOn && !replyText) { addToast('Nhập comment để trả lời trước', 'error'); return }
+    const chosenHook = (isQuick && !replyOn && brain.pickedHookIdx >= 0)
       ? brain.hookVariants[brain.pickedHookIdx]?.text
       : undefined
-    if (isQuick && !chosenHook) { addToast('Tạo hook và chọn 1 cái trước', 'error'); return }
+    if (isQuick && !replyOn && !chosenHook) { addToast('Tạo hook và chọn 1 cái trước', 'error'); return }
 
     setIsGeneratingScript(true)
     setScriptBrainError(null)
@@ -401,6 +406,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         ownScriptText: state.inputs.script,
         chosenHook,
         gift,
+        replyComment: replyOn ? replyText : undefined,
       })
 
       // Quick mode: DON'T jump to the next step. Drop the generated script into the
@@ -636,9 +642,13 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
 
   const inputsOk = !!state.inputs.product && !!state.inputs.avatar
   const canGenerate = inputsOk && !!geminiKey && !brain.isGeneratingScript
-  // Quick tab needs a picked hook; own tab needs pasted text.
+  // P4 reply-to-comment — when ON the comment IS the hook (no hook pick); the quick-tab gate then
+  // needs a non-empty comment instead of a picked hook.
+  const replyEnabled = !!state.replyComment?.enabled
+  const replyCommentText = (state.replyComment?.comment ?? '').trim()
+  // Quick tab needs a picked hook (or a comment in reply mode); own tab needs pasted text.
   const canGenerateScript = canGenerate && (
-    genTab === 'own' ? hasScriptText : brain.pickedHookIdx >= 0
+    genTab === 'own' ? hasScriptText : (replyEnabled ? !!replyCommentText : brain.pickedHookIdx >= 0)
   )
 
   // Voice picker — extracted to a variable so it can render at the TOP of the
@@ -1239,6 +1249,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
               </div>
             </PickerCard>
 
+            {!replyEnabled && (
             <PickerCard title="Hook · 3 giây đầu (quyết định giữ chân)" icon={Sparkles}>
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="text-[10px] text-gray-500">
@@ -1287,6 +1298,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                 </div>
               )}
             </PickerCard>
+            )}
           </div>
         )}
 
