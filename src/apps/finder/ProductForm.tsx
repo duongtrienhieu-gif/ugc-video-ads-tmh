@@ -762,21 +762,21 @@ function ProductImageSlot({ index, refStr, uploading, onFile, onRemove }: {
   const url = useAssetUrl(refStr || undefined)
   const inputRef = useRef<HTMLInputElement>(null)
   return (
-    <div className="relative h-20 w-20 shrink-0">
+    <div className="relative aspect-square w-full">
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={uploading}
-        className="group flex h-full w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-black/10 bg-black/[0.02] transition-colors hover:border-black/15 disabled:opacity-60"
+        className="group flex h-full w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-black/10 bg-black/[0.02] transition-colors hover:border-[var(--color-accent)] disabled:opacity-60"
       >
         {uploading ? (
-          <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+          <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
         ) : url ? (
           <img src={url} alt="" className="h-full w-full object-cover" />
         ) : (
-          <span className="flex flex-col items-center text-gray-400 transition-colors group-hover:text-gray-600">
-            <ImagePlus className="h-4 w-4" />
-            <span className="mt-0.5 text-[9px]">Ảnh {index + 1}</span>
+          <span className="flex flex-col items-center gap-1 text-gray-400 transition-colors group-hover:text-[var(--color-accent)]">
+            <ImagePlus className="h-6 w-6" strokeWidth={1.5} />
+            <span className="text-[11px] font-semibold">Ảnh {index + 1}</span>
           </span>
         )}
       </button>
@@ -1132,8 +1132,8 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         </button>
       </div>
 
-      {/* Auto-fill */}
-      <div className="flex flex-col gap-2.5 rounded-xl border border-app-border p-3" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+      {/* Auto-fill — secondary helper, kept compact below the product images */}
+      <div className="flex flex-col gap-2 rounded-xl border border-app-border p-2.5" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
         <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--color-accent)' }}>
           <Sparkles className="h-3 w-3" /> Tự động điền bằng AI
           <span className="font-medium normal-case tracking-normal text-app-subtle">— dán link hoặc tải ảnh chụp trang (KHÔNG phải ảnh sản phẩm)</span>
@@ -1175,7 +1175,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
             if (file) {
               const url = URL.createObjectURL(file)
               return (
-                <div key={i} className="relative h-20 w-20 shrink-0 rounded-lg overflow-hidden border bg-white" style={{ borderColor: 'var(--color-accent)' }}>
+                <div key={i} className="relative h-16 w-16 shrink-0 rounded-lg overflow-hidden border bg-white" style={{ borderColor: 'var(--color-accent)' }}>
                   <img src={url} alt="" className="h-full w-full object-cover" onLoad={() => URL.revokeObjectURL(url)} />
                   <button
                     type="button"
@@ -1196,7 +1196,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
                 type="button"
                 onClick={isNextSlot ? () => screenshotRef.current?.click() : undefined}
                 disabled={!isNextSlot || isFetching || isAnalyzing}
-                className={`h-20 w-20 shrink-0 rounded-lg border border-dashed flex items-center justify-center transition-colors ${
+                className={`h-16 w-16 shrink-0 rounded-lg border border-dashed flex items-center justify-center transition-colors ${
                   isNextSlot
                     ? 'ui-accent-soft cursor-pointer'
                     : 'border-black/8 bg-black/[0.02] text-gray-300 cursor-not-allowed'
@@ -1213,7 +1213,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
             type="button"
             onClick={handleAnalyzeScreenshots}
             disabled={isFetching || isAnalyzing}
-            className="ui-accent-solid flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+            className="ui-accent-solid flex items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40"
           >
             {isAnalyzing
               ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Đang phân tích {stagedScreenshots.length} ảnh...</>
@@ -1238,7 +1238,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
           Ảnh sản phẩm *
           <span className="ml-1 normal-case tracking-normal text-gray-400">(bắt buộc đủ 4 — nên ĐA DẠNG góc/trạng thái: mặt trước · mở/đóng nắp · nhãn/mặt sau · trong bối cảnh → video/ảnh sinh động & chính xác hơn)</span>
         </span>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-4 gap-2.5 sm:gap-3">
           {[0, 1, 2, 3].map((i) => (
             <ProductImageSlot
               key={i}
