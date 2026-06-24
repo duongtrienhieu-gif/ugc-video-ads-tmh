@@ -1056,7 +1056,9 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                 </button>
               </div>
               {replyGloss && brain.outputLang !== 'vi' && (
-                <p className="text-[11px] italic leading-snug text-gray-500">🇻🇳 {replyGloss}</p>
+                <div className="rounded-md bg-white/85 px-2.5 py-1.5">
+                  <p className="text-[12.5px] font-medium leading-relaxed text-gray-800">🇻🇳 {replyGloss}</p>
+                </div>
               )}
               {replyCardUrl && (
                 <div className="rounded-lg border border-sky-200 bg-white p-2">
