@@ -487,10 +487,15 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const handleRegenerateScript = async () => {
     if (!geminiKey) { addToast('Chưa có Gemini API key trong Settings', 'error'); return }
     if (!state.inputs.product) { addToast('Chưa chọn sản phẩm', 'error'); return }
+    // P6bh — reply-aware: in reply mode there is NO picked hook (the comment IS the hook). Keep the
+    // comment, rewrite a new body; otherwise keep the picked hook (original P5e behaviour).
+    const replyOn = !!state.replyComment?.enabled
+    const replyText = (state.replyComment?.comment ?? '').trim()
     const chosenHook = brain.pickedHookIdx >= 0
       ? brain.hookVariants[brain.pickedHookIdx]?.text
       : undefined
-    if (!chosenHook) { addToast('Không tìm thấy hook đã chọn — quay lại ⚡ Tạo nhanh để chọn hook', 'error'); return }
+    if (replyOn && !replyText) { addToast('Nhập comment để trả lời trước', 'error'); return }
+    if (!replyOn && !chosenHook) { addToast('Không tìm thấy hook đã chọn — quay lại ⚡ Tạo nhanh để chọn hook', 'error'); return }
     setIsGeneratingScript(true)
     setScriptBrainError(null)
     try {
@@ -510,7 +515,8 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         lang: brain.outputLang,
         shape: brain.shape,
         useOwnScript: false,
-        chosenHook,
+        chosenHook: replyOn ? undefined : chosenHook,
+        replyComment: replyOn ? replyText : undefined,   // P6bh — reply mode: keep comment, new body
         previousScript: state.inputs.script,   // diverge from the current version
         gift,
       })
@@ -521,7 +527,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
       setScript(draft)
       setLangTouched(true)
       setViTranslation(null)   // P5g — lazy gloss; user clicks "Dịch để hiểu" when needed
-      addToast('✓ Đã tạo lại kịch bản mới (giữ hook) — xem lại & chỉnh sửa', 'success')
+      addToast(replyOn ? '✓ Đã tạo lại kịch bản mới (giữ comment) — xem lại & chỉnh sửa' : '✓ Đã tạo lại kịch bản mới (giữ hook) — xem lại & chỉnh sửa', 'success')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setScriptBrainError(msg.slice(0, 240))
@@ -1149,18 +1155,23 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                 </>
               ) : 'Dán kịch bản hoàn chỉnh của bạn, hoặc chuyển sang ⚡ Tạo nhanh để AI viết.'}
             </p>
-            {/* P5e — regenerate a fully new body keeping the SAME picked hook. Only
-                shown when this script came from ⚡ Tạo nhanh (a hook is still picked). */}
-            {hasScriptText && brain.pickedHookIdx >= 0 && brain.hookVariants[brain.pickedHookIdx] && (
+            {/* P5e/P6bh — regenerate a fully new body. Quick flow: keep the picked hook. Reply mode:
+                keep the comment (no hook). Shown when a script exists AND there's a hook OR a comment. */}
+            {hasScriptText && (
+              (brain.pickedHookIdx >= 0 && brain.hookVariants[brain.pickedHookIdx]) ||
+              (!!state.replyComment?.enabled && !!(state.replyComment?.comment ?? '').trim())
+            ) && (
               <button
                 onClick={handleRegenerateScript}
                 disabled={brain.isGeneratingScript || !geminiKey}
                 className="ui-accent-soft mt-2 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50"
-                title="Giữ nguyên hook đã chọn, viết lại kịch bản mới hoàn toàn (khác bản hiện tại)"
+                title={state.replyComment?.enabled
+                  ? 'Giữ nguyên comment, viết lại kịch bản mới hoàn toàn (khác bản hiện tại)'
+                  : 'Giữ nguyên hook đã chọn, viết lại kịch bản mới hoàn toàn (khác bản hiện tại)'}
               >
                 {brain.isGeneratingScript
                   ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang viết lại...</>
-                  : <><RefreshCw className="h-3 w-3" /> Tạo lại kịch bản (giữ hook)</>}
+                  : <><RefreshCw className="h-3 w-3" /> {state.replyComment?.enabled ? 'Tạo lại kịch bản (giữ comment)' : 'Tạo lại kịch bản (giữ hook)'}</>}
               </button>
             )}
           </div>
