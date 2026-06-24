@@ -130,10 +130,18 @@ export async function renderOneHybridScene(
   // left it unset, default product scenes to hands-only so we never inject a
   // stray creator face into a pure product shot. ('creator' is kept only when
   // the director explicitly asked for a person — e.g. the CTA endorsement).
+  // #2 — the comment above says "default PRODUCT scenes to hands-only", but the code only did it
+  // for product_closeup → a product_ACTION with framing left unset defaulted to 'creator' and grew
+  // a stray face. Default BOTH product kinds to hands_noface; only concept/3d/etc. → 'creator'.
   const cameraFraming: typeof scene.cameraFraming =
-    scene.cameraFraming ?? (scene.kind === 'product_closeup' ? 'hands_noface' : 'creator')
+    scene.cameraFraming ?? ((scene.kind === 'product_closeup' || scene.kind === 'product_action') ? 'hands_noface' : 'creator')
 
-  if (scene.role === 'mechanism3d' && !conceptPrompt.startsWith('3D ')) {
+  // #1 — wrap a mechanism3d concept into the canonical "3D ANIMATION (no people…)" form UNLESS it
+  // ALREADY matches the SAME predicate renderInsert uses to set is3D (/^3D (MECHANISM )?ANIMATION/).
+  // The old `startsWith('3D ')` disagreed with that regex: a concept like "3D cross-section animation…"
+  // started with "3D " (→ skipped wrap) yet wasn't "3D ANIMATION" (→ is3D=false) → 3D scene rendered
+  // a PERSON. Now both checks key off the SAME string → no gap.
+  if (scene.role === 'mechanism3d' && !/^\s*3D (MECHANISM )?ANIMATION/i.test(conceptPrompt)) {
     // P6ae — 3D covers TWO modes: (1) a cross-section of the internal mechanism (how the active
     // works inside the body), OR (2) an INGREDIENT-3D — the PRODUCT as hero in the centre with the
     // active's molecules/particles orbiting it (for synthetic/abstract actives that have no real
