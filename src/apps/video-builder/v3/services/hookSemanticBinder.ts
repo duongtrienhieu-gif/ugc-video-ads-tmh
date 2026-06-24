@@ -117,11 +117,14 @@ export function buildSemanticAnswerRule(shape: HookSemanticShape, hookText: stri
       )
     case 'investigation':
       return (
-        `*** HOOK SHAPE: INVESTIGATION / TEST ***\n` +
-        `The hook is "I tested / I'll prove" ("${hook}"). The body's FIRST sentence MUST ` +
-        `IMMEDIATELY begin the test (open with the setup: "Ngày đầu mình...", "Mình bắt ` +
-        `đầu bằng...", "Day 1 aku..."). Do NOT detour. The discovery block carries the test ` +
-        `findings.`
+        `*** HOOK SHAPE: INVESTIGATION / TEST (N-day journey) ***\n` +
+        `The hook is "I tested over N days / I'll prove" ("${hook}"). The body's FIRST sentence opens on ` +
+        `DAY 1 = the BASELINE you STARTED with — the PRE-EXISTING problem/symptom you still had at the ` +
+        `start ("Ngày đầu, [vấn đề] vẫn còn…", "Hôm bắt đầu test, [vấn đề] vẫn…", "Day 1, [masalah] masih…"). ` +
+        `CRITICAL: frame the symptom as the condition you CAME IN with — do NOT couple it with USING the ` +
+        `product ("ngày đầu THỬ [sản phẩm] mà vẫn đau" reads as the product FAILING). The product is the ` +
+        `thing you're testing to FIX it; its FIRST positive effect appears LATER (discovery, Day 3+). ` +
+        `Do NOT detour to an unrelated opener.`
       )
     case 'imperative':
       return (
