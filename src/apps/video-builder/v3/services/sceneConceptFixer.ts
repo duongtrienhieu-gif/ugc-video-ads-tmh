@@ -134,8 +134,13 @@ export async function fixSceneConceptPrompt(params: {
   fullScript?: GeneratedScript | null
   /** Free-text + archetype hint combined — what the user wants / what's wrong. May be empty. */
   userIntent: string
-  /** The archetype the user explicitly picked (a chip). When set, the output shotIntent is forced to it. */
+  /** The archetype the user explicitly picked (a chip). When set + NO note, the output shotIntent is
+   *  forced to it (fix B). A note overrides it (see userNote). */
   targetIntent?: ShotIntent
+  /** P6be — the user's RAW free-text note (without the archetype hint). When present it is the #1
+   *  driver: the AI picks the shotIntent + framing that best fits the note, so the note can flip the
+   *  shot/face-vs-no-face even against the (pre-selected) archetype. Empty → the picked archetype locks. */
+  userNote?: string
 }): Promise<SceneFix> {
   if (!params.geminiKey) throw new Error('Thiếu Gemini key')
   const langName = SCRIPT_LANG_GEMINI_NAME[params.lang] ?? 'Vietnamese'
@@ -145,6 +150,12 @@ export async function fixSceneConceptPrompt(params: {
     ? params.fullScript.blocks.map((b) => b.text).join(' / ').slice(0, 600)
     : ''
   const intent = params.userIntent.trim()
+  // P6be — a free-text NOTE is the #1 driver. When present, the AI chooses the shotIntent + framing
+  // that best fits the note (the pre-selected/picked archetype is only a loose hint), so a note can
+  // flip the shot or face↔no-face even against the scene's current archetype. No note → the picked
+  // archetype hard-locks (fix B). lockToTarget = "user deliberately picked AND no note overriding".
+  const noteDriven = !!(params.userNote && params.userNote.trim())
+  const lockToTarget = !!params.targetIntent && !noteDriven
   // F-1/2 — keep the scene's gift / multi-unit context so a fix never silently drops them.
   const giftLine = s.giftRef
     ? '\nGIFT (keep it): this scene shows the product TOGETHER WITH a bundled FREE GIFT — a SEPARATE object. Your conceptPrompt MUST keep BOTH the product and the free gift in frame (do NOT drop the gift).'
@@ -158,7 +169,7 @@ export async function fixSceneConceptPrompt(params: {
   // target is BOTH what to avoid AND what to output (a contradiction that made the fix ignore the
   // pick). With a target, show ONLY the old conceptPrompt as the negative; without one, show the full
   // plan so the model knows what to change.
-  const wrongPlan = params.targetIntent
+  const wrongPlan = lockToTarget
     ? `DIRECTOR'S OLD conceptPrompt — do NOT reproduce its WORDING:\n${s.conceptPrompt?.trim() || '(empty)'}`
     : `DIRECTOR'S CURRENT PLAN — this is WRONG, do NOT reproduce it:
 - shotIntent: ${s.shotIntent ?? '(none)'}
@@ -169,7 +180,7 @@ export async function fixSceneConceptPrompt(params: {
 `THIS SCENE'S SPOKEN LINE (${langName}): "${s.quote ?? ''}"
 
 ${wrongPlan}
-${params.targetIntent ? `\nTARGET ARCHETYPE the user chose: "${params.targetIntent}" — you MUST output this exact shotIntent, and the conceptPrompt MUST BE that archetype's shot. The chosen archetype + the note below DRIVE the visual; the spoken line is only context, NOT the thing to illustrate.` : ''}${giftLine}${unitsLine}
+${lockToTarget ? `\nTARGET ARCHETYPE the user chose: "${params.targetIntent}" — you MUST output this exact shotIntent, and the conceptPrompt MUST BE that archetype's shot. The chosen archetype DRIVES the visual; the spoken line is only context, NOT the thing to illustrate.` : ''}${noteDriven ? `\nThe USER'S NOTE below is the #1 source of truth: CHOOSE the shotIntent + framing that BEST realises the note — even if it differs from the scene's current archetype${params.targetIntent ? ` (currently "${params.targetIntent}" — treat as a loose hint only, the note overrides it)` : ''}. Set cameraFraming to match what the NOTE describes: a close-up of a screen / object / product with no person → "hands_noface"; a person feeling or doing something → "creator".` : ''}${giftLine}${unitsLine}
 USER'S NOTE — THE #1 PRIORITY (this is EXACTLY the shot the user wants; build the conceptPrompt
 AROUND it; it WINS over the default archetype shot and you MAY go beyond the literal spoken line
 to honor it; only fall back to inferring from the line when this is empty):
@@ -193,9 +204,14 @@ Return the corrected { shotIntent, conceptPrompt, kind, cameraFraming } as JSON 
   const conceptPrompt = (fix.conceptPrompt ?? '').trim()
   if (!conceptPrompt) throw new Error('AI trả về prompt rỗng — thử lại')
 
-  // shotIntent: a user-forced target wins; else the model's pick; else a safe default.
+  // P6be — shotIntent priority: note-driven → the model's pick (chosen to fit the note) wins, so the
+  // note can flip the shot; a deliberately-picked archetype (no note) hard-locks (fix B); else the
+  // model's pick; else a safe default. The framing snap below still keys on the RESOLVED shotIntent,
+  // so the prompt never fights the renderer regardless of which path set it.
   const modelIntent = SHOT_INTENTS.includes(fix.shotIntent as ShotIntent) ? (fix.shotIntent as ShotIntent) : undefined
-  const shotIntent: ShotIntent = params.targetIntent ?? modelIntent ?? 'product_demo'
+  const shotIntent: ShotIntent = lockToTarget
+    ? params.targetIntent!
+    : (modelIntent ?? params.targetIntent ?? 'product_demo')
   const def = INTENT_DEFAULT[shotIntent]
 
   // kind/framing: keep the model's if valid, else fall back to the archetype default; then snap

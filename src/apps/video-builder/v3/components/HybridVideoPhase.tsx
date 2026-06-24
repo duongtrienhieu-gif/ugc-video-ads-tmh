@@ -687,9 +687,9 @@ export default function HybridVideoPhase(_props: Props) {
                 onRender={() => renderScene(i)}
                 onSavePrompt={(prompt, plan) => setSceneConceptPrompt(i, prompt, plan)}
                 onToggleLips={() => toggleSceneLips(i)}
-                onAiFix={(intent, targetIntent) => fixSceneConceptPrompt({
+                onAiFix={(intent, targetIntent, userNote) => fixSceneConceptPrompt({
                   geminiKey, scene: s, product: state.inputs.product,
-                  lang: state.scriptBrain.outputLang, fullScript: script, userIntent: intent, targetIntent,
+                  lang: state.scriptBrain.outputLang, fullScript: script, userIntent: intent, targetIntent, userNote,
                 })} />
             ))}
           </div>
@@ -820,7 +820,7 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, failMsg, prog
   credit: number; hasAssets: boolean; onRender: () => void
   onSavePrompt: (prompt: string, plan?: { kind?: TimedBrollScene['kind']; cameraFraming?: 'creator' | 'hands_noface'; shotIntent?: ShotIntent }) => void
   onToggleLips: () => void
-  onAiFix: (intent: string, targetIntent?: ShotIntent) => Promise<SceneFix>
+  onAiFix: (intent: string, targetIntent?: ShotIntent, userNote?: string) => Promise<SceneFix>
 }) {
   const url = useAssetUrl(clipRef ?? undefined)
   const badge = ROLE_BADGE[scene.role] ?? ROLE_BADGE.broll
@@ -866,7 +866,7 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, failMsg, prog
         arch?.hint ?? '',
         aiNote.trim() ? `User note: ${aiNote.trim()}` : '',
       ].filter(Boolean).join('\n')
-      const fix = await onAiFix(intent, arch?.intent)
+      const fix = await onAiFix(intent, arch?.intent, aiNote.trim())
       setDraftPrompt(fix.conceptPrompt)
       setAiPlan({ kind: fix.kind, cameraFraming: fix.cameraFraming, shotIntent: fix.shotIntent })
     } catch (e) {
