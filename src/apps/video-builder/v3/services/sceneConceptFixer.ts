@@ -153,14 +153,23 @@ export async function fixSceneConceptPrompt(params: {
     ? `\nUNITS (keep it): show ${s.productUnits} identical units of the product (a buy-X-get-Y deal) — not a single one.`
     : ''
 
+  // P6bd — when the user picked a TARGET archetype, the scene's shotIntent/kind/framing were already
+  // snapped to that target on pick — so echoing them as the "WRONG plan" would tell the model the
+  // target is BOTH what to avoid AND what to output (a contradiction that made the fix ignore the
+  // pick). With a target, show ONLY the old conceptPrompt as the negative; without one, show the full
+  // plan so the model knows what to change.
+  const wrongPlan = params.targetIntent
+    ? `DIRECTOR'S OLD conceptPrompt — do NOT reproduce its WORDING:\n${s.conceptPrompt?.trim() || '(empty)'}`
+    : `DIRECTOR'S CURRENT PLAN — this is WRONG, do NOT reproduce it:
+- shotIntent: ${s.shotIntent ?? '(none)'}
+- conceptPrompt: ${s.conceptPrompt?.trim() || '(empty)'}
+- kind: ${s.kind ?? '(none)'} · cameraFraming: ${s.cameraFraming ?? '(none)'}`
+
   const userMsg =
 `THIS SCENE'S SPOKEN LINE (${langName}): "${s.quote ?? ''}"
 
-DIRECTOR'S CURRENT PLAN — this is WRONG, do NOT reproduce it:
-- shotIntent: ${s.shotIntent ?? '(none)'}
-- conceptPrompt: ${s.conceptPrompt?.trim() || '(empty)'}
-- kind: ${s.kind ?? '(none)'} · cameraFraming: ${s.cameraFraming ?? '(none)'}
-${params.targetIntent ? `\nTARGET ARCHETYPE the user chose: "${params.targetIntent}" — you MUST output this exact shotIntent.` : ''}${giftLine}${unitsLine}
+${wrongPlan}
+${params.targetIntent ? `\nTARGET ARCHETYPE the user chose: "${params.targetIntent}" — you MUST output this exact shotIntent, and the conceptPrompt MUST BE that archetype's shot. The chosen archetype + the note below DRIVE the visual; the spoken line is only context, NOT the thing to illustrate.` : ''}${giftLine}${unitsLine}
 USER'S NOTE — THE #1 PRIORITY (this is EXACTLY the shot the user wants; build the conceptPrompt
 AROUND it; it WINS over the default archetype shot and you MAY go beyond the literal spoken line
 to honor it; only fall back to inferring from the line when this is empty):

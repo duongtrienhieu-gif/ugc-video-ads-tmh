@@ -791,17 +791,24 @@ function AssetsBar({ keyframeRef, keyframeProductRef, voiceRef, voiceDurationSec
 const FIX_ARCHETYPES: { value: string; intent?: ShotIntent; label: string; hint?: string }[] = [
   { value: '',                                              label: '✨ Để AI tự chọn (mặc định)' },
   { value: 'problem',         intent: 'reaction',           label: '😣 Cảnh vấn đề / nỗi đau', hint: 'PROBLEM moment: the creator living the PROBLEM/pain in ONE concrete real-life moment — visibly uncomfortable. NOT resolved, NO smile, NO before/after split, NO product. A single problem shot only.' },
-  { value: 'reaction',        intent: 'reaction',           label: '🧍 Người thật / cảm xúc' },
-  { value: 'result_behavior', intent: 'result_behavior',    label: '🏃 Tận hưởng kết quả' },
-  { value: 'product_demo',    intent: 'product_demo',       label: '🧴 Đang dùng sản phẩm' },
-  { value: 'product_macro',   intent: 'product_macro',      label: '🔍 Cận sản phẩm / chi tiết' },
+  { value: 'reaction',        intent: 'reaction',           label: '🧍 Người thật / cảm xúc', hint: "REACTION moment: the SAME creator's genuine face close-up living THIS feeling in a real daily setting — an honest, unscripted expression. No product packaging, no on-screen text." },
+  { value: 'result_behavior', intent: 'result_behavior',    label: '🏃 Tận hưởng kết quả', hint: 'RESULT moment: the SAME creator freely DOING the everyday thing the result enables (move / sleep / work / play) with visible ease and a relaxed look — show the benefit as behaviour, no product needed.' },
+  { value: 'product_demo',    intent: 'product_demo',       label: '🧴 Đang dùng sản phẩm', hint: 'PRODUCT-IN-USE: the product being USED in its real setting — the actual using-action (apply / scoop / stick / drink) clearly in frame; the product stays held or resting, never floating.' },
+  { value: 'product_macro',   intent: 'product_macro',      label: '🔍 Cận sản phẩm / chi tiết', hint: 'PRODUCT MACRO: a clean extreme close-up of the product or ONE key detail / texture on a real surface in good light — no hands, no face, the product dead-still as the hero.' },
   { value: 'ingredient',      intent: 'product_macro',      label: '🌿 Nguyên liệu / thành phần', hint: 'INGREDIENT SHOWCASE: arrange the REAL raw ingredients named in the line (herbs/fruit/roots/spices) around the product as the hero, natural flat-lay, no face.' },
-  { value: 'mechanism3d',     intent: 'mechanism3d',        label: '🧬 3D cơ chế' },
-  { value: 'before_after',    intent: 'before_after',       label: '🔁 Trước / sau' },
-  { value: 'social_proof',    intent: 'social_proof',       label: '🗯 Bằng chứng' },
-  { value: 'endorsement',     intent: 'endorsement',        label: '🛒 Ưu đãi / kêu gọi mua' },
+  { value: 'mechanism3d',     intent: 'mechanism3d',        label: '🧬 3D cơ chế', hint: 'A 3D cross-section animation showing HOW it works inside the body / material — clean, abstract, non-graphic; no people, no hands, no product packaging.' },
+  { value: 'before_after',    intent: 'before_after',       label: '🔁 Trước / sau', hint: 'BEFORE / AFTER split-screen of the SAME creator — one side the problem state, the other the relieved / improved state; same person, same framing, an honest transformation.' },
+  { value: 'social_proof',    intent: 'social_proof',       label: '🗯 Bằng chứng', hint: 'SOCIAL PROOF beat: many real people / a crowd holding or enjoying the product in an authentic everyday setting — a believable "everyone is using this" moment, not staged.' },
+  { value: 'endorsement',     intent: 'endorsement',        label: '🛒 Ưu đãi / kêu gọi mua', hint: 'ENDORSEMENT / CTA: the SAME creator holds the product up beside their face with a warm smile and a confident nod to camera — a genuine "I recommend this" at the call to buy. No on-screen price or numbers.' },
   { value: 'offer',           intent: 'offer',              label: '🎁 Combo / quà (không tay)', hint: 'OFFER product-hero close-up: the product (with the bundled free gift / extra units if any) as the clear HERO on a clean premium surface, framed as a deal worth grabbing. NO hands, NO person, NO on-screen price.' },
 ]
+
+// P6bd — map a scene's current shotIntent to its dropdown value so the picker OPENS on the scene's
+// real archetype (not always "Để AI tự chọn"). The canonical archetypes use value === intent name;
+// aliases (problem→reaction, ingredient→product_macro) collapse to the canonical one. '' when none.
+function archValueForIntent(intent?: ShotIntent): string {
+  return FIX_ARCHETYPES.find((a) => a.value === intent)?.value ?? ''
+}
 
 function SceneCard({ i, scene, clipRef, rendering, queued, failed, failMsg, progress, voiceUrl, gloss, conceptGloss, mismatch, credit, hasAssets, onRender, onSavePrompt, onToggleLips, onAiFix }: {
   i: number; scene: TimedBrollScene; clipRef?: string; rendering: boolean; queued: boolean; failed: boolean; failMsg?: string
@@ -842,7 +849,11 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, failMsg, prog
   // P6a — AI scene-fixer state. `aiPlan` holds the kind/cameraFraming the fixer
   // chose alongside the prompt, so saving applies all three together (the prompt
   // never fights the framing). Cleared on Huỷ. chips + note feed the fixer's intent.
-  const [aiArch, setAiArch] = useState('')   // P6t — chosen archetype (maps to shotIntent)
+  const [aiArch, setAiArch] = useState(() => archValueForIntent(scene.shotIntent))   // P6t/P6bd — opens on the scene's current archetype
+  // P6bd — keep the picker synced to the scene's CURRENT archetype whenever the editor is closed
+  // (incl. right after a save changes shotIntent), so each time it opens it shows the real archetype
+  // instead of resetting to "Để AI tự chọn". The !editing guard never clobbers an in-progress pick.
+  useEffect(() => { if (!editing) setAiArch(archValueForIntent(scene.shotIntent)) }, [editing, scene.shotIntent])
   const [aiNote, setAiNote] = useState('')
   const [aiBusy, setAiBusy] = useState(false)
   const [aiErr, setAiErr] = useState('')
