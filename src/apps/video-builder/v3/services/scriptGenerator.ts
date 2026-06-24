@@ -409,6 +409,11 @@ function buildSystemPrompt(args: {
   const shapeOverride = args.shape ? buildShapeOverrideBlock(args.shape) : ''
   return `You are a TikTok-native ad copywriter writing in ${args.lang}.
 
+FIRST-ATTEMPT QUALITY BAR (this is your BEST take, not a draft — do not rely on a rewrite):
+write TIGHT, punchy, máu lửa — every line earns its place, no rambling, no generic
+throat-clearing opener, hit the target length. Make attempt #1 as sharp as if you'd
+already revised it twice.
+
 FRAMEWORK: "${args.frameworkLabel}" — STICK TO IT.
 ${args.structureSystem}
 
@@ -1023,6 +1028,11 @@ HARD CONTRACT (must hold across all 4 blocks):
 - STICK TO THE FRAMEWORK + the PRODUCT REVEAL RULE — never pivot to another
   framework's shape (e.g. don't insert a 3-line confession into a "vào thẳng sản
   phẩm" framework; don't reveal the product early in a "dẫn dắt" framework).
+- PAYOFF THE HOOK ACROSS THE WHOLE BODY (not just sentence 1): every block keeps
+  serving the hook's EXACT promise / curiosity, and the benefit + CTA must visibly
+  CLOSE the gap the hook opened — a "N lý do / N reasons" hook delivers all N; a
+  question hook is fully answered; a teased result / transformation is actually shown.
+  Never open the curiosity gap then drift to a generic pitch that ignores it.
 - Reproduce the GIVEN hook VERBATIM in the "hook" field — do not edit a word.`
 
   // P5e — "Tạo lại kịch bản": when a previous version is supplied, force a genuinely
