@@ -394,6 +394,21 @@ function buildInsertKeyframePrompt(
       `plausible for a viewer who has handled this kind of product in real life.`,
     )
   }
+  // P6bi — CTA ENDORSEMENT ONLY (creator holds the PRODUCT + the FREE GIFT up to camera). An actively
+  // PRESENTED product drifts far more than a static one — the model re-renders a held / tilted box near
+  // the face (the audited "sản phẩm chính sai" at the endorsement cut), while the static product cuts
+  // (closeup / offer on a surface) copy the reference correctly. Pin the HELD product to behave like a
+  // static hero so its label is copied faithfully. Scoped to product+person+GIFT = the endorsement;
+  // a normal product-demo (no gift) never enters here, so it is untouched.
+  if (productRefIndex > 0 && personRefIndex > 0 && giftRefIndex > 0) {
+    paragraphs.push(
+      `HELD-PRODUCT FIDELITY (CTA): hold the product STEADY with its main label FLAT and FULLY FACING ` +
+      `the camera — NOT tilted, angled, rotated, or motion-blurred. Render the package as an EXACT copy ` +
+      `of reference image #${productRefIndex}, identical to how it would look sitting still on a table; ` +
+      `the hand merely holds it up, it never changes the package, label, colours or text. Apply the SAME ` +
+      `steady, flat, exact-copy treatment to the gift (#${giftRefIndex}).`,
+    )
+  }
 
   // 2. Composition
   paragraphs.push(`COMPOSITION: ${preset.framingPreset} shot, vertical 9:16 aspect ratio.`)
