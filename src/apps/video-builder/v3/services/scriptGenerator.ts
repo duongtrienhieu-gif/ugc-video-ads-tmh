@@ -96,6 +96,31 @@ export interface GenerateScriptResult {
   hookVariants: HookVariant[]
 }
 
+// A (P6bj) — DETERMINISTIC length fallback. The Gemini refit is an EXTRA call that often fails on
+// free-tier (rate limit) or under-cuts a far-over MS script → the fit loop `break`s and SHIPS a
+// bloated ~79s clip (the audited bug). This guarantees length WITHOUT a model call: remove WHOLE
+// sentences from the LOW-priority blocks (benefit → discovery → pain), last-sentence-first, NEVER
+// touching the hook or the CTA (the offer/gift live there), until the script is within the +10% band.
+// Blunt but bounded — only the EXCESS is cut, only from compressible blocks, only as a last resort.
+function hardTrimToBand(
+  blocks: Record<ScriptBlockId, string>, targetSec: number, lang: ScriptLang,
+): Record<ScriptBlockId, string> {
+  const out = { ...blocks }
+  const cutOrder: ScriptBlockId[] = ['benefit', 'discovery', 'pain']
+  const sentsOf = (t: string) => (t.match(/[^.!?…]+[.!?…]*/g) ?? [t]).map((s) => s.trim()).filter(Boolean)
+  for (let guard = 0; guard < 40; guard++) {
+    const joined = SCRIPT_BLOCK_IDS.map((id) => out[id] ?? '').join(' ')
+    if (estimateReadDurationForVoice(joined, lang) <= targetSec * 1.10) break
+    let cut = false
+    for (const id of cutOrder) {
+      const s = sentsOf(out[id] ?? '')
+      if (s.length > 1) { s.pop(); out[id] = s.join(' '); cut = true; break }
+    }
+    if (!cut) break   // every compressible block is down to its last sentence → keep the spine, stop
+  }
+  return out
+}
+
 /**
  * Z31 — Generate a full ad script with 3 hook variants.
  * Single Gemini call; strict JSON output; auto-retry on parse fail.
@@ -234,6 +259,15 @@ export async function generateScript(
       })
       if (!refit) break
       blockMap = refit
+    }
+    // A (P6bj) — after the (flaky) Gemini refit loop, GUARANTEE the band deterministically: if the
+    // script is still > +10% (refit failed / under-cut), hard-trim low-priority sentences so it never
+    // ships a bloated clip. No-op when already in band (the common case).
+    {
+      const joinedAfter = SCRIPT_BLOCK_IDS.map((id) => blockMap[id] ?? '').join(' ')
+      if (estimateReadDurationForVoice(joinedAfter, params.lang) > target * 1.10) {
+        blockMap = hardTrimToBand(blockMap, target, params.lang)
+      }
     }
     // HARD guards (user rule, UNIVERSAL VN/MS/EN): the script NEVER speaks a PRICE, and the
     // offer NEVER escalates past "buy 1 free 1". Prompt nudges are unreliable — esp. for MY,
@@ -780,11 +814,12 @@ ${creatorLine}
 SELECTED STRUCTURE: ${args.structureLabel}
 SELECTED ANGLE: ${args.angleLabel}
 ${replyLine}
-LENGTH — aim for about ${args.targetDurationSec}s spoken: tight, punchy, to the
-point. Do NOT ramble, repeat, or over-explain — a concise ad holds attention far
-better than a long one. The length is auto-checked and trimmed afterward, so err
-on the side of SHORTER rather than padding. Cover the key beats (the pain, the
-named ingredient + how it works, the usage moment, the offer) without filler.
+LENGTH — HARD TARGET ~${args.targetDurationSec}s spoken: write to land AT or slightly UNDER it.
+Do NOT overshoot — Bahasa Malaysia especially tends to run long, so keep it LEAN. Tight, punchy,
+every sentence earns its place: no rambling, no repetition, no over-explaining, no padding. Cover
+the key beats (the pain, the named ingredient + how it works, the usage moment, the offer) and
+STOP. Do NOT rely on a later auto-trim to fix the length — hit the target NOW (a script that
+overshoots gets cut and reads choppy). A concise ad holds attention far better than a long one.
 
 PER-BLOCK rough split (sum ~${args.targetDurationSec}s, just a guide):
 - HOOK:      ~${args.budgets.hook}s
