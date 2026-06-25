@@ -68,6 +68,29 @@ export function detectHookShape(hookText: string): HookSemanticShape {
   return 'general'
 }
 
+/** Gap 1 — extract a journey hook's total duration in DAYS ("7 ngày"→7, "2 tuần"→14, "1 tháng"→30,
+ *  "30 days", "3 minggu"→21). null when the hook names no explicit duration. Weeks/months first so
+ *  "2 tuần" isn't mis-read as 2 days. */
+export function extractJourneyDays(hookText: string): number | null {
+  const t = (hookText ?? '').toLowerCase()
+  let m = t.match(/(\d+)\s*(tuần|minggu|weeks?)/)
+  if (m) return parseInt(m[1], 10) * 7
+  m = t.match(/(\d+)\s*(tháng|bulan|months?)/)
+  if (m) return parseInt(m[1], 10) * 30
+  m = t.match(/(\d+)\s*(ngày|hari|days?)/)
+  if (m) return parseInt(m[1], 10)
+  return null
+}
+
+/** Gap 2 — a TURNING-POINT journey hook: flat / no visible change EARLY, then a SUDDEN shift later
+ *  ("3 ngày đầu thấy thường, ngày 7 mới sốc" / "tuần đầu chưa thấy gì, tuần 3 mới rõ" / "ngày 1 nghi,
+ *  ngày 10 khỏi bàn"). Such a hook must NOT be answered with gradual day-by-day improvement. */
+const TURNING_POINT_RE =
+  /(đầu[^.]{0,20}(thường|chưa|bình thường)|chưa thấy gì|chẳng thấy gì|còn (nghi|định bỏ)|awal[^.]{0,20}biasa|belum nampak|tak nampak)[^.]{0,40}(mới|ngày (thứ )?\d|tuần (thứ )?\d|hari ke|sốc|ngạc nhiên|khỏi bàn|terkejut|baru)/i
+export function isTurningPointHook(hookText: string): boolean {
+  return TURNING_POINT_RE.test((hookText ?? '').toLowerCase())
+}
+
 /** Per-shape ANSWER rule injected into the body system prompt. Replaces the
  *  literal-reuse HARD CONTRACT from P3i. The body model now knows exactly what
  *  the hook is doing and what kind of opening sentence it owes. */
@@ -115,7 +138,17 @@ export function buildSemanticAnswerRule(shape: HookSemanticShape, hookText: stri
         `EXPLAIN WHY the claim is true (open with "Vì..." / "Bởi vì..." / "Lý do là..." / ` +
         `"Sebabnya..." / "Sebab..."). Do NOT switch to an unrelated emotional opener.`
       )
-    case 'investigation':
+    case 'investigation': {
+      const days = extractJourneyDays(hook)
+      const turning = isTurningPointHook(hook)
+      // Gap 1 — the journey's last milestone must land on the duration the hook named.
+      const durationRule = days
+        ? ` The hook names a ${days}-DAY journey: the FINAL reveal MUST land on day ${days} (the milestones build UP to day ${days}) — NEVER end on a different number than the hook promised.`
+        : ''
+      // Gap 2 — turning-point hook → flat early, sudden jump; otherwise gradual improvement.
+      const arcRule = turning
+        ? ` This hook is a TURNING-POINT: show the EARLY days as FLAT — no visible change, you almost gave up — then a SUDDEN, clear shift at the LATER day the hook names. Do NOT show steady day-by-day improvement from day 1.`
+        : ` Show GRADUAL, step-by-step improvement across the milestones (small change → bigger → result).`
       return (
         `*** HOOK SHAPE: INVESTIGATION / TEST (N-day journey) ***\n` +
         `The hook is "I tested over N days / I'll prove" ("${hook}"). The body's FIRST sentence opens on ` +
@@ -123,9 +156,11 @@ export function buildSemanticAnswerRule(shape: HookSemanticShape, hookText: stri
         `start ("Ngày đầu, [vấn đề] vẫn còn…", "Hôm bắt đầu test, [vấn đề] vẫn…", "Day 1, [masalah] masih…"). ` +
         `CRITICAL: frame the symptom as the condition you CAME IN with — do NOT couple it with USING the ` +
         `product ("ngày đầu THỬ [sản phẩm] mà vẫn đau" reads as the product FAILING). The product is the ` +
-        `thing you're testing to FIX it; its FIRST positive effect appears LATER (discovery, Day 3+). ` +
-        `Do NOT detour to an unrelated opener.`
+        `thing you're testing to FIX it; its FIRST positive effect appears LATER (discovery, Day 3+).` +
+        durationRule + arcRule +
+        ` Do NOT detour to an unrelated opener.`
       )
+    }
     case 'imperative':
       return (
         `*** HOOK SHAPE: IMPERATIVE ***\n` +
