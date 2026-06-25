@@ -636,6 +636,28 @@ export function validateShapeExecution(
       `ngày 3 / ngày 7" or "ngày đầu… đến ngày cuối"). Rewrite discovery as dated ` +
       `milestones across the journey, not one undated story.`,
     )
+    // Gap 5 — milestones must ASCEND. Extract day numbers in mention-order; flag a later one < earlier.
+    const dayNums = [...body.matchAll(/(?:ngày|day|hari)\s*(\d{1,3})/gi)].map((m) => parseInt(m[1], 10))
+    for (let i = 1; i < dayNums.length; i++) {
+      if (dayNums[i] < dayNums[i - 1]) {
+        failures.push(
+          `SHAPE=JOURNEY: các mốc ngày phải TĂNG DẦN theo thời gian (thấy "ngày ${dayNums[i]}" ` +
+          `xuất hiện SAU "ngày ${dayNums[i - 1]}"). Sắp lại discovery theo thứ tự ngày tăng dần.`,
+        )
+        break
+      }
+    }
+    // Gap 3 — day-1 baseline must NOT couple the product: the pain block's FIRST sentence states the
+    // pre-existing problem only; "bắt đầu dùng X" belongs to a separate later sentence. A product-use
+    // verb in sentence 1 reads as "tried the product + still sick" = the product failing (audited).
+    const painFirst = ((blocks.pain ?? '').trim().match(/^[^.!?…]+/)?.[0] ?? '').toLowerCase()
+    const useVerb = isMs
+      ? /\b(pakai|guna|makan|telan|tampal|sapu)\b/
+      : /\b(dùng|uống|xài|dán|ngậm)\b/
+    if (useVerb.test(painFirst)) failures.push(
+      `SHAPE=JOURNEY: câu ĐẦU (ngày 1) đang gắn việc DÙNG sản phẩm vào triệu chứng — đọc như sản ` +
+      `phẩm thất bại. Câu 1 chỉ nêu VẤN ĐỀ NỀN (chưa có sản phẩm); chuyển "bắt đầu dùng" sang câu riêng phía sau.`,
+    )
   }
   return { ok: failures.length === 0, failures }
 }
