@@ -1127,7 +1127,10 @@ THE FIXED HOOK (continue the script DIRECTLY from this line; reproduce it verbat
     const anchorCheck = validateAnchor(bodyBlocks, anchor, args.lang)
     // P5z3 (B) — LLM continuity gate: only for the drift-prone shapes (the 4 strict shapes
     // already have deterministic openers). Judges the line right after the hook.
-    const DRIFT_PRONE = new Set(['general', 'confession', 'claim_bold', 'imperative'])
+    // Gap 4 — 'investigation' (journey) added: the deterministic opener check only validates the
+    // first WORD ("Ngày đầu…"); the LLM gate catches a body that opens the day-1 baseline but then
+    // drifts off the hook's test/promise.
+    const DRIFT_PRONE = new Set(['general', 'confession', 'claim_bold', 'imperative', 'investigation'])
     const continuityFail = DRIFT_PRONE.has(resolvedHookShape)
       ? await judgeHookContinuity(blocks.hook, bodyBlocks.pain, args.apiKey)
       : null
