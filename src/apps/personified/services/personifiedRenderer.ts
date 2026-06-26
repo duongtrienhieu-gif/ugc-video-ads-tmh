@@ -7,8 +7,10 @@
 import {
   generateGpt4oImageFast, generateVideoJob, pollVideoJobUntilDone, type Resolution,
 } from '../../../utils/kieai'
+import { textToSpeech } from '../../../utils/elevenlabs'
+import { submitLatentSync, pollLatentSyncUntilDone } from '../../../utils/falai'
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
-import type { PersonifiedScene, PersonifiedCharacter } from '../types'
+import type { PersonifiedScene, PersonifiedCharacter, VoiceProfile } from '../types'
 import type { RenderTier } from '../constants'
 
 function tierToModel(tier: RenderTier): string {
@@ -165,6 +167,83 @@ export async function renderPersonifiedScene(p: RenderSceneParams): Promise<Rend
   const { clipRef, taskId } = await renderClipFromKeyframe({ ...p, keyframeRef })
   p.onStage?.('done', { keyframeRef, clipRef, taskId })
   return { keyframeRef, clipRef, taskId }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P2c — LIPSYNC: thoại nhân vật. TTS ElevenLabs multilingual_v2 (chuẩn MY/VN) →
+// LatentSync (fal.ai, video→video) NHÉP MỒM lên clip i2v đã render (giữ chuyển động
+// Seedance, chỉ thêm khẩu hình). Chỉ cảnh CÓ dialoguePrimary. Clip i2v giữ nguyên →
+// nếu sync mồm cartoon kém có thể đổi engine mà không phải render lại i2v.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ElevenLabs premade multilingual voices (lấy từ voiceCategories.ts).
+const EL_VOICE = {
+  adam: 'pNInz6obpgDQGcFmaJgB',   // nam mạnh / hung hăng
+  josh: 'TxGEqnHWrfWFTfGW9XjX',   // nam chuyên gia / điềm
+  domi: 'AZnzlk1XvdvUeBnXmlld',   // nữ ấm / có lực
+  bella: 'EXAVITQu4vr4xnSDxMaL',  // nữ nhẹ / mềm
+}
+
+/** Map VoiceProfile nhân vật → 1 voiceId ElevenLabs mặc định (user có thể đổi sau).
+ *  Phân theo giới tính + tính cách (hung hăng → giọng có lực hơn). */
+function pickVoiceId(v?: VoiceProfile): string {
+  const male = v?.gioiTinh === 'nam'
+  const punch = /hung|đanh|gắt|mạnh|dữ|khịa|cằn|quát|gào|trầm/i.test(`${v?.tinhCach ?? ''} ${v?.texture ?? ''} ${v?.pitch ?? ''}`)
+  if (male) return punch ? EL_VOICE.adam : EL_VOICE.josh
+  return punch ? EL_VOICE.domi : EL_VOICE.bella
+}
+
+export interface LipsyncSceneParams {
+  elevenKey: string
+  falKey: string
+  scene: PersonifiedScene
+  character?: PersonifiedCharacter
+  /** Clip i2v CÂM đã render (P2a/b) — LatentSync nhép mồm lên đây. */
+  clipRef: string
+  /** Tốc độ đọc (atempo nằm trong textToSpeech ElevenLabs); mặc định 1.0. */
+  speed?: number
+  signal?: AbortSignal
+  onStage?: (stage: 'tts' | 'lip' | 'done', info?: { audioRef?: string; lipsyncRef?: string; status?: string }) => void
+}
+
+export interface LipsyncSceneResult { audioRef: string; lipsyncRef: string }
+
+/** P2c — nhép mồm 1 cảnh: TTS → LatentSync lên clip i2v → { audioRef, lipsyncRef }. */
+export async function renderSceneLipsync(p: LipsyncSceneParams): Promise<LipsyncSceneResult> {
+  if (!p.elevenKey) throw new Error('Thiếu ElevenLabs API key (Cài đặt)')
+  if (!p.falKey) throw new Error('Thiếu fal.ai API key (Cài đặt)')
+  const text = (p.scene.dialoguePrimary ?? '').trim()
+  if (!text) throw new Error('Cảnh không có thoại — không cần lipsync')
+  if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
+
+  // ── 1. TTS (ElevenLabs multilingual — đọc đúng ngôn ngữ đích) ──────────────
+  const buf = await textToSpeech({
+    apiKey: p.elevenKey,
+    voiceId: pickVoiceId(p.character?.voice),
+    text,
+    modelId: 'eleven_multilingual_v2',
+    speed: p.speed ?? 1.0,
+  })
+  const audioRef = await saveAsset(new Blob([buf], { type: 'audio/mpeg' }), 'audio/mpeg')
+  p.onStage?.('tts', { audioRef })
+  if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
+
+  // ── 2. LatentSync nhép mồm lên clip i2v (cần URL công khai cho cả audio + video) ──
+  const audioUrl = await getUrl(audioRef)
+  const clipUrl = isAssetRef(p.clipRef) ? await getUrl(p.clipRef) : p.clipRef
+  if (!audioUrl) throw new Error('Không lấy được URL audio')
+  if (!clipUrl) throw new Error('Không lấy được URL clip i2v')
+
+  const { requestId } = await submitLatentSync({ apiKey: p.falKey, videoUrl: clipUrl, audioUrl })
+  p.onStage?.('lip', { audioRef })
+  const res = await pollLatentSyncUntilDone({
+    apiKey: p.falKey, requestId, timeoutMs: 15 * 60 * 1000,
+    onStatusChange: (status) => p.onStage?.('lip', { audioRef, status }),
+  })
+  const vidBlob = await fetch(res.videoUrl).then((r) => r.blob())
+  const lipsyncRef = await saveAsset(vidBlob, res.contentType || 'video/mp4')
+  p.onStage?.('done', { audioRef, lipsyncRef })
+  return { audioRef, lipsyncRef }
 }
 
 // ── Dev helper — test render 1 cảnh từ kịch bản đang lưu (console, P2a) ───────
