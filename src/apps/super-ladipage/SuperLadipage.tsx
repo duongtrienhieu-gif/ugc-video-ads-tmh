@@ -277,6 +277,10 @@ export default function SuperLadipage() {
       if (product) setSelectedProduct(product)
       consumePayload()
     }
+    if (interAppPayload.targetField === 'researchProduct' && interAppPayload.data) {
+      setSelectedProduct(interAppPayload.data as Product)
+      consumePayload()
+    }
   }, [interAppPayload, activeApp, consumePayload, getProductById])
 
   // ── Pack generation (Pass 1 — text only) ────────────────────────────

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { X, Check, AlertTriangle, XCircle, Plus, Play, TrendingUp, TrendingDown, ExternalLink, Sparkles, Info, Download } from 'lucide-react'
 import type { Market, ScoredProduct, SignalResult } from '../types'
-import { VERDICT_META, NICHES, MARKETS, MARKET_CURRENCY } from '../constants'
+import { VERDICT_META, NICHES, MARKETS, MARKET_CURRENCY, nicheLabel } from '../constants'
+import type { Product } from '../../../stores/types'
 import { formatMyr } from '../services/pricing'
 import { getVideosFor, getCreatorsFor, getCrossMarketFor, analyzeVideo, formatCount, formatKMyr } from '../services/evidence'
 import { useResearchStore, type DbVideo, type DbCreator } from '../store'
@@ -113,7 +114,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const getVideosForProduct = useResearchStore((s) => s.getVideosForProduct)
   const getCreatorsForProduct = useResearchStore((s) => s.getCreatorsForProduct)
   const isLive = useResearchStore((s) => s.isLive)
-  const openApp = useAppStore((s) => s.openApp)
+  const sendToApp = useAppStore((s) => s.sendToApp)
   const addToast = useAppStore((s) => s.addToast)
 
   // LIVE: video BÁN thật của SP (ScrapeCreators keyword search) — chỉ khi quét live
@@ -178,6 +179,24 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const crossMarket = useMemo(() => getCrossMarketFor(product), [product])
 
   const cur = MARKET_CURRENCY[product.market] ?? ''
+  const marketLabel = MARKETS.find((m) => m.key === product.market)?.label ?? product.market
+  // Đổi SP research → Product TẠM (không ghi bank) để gửi sang app viết content / dựng ladi.
+  const tempProduct: Product = {
+    id: `research-${product.productId}`,
+    productImage: product.imageUrl || '',
+    productImages: product.imageUrl ? [product.imageUrl] : [],
+    productName: product.title,
+    productDescription: `Ngách: ${nicheLabel(product.nicheKey)} · Giá ${cur} ${product.unitPrice.toLocaleString('vi-VN')} · ${product.sale.toLocaleString('vi-VN')} đã bán trên TikTok Shop ${marketLabel}.`,
+    targetMarket: marketLabel,
+    painPoints: '',
+    usps: `Đã bán ${product.sale.toLocaleString('vi-VN')} · Đánh giá ${product.rating || '—'}★`,
+    benefits: '', offer: '', ingredients: '', usageGuide: '',
+    createdAt: Date.now(),
+  }
+  const sendResearchTo = (targetApp: string, label: string) => {
+    sendToApp({ targetApp, targetField: 'researchProduct', data: tempProduct })
+    addToast(`Đã gửi "${product.title.slice(0, 30)}…" sang ${label}`, 'success')
+  }
   const metrics: { label: string; value: string }[] = isLive
     ? [
         { label: 'Đã bán', value: product.sale.toLocaleString('vi-VN') },
@@ -312,16 +331,20 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
               <button className="flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700">
                 <Plus className="h-4 w-4" /> Đưa vào danh sách Test
               </button>
-              <button
-                onClick={() => {
-                  openApp('ads-content')
-                  try { void navigator.clipboard.writeText(product.title) } catch { /* clipboard có thể bị chặn */ }
-                  addToast(`Đã mở Ads Content · copy tên SP: ${product.title.slice(0, 40)}`, 'success')
-                }}
-                className="flex items-center justify-center gap-2 rounded-xl border border-violet-300 bg-white py-2.5 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50"
-              >
-                <Sparkles className="h-4 w-4" /> → Tạo content (UGC Lab)
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => sendResearchTo('ads-content', 'Ads Content')}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-violet-300 bg-white py-2.5 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50"
+                >
+                  <Sparkles className="h-4 w-4" /> → Viết content
+                </button>
+                <button
+                  onClick={() => sendResearchTo('super-ladipage', 'Super Ladipage')}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-violet-300 bg-white py-2.5 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50"
+                >
+                  <Sparkles className="h-4 w-4" /> → Dựng Ladi
+                </button>
+              </div>
             </div>
           )}
 
