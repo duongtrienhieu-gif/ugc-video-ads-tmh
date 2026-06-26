@@ -55,6 +55,9 @@ export default function Personified() {
 
   const [tier, setTier] = useState<RenderTier>('seedance720')
   const [error, setError] = useState('')
+  // C — kịch bản hiển thị dạng tab + bảng cảnh dày (bỏ scroll dài / cột voice trùng).
+  const [scriptTab, setScriptTab] = useState<'table' | 'read' | 'chars'>('table')
+  const [expandedScene, setExpandedScene] = useState<number | null>(null)
 
   const product = useMemo(() => products.find((p) => p.id === productId), [products, productId])
   const credit = useMemo(
@@ -261,7 +264,7 @@ export default function Personified() {
 
         {/* ── Bước 3 — Kịch bản ── */}
         {script && (
-          <Section step={3} title="Kịch bản — Storyboard + Full-text Voice Script">
+          <Section step={3} title="Kịch bản">
             <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
               <span className="rounded-full bg-gray-100 px-2 py-1 font-semibold text-gray-700">{script.scenes.length} cảnh · ~{script.totalSec}s <span className="font-normal text-gray-400">(mục tiêu ~{LENGTH_TARGET_SEC[config.length]}s)</span></span>
               <label className="flex items-center gap-1">
@@ -278,45 +281,51 @@ export default function Personified() {
               </button>
             </div>
 
-            {/* Characters */}
-            {script.characters.length > 0 && (
-              <div className="mb-4 grid gap-2 md:grid-cols-2">
-                {script.characters.map((ch, i) => (
-                  <div key={i} className="rounded-lg border border-black/10 bg-white p-3 text-xs">
-                    <div className="font-bold text-gray-900">{ch.name} <span className="font-normal text-gray-400">· {ch.role}</span></div>
-                    <div className="mt-0.5 text-gray-600">{ch.represents}</div>
-                    {ch.voice.vungMien && !/không có/i.test(ch.voice.vungMien) && (
-                      <div className="mt-1 text-[10px] text-gray-400">Giọng: {ch.voice.vungMien} · {ch.voice.gioiTinh} · {ch.voice.tuoi} · {ch.voice.texture}</div>
+            {/* C — tabs: bảng cảnh dày (mặc định) · đọc liền mạch · nhân vật. Hết scroll dài + bỏ cột voice trùng. */}
+            <div className="mb-3 flex gap-1">
+              {([['table', '📋 Bảng cảnh'], ['read', '📖 Đọc liền mạch'], ['chars', `👤 Nhân vật (${script.characters.length})`]] as const).map(([id, label]) => (
+                <button key={id} onClick={() => setScriptTab(id)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${scriptTab === id ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{label}</button>
+              ))}
+            </div>
+
+            {/* ── Bảng cảnh: thấy hết cảnh trong 1 màn, click 1 dòng để bung chi tiết ── */}
+            {scriptTab === 'table' && (
+              <div className="overflow-hidden rounded-lg border border-black/10">
+                <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                  <span className="w-5 shrink-0">#</span>
+                  <span className="w-28 shrink-0">Loại</span>
+                  <span className="w-9 shrink-0">Giây</span>
+                  <span className="w-20 shrink-0">Nhân vật</span>
+                  <span className="flex-1">Thoại</span>
+                </div>
+                {script.scenes.map((s) => (
+                  <div key={s.idx} className="border-t border-black/5">
+                    <button onClick={() => setExpandedScene(expandedScene === s.idx ? null : s.idx)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-violet-50/40">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[10px] font-bold text-violet-700">{s.idx}</span>
+                      <span className="w-28 shrink-0 truncate text-[11px] font-semibold text-gray-600">{SCENE_TYPE_LABEL[s.sceneType]}{s.hasProduct && ' 📦'}</span>
+                      <span className="w-9 shrink-0 text-[11px] font-bold text-amber-700">{s.clipDuration}s</span>
+                      <span className="w-20 shrink-0 truncate text-[11px] text-gray-400">{s.speaker}</span>
+                      <span className="flex-1 truncate text-xs text-gray-900">"{s.dialoguePrimary}"</span>
+                    </button>
+                    {expandedScene === s.idx && (
+                      <div className="space-y-1.5 bg-gray-50/70 px-3 pb-3 pl-10 pt-1 text-xs">
+                        <div className="text-sm font-medium text-gray-900">"{s.dialoguePrimary}"</div>
+                        {!isVN && s.dialogueVi && <div className="italic text-gray-500">↳ {s.dialogueVi}</div>}
+                        {s.action && <div className="text-gray-600"><span className="font-semibold">Hành động:</span> {s.action}</div>}
+                        <div className="text-[11px] text-gray-400">🎥 {s.camera}{s.sfx.length > 0 && ` · 🔊 ${s.sfx.join(', ')}`}</div>
+                        {s.videoPromptEn && <div className="text-[10px] text-gray-400"><span className="font-semibold">i2v:</span> {s.videoPromptEn}</div>}
+                      </div>
                     )}
                   </div>
                 ))}
               </div>
             )}
 
-            <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-              {/* Storyboard */}
+            {/* ── Đọc liền mạch: voice script song ngữ (gộp cột cũ vào đây, hết trùng) ── */}
+            {scriptTab === 'read' && (
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-600">Storyboard</p>
-                {script.scenes.map((s) => (
-                  <div key={s.idx} className="rounded-lg border border-black/10 bg-white p-3">
-                    <div className="flex items-center gap-2 text-[11px]">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-100 font-bold text-violet-700">{s.idx}</span>
-                      <span className="rounded bg-gray-100 px-1.5 py-0.5 font-semibold text-gray-600">{SCENE_TYPE_LABEL[s.sceneType]}</span>
-                      <span className="rounded bg-amber-50 px-1.5 py-0.5 font-bold text-amber-700">{s.clipDuration}s</span>
-                      {s.hasProduct && <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-bold text-emerald-700" title="Cảnh có sản phẩm thật — P2 sẽ khóa bằng 4 ảnh">📦 SP thật</span>}
-                      <span className="text-gray-400">· {s.speaker}</span>
-                    </div>
-                    <div className="mt-2 text-sm font-medium text-gray-900">"{s.dialoguePrimary}"</div>
-                    {!isVN && s.dialogueVi && <div className="mt-0.5 text-xs italic text-gray-500">↳ {s.dialogueVi}</div>}
-                    <div className="mt-1.5 text-[11px] text-gray-500">{s.action}</div>
-                    <div className="mt-1 text-[10px] text-gray-400">🎥 {s.camera}{s.sfx.length > 0 && ` · 🔊 ${s.sfx.join(', ')}`}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Full-text voice script (song ngữ) — tự giãn full nội dung, không scroll */}
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-600">Full-text Voice Script {!isVN && '(đích)'}</p>
                 <div className="w-full whitespace-pre-wrap rounded-lg border border-black/10 bg-white p-3 text-sm leading-relaxed text-gray-800">
                   {script.fullVoiceScriptPrimary}
                 </div>
@@ -329,7 +338,24 @@ export default function Personified() {
                   </>
                 )}
               </div>
-            </div>
+            )}
+
+            {/* ── Nhân vật ── */}
+            {scriptTab === 'chars' && (
+              script.characters.length > 0 ? (
+                <div className="grid gap-2 md:grid-cols-2">
+                  {script.characters.map((ch, i) => (
+                    <div key={i} className="rounded-lg border border-black/10 bg-white p-3 text-xs">
+                      <div className="font-bold text-gray-900">{ch.name} <span className="font-normal text-gray-400">· {ch.role}</span></div>
+                      <div className="mt-0.5 text-gray-600">{ch.represents}</div>
+                      {ch.voice.vungMien && !/không có/i.test(ch.voice.vungMien) && (
+                        <div className="mt-1 text-[10px] text-gray-400">Giọng: {ch.voice.vungMien} · {ch.voice.gioiTinh} · {ch.voice.tuoi} · {ch.voice.texture}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-xs text-gray-400">Chưa có nhân vật.</p>
+            )}
           </Section>
         )}
       </div>

@@ -119,7 +119,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const [liveVidLoading, setLiveVidLoading] = useState(false)
   const liveFetchedFor = useRef<string | null>(null)
   useEffect(() => {
-    if (!isLive || tab !== 'video') return
+    if (!isLive || (tab !== 'video' && tab !== 'creator')) return
     if (liveFetchedFor.current === product.productId) return
     liveFetchedFor.current = product.productId
     let cancelled = false
