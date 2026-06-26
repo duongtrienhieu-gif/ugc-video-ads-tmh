@@ -9,7 +9,7 @@ import PricingCalculator from './PricingCalculator'
 
 type Tab = 'overview' | 'video' | 'creator' | 'market' | 'pricing'
 
-const KALODATA_CURRENCY: Record<Market, string> = { MY: 'MYR', TH: 'THB', ID: 'IDR', VN: 'VND' }
+const KALODATA_CURRENCY: Record<Market, string> = { MY: 'MYR', TH: 'THB', ID: 'IDR', VN: 'VND', PH: 'PHP' }
 function kalodataUrl(productId: string, market: Market): string {
   // demo: bỏ hậu tố thị trường (-th/-id/-vn) đã thêm cho data mẫu;
   // data thật: product_id chính là id Kalodata nên link trỏ đúng sản phẩm.

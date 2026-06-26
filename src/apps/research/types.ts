@@ -2,7 +2,7 @@
 // Khớp với schema Supabase (migrations/research.sql) để sau này thay
 // data mẫu → data Kalodata thật chỉ là đổi nguồn, không đổi type.
 
-export type Market = 'MY' | 'TH' | 'ID' | 'VN'
+export type Market = 'MY' | 'TH' | 'ID' | 'VN' | 'PH'
 export type Verdict = 'go' | 'consider' | 'avoid'
 export type SkuRisk = 'low' | 'mid' | 'high'
 

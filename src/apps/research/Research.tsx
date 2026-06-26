@@ -10,6 +10,8 @@ import ProductDetail from './components/ProductDetail'
 import ShopList from './components/ShopList'
 import type { Market } from './types'
 
+const MARKET_LANG: Record<string, string> = { MY: 'Malay', ID: 'Indonesia', VN: 'Việt', TH: 'Thái', PH: 'English/Tagalog' }
+
 const segCls = (active: boolean) =>
   `rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
     active ? 'bg-violet-100 text-violet-700' : 'text-slate-500 hover:text-slate-700'
@@ -17,6 +19,7 @@ const segCls = (active: boolean) =>
 
 export default function Research() {
   const { market, setMarket, activePreset, applyPreset, getScored, selectedId, select, getSelected, hydrate, realProducts } = useResearchStore()
+  const { isLive, scanning, scanError, scanCredits, scanKeywords, setScanKeywords, scanLive } = useResearchStore()
   const realVideos = useResearchStore((s) => s.realVideos)
   const realCreators = useResearchStore((s) => s.realCreators)
   const realShops = useResearchStore((s) => s.realShops)
@@ -35,7 +38,14 @@ export default function Research() {
               <Search className="h-4 w-4 text-violet-600" />
             </div>
             <h1 className="text-base font-bold text-slate-800">Research</h1>
-            {realProducts ? (
+            {isLive && realProducts ? (
+              <span
+                className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600"
+                title={'Data LIVE từ TikTok Shop (ScrapeCreators) theo thị trường + từ khóa. Chấm điểm theo SỐ ĐÃ BÁN.'}
+              >
+                ✓ {realProducts.length} SP · TikTok Shop LIVE
+              </span>
+            ) : realProducts ? (
               <span
                 className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600"
                 title={`DB hiện có:\n• ${realProducts.length} sản phẩm\n• ${realCreators?.length || 0} creator\n• ${realVideos?.length || 0} video\n• ${realShops?.length || 0} shop\n\nSố liệu là DATA THẬT từ Kalodata. Tên hiển thị tiếng Việt do Kalodata tự dịch.`}
@@ -68,6 +78,26 @@ export default function Research() {
           </div>
 
           <div aria-hidden />
+        </div>
+
+        {/* Quét LIVE — TikTok Shop theo thị trường + từ khóa ngách */}
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={scanKeywords}
+            onChange={(e) => setScanKeywords(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void scanLive() }}
+            placeholder={`Từ khóa ngách (tiếng ${MARKET_LANG[market] ?? ''}) — vd: garam bawang, suplemen...`}
+            className="min-w-[260px] flex-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm"
+          />
+          <button
+            onClick={() => void scanLive()}
+            disabled={scanning}
+            className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
+          >
+            {scanning ? 'Đang quét…' : '🔎 Quét live'}
+          </button>
+          {scanCredits != null && <span className="text-xs text-slate-400">credit: {scanCredits}</span>}
+          {scanError && <span className="text-xs text-red-500">{scanError}</span>}
         </div>
 
         {/* Preset chọn nhanh */}

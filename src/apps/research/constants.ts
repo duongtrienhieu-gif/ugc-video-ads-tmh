@@ -26,6 +26,7 @@ export const MARKETS: { key: Market; label: string; flag: string; primary?: bool
   { key: 'TH', label: 'Thái Lan', flag: '🇹🇭' },
   { key: 'ID', label: 'Indonesia', flag: '🇮🇩' },
   { key: 'VN', label: 'Việt Nam', flag: '🇻🇳' },
+  { key: 'PH', label: 'Philippines', flag: '🇵🇭' },
 ]
 
 // ── 7 vùng săn (ngách) ↔ nhân sự ──

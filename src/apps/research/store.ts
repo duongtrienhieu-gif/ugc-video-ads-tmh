@@ -3,8 +3,8 @@
 // về SAMPLE_PRODUCTS để app vẫn dùng được. UI không phải đổi.
 import { create } from 'zustand'
 import { supabase } from '../../lib/supabase'
-import type { Market, NicheKey, ResearchProduct, ScoredProduct, SkuRisk } from './types'
-import { DEFAULT_FILTERS, type ResearchFilters, type PresetKey, PRESETS } from './constants'
+import type { Market, NicheKey, ResearchProduct, ScoredProduct, SkuRisk, Verdict, SignalResult } from './types'
+import { DEFAULT_FILTERS, type ResearchFilters, type PresetKey, PRESETS, VERDICT_THRESHOLDS } from './constants'
 import { SAMPLE_PRODUCTS } from './sampleData'
 import { scoreMany } from './services/scoring'
 import { classifyNiche, classifySkuRisk } from './services/niche'
@@ -27,7 +27,52 @@ export interface DbShop {
   productIds: string[]; nicheKey: NicheKey
 }
 
-type SortKey = 'score' | 'revenue' | 'growth' | 'commission'
+type SortKey = 'score' | 'revenue' | 'growth' | 'commission' | 'sale'
+
+// ── LIVE: TikTok Shop (ScrapeCreators) → ResearchProduct ─────────────────────
+interface LiveApiProduct {
+  productId: string; title: string; imageUrl: string
+  sale: number; unitPrice: string | number; rating: number | string
+}
+function liveToProduct(p: LiveApiProduct, market: Market): ResearchProduct {
+  const price = parseFloat(String(p.unitPrice).replace(/[^\d.]/g, '')) || 0
+  const sale = Number(p.sale) || 0
+  const title = p.title || '(không tên)'
+  return {
+    productId: String(p.productId), market, title,
+    imageUrl: p.imageUrl || undefined,
+    revenue: Math.round(sale * price),
+    growthRate: 0, sale, unitPrice: price,
+    commissionRate: 0, rating: Number(p.rating) || 0,
+    creatorNum: 0, competitionShops: 10,
+    nicheKey: classifyNiche(title),
+    skuVarianceRisk: classifySkuRisk(title),
+  }
+}
+// Chấm điểm cho data LIVE (chỉ có số bán + giá + rating — KHÔNG có growth/commission/creator như Kalodata).
+// Điểm dựa vào SỐ ĐÃ BÁN (tín hiệu winner thật trên TikTok Shop).
+function scoreLive(p: ResearchProduct): ScoredProduct {
+  const sale = p.sale
+  const score = Math.max(0, Math.min(100, Math.round(38 + 13 * Math.log10(sale + 1))))
+  const verdict: Verdict = score >= VERDICT_THRESHOLDS.go ? 'go' : score >= VERDICT_THRESHOLDS.consider ? 'consider' : 'avoid'
+  const reasons = [
+    `${sale.toLocaleString('vi-VN')} đã bán`,
+    p.unitPrice ? `Giá RM ${p.unitPrice}` : '',
+    p.rating ? `⭐ ${p.rating}` : '',
+  ].filter(Boolean)
+  const signals: SignalResult[] = [
+    { key: 'sale', label: 'Đã bán', display: sale.toLocaleString('vi-VN'),
+      status: sale >= 5000 ? 'pass' : sale >= 1000 ? 'warn' : 'fail',
+      detail: 'Số đã bán trên TikTok Shop — tín hiệu winner thật.' },
+    { key: 'price', label: 'Giá bán', display: p.unitPrice ? `RM ${p.unitPrice}` : '—',
+      status: p.unitPrice > 0 && p.unitPrice <= 60 ? 'pass' : 'warn',
+      detail: 'Giá bán lẻ trên sàn.' },
+    { key: 'rating', label: 'Đánh giá', display: p.rating ? String(p.rating) : '—',
+      status: p.rating >= 4.5 ? 'pass' : p.rating > 0 ? 'warn' : 'fail',
+      detail: 'Điểm đánh giá sản phẩm.' },
+  ]
+  return { ...p, score, verdict, signals, reasons }
+}
 
 /* DB row (research_products) → ResearchProduct.
    LƯU Ý: nicheKey + competitionShops là PLACEHOLDER cho data thật (chờ map danh mục
@@ -117,6 +162,13 @@ interface ResearchStore {
   hydrated: boolean
   syncedAt: string | null
 
+  // LIVE scan (TikTok Shop qua /api/research)
+  isLive: boolean
+  scanning: boolean
+  scanError: string | null
+  scanCredits: number | null
+  scanKeywords: string
+
   setMarket: (m: Market) => void
   setNiche: (n: NicheKey | 'all') => void
   applyPreset: (k: PresetKey) => void
@@ -125,6 +177,8 @@ interface ResearchStore {
   setSort: (s: SortKey) => void
   select: (id: string | null) => void
   hydrate: () => Promise<void>
+  setScanKeywords: (s: string) => void
+  scanLive: () => Promise<void>
 
   source: () => ResearchProduct[]
   getScored: () => ScoredProduct[]
@@ -147,6 +201,11 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
   realShops: null,
   hydrated: false,
   syncedAt: null,
+  isLive: false,
+  scanning: false,
+  scanError: null,
+  scanCredits: null,
+  scanKeywords: 'garam bawang, suplemen kesihatan, vitamin, kolagen, alat urut',
 
   setMarket: (market) => set({ market }),
   setNiche: (nicheFilter) => set({ nicheFilter }),
@@ -159,6 +218,29 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
   setFilter: (k, v) => set((s) => ({ activePreset: null, filters: { ...s.filters, [k]: v } })),
   setSort: (sortBy) => set({ sortBy }),
   select: (selectedId) => set({ selectedId }),
+  setScanKeywords: (scanKeywords) => set({ scanKeywords }),
+
+  scanLive: async () => {
+    const { market, scanKeywords } = get()
+    const kw = scanKeywords.trim()
+    if (!kw) { set({ scanError: 'Nhập ít nhất 1 từ khóa ngách' }); return }
+    set({ scanning: true, scanError: null })
+    try {
+      const url = `/api/research?market=${market}&niches=${encodeURIComponent(kw)}&amount=30`
+      const r = await fetch(url)
+      const d = await r.json()
+      if (d.error) { set({ scanning: false, scanError: d.error }); return }
+      const products: ResearchProduct[] = (d.products || []).map((p: LiveApiProduct) => liveToProduct(p, market))
+      set({
+        realProducts: products, isLive: true, hydrated: true,
+        scanCredits: d.credits ?? null,
+        scanError: d.errors && d.errors.length ? `${d.errors.length} từ khóa không ra SP` : null,
+        scanning: false, selectedId: null, nicheFilter: 'all',
+      })
+    } catch (e) {
+      set({ scanning: false, scanError: (e as Error).message || 'Lỗi kết nối' })
+    }
+  },
 
   hydrate: async () => {
     if (get().hydrated) return
@@ -231,12 +313,13 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
     if (filters.lowSaturationOnly) rows = rows.filter((p) => p.competitionShops < 15)
     if (filters.hasCreatorOnly) rows = rows.filter((p) => p.creatorNum > 0)
 
-    const scored = scoreMany(rows)
+    const scored = get().isLive ? rows.map(scoreLive) : scoreMany(rows)
     scored.sort((a, b) => {
       switch (sortBy) {
         case 'revenue': return b.revenue - a.revenue
         case 'growth': return b.growthRate - a.growthRate
         case 'commission': return b.commissionRate - a.commissionRate
+        case 'sale': return b.sale - a.sale
         default: return b.score - a.score
       }
     })
@@ -247,6 +330,7 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
     const { selectedId } = get()
     if (!selectedId) return null
     const found = get().source().find((p) => p.productId === selectedId)
-    return found ? scoreMany([found])[0] : null
+    if (!found) return null
+    return get().isLive ? scoreLive(found) : scoreMany([found])[0]
   },
 }))
