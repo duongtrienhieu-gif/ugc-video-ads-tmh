@@ -72,11 +72,13 @@ export default function Research() {
                 <option key={m.key} value={m.key}>{m.flag} {m.label}</option>
               ))}
             </select>
-            <select className="rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-sm font-medium" defaultValue="30">
-              <option value="7">7 ngày</option>
-              <option value="30">30 ngày</option>
-              <option value="90">90 ngày</option>
-            </select>
+            {!isLive && (
+              <select className="rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-sm font-medium" defaultValue="30">
+                <option value="7">7 ngày</option>
+                <option value="30">30 ngày</option>
+                <option value="90">90 ngày</option>
+              </select>
+            )}
           </div>
 
           <div aria-hidden />
@@ -128,23 +130,25 @@ export default function Research() {
           {crossError && <span className="text-xs text-red-500">{crossError}</span>}
         </div>
 
-        {/* Preset chọn nhanh */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-slate-400">Chọn nhanh:</span>
-          {PRESETS.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => applyPreset(p.key)}
-              className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
-                activePreset === p.key
-                  ? 'border-violet-300 bg-violet-50 text-violet-700'
-                  : 'border-black/10 bg-white text-slate-600 hover:bg-black/[0.02]'
-              }`}
-            >
-              {p.emoji} {p.label}
-            </button>
-          ))}
-        </div>
+        {/* Preset chọn nhanh — chỉ ở chế độ data Kalodata (không live) */}
+        {!isLive && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-slate-400">Chọn nhanh:</span>
+            {PRESETS.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => applyPreset(p.key)}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                  activePreset === p.key
+                    ? 'border-violet-300 bg-violet-50 text-violet-700'
+                    : 'border-black/10 bg-white text-slate-600 hover:bg-black/[0.02]'
+                }`}
+              >
+                {p.emoji} {p.label}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
 
       {/* Body */}

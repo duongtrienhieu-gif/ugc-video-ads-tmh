@@ -102,6 +102,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const [tab, setTab] = useState<Tab>('overview')
   const [analyzeId, setAnalyzeId] = useState<string | null>(null)
   const [embedVideo, setEmbedVideo] = useState<{ id: string; handle?: string } | null>(null)
+  const [playMp4, setPlayMp4] = useState<string | null>(null)
   const v = VERDICT_META[product.verdict]
   const niche = NICHES.find((n) => n.key === product.nicheKey)
   const passCount = product.signals.filter((s) => s.status === 'pass').length
@@ -123,7 +124,8 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
     liveFetchedFor.current = product.productId
     let cancelled = false
     setLiveVidLoading(true); setLiveVideos(null)
-    const q = product.title.split(/\s+/).slice(0, 7).join(' ')
+    // Lấy phần tên SP trước dấu phân tách (| - [ ( ) để tìm video ĐÚNG SP hơn, không bị chung chung.
+    const q = (product.title.split(/[|\-–—[\](]/)[0] || product.title).trim().split(/\s+/).slice(0, 8).join(' ')
     fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(q)}&limit=12`)
       .then((r) => r.json())
       .then((d) => { if (!cancelled) setLiveVideos(Array.isArray(d.videos) ? d.videos : []) })
@@ -178,9 +180,9 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
         { label: 'Đánh giá', value: `${product.rating.toFixed(1)}★` },
       ]
 
-  const TABS: [Tab, string][] = [
-    ['overview', 'Tổng quan'], ['video', 'Video win'], ['creator', 'Creator'], ['market', 'Thị trường'], ['pricing', 'Giá'],
-  ]
+  const TABS: [Tab, string][] = isLive
+    ? [['overview', 'Tổng quan'], ['video', 'Video win'], ['pricing', 'Giá']]
+    : [['overview', 'Tổng quan'], ['video', 'Video win'], ['creator', 'Creator'], ['market', 'Thị trường'], ['pricing', 'Giá']]
 
   return (
     <>
@@ -203,24 +205,32 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
               <span className={`rounded-full border px-2 py-0.5 text-xs font-bold ${v.bg} ${v.color}`}>{v.emoji} {v.label}</span>
             </div>
             <div className="mt-1.5 flex items-center gap-3">
-              <a
-                href={kalodataUrl(product.productId, product.market)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs font-medium text-violet-600 hover:underline"
-                title="Nếu trang Kalodata trống → sản phẩm này hết data trong 90 ngày gần nhất (vấn đề từ Kalodata, không phải bug app)"
-              >
-                <ExternalLink className="h-3 w-3" /> Xem trên Kalodata
-              </a>
-              <a
-                href={`https://www.kalodata.com/product?searchKey=${encodeURIComponent(product.title.slice(0, 40))}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:underline"
-                title="Tìm sản phẩm theo tên (fallback)"
-              >
-                Tìm theo tên
-              </a>
+              {isLive ? (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500">
+                  {MARKETS.find((m) => m.key === product.market)?.flag} {MARKETS.find((m) => m.key === product.market)?.label} · TikTok Shop
+                </span>
+              ) : (
+                <>
+                  <a
+                    href={kalodataUrl(product.productId, product.market)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-violet-600 hover:underline"
+                    title="Nếu trang Kalodata trống → sản phẩm này hết data trong 90 ngày gần nhất (vấn đề từ Kalodata, không phải bug app)"
+                  >
+                    <ExternalLink className="h-3 w-3" /> Xem trên Kalodata
+                  </a>
+                  <a
+                    href={`https://www.kalodata.com/product?searchKey=${encodeURIComponent(product.title.slice(0, 40))}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:underline"
+                    title="Tìm sản phẩm theo tên (fallback)"
+                  >
+                    Tìm theo tên
+                  </a>
+                </>
+              )}
             </div>
           </div>
           <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-black/5"><X className="h-5 w-5" /></button>
@@ -318,7 +328,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
                   </div>
                   <div className="mt-2 flex gap-2">
                     <button
-                      onClick={() => setEmbedVideo({ id: vid.id, handle: vid.author || undefined })}
+                      onClick={() => { if (vid.downloadUrl) setPlayMp4(vid.downloadUrl); else if (vid.url) window.open(vid.url, '_blank') }}
                       className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
                     >
                       <Play className="h-3.5 w-3.5" /> Xem
@@ -427,8 +437,8 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
             </div>
           )}
 
-          {/* ── CREATOR ── */}
-          {tab === 'creator' && (
+          {/* ── CREATOR (Kalodata — ẩn khi live) ── */}
+          {tab === 'creator' && !isLive && (
             <div className="flex flex-col gap-3">
               <p className="text-xs text-slate-500">👤 Creator đang đẩy sản phẩm (thị trường <b>{product.market}</b>) — bấm <b>"TikTok"</b> để xem kênh, đánh giá rồi tuyển.</p>
               {creators.some((c) => /[ăâđêôơưĐ]/.test(c.nickname)) && (
@@ -484,8 +494,8 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
             </div>
           )}
 
-          {/* ── THỊ TRƯỜNG (cross-market) ── */}
-          {tab === 'market' && (
+          {/* ── THỊ TRƯỜNG (Kalodata cross-market — ẩn khi live, dùng nút "So 5 nước") ── */}
+          {tab === 'market' && !isLive && (
             <div className="flex flex-col gap-3">
               <p className="text-xs text-slate-500">🌏 So sánh sản phẩm/ngách giữa các thị trường — bằng chứng cho cơ hội cross-market.</p>
               <div className="overflow-hidden rounded-xl border border-black/10">
@@ -562,6 +572,16 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
             <div className="flex-1 overflow-auto bg-slate-50">
               <TikTokEmbedPlayer videoId={embedVideo.id} handle={embedVideo.handle} />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Player MP4 không logo (live) — chạy thẳng, không cần TikTok embed ── */}
+      {playMp4 && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4" onClick={() => setPlayMp4(null)}>
+          <div className="relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setPlayMp4(null)} className="absolute -top-9 right-0 rounded-full bg-white/10 p-1.5 text-white hover:bg-white/20" title="Đóng"><X className="h-5 w-5" /></button>
+            <video src={playMp4} controls autoPlay playsInline className="max-h-[85vh] w-full rounded-2xl bg-black" />
           </div>
         </div>
       )}

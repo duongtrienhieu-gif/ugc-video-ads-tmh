@@ -255,7 +255,7 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
         realProducts: products, isLive: true, hydrated: true,
         scanCredits: d.credits ?? null,
         scanError: d.errors && d.errors.length ? `${d.errors.length} từ khóa không ra SP` : null,
-        scanning: false, selectedId: null, nicheFilter: 'all',
+        scanning: false, selectedId: null, nicheFilter: 'all', sortBy: 'sale',
       })
     } catch (e) {
       set({ scanning: false, scanError: (e as Error).message || 'Lỗi kết nối' })

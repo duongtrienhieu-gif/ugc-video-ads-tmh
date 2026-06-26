@@ -49,14 +49,18 @@ export const MARKET_CURRENCY: Record<Market, string> = { MY: 'RM', ID: 'Rp', TH:
 
 // ── Ngách-preset cho QUÉT LIVE: chọn 1 cái → tự điền từ khóa → quét ngay ──
 // Từ khóa kiểu universal/Malay-English (TikTok Shop search fuzzy, chạy được cả 5 nước).
+// Ngách-preset: ưu tiên hàng TIÊU DÙNG NHANH, dễ UPSALE (mua nhiều/combo), dễ win COD.
 export const NICHE_PRESETS: { label: string; emoji: string; keywords: string[] }[] = [
-  { label: 'TPCN / Suplemen', emoji: '💊', keywords: ['suplemen', 'vitamin', 'collagen', 'probiotik'] },
-  { label: 'Đồ ăn vặt / Snack', emoji: '🍿', keywords: ['snack', 'kerepek', 'keripik', 'snek viral'] },
-  { label: 'Gia vị / Muối', emoji: '🧂', keywords: ['garam bawang', 'seasoning', 'perasa', 'bumbu'] },
-  { label: 'Dụng cụ sức khỏe', emoji: '💪', keywords: ['massage gun', 'alat urut', 'koyo', 'knee support'] },
-  { label: 'Chăm sóc da', emoji: '🧴', keywords: ['serum', 'skincare', 'whitening', 'sunscreen'] },
-  { label: 'Giảm cân', emoji: '🔥', keywords: ['slimming', 'diet drink', 'penurun berat', 'detox'] },
-  { label: 'Chăm sóc cá nhân', emoji: '🪥', keywords: ['oral care', 'deodorant', 'hair care', 'shaver'] },
+  { label: 'TPCN / Vitamin', emoji: '💊', keywords: ['vitamin', 'suplemen', 'multivitamin', 'omega 3', 'probiotik'] },
+  { label: 'Collagen / Đẹp da', emoji: '🌸', keywords: ['collagen', 'glutathione', 'whitening drink', 'beauty drink'] },
+  { label: 'Giảm cân / Detox', emoji: '🔥', keywords: ['slimming', 'detox', 'diet drink', 'fat burner', 'lemon detox'] },
+  { label: 'Sinh lý / Sức khỏe nam', emoji: '💪', keywords: ['tongkat ali', 'testosterone', 'maca', 'kuat tenaga'] },
+  { label: 'Tóc / Rụng tóc', emoji: '💇', keywords: ['hair serum', 'hair growth', 'rambut gugur', 'anti hairfall'] },
+  { label: 'Skincare', emoji: '🧴', keywords: ['serum', 'sunscreen', 'acne treatment', 'face mask'] },
+  { label: 'Răng miệng', emoji: '🦷', keywords: ['teeth whitening', 'pemutih gigi', 'mouthwash', 'oral care'] },
+  { label: 'Mẹ & bé', emoji: '🤰', keywords: ['baby vitamin', 'prenatal', 'vitamin kanak', 'susu kanak'] },
+  { label: 'Dụng cụ sức khỏe', emoji: '🩹', keywords: ['massage gun', 'knee support', 'posture corrector', 'pain relief patch'] },
+  { label: 'Đồ ăn vặt / Snack', emoji: '🍿', keywords: ['snack viral', 'kerepek', 'keripik', 'cookies'] },
 ]
 
 // ── Verdict ──

@@ -20,6 +20,32 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
 
 export default function FilterPanel() {
   const { filters, setFilter, nicheFilter, setNiche, sortBy, setSort, clearPreset } = useResearchStore()
+  const isLive = useResearchStore((s) => s.isLive)
+
+  // Chế độ LIVE (TikTok Shop): chỉ có số bán/giá/rating → ẩn các lọc Kalodata,
+  // chỉ giữ Sắp xếp (theo số bán) + Ẩn SKU nhiều biến thể.
+  if (isLive) {
+    return (
+      <aside className="flex w-56 shrink-0 flex-col gap-3 overflow-y-auto border-r border-black/10 bg-[#FAFAFA] p-3">
+        <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Bộ lọc (live)</span>
+        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          Sắp xếp theo
+          <select
+            value={sortBy === 'sale' || sortBy === 'score' ? sortBy : 'sale'}
+            onChange={(e) => setSort(e.target.value as 'sale' | 'score')}
+            className="rounded-lg border border-black/10 bg-white px-2 py-1.5 text-xs"
+          >
+            <option value="sale">Số đã bán</option>
+            <option value="score">Điểm cơ hội</option>
+          </select>
+        </label>
+        <Toggle on={filters.hideHighSku} onChange={(v) => setFilter('hideHighSku', v)} label="Ẩn SP nhiều biến thể" />
+        <p className="mt-1 rounded-lg bg-violet-50 px-2 py-1.5 text-[10px] text-violet-600">
+          Đang xem data LIVE TikTok Shop — chấm điểm theo SỐ ĐÃ BÁN.
+        </p>
+      </aside>
+    )
+  }
 
   return (
     <aside className="flex w-56 shrink-0 flex-col gap-3 overflow-y-auto border-r border-black/10 bg-[#FAFAFA] p-3">
