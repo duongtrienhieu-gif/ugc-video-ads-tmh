@@ -39,6 +39,7 @@ export interface CrossRow {
 interface LiveApiProduct {
   productId: string; title: string; imageUrl: string
   sale: number; unitPrice: string | number; rating: number | string
+  ship?: string; seller?: string
 }
 function liveToProduct(p: LiveApiProduct, market: Market): ResearchProduct {
   const price = parseFloat(String(p.unitPrice).replace(/[^\d.]/g, '')) || 0
@@ -53,6 +54,8 @@ function liveToProduct(p: LiveApiProduct, market: Market): ResearchProduct {
     creatorNum: 0, competitionShops: 10,
     nicheKey: classifyNiche(title),
     skuVarianceRisk: classifySkuRisk(title),
+    shipFrom: p.ship || undefined,
+    seller: p.seller || undefined,
   }
 }
 // Chấm điểm cho data LIVE (chỉ có số bán + giá + rating — KHÔNG có growth/commission/creator như Kalodata).

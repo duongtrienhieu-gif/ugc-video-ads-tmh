@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X, Check, AlertTriangle, XCircle, Plus, Play, TrendingUp, TrendingDown, ExternalLink, Sparkles, Info, Download } from 'lucide-react'
 import type { Market, ScoredProduct, SignalResult } from '../types'
 import { VERDICT_META, NICHES, MARKETS, MARKET_CURRENCY, nicheLabel } from '../constants'
@@ -12,7 +12,16 @@ import { useResearchStore, type DbVideo, type DbCreator } from '../store'
 import { useAppStore } from '../../../stores/appStore'
 import PricingCalculator from './PricingCalculator'
 
-type Tab = 'overview' | 'video' | 'creator' | 'market' | 'pricing'
+type Tab = 'overview' | 'analysis' | 'video' | 'creator' | 'market' | 'pricing'
+
+// Kết quả AI mổ xẻ SP (live) — vì sao win + khách + góc ads + giá + rủi ro.
+interface AiVerdict {
+  whyWin: string
+  audience: string
+  angles: string[]
+  priceSuggest: string
+  risk: string
+}
 
 const KALODATA_CURRENCY: Record<Market, string> = { MY: 'MYR', TH: 'THB', ID: 'IDR', VN: 'VND', PH: 'PHP' }
 function kalodataUrl(productId: string, market: Market): string {
@@ -122,27 +131,61 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const addProduct = useBankStore((s) => s.addProduct)
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const [aiBusy, setAiBusy] = useState(false)
+  const [verdict, setVerdict] = useState<AiVerdict | null>(null)
+  const [verdictBusy, setVerdictBusy] = useState(false)
+  const [verdictErr, setVerdictErr] = useState<string | null>(null)
 
   // LIVE: video BÁN thật của SP (ScrapeCreators keyword search) — chỉ khi quét live
   interface LiveVid { id: string; desc: string; author: string; nickname: string; views: number; cover: string; downloadUrl: string; url: string; durationSec: number }
+  const MIN_SEC = 30   // chỉ video >30s (giàu scene/kịch bản, hợp FB ads)
   const [liveVideos, setLiveVideos] = useState<LiveVid[] | null>(null)
   const [liveVidLoading, setLiveVidLoading] = useState(false)
+  const [liveCursor, setLiveCursor] = useState<string | null>(null)
+  const [liveHasMore, setLiveHasMore] = useState(false)
+  const [liveMoreLoading, setLiveMoreLoading] = useState(false)
   const liveFetchedFor = useRef<string | null>(null)
+
+  // Tên SP trước dấu phân tách (| - [ ( ) → tìm video ĐÚNG SP hơn, không chung chung.
+  const liveQuery = useMemo(
+    () => (product.title.split(/[|\-–—[\](]/)[0] || product.title).trim().split(/\s+/).slice(0, 8).join(' '),
+    [product.title],
+  )
+
+  const loadMoreVideos = useCallback(async () => {
+    if (!liveCursor || liveMoreLoading) return
+    setLiveMoreLoading(true)
+    try {
+      const d = await fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(liveQuery)}&minSec=${MIN_SEC}&cursor=${encodeURIComponent(liveCursor)}`).then((r) => r.json())
+      const more: LiveVid[] = Array.isArray(d.videos) ? d.videos : []
+      setLiveVideos((prev) => {
+        const seen = new Set((prev || []).map((v) => v.id))
+        return [...(prev || []), ...more.filter((v) => !seen.has(v.id))].sort((a, b) => b.durationSec - a.durationSec)
+      })
+      setLiveCursor(d.cursor != null ? String(d.cursor) : null)
+      setLiveHasMore(!!d.hasMore && d.cursor != null)
+    } catch { /* bỏ qua */ } finally {
+      setLiveMoreLoading(false)
+    }
+  }, [liveCursor, liveMoreLoading, product.market, liveQuery])
+
   useEffect(() => {
     if (!isLive || (tab !== 'video' && tab !== 'creator')) return
     if (liveFetchedFor.current === product.productId) return
     liveFetchedFor.current = product.productId
     let cancelled = false
-    setLiveVidLoading(true); setLiveVideos(null)
-    // Lấy phần tên SP trước dấu phân tách (| - [ ( ) để tìm video ĐÚNG SP hơn, không bị chung chung.
-    const q = (product.title.split(/[|\-–—[\](]/)[0] || product.title).trim().split(/\s+/).slice(0, 8).join(' ')
-    fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(q)}&limit=12`)
+    setLiveVidLoading(true); setLiveVideos(null); setLiveCursor(null); setLiveHasMore(false)
+    fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(liveQuery)}&minSec=${MIN_SEC}`)
       .then((r) => r.json())
-      .then((d) => { if (!cancelled) setLiveVideos(Array.isArray(d.videos) ? d.videos : []) })
+      .then((d) => {
+        if (cancelled) return
+        setLiveVideos(Array.isArray(d.videos) ? d.videos : [])
+        setLiveCursor(d.cursor != null ? String(d.cursor) : null)
+        setLiveHasMore(!!d.hasMore && d.cursor != null)
+      })
       .catch(() => { if (!cancelled) setLiveVideos([]) })
       .finally(() => { if (!cancelled) setLiveVidLoading(false) })
     return () => { cancelled = true }
-  }, [isLive, tab, product.productId, product.market, product.title])
+  }, [isLive, tab, product.productId, product.market, liveQuery])
 
   // Creator (live) = tác giả của các video đang BÁN sản phẩm → người đang đẩy SP
   const liveCreators = useMemo(() => {
@@ -240,11 +283,44 @@ Suy luận hợp lý từ tên + ngách. CHỈ trả JSON.`
       setAiBusy(false)
     }
   }
+  // AI mổ xẻ SP win: vì sao win / khách MY / 3 góc ads / giá đề xuất / rủi ro.
+  const aiAnalyze = async () => {
+    if (!geminiApiKey) { setVerdictErr('Cần Gemini API key trong Cài đặt'); return }
+    setVerdictBusy(true); setVerdictErr(null)
+    try {
+      const prompt = `Bạn là chuyên gia bán hàng COD/affiliate đưa SP win từ ${marketLabel} về MALAYSIA bán. Đọc SP đang bán chạy trên TikTok Shop và phân tích sắc bén bằng TIẾNG VIỆT.
+SẢN PHẨM:
+- Tên: ${product.title}
+- Ngách: ${nicheLabel(product.nicheKey)}
+- Thị trường nguồn: ${marketLabel}
+- Giá: ${cur} ${product.unitPrice} · Đã bán: ${product.sale} · Đánh giá: ${product.rating || '—'}
+Trả JSON đúng khóa:
+{"whyWin":"2-3 câu vì sao SP này win (nhu cầu, tâm lý mua, tính viral)","audience":"chân dung khách MUA ở Malaysia: tuổi/giới/nỗi đau cụ thể","angles":["góc ads 1 (1 câu)","góc ads 2","góc ads 3"],"priceSuggest":"gợi ý giá bán + combo ở Malaysia (RM), suy luận từ giá nguồn","risk":"rủi ro chính khi bán (cạnh tranh, hoàn, kiểm duyệt) + cách né, 1-2 câu"}
+Cụ thể, thực chiến, KHÔNG bịa chứng nhận. CHỈ trả JSON.`
+      const raw = await directGeminiText({ apiKey: geminiApiKey, prompt, responseMimeType: 'application/json', temperature: 0.6 })
+      const d = JSON.parse(raw) as Partial<AiVerdict>
+      setVerdict({
+        whyWin: d.whyWin || '—',
+        audience: d.audience || '—',
+        angles: Array.isArray(d.angles) ? d.angles : [],
+        priceSuggest: d.priceSuggest || '—',
+        risk: d.risk || '—',
+      })
+    } catch (e) {
+      setVerdictErr('AI lỗi: ' + ((e as Error).message || '').slice(0, 70))
+    } finally {
+      setVerdictBusy(false)
+    }
+  }
+
+  const compactCur = (n: number) => n >= 1000 ? `${cur} ${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : `${cur} ${n.toLocaleString('vi-VN')}`
   const metrics: { label: string; value: string }[] = isLive
     ? [
         { label: 'Đã bán', value: product.sale.toLocaleString('vi-VN') },
+        { label: 'Doanh thu ~', value: compactCur(product.revenue) },
         { label: 'Đơn giá', value: `${cur} ${product.unitPrice.toLocaleString('vi-VN')}` },
         { label: 'Đánh giá', value: product.rating ? `${product.rating.toFixed(1)}★` : '—' },
+        { label: 'Nơi gửi', value: product.shipFrom || '—' },
         { label: 'Thị trường', value: product.market },
       ]
     : [
@@ -259,7 +335,7 @@ Suy luận hợp lý từ tên + ngách. CHỈ trả JSON.`
       ]
 
   const TABS: [Tab, string][] = isLive
-    ? [['overview', 'Tổng quan'], ['video', 'Video win'], ['creator', 'Creator'], ['pricing', 'Giá']]
+    ? [['overview', 'Tổng quan'], ['analysis', '🧠 Phân tích AI'], ['video', 'Video win'], ['creator', 'Creator'], ['pricing', 'Giá']]
     : [['overview', 'Tổng quan'], ['video', 'Video win'], ['creator', 'Creator'], ['market', 'Thị trường'], ['pricing', 'Giá']]
 
   return (
@@ -333,15 +409,25 @@ Suy luận hợp lý từ tên + ngách. CHỈ trả JSON.`
           {/* ── TỔNG QUAN ── */}
           {tab === 'overview' && (
             <div className="flex flex-col gap-4">
-              <div className="rounded-xl border border-black/10 bg-slate-50 p-3">
-                <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
-                  <span>Xu hướng doanh thu</span>
-                  <span className="font-semibold text-slate-700">{formatKMyr(product.revenue)} · {product.sale} đơn</span>
+              {isLive ? (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-emerald-700">💰 Doanh thu ước tính</span>
+                    <span className="text-base font-bold text-emerald-700">{compactCur(product.revenue)}</span>
+                  </div>
+                  <p className="mt-1 text-[10px] text-emerald-600/80">{product.sale.toLocaleString('vi-VN')} đã bán × {cur} {product.unitPrice.toLocaleString('vi-VN')} (số tích lũy trên TikTok Shop, không phải theo ngày).</p>
                 </div>
-                <Sparkline data={product.revenueTrend} />
-              </div>
+              ) : (
+                <div className="rounded-xl border border-black/10 bg-slate-50 p-3">
+                  <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
+                    <span>Xu hướng doanh thu</span>
+                    <span className="font-semibold text-slate-700">{formatKMyr(product.revenue)} · {product.sale} đơn</span>
+                  </div>
+                  <Sparkline data={product.revenueTrend} />
+                </div>
+              )}
 
-              <div className="grid grid-cols-4 gap-2">
+              <div className={`grid ${isLive ? 'grid-cols-3' : 'grid-cols-4'} gap-2`}>
                 {metrics.map((m) => (
                   <div key={m.label} className="rounded-lg border border-black/10 bg-white p-2 text-center">
                     <div className="text-sm font-bold text-slate-800">{m.value}</div>
@@ -398,16 +484,81 @@ Suy luận hợp lý từ tên + ngách. CHỈ trả JSON.`
             </div>
           )}
 
+          {/* ── PHÂN TÍCH AI (live) ── */}
+          {tab === 'analysis' && (
+            <div className="flex flex-col gap-3">
+              <p className="text-xs text-slate-500">🧠 AI đọc SP win ở <b>{marketLabel}</b> → mổ xẻ vì sao win, khách Malaysia, góc ads, giá đề xuất, rủi ro.</p>
+              {!verdict && (
+                <button
+                  onClick={() => void aiAnalyze()}
+                  disabled={verdictBusy}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
+                >
+                  <Sparkles className="h-4 w-4" /> {verdictBusy ? 'AI đang phân tích…' : 'Phân tích SP này'}
+                </button>
+              )}
+              {verdictErr && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{verdictErr}</p>}
+              {verdict && (
+                <div className="flex flex-col gap-3">
+                  {[
+                    { icon: '🏆', label: 'Vì sao win', text: verdict.whyWin },
+                    { icon: '🎯', label: 'Khách Malaysia', text: verdict.audience },
+                    { icon: '💵', label: 'Giá & combo đề xuất (MY)', text: verdict.priceSuggest },
+                    { icon: '⚠️', label: 'Rủi ro & cách né', text: verdict.risk },
+                  ].map((b) => (
+                    <div key={b.label} className="rounded-xl border border-black/10 bg-slate-50 p-3">
+                      <div className="text-xs font-bold text-slate-700">{b.icon} {b.label}</div>
+                      <p className="mt-1 whitespace-pre-line text-[11px] leading-relaxed text-slate-600">{b.text}</p>
+                    </div>
+                  ))}
+                  {verdict.angles.length > 0 && (
+                    <div className="rounded-xl border border-violet-200 bg-violet-50 p-3">
+                      <div className="text-xs font-bold text-violet-700">🎬 3 góc ads gợi ý</div>
+                      <ul className="mt-1.5 flex flex-col gap-1.5">
+                        {verdict.angles.map((a, i) => (
+                          <li key={i} className="flex gap-2 text-[11px] leading-relaxed text-slate-700">
+                            <span className="font-bold text-violet-500">{i + 1}.</span><span>{a}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => void aiAnalyze()}
+                      disabled={verdictBusy}
+                      className="rounded-xl border border-violet-300 bg-white py-2 text-xs font-semibold text-violet-700 hover:bg-violet-50 disabled:opacity-50"
+                    >
+                      {verdictBusy ? 'Đang…' : '↻ Phân tích lại'}
+                    </button>
+                    <button
+                      onClick={() => sendResearchTo('ads-content', 'Ads Content')}
+                      className="rounded-xl bg-violet-600 py-2 text-xs font-semibold text-white hover:bg-violet-700"
+                    >
+                      → Viết content
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── VIDEO WIN (LIVE — TikTok Shop thật) ── */}
           {tab === 'video' && isLive && (
             <div className="flex flex-col gap-3">
-              <p className="text-xs text-slate-500">🎥 Video đang <b>BÁN</b> sản phẩm này trên TikTok Shop <b>{product.market}</b> — sắp theo lượt xem. Bấm <b>⬇ Tải</b> lấy video không logo về làm ladi.</p>
+              <p className="text-xs text-slate-500">🎥 Video <b>BÁN</b> sản phẩm này — <b>chỉ video &gt;30s</b>, sắp theo <b>độ dài</b> (video dài = giàu cảnh/kịch bản, hợp tái dùng cho <b>FB ads</b>). Bấm <b>⬇ Tải</b> lấy video không logo.</p>
               {liveVidLoading && (
-                <div className="rounded-xl border border-dashed border-black/10 p-6 text-center text-xs text-slate-400">Đang tìm video bán…</div>
+                <div className="rounded-xl border border-dashed border-black/10 p-6 text-center text-xs text-slate-400">Đang tìm video &gt;30s…</div>
               )}
               {!liveVidLoading && liveVideos && liveVideos.length === 0 && (
                 <div className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
-                  Không tìm thấy video bán cho từ khóa này.<br/>Thử mở SP trên TikTok Shop hoặc đổi từ khóa quét.
+                  Không thấy video &gt;30s cho từ khóa này.<br/>Bấm <b>Tải thêm</b> để quét tiếp, hoặc đổi từ khóa.
+                  {liveHasMore && (
+                    <button onClick={() => void loadMoreVideos()} disabled={liveMoreLoading}
+                      className="mt-3 block w-full rounded-lg border border-violet-300 bg-white py-2 text-xs font-semibold text-violet-700 hover:bg-violet-50 disabled:opacity-50">
+                      {liveMoreLoading ? 'Đang tải…' : '↻ Tải thêm video'}
+                    </button>
+                  )}
                 </div>
               )}
               {liveVideos && liveVideos.map((vid) => (
@@ -447,6 +598,15 @@ Suy luận hợp lý từ tên + ngách. CHỈ trả JSON.`
                   </div>
                 </div>
               ))}
+              {liveVideos && liveVideos.length > 0 && liveHasMore && (
+                <button onClick={() => void loadMoreVideos()} disabled={liveMoreLoading}
+                  className="rounded-xl border border-violet-300 bg-white py-2.5 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:opacity-50">
+                  {liveMoreLoading ? 'Đang tải…' : '↻ Tải thêm video'}
+                </button>
+              )}
+              {liveVideos && liveVideos.length > 0 && !liveHasMore && (
+                <p className="py-1 text-center text-[11px] text-slate-400">— Hết video &gt;30s cho từ khóa này —</p>
+              )}
             </div>
           )}
 

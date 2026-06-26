@@ -50,17 +50,28 @@ export const MARKET_CURRENCY: Record<Market, string> = { MY: 'RM', ID: 'Rp', TH:
 // ── Ngách-preset cho QUÉT LIVE: chọn 1 cái → tự điền từ khóa → quét ngay ──
 // Từ khóa kiểu universal/Malay-English (TikTok Shop search fuzzy, chạy được cả 5 nước).
 // Ngách-preset: ưu tiên hàng TIÊU DÙNG NHANH, dễ UPSALE (mua nhiều/combo), dễ win COD.
+// Mỗi ngách 10 từ khóa, trộn 4 lớp: (a) category English (b) từ Malay bản địa
+// (c) triệu chứng/lợi ích (d) dạng sản phẩm — để bắt RỘNG, list SP đa dạng.
+// ⚠️ 1 từ khóa = 1 credit/lần quét (10 kw → ~10 credit/ngách/thị trường).
 export const NICHE_PRESETS: { label: string; emoji: string; keywords: string[] }[] = [
-  { label: 'TPCN / Vitamin', emoji: '💊', keywords: ['vitamin', 'suplemen', 'multivitamin', 'omega 3', 'probiotik'] },
-  { label: 'Collagen / Đẹp da', emoji: '🌸', keywords: ['collagen', 'glutathione', 'whitening drink', 'beauty drink'] },
-  { label: 'Giảm cân / Detox', emoji: '🔥', keywords: ['slimming', 'detox', 'diet drink', 'fat burner', 'lemon detox'] },
-  { label: 'Sinh lý / Sức khỏe nam', emoji: '💪', keywords: ['tongkat ali', 'testosterone', 'maca', 'kuat tenaga'] },
-  { label: 'Tóc / Rụng tóc', emoji: '💇', keywords: ['hair serum', 'hair growth', 'rambut gugur', 'anti hairfall'] },
-  { label: 'Skincare', emoji: '🧴', keywords: ['serum', 'sunscreen', 'acne treatment', 'face mask'] },
-  { label: 'Răng miệng', emoji: '🦷', keywords: ['teeth whitening', 'pemutih gigi', 'mouthwash', 'oral care'] },
-  { label: 'Mẹ & bé', emoji: '🤰', keywords: ['baby vitamin', 'prenatal', 'vitamin kanak', 'susu kanak'] },
-  { label: 'Dụng cụ sức khỏe', emoji: '🩹', keywords: ['massage gun', 'knee support', 'posture corrector', 'pain relief patch'] },
-  { label: 'Đồ ăn vặt / Snack', emoji: '🍿', keywords: ['snack viral', 'kerepek', 'keripik', 'cookies'] },
+  { label: 'TPCN / Vitamin', emoji: '💊', keywords: ['vitamin', 'suplemen', 'multivitamin', 'omega 3', 'probiotik', 'vitamin c', 'zinc', 'immune booster', 'daya tahan badan', 'kesihatan'] },
+  { label: 'Collagen / Đẹp da', emoji: '🌸', keywords: ['collagen', 'glutathione', 'whitening drink', 'beauty drink', 'kolagen', 'collagen drink', 'skin booster', 'awet muda', 'glowing skin', 'vitamin kulit'] },
+  { label: 'Giảm cân / Detox', emoji: '🔥', keywords: ['slimming', 'detox', 'diet drink', 'fat burner', 'lemon detox', 'kurus', 'pelangsing', 'slim drink', 'fiber drink', 'buang lemak'] },
+  { label: 'Sinh lý / Sức khỏe nam', emoji: '💪', keywords: ['tongkat ali', 'testosterone', 'maca', 'kuat tenaga', 'stamina lelaki', 'suplemen lelaki', 'tenaga batin', 'vitality men', 'booster lelaki', 'kesihatan lelaki'] },
+  { label: 'Tóc / Rụng tóc', emoji: '💇', keywords: ['hair serum', 'hair growth', 'rambut gugur', 'anti hairfall', 'serum rambut', 'hair tonic', 'kebotakan', 'hair oil', 'rambut tebal', 'scalp treatment'] },
+  { label: 'Skincare', emoji: '🧴', keywords: ['serum', 'sunscreen', 'face mask', 'moisturizer', 'toner', 'pelembap', 'krim muka', 'skincare set', 'niacinamide', 'hyaluronic'] },
+  { label: 'Răng miệng', emoji: '🦷', keywords: ['teeth whitening', 'pemutih gigi', 'mouthwash', 'oral care', 'gigi putih', 'toothpaste', 'ubat gigi', 'fresh breath', 'gum care', 'dental kit'] },
+  { label: 'Mẹ & bé', emoji: '🤰', keywords: ['baby vitamin', 'prenatal', 'vitamin kanak', 'susu kanak', 'baby care', 'ibu mengandung', 'baby skincare', 'milk booster', 'vitamin anak', 'produk bayi'] },
+  { label: 'Dụng cụ sức khỏe', emoji: '🩹', keywords: ['massage gun', 'knee support', 'posture corrector', 'pain relief patch', 'alat urut', 'koyo', 'neck massager', 'back support', 'support lutut', 'alat terapi'] },
+  { label: 'Đồ ăn vặt / Snack', emoji: '🍿', keywords: ['snack viral', 'kerepek', 'keripik', 'cookies', 'snek', 'makanan ringan', 'coklat', 'biskut', 'snack sihat', 'kuih viral'] },
+  { label: 'Xương khớp / Đau nhức', emoji: '🦴', keywords: ['joint', 'sendi', 'sakit lutut', 'pain relief', 'urut', 'sakit sendi', 'glucosamine', 'sakit badan', 'sakit belakang', 'koyo panas'] },
+  { label: 'Tiêu hóa / Dạ dày / Gan', emoji: '🌿', keywords: ['gastrik', 'probiotik usus', 'perut', 'detox usus', 'liver detox', 'sakit perut', 'pencernaan', 'gut health', 'enzyme', 'ubat gastrik'] },
+  { label: 'Mắt / Thị lực', emoji: '👁️', keywords: ['lutein', 'eye vitamin', 'mata', 'penglihatan', 'eye care', 'vitamin mata', 'mata kabur', 'bilberry eye', 'eye supplement', 'kesihatan mata'] },
+  { label: 'Ngủ ngon / Giảm stress', emoji: '😴', keywords: ['sleep', 'insomnia', 'magnesium', 'stress relief', 'susah tidur', 'melatonin', 'tidur lena', 'relax', 'anti stress', 'calm mind'] },
+  { label: 'Vệ sinh PN / Trắng body', emoji: '🌺', keywords: ['feminine wash', 'body whitening', 'deodoran', 'ketiak', 'miss v', 'pemutih badan', 'bau badan', 'lotion pemutih', 'intimate wash', 'underarm'] },
+  { label: 'Trang điểm / Son', emoji: '💄', keywords: ['lipstick', 'cushion', 'makeup', 'gincu', 'foundation', 'lip tint', 'bedak', 'mascara', 'eyeliner', 'mekap'] },
+  { label: 'Đường huyết / Tim mạch', emoji: '🩸', keywords: ['diabetes', 'kolesterol', 'darah tinggi', 'gula darah', 'blood pressure', 'jantung', 'kawal gula', 'lemak darah', 'sugar control', 'kesihatan jantung'] },
+  { label: 'Trị mụn / Trị nám', emoji: '🧖', keywords: ['acne', 'jerawat', 'dark spot', 'melasma', 'rawatan jerawat', 'parut jerawat', 'pigmentation', 'anti acne', 'kulit berjerawat', 'spot corrector'] },
 ]
 
 // ── Verdict ──

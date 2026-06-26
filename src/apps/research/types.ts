@@ -37,6 +37,8 @@ export interface ResearchProduct {
   revenueTrend?: number[]  // sparkline
   hotIn?: Market[]         // đang nổ ở market nào (cross-market hint)
   launchDate?: string
+  shipFrom?: string        // nơi gửi hàng (live TikTok Shop) — local vs cross-border
+  seller?: string          // tên shop bán (live)
 }
 
 export interface SignalResult {
