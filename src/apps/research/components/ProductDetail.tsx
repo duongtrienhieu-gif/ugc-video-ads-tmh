@@ -427,8 +427,34 @@ Cụ thể, thực chiến, KHÔNG bịa chứng nhận. CHỈ trả JSON.`
 {"transcript":"toàn bộ lời thoại + chữ trên màn hình, DỊCH sang tiếng Việt theo trình tự, tự nhiên dễ hiểu","structure":"cấu trúc video: hook mở đầu → thân (chứng minh/cảm xúc) → CTA, mỗi ý 1 dòng","angle":"góc bán chính & vì sao video này chốt/viral","howto":"cách bắt chước cho sản phẩm của mình, mỗi ý 1 dòng cụ thể"}
 Mô tả gốc của video: ${playVid.desc}
 Nếu video không có lời thoại thì đọc chữ trên màn hình + hình ảnh. CHỈ trả JSON.`
-      const raw = await directGeminiVision({ apiKey: geminiApiKey, parts: [{ fileData: { mimeType: mime, fileUri: uri } }, { text: prompt }], responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 4096 })
-      setReadResult(JSON.parse(raw) as VideoRead)
+      // responseSchema → Gemini ép trả JSON hợp lệ (tự escape nháy/xuống dòng trong transcript,
+      // tránh lỗi "Expected ',' or '}'"). maxOutputTokens cao vì transcript có thể dài.
+      const raw = await directGeminiVision({
+        apiKey: geminiApiKey,
+        parts: [{ fileData: { mimeType: mime, fileUri: uri } }, { text: prompt }],
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'object',
+          properties: {
+            transcript: { type: 'string' },
+            structure: { type: 'string' },
+            angle: { type: 'string' },
+            howto: { type: 'string' },
+          },
+          required: ['transcript', 'structure', 'angle', 'howto'],
+        },
+        temperature: 0.4,
+        maxOutputTokens: 8192,
+      })
+      let parsed: VideoRead
+      try {
+        parsed = JSON.parse(raw) as VideoRead
+      } catch {
+        // Dự phòng: bỏ code-fence ```json nếu model lỡ thêm, rồi parse lại.
+        const c = raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
+        parsed = JSON.parse(c) as VideoRead
+      }
+      setReadResult(parsed)
     } catch (e) {
       setReadErr('Đọc video lỗi: ' + ((e as Error).message || '').slice(0, 140))
     } finally {
