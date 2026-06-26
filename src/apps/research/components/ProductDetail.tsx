@@ -4,7 +4,7 @@ import type { Market, ScoredProduct, SignalResult } from '../types'
 import { VERDICT_META, NICHES, MARKETS, MARKET_CURRENCY, NICHE_PRESETS, nicheLabel } from '../constants'
 import { useBankStore } from '../../../stores/bankStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
-import { directGeminiText } from '../../../utils/gemini'
+import { directGeminiText, directGeminiVision, uploadFileToGemini } from '../../../utils/gemini'
 import { formatMyr } from '../services/pricing'
 import { getVideosFor, getCreatorsFor, getCrossMarketFor, analyzeVideo, formatCount, formatKMyr } from '../services/evidence'
 import { useResearchStore, type DbVideo, type DbCreator } from '../store'
@@ -13,6 +13,14 @@ import { useAppStore } from '../../../stores/appStore'
 import PricingCalculator from './PricingCalculator'
 
 type Tab = 'overview' | 'analysis' | 'video' | 'creator' | 'market' | 'pricing'
+
+// Kết quả AI "đọc" 1 video bán hàng → tiếng Việt (cho seller VN bán ở MY).
+interface VideoRead {
+  transcript: string   // lời thoại/chữ trên màn hình → dịch VN theo trình tự
+  structure: string    // hook → thân → CTA
+  angle: string        // góc bán & vì sao viral
+  howto: string        // cách bắt chước cho SP của mình
+}
 
 // Kết quả AI mổ xẻ SP (live) — vì sao win + khách + góc ads + giá + rủi ro.
 interface AiVerdict {
@@ -118,6 +126,28 @@ function coreTerms(title: string): string[] {
   return out
 }
 
+// Tải video về blob để đưa cho Gemini "xem". TikTok CDN hay chặn CORS → thử proxy dự phòng.
+async function fetchVideoBlob(url: string): Promise<Blob> {
+  const tries = [url, `https://corsproxy.io/?url=${encodeURIComponent(url)}`, `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`]
+  for (const u of tries) {
+    try {
+      const r = await fetch(u)
+      if (!r.ok) continue
+      const b = await r.blob()
+      if (b.size > 0) return b
+    } catch { /* thử proxy kế tiếp */ }
+  }
+  throw new Error('Không tải được video (CORS). Bấm Tải để lưu về rồi xem.')
+}
+function blobToB64(b: Blob): Promise<string> {
+  return new Promise((res, rej) => {
+    const r = new FileReader()
+    r.onload = () => res((r.result as string).split(',')[1] || '')
+    r.onerror = rej
+    r.readAsDataURL(b)
+  })
+}
+
 const STATUS_ICON: Record<SignalResult['status'], React.ReactNode> = {
   pass: <Check className="h-4 w-4 text-emerald-500" />,
   warn: <AlertTriangle className="h-4 w-4 text-amber-500" />,
@@ -140,7 +170,10 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const [tab, setTab] = useState<Tab>('overview')
   const [analyzeId, setAnalyzeId] = useState<string | null>(null)
   const [embedVideo, setEmbedVideo] = useState<{ id: string; handle?: string } | null>(null)
-  const [playMp4, setPlayMp4] = useState<string | null>(null)
+  const [playVid, setPlayVid] = useState<LiveVid | null>(null)   // video đang xem trong popup
+  const [readBusy, setReadBusy] = useState(false)
+  const [readErr, setReadErr] = useState<string | null>(null)
+  const [readResult, setReadResult] = useState<VideoRead | null>(null)
   const v = VERDICT_META[product.verdict]
   const niche = NICHES.find((n) => n.key === product.nicheKey)
   const passCount = product.signals.filter((s) => s.status === 'pass').length
@@ -382,6 +415,35 @@ Cụ thể, thực chiến, KHÔNG bịa chứng nhận. CHỈ trả JSON.`
       setVerdictErr('AI lỗi: ' + ((e as Error).message || '').slice(0, 70))
     } finally {
       setVerdictBusy(false)
+    }
+  }
+
+  // ── "Đọc video": Gemini xem MP4 → kịch bản + dịch VN + mổ xẻ góc bán (cho seller VN bán MY) ──
+  const closeVid = () => { setPlayVid(null); setReadResult(null); setReadErr(null); setReadBusy(false) }
+  const readVideo = async () => {
+    if (!playVid) return
+    if (!geminiApiKey) { setReadErr('Cần Gemini API key trong Cài đặt'); return }
+    setReadBusy(true); setReadErr(null); setReadResult(null)
+    try {
+      const blob = await fetchVideoBlob(playVid.downloadUrl)
+      const mime = blob.type && blob.type.startsWith('video') ? blob.type : 'video/mp4'
+      let part: { inlineData: { mimeType: string; data: string } } | { fileData: { mimeType: string; fileUri: string } }
+      if (blob.size > 18 * 1024 * 1024) {
+        const up = await uploadFileToGemini({ apiKey: geminiApiKey, file: new Blob([blob], { type: mime }), displayName: 'tt-video' })
+        part = { fileData: { mimeType: up.mimeType, fileUri: up.fileUri } }
+      } else {
+        part = { inlineData: { mimeType: mime, data: await blobToB64(blob) } }
+      }
+      const prompt = `Bạn đang xem 1 video TikTok BÁN HÀNG ở Malaysia (tiếng Malay/English). Người đọc là seller Việt Nam muốn HỌC cách họ bán. Trả JSON tiếng Việt:
+{"transcript":"toàn bộ lời thoại + chữ trên màn hình, DỊCH sang tiếng Việt theo trình tự, tự nhiên dễ hiểu","structure":"cấu trúc video: hook mở đầu → thân (chứng minh/cảm xúc) → CTA, mỗi ý 1 dòng","angle":"góc bán chính & vì sao video này chốt/viral","howto":"cách bắt chước cho sản phẩm của mình, mỗi ý 1 dòng cụ thể"}
+Mô tả gốc của video: ${playVid.desc}
+Nếu video không có lời thoại thì đọc chữ trên màn hình + hình ảnh. CHỈ trả JSON.`
+      const raw = await directGeminiVision({ apiKey: geminiApiKey, parts: [part, { text: prompt }], responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 4096 })
+      setReadResult(JSON.parse(raw) as VideoRead)
+    } catch (e) {
+      setReadErr('Đọc video lỗi: ' + ((e as Error).message || '').slice(0, 140))
+    } finally {
+      setReadBusy(false)
     }
   }
 
@@ -674,7 +736,7 @@ Cụ thể, thực chiến, KHÔNG bịa chứng nhận. CHỈ trả JSON.`
                   </div>
                   <div className="mt-2 flex gap-2">
                     <button
-                      onClick={() => { if (vid.downloadUrl) setPlayMp4(vid.downloadUrl); else if (vid.url) window.open(vid.url, '_blank') }}
+                      onClick={() => { if (vid.downloadUrl) { setReadResult(null); setReadErr(null); setPlayVid(vid) } else if (vid.url) window.open(vid.url, '_blank') }}
                       className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
                     >
                       <Play className="h-3.5 w-3.5" /> Xem
@@ -954,12 +1016,74 @@ Cụ thể, thực chiến, KHÔNG bịa chứng nhận. CHỈ trả JSON.`
         </div>
       )}
 
-      {/* ── Player MP4 không logo (live) — chạy thẳng, không cần TikTok embed ── */}
-      {playMp4 && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4" onClick={() => setPlayMp4(null)}>
-          <div className="relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setPlayMp4(null)} className="absolute -top-9 right-0 rounded-full bg-white/10 p-1.5 text-white hover:bg-white/20" title="Đóng"><X className="h-5 w-5" /></button>
-            <video src={playMp4} controls autoPlay playsInline className="max-h-[85vh] w-full rounded-2xl bg-black" />
+      {/* ── Player MP4 + "Đọc video" (kịch bản + dịch VN) — vừa xem vừa đối chiếu ── */}
+      {playVid && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-3 sm:p-4" onClick={closeVid}>
+          <div className="relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white lg:flex-row" onClick={(e) => e.stopPropagation()}>
+            <button onClick={closeVid} className="absolute right-2 top-2 z-10 rounded-full bg-black/50 p-1.5 text-white hover:bg-black/70" title="Đóng"><X className="h-5 w-5" /></button>
+
+            {/* Video */}
+            <div className="flex shrink-0 items-center justify-center bg-black lg:w-[44%]">
+              <video src={playVid.downloadUrl} controls autoPlay playsInline className="max-h-[40vh] w-full object-contain lg:max-h-[92vh]" />
+            </div>
+
+            {/* Kịch bản tiếng Việt */}
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+              <p className="mb-1 line-clamp-2 text-xs font-semibold text-slate-700">{playVid.desc || '(video)'}</p>
+              <p className="mb-3 text-[11px] text-slate-400">@{playVid.author} · 👁 {formatCount(playVid.views)} · {playVid.durationSec}s</p>
+
+              {!readResult && !readBusy && (
+                <button
+                  onClick={() => void readVideo()}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700"
+                >
+                  <Sparkles className="h-4 w-4" /> 🇻🇳 Đọc video (kịch bản + dịch)
+                </button>
+              )}
+              {readBusy && (
+                <div className="rounded-xl border border-dashed border-violet-200 bg-violet-50 p-4 text-center text-xs text-violet-600">
+                  🤖 AI đang xem & dịch video… (~15–40 giây)
+                </div>
+              )}
+              {readErr && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{readErr}</p>}
+
+              {readResult && (
+                <div className="flex flex-col gap-3">
+                  {[
+                    { icon: '💬', label: 'Lời thoại / kịch bản (dịch VN)', text: readResult.transcript },
+                    { icon: '🎬', label: 'Cấu trúc', text: readResult.structure },
+                    { icon: '🎯', label: 'Góc bán & vì sao chốt', text: readResult.angle },
+                    { icon: '♻️', label: 'Cách bắt chước cho SP mình', text: readResult.howto },
+                  ].map((b) => (
+                    <div key={b.label} className="rounded-xl border border-black/10 bg-slate-50 p-3">
+                      <div className="text-xs font-bold text-slate-700">{b.icon} {b.label}</div>
+                      <p className="mt-1 whitespace-pre-line text-[11px] leading-relaxed text-slate-600">{b.text}</p>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => void readVideo()}
+                    disabled={readBusy}
+                    className="rounded-xl border border-violet-300 bg-white py-2 text-xs font-semibold text-violet-700 hover:bg-violet-50 disabled:opacity-50"
+                  >
+                    ↻ Đọc lại
+                  </button>
+                </div>
+              )}
+
+              {/* Tải / TikTok */}
+              <div className="mt-3 flex gap-2">
+                <a href={playVid.downloadUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100">
+                  <Download className="h-3.5 w-3.5" /> Tải
+                </a>
+                {playVid.url && (
+                  <a href={playVid.url} target="_blank" rel="noopener noreferrer"
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-black/10 bg-slate-50 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                    <ExternalLink className="h-3.5 w-3.5" /> TikTok
+                  </a>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
