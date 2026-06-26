@@ -39,6 +39,8 @@ export interface ResearchProduct {
   launchDate?: string
   shipFrom?: string        // nơi gửi hàng (live TikTok Shop) — local vs cross-border
   seller?: string          // tên shop bán (live)
+  scanNiche?: string       // nhãn ngách user pick lúc quét (live) — để UI + AI dùng đúng ngách
+  isTracked?: boolean      // có mốc snapshot trước → growthRate là tăng trưởng THẬT (momentum)
 }
 
 export interface SignalResult {

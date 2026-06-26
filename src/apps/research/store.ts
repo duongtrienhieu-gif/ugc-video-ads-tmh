@@ -2,9 +2,9 @@
 // Đọc data THẬT từ Supabase (research_products); nếu chưa có / lỗi bảng → fallback
 // về SAMPLE_PRODUCTS để app vẫn dùng được. UI không phải đổi.
 import { create } from 'zustand'
-import { supabase } from '../../lib/supabase'
+import { supabase, requireUserId } from '../../lib/supabase'
 import type { Market, NicheKey, ResearchProduct, ScoredProduct, SkuRisk, Verdict, SignalResult } from './types'
-import { DEFAULT_FILTERS, type ResearchFilters, type PresetKey, PRESETS, VERDICT_THRESHOLDS, MARKET_CURRENCY } from './constants'
+import { DEFAULT_FILTERS, type ResearchFilters, type PresetKey, PRESETS, VERDICT_THRESHOLDS, MARKET_CURRENCY, MARKET_PRICE_FLOOR } from './constants'
 import { SAMPLE_PRODUCTS } from './sampleData'
 import { scoreMany } from './services/scoring'
 import { classifyNiche, classifySkuRisk } from './services/niche'
@@ -42,7 +42,7 @@ interface LiveApiProduct {
   sale: number; unitPrice: string | number; rating: number | string
   ship?: string; seller?: string
 }
-function liveToProduct(p: LiveApiProduct, market: Market): ResearchProduct {
+function liveToProduct(p: LiveApiProduct, market: Market, scanNiche?: string): ResearchProduct {
   const price = parseFloat(String(p.unitPrice).replace(/[^\d.]/g, '')) || 0
   const sale = Number(p.sale) || 0
   const title = p.title || '(không tên)'
@@ -57,7 +57,57 @@ function liveToProduct(p: LiveApiProduct, market: Market): ResearchProduct {
     skuVarianceRisk: classifySkuRisk(title),
     shipFrom: p.ship || undefined,
     seller: p.seller || undefined,
+    scanNiche: scanNiche || undefined,
   }
+}
+
+// ── Momentum: snapshot số-bán/ngày (Supabase research_snapshots) → tăng trưởng THẬT ──
+// Best-effort: bảng chưa tạo / chưa đăng nhập / lỗi → bỏ qua, không vỡ scan.
+const TODAY = () => new Date().toISOString().slice(0, 10)
+async function fetchPriorSnapshots(productIds: string[]): Promise<Map<string, { sold: number; on: string }>> {
+  const out = new Map<string, { sold: number; on: string }>()
+  if (!productIds.length) return out
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return out
+    const { data, error } = await supabase
+      .from('research_snapshots')
+      .select('product_id, sold, captured_on')
+      .eq('user_id', user.id)
+      .in('product_id', productIds.slice(0, 300))
+      .order('captured_on', { ascending: false })
+    if (error || !data) return out
+    const today = TODAY()
+    for (const r of data as Record<string, unknown>[]) {
+      const pid = String(r.product_id)
+      const on = String(r.captured_on)
+      if (on >= today) continue                 // cần mốc TRƯỚC hôm nay
+      if (!out.has(pid)) out.set(pid, { sold: Number(r.sold) || 0, on })  // bản gần nhất trước hôm nay
+    }
+    return out
+  } catch { return out }
+}
+async function applyMomentum(products: ResearchProduct[]): Promise<ResearchProduct[]> {
+  const prior = await fetchPriorSnapshots(products.map((p) => p.productId))
+  if (!prior.size) return products
+  const today = TODAY()
+  return products.map((p) => {
+    const pv = prior.get(p.productId)
+    if (!pv || pv.sold <= 0 || p.sale <= pv.sold) return p
+    const days = Math.max(1, Math.round((Date.parse(today) - Date.parse(pv.on)) / 86400000))
+    const growthPerDay = ((p.sale - pv.sold) / pv.sold) * 100 / days
+    return { ...p, growthRate: Math.round(growthPerDay * 10) / 10, isTracked: true }
+  })
+}
+async function saveSnapshots(products: ResearchProduct[], market: Market) {
+  try {
+    const user_id = await requireUserId()
+    const today = TODAY()
+    const rows = products.slice(0, 300).map((p) => ({
+      user_id, product_id: p.productId, market, sold: p.sale, captured_on: today,
+    }))
+    if (rows.length) await supabase.from('research_snapshots').upsert(rows, { onConflict: 'user_id,product_id,captured_on' })
+  } catch { /* best-effort: bảng chưa tạo / chưa login */ }
 }
 // Chấm điểm cho data LIVE (chỉ có số bán + giá + rating — KHÔNG có growth/commission/creator như Kalodata).
 // Điểm dựa vào SỐ ĐÃ BÁN (tín hiệu winner thật trên TikTok Shop).
@@ -65,7 +115,11 @@ function scoreLive(p: ResearchProduct): ScoredProduct {
   const sale = p.sale
   const cur = MARKET_CURRENCY[p.market] || ''
   const priceStr = p.unitPrice ? `${cur} ${p.unitPrice.toLocaleString('vi-VN')}` : '—'
-  const score = Math.max(0, Math.min(100, Math.round(38 + 13 * Math.log10(sale + 1))))
+  // Điểm theo SỐ BÁN (log) + ĐIỀU CHỈNH theo rating: 4.5 = trung tính, <4.5 bị trừ
+  // (tránh SP 10k đơn nhưng 2★ vẫn "Nên test" — rating thấp = nhiều hoàn/khiếu nại).
+  let raw = 38 + 13 * Math.log10(sale + 1)
+  if (p.rating > 0) raw += (p.rating - 4.5) * 6
+  const score = Math.max(0, Math.min(100, Math.round(raw)))
   const verdict: Verdict = score >= VERDICT_THRESHOLDS.go ? 'go' : score >= VERDICT_THRESHOLDS.consider ? 'consider' : 'avoid'
   const reasons = [
     `${sale.toLocaleString('vi-VN')} đã bán`,
@@ -180,6 +234,7 @@ interface ResearchStore {
   scanError: string | null
   scanCredits: number | null
   scanKeywords: string
+  scanNiche: string          // nhãn ngách đang quét (để gắn vào SP + hiển thị chip)
 
   // Cross-market
   crossLoading: boolean
@@ -196,6 +251,7 @@ interface ResearchStore {
   select: (id: string | null) => void
   hydrate: () => Promise<void>
   setScanKeywords: (s: string) => void
+  setScanNiche: (s: string) => void
   scanLive: () => Promise<void>
   scanCross: (q: string) => Promise<void>
   clearCross: () => void
@@ -226,6 +282,7 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
   scanError: null,
   scanCredits: null,
   scanKeywords: 'garam bawang, suplemen kesihatan, vitamin, kolagen, alat urut',
+  scanNiche: '',
   crossLoading: false,
   crossError: null,
   crossData: null,
@@ -243,9 +300,10 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
   setSort: (sortBy) => set({ sortBy }),
   select: (selectedId) => set({ selectedId }),
   setScanKeywords: (scanKeywords) => set({ scanKeywords }),
+  setScanNiche: (scanNiche) => set({ scanNiche }),
 
   scanLive: async () => {
-    const { market, scanKeywords } = get()
+    const { market, scanKeywords, scanNiche } = get()
     const kw = scanKeywords.trim()
     if (!kw) { set({ scanError: 'Nhập ít nhất 1 từ khóa ngách' }); return }
     set({ scanning: true, scanError: null })
@@ -254,13 +312,16 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
       const r = await fetch(url)
       const d = await r.json()
       if (d.error) { set({ scanning: false, scanError: d.error }); return }
-      const products: ResearchProduct[] = (d.products || []).map((p: LiveApiProduct) => liveToProduct(p, market))
+      const products: ResearchProduct[] = (d.products || []).map((p: LiveApiProduct) => liveToProduct(p, market, scanNiche))
+      // Momentum: so với snapshot trước (nếu có) → tăng trưởng thật; rồi lưu mốc hôm nay.
+      const withMomentum = await applyMomentum(products)
       set({
-        realProducts: products, isLive: true, hydrated: true,
+        realProducts: withMomentum, isLive: true, hydrated: true,
         scanCredits: d.credits ?? null,
         scanError: d.errors && d.errors.length ? `${d.errors.length} từ khóa không ra SP` : null,
         scanning: false, selectedId: null, nicheFilter: 'all', sortBy: 'sale',
       })
+      void saveSnapshots(products, market)
     } catch (e) {
       set({ scanning: false, scanError: (e as Error).message || 'Lỗi kết nối' })
     }
@@ -351,6 +412,11 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
     let rows = get().source().filter((p) => p.market === market)
     if (nicheFilter !== 'all') rows = rows.filter((p) => p.nicheKey === nicheFilter)
     if (filters.hideHighSku) rows = rows.filter((p) => p.skuVarianceRisk !== 'high')
+    // Ẩn SP giá mồi (~0) ở chế độ live — giá thật nằm ở variant, lên thẻ gây nhiễu.
+    if (live && filters.hideTeaser) {
+      const floor = MARKET_PRICE_FLOOR[market] ?? 0
+      rows = rows.filter((p) => !(p.unitPrice > 0 && p.unitPrice < floor))
+    }
     // Các bộ lọc dưới đây thuộc data Kalodata (giá RM / hoa hồng / tăng trưởng / creator).
     // Với data LIVE TikTok Shop (giá local + không có các trường này) → BỎ QUA, nếu không sẽ lọc sạch SP nước ngoài.
     if (!live) {

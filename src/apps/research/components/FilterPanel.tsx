@@ -31,17 +31,19 @@ export default function FilterPanel() {
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
           Sắp xếp theo
           <select
-            value={sortBy === 'sale' || sortBy === 'score' ? sortBy : 'sale'}
-            onChange={(e) => setSort(e.target.value as 'sale' | 'score')}
+            value={sortBy === 'sale' || sortBy === 'score' || sortBy === 'growth' ? sortBy : 'sale'}
+            onChange={(e) => setSort(e.target.value as 'sale' | 'score' | 'growth')}
             className="rounded-lg border border-black/10 bg-white px-2 py-1.5 text-xs"
           >
             <option value="sale">Số đã bán</option>
             <option value="score">Điểm cơ hội</option>
+            <option value="growth">📈 Tăng nhanh (momentum)</option>
           </select>
         </label>
         <Toggle on={filters.hideHighSku} onChange={(v) => setFilter('hideHighSku', v)} label="Ẩn SP nhiều biến thể" />
+        <Toggle on={filters.hideTeaser} onChange={(v) => setFilter('hideTeaser', v)} label="Ẩn SP giá mồi (≈0)" />
         <p className="mt-1 rounded-lg bg-violet-50 px-2 py-1.5 text-[10px] text-violet-600">
-          Đang xem data LIVE TikTok Shop — chấm điểm theo SỐ ĐÃ BÁN.
+          Đang xem data LIVE TikTok Shop — chấm điểm theo SỐ ĐÃ BÁN. "Tăng nhanh" cần quét lại sau vài ngày.
         </p>
       </aside>
     )

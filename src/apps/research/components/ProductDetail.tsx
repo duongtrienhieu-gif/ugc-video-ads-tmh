@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X, Check, AlertTriangle, XCircle, Plus, Play, TrendingUp, TrendingDown, ExternalLink, Sparkles, Info, Download } from 'lucide-react'
 import type { Market, ScoredProduct, SignalResult } from '../types'
-import { VERDICT_META, NICHES, MARKETS, MARKET_CURRENCY, nicheLabel } from '../constants'
+import { VERDICT_META, NICHES, MARKETS, MARKET_CURRENCY, NICHE_PRESETS, nicheLabel } from '../constants'
 import { useBankStore } from '../../../stores/bankStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { directGeminiText } from '../../../utils/gemini'
@@ -260,6 +260,9 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
 
   const cur = MARKET_CURRENCY[product.market] ?? ''
   const marketLabel = MARKETS.find((m) => m.key === product.market)?.label ?? product.market
+  // Ngách hiển thị: ưu tiên nhãn user đã pick lúc quét (scanNiche) thay vì classify từ tên (hay ra 'other').
+  const nicheText = product.scanNiche || nicheLabel(product.nicheKey)
+  const nicheEmoji = NICHE_PRESETS.find((n) => n.label === product.scanNiche)?.emoji ?? niche?.emoji ?? '📦'
 
   // AI đọc SP research → suy luận → điền ĐẦY ĐỦ field → tạo SP THẬT vào Bank, trả id thật.
   // Dedup trong phiên: tạo 1 lần, các nút sau tái dùng id (không tạo trùng).
@@ -269,7 +272,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
     const prompt = `Bạn là chuyên gia nghiên cứu sản phẩm COD/affiliate. Đọc 1 sản phẩm đang bán chạy trên TikTok Shop và SUY LUẬN viết hồ sơ ĐẦY ĐỦ bằng TIẾNG VIỆT để tạo content quảng cáo + landing page.
 SẢN PHẨM:
 - Tên gốc: ${product.title}
-- Ngách: ${nicheLabel(product.nicheKey)}
+- Ngách: ${nicheText}
 - Thị trường: ${marketLabel}
 - Giá: ${cur} ${product.unitPrice} · Đã bán: ${product.sale} · Đánh giá: ${product.rating || '—'}
 Trả JSON đúng khóa (tiếng Việt, cụ thể, KHÔNG bịa chứng nhận y tế/giấy phép):
@@ -322,7 +325,7 @@ Suy luận hợp lý từ tên + ngách. CHỈ trả JSON.`
       const prompt = `Bạn là chuyên gia bán hàng COD/affiliate đưa SP win từ ${marketLabel} về MALAYSIA bán. Đọc SP đang bán chạy trên TikTok Shop và phân tích sắc bén bằng TIẾNG VIỆT.
 SẢN PHẨM:
 - Tên: ${product.title}
-- Ngách: ${nicheLabel(product.nicheKey)}
+- Ngách: ${nicheText}
 - Thị trường nguồn: ${marketLabel}
 - Giá: ${cur} ${product.unitPrice} · Đã bán: ${product.sale} · Đánh giá: ${product.rating || '—'}
 Trả JSON đúng khóa:
@@ -380,7 +383,7 @@ Cụ thể, thực chiến, KHÔNG bịa chứng nhận. CHỈ trả JSON.`
               <img src={product.imageUrl} alt={product.title} className="h-full w-full object-cover"
                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
             ) : (
-              <span>{niche?.emoji ?? '📦'}</span>
+              <span>{nicheEmoji}</span>
             )}
           </div>
           <div className="min-w-0 flex-1">
@@ -446,7 +449,10 @@ Cụ thể, thực chiến, KHÔNG bịa chứng nhận. CHỈ trả JSON.`
                     <span className="font-semibold text-emerald-700">💰 Doanh thu ước tính</span>
                     <span className="text-base font-bold text-emerald-700">{compactCur(product.revenue)}</span>
                   </div>
-                  <p className="mt-1 text-[10px] text-emerald-600/80">{product.sale.toLocaleString('vi-VN')} đã bán × {cur} {product.unitPrice.toLocaleString('vi-VN')} (số tích lũy trên TikTok Shop, không phải theo ngày).</p>
+                  <p className="mt-1 text-[10px] text-emerald-600/80">
+                    {product.sale.toLocaleString('vi-VN')} đã bán × {cur} {product.unitPrice.toLocaleString('vi-VN')} (số tích lũy).
+                    {product.isTracked && product.growthRate > 0 && <span className="font-bold"> · 📈 +{product.growthRate}%/ngày (so mốc trước)</span>}
+                  </p>
                 </div>
               ) : (
                 <div className="rounded-xl border border-black/10 bg-slate-50 p-3">

@@ -71,6 +71,9 @@ export default function OpportunityCard({ product: p, onOpen }: Props) {
             <>
               <span className="flex items-center gap-1"><Tag className="h-3.5 w-3.5" />{priceStr}</span>
               {p.rating > 0 && <span className="flex items-center gap-1">⭐ {p.rating}</span>}
+              {p.isTracked && p.growthRate > 0 && (
+                <span className="flex items-center gap-1 font-semibold text-emerald-600"><TrendingUp className="h-3.5 w-3.5" />+{p.growthRate}%/ngày</span>
+              )}
             </>
           ) : (
             <>
