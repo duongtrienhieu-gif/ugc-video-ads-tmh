@@ -237,7 +237,12 @@ export default function Personified() {
     if (charBank[character.name]?.status === 'rendering') return
     setCharBank((p) => ({ ...p, [character.name]: { status: 'rendering' } }))
     try {
-      const { refImage } = await renderCharacterRef({ apiKey: kieKey, character })
+      // Hero = SP nhân cách hóa → khóa bao bì thật bằng ảnh sản phẩm (chống drift màu/nhãn).
+      const isProductHero = character.role === 'hero'
+      const { refImage } = await renderCharacterRef({
+        apiKey: kieKey, character,
+        productRefs: isProductHero ? productRefs : [],
+      })
       setCharBank((p) => ({ ...p, [character.name]: { status: 'done', refImage } }))
     } catch (e) {
       setCharBank((p) => ({ ...p, [character.name]: { status: 'failed', error: e instanceof Error ? e.message : String(e) } }))
@@ -695,7 +700,7 @@ export default function Personified() {
                               : <div className="flex h-28 w-20 items-center justify-center rounded-lg border border-dashed border-violet-200 bg-violet-50/40 text-center text-[18px]">{bank?.status === 'rendering' ? <Loader2 className="h-4 w-4 animate-spin text-violet-500" /> : '🎭'}</div>}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="font-bold text-gray-900">{ch.name} <span className="font-normal text-gray-400">· {ch.role}</span></div>
+                            <div className="font-bold text-gray-900">{ch.name} <span className="font-normal text-gray-400">· {ch.role}</span>{ch.role === 'hero' && <span className="ml-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">📦 khóa bao bì thật</span>}</div>
                             <div className="mt-0.5 text-gray-600">{ch.represents}</div>
                             {ch.voice.vungMien && !/không có/i.test(ch.voice.vungMien) && (
                               <div className="mt-1 text-[10px] text-gray-400">Giọng: {ch.voice.vungMien} · {ch.voice.gioiTinh} · {ch.voice.tuoi} · {ch.voice.texture}</div>

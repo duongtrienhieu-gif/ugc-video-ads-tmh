@@ -21,9 +21,15 @@ function tierToRes(tier: RenderTier): Resolution {
 }
 
 /** Prompt CHARACTER SHEET — render 1 lần/nhân vật để khóa diện mạo (Character Bank, P2b).
- *  Pose trung tính, nền studio trơn → dễ dùng làm reference i2i cho mọi cảnh sau. */
-function buildCharacterSheetPrompt(character: PersonifiedCharacter): string {
+ *  Pose trung tính, nền studio trơn → dễ dùng làm reference i2i cho mọi cảnh sau.
+ *  hasProductRef = nhân vật HERO chính là SẢN PHẨM nhân cách hóa → khóa bao bì/màu/nhãn
+ *  từ ảnh thật (ref #1), CHỈ thêm mắt + tay/chân, BỎ QUA màu mô tả trong text (chống drift). */
+function buildCharacterSheetPrompt(character: PersonifiedCharacter, hasProductRef: boolean): string {
   const base = (character.imagePromptEn ?? '').trim() || (character.appearance ?? '').trim() || 'A 3D Pixar cartoon character'
+  if (hasProductRef) {
+    // HERO = sản phẩm thật. Reference image #1 = bao bì thật → giữ NGUYÊN packaging.
+    return `Reference image #1 is the REAL PRODUCT. Personify THIS EXACT product as a 3D Pixar cartoon hero: keep the packaging, label text, brand name, colours, gradients and shape EXACTLY as reference image #1 — do NOT change the colour, do NOT recolour, do NOT invent a new label. ONLY add expressive cartoon eyes, small cartoon arms with gloved hands, and little legs with shoes, while the body stays the real product. ${character.represents ? `It represents: ${character.represents}.` : ''} Ignore any colour or packaging described in words — the colour and label come ONLY from reference image #1. Full-body character reference, neutral confident standing pose, facing camera, plain soft studio backdrop, even lighting, 3D Pixar cartoon style, vertical 9:16 framing. NO on-screen text, NO captions, NO watermark, NO subtitles.`
+  }
   return `${base} Full-body character reference, neutral standing pose, facing camera, plain soft studio backdrop, even lighting, 3D Pixar cartoon style, vertical 9:16 framing. NO on-screen text, NO captions, NO watermark, NO subtitles.`
 }
 
@@ -79,15 +85,23 @@ async function refToUrl(ref: string | undefined): Promise<string | null> {
 }
 
 /** P2b — render CHARACTER SHEET 1 nhân vật (1 lần) → { refImage }. Lưu vào Character Bank,
- *  dùng làm ref khóa diện mạo cho mọi cảnh có nhân vật đó. */
+ *  dùng làm ref khóa diện mạo cho mọi cảnh có nhân vật đó.
+ *  productRefs: chỉ truyền cho nhân vật HERO (= SP nhân cách hóa) → khóa bao bì thật,
+ *  chống drift màu/nhãn (vd LANZF đỏ ra xanh). Villain/organ để rỗng (vật bịa). */
 export async function renderCharacterRef(
-  p: { apiKey: string; character: PersonifiedCharacter; signal?: AbortSignal },
+  p: { apiKey: string; character: PersonifiedCharacter; productRefs?: string[]; signal?: AbortSignal },
 ): Promise<{ refImage: string }> {
   if (!p.apiKey) throw new Error('Thiếu KIE API key (Cài đặt)')
   if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
-  const prompt = buildCharacterSheetPrompt(p.character)
+
+  const filesUrl: string[] = []
+  for (const ref of (p.productRefs ?? []).slice(0, 4)) {
+    const url = await refToUrl(ref)
+    if (url) filesUrl.push(url)
+  }
+  const prompt = buildCharacterSheetPrompt(p.character, filesUrl.length > 0)
   const remoteUrl = await generateGpt4oImageFast({
-    apiKey: p.apiKey, prompt, filesUrl: [], size: '2:3',
+    apiKey: p.apiKey, prompt, filesUrl, size: '2:3',
     softTimeoutMs: 100_000, attemptTimeoutMs: 150_000, maxAttempts: 3, signal: p.signal,
   })
   const blob = await fetch(remoteUrl).then((r) => r.blob())
