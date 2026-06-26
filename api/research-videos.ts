@@ -9,6 +9,17 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 const VALID_REGIONS = new Set(['MY', 'TH', 'ID', 'VN', 'PH'])
 
+// Từ NGÁCH-CHUNG: khớp những từ này = tín hiệu YẾU (video ngách chung, không chắc đúng SP).
+// → chấm điểm rất nhẹ để brand/tên-riêng nổi lên trên, bớt video ngách chung lọt vào.
+const GENERIC_TERMS = new Set([
+  'probiotic', 'probiotik', 'prebiotic', 'prebiotik', 'fiber', 'serat', 'enzyme',
+  'collagen', 'kolagen', 'glutathione', 'vitamin', 'suplemen', 'supplement', 'serum',
+  'detox', 'slim', 'slimming', 'kurus', 'whitening', 'drink', 'minuman', 'gummies', 'gummy',
+  'mask', 'oil', 'minyak', 'cream', 'krim', 'skincare', 'health', 'sihat', 'beauty',
+  'acne', 'jerawat', 'hair', 'rambut', 'sleep', 'tidur', 'joint', 'sendi', 'eye', 'mata',
+  'gastrik', 'halal', 'set', 'original', 'lutein', 'magnesium', 'omega', 'zinc', 'tongkat',
+])
+
 interface UrlList { url_list?: string[] }
 interface Aweme {
   aweme_id?: string
@@ -80,17 +91,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Chấm điểm LIÊN QUAN: video phải nhắc tới SP trong desc. Khớp token[0] (brand) = +3,
     // mỗi token khác = +1. Bỏ video score 0 (news/drift). Nếu KHÔNG có terms thì giữ tất cả.
+    // Chấm điểm: BRAND (token[0], không phải từ chung) khớp desc = +4 và đánh dấu brandHit;
+    // token riêng khác = +1.5; từ ngách-chung = +0.3 (rất nhẹ). → video gọi đúng brand nổi lên.
+    const brandToken = terms[0] && !GENERIC_TERMS.has(terms[0]) ? terms[0] : ''
     const scored = mapped
       .map((v) => {
         const desc = v.desc.toLowerCase()
         let score = 0
-        terms.forEach((t, i) => { if (desc.includes(t)) score += i === 0 ? 3 : 1 })
-        return { v, score }
+        let brandHit = false
+        terms.forEach((t, i) => {
+          if (!desc.includes(t)) return
+          if (i === 0 && t === brandToken) { score += 4; brandHit = true }
+          else score += GENERIC_TERMS.has(t) ? 0.3 : 1.5
+        })
+        return { v, score, brandHit }
       })
       .filter((s) => terms.length === 0 ? true : s.score > 0)
-      // Liên quan nhất trước; cùng điểm thì video DÀI hơn (giàu cảnh/kịch bản) trước.
+    // Nếu đã đủ video khớp BRAND (≥3) → chỉ giữ video khớp brand (bỏ video ngách chung).
+    // Chưa đủ → giữ tất cả score>0 để không trống. Sắp theo điểm rồi độ dài.
+    const brandHits = scored.filter((s) => s.brandHit)
+    const chosen = (brandToken && brandHits.length >= 3 ? brandHits : scored)
       .sort((a, b) => b.score - a.score || b.v.durationSec - a.v.durationSec)
-    const videos = scored.slice(0, 40).map((s) => s.v)
+    const videos = chosen.slice(0, 40).map((s) => s.v)
 
     // has_more: ưu tiên field của API; nếu thiếu thì suy từ việc còn cursor + còn item thô.
     const hasMore = d.has_more != null ? !!d.has_more : (!!d.cursor && list.length > 0)
