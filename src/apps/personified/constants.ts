@@ -172,8 +172,8 @@ export const RENDER_TIER_LABEL: Record<RenderTier, string> = {
   seedance720: 'Seedance 720p (đẹp nhất · đắt hơn)',
   grok480:     'Grok 480p (ultra-nháp)',
 }
-/** credit / giây i2v (no-audio). Seedance 720p 3.5 · Seedance 480p ~2 (verify KIE) · Grok 480p ~1.6. */
-const I2V_CR_PER_SEC: Record<RenderTier, number> = { seedance480: 2, seedance720: 3.5, grok480: 1.6 }
+/** credit / giây i2v (no-audio). Seedance 720p 3.5 · Seedance 480p 1.75 (kieai.ts xác nhận) · Grok 480p ~1.6. */
+const I2V_CR_PER_SEC: Record<RenderTier, number> = { seedance480: 1.75, seedance720: 3.5, grok480: 1.6 }
 const KEYFRAME_CR = 6                         // 1 ảnh keyframe gpt-4o-image ≈ 6cr
 export const LIPSYNC_CR_PER_SEC = 3           // InfiniteTalk 480p ≈ 3cr/giây giọng (số từ v3)
 const LIPSYNC_SPEECH_FRAC = 0.75              // giọng ≈ 75% độ dài clip (đuôi là hình không lời)

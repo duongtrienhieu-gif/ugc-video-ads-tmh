@@ -16,6 +16,7 @@ import {
   estimateProjectCredits, formatCreditEstimate, pickClipDuration, estimateSpeechSec, playbackWps,
 } from './constants'
 import { analyzeInsight, generateScript } from './services/personifiedBrain'
+import './services/personifiedRenderer'   // P2a — đăng ký dev helper __testRenderScene(n)
 
 const DEFAULT_CONFIG: PersonifiedConfig = {
   archetype: 'KB1_invader', length: 'medium', heroType: 'product_knight',
