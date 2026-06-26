@@ -217,12 +217,18 @@ ${ARCHETYPE_STRUCTURE[config.archetype]}
 ${SHARED_CHAR_RULES}
 ${HERO_FORMFACTOR_RULE}
 
-🎬 LUẬT KỂ CHUYỆN (thứ làm video HẤP DẪN — quan trọng NGANG khuôn cứng; thiếu nó kịch bản thành "danh sách câu rời", chán):
-1. MẠCH LIỀN 1 truyện: mỗi cảnh là HỆ QUẢ của cảnh trước (vì thế… nên… và rồi…), KHÔNG phải mỗi cảnh 1 câu tuyên bố rời rạc. Cảnh sau ĐẨY/NHẮC cảnh trước.
-2. LEO THANG: mỗi cảnh phải CĂNG hơn cảnh trước — cấm 3 cảnh cùng 1 mức cảm xúc.
-3. CAO TRÀO CÓ CÚ LẬT: phản diện KHÔNG thua tức thì — nó CHỐNG CỰ / cười khẩy / phản công TRƯỚC, RỒI cơ chế CỤ THỂ của sản phẩm mới lật ngược. Chiến thắng phải GIÀNH được mới đã (cấm "SP xuất hiện → villain thua ngay").
-4. NEO VÀO ĐỜI THẬT: nỗi đau phải là 1 KHOẢNH KHẮC CỤ THỂ, dễ nhận ra, hơi quê/ngại (vd "nghe con nói Hả 5 lần", "ngại không dám nói chuyện") — CẤM chung chung "đời mày tiêu / khổ lắm".
-5. THOẠI = CÁ TÍNH + ẨN Ý, KHÔNG TƯỜNG THUẬT: mỗi nhân vật có thái độ riêng (villain láo/cợt, organ mệt mỏi đá xoáy). CẤM nhân vật đọc trắng chức năng mình ("tao làm mày điếc") — khoe hại/lợi qua THÁI ĐỘ + tình huống, không qua câu khai báo.
+🔥 CRAFT VIRAL (rút TRỰC TIẾP từ video nhân-cách-hóa đang viral — BÁM SÁT, đây là thứ tạo KHÁC BIỆT; áp CHO CẢ thị trường MY lẫn VN, chỉ đổi NGÔN NGỮ slang — ví dụ minh hoạ VN//MY):
+1. MẠCH + LEO THANG: 1 truyện liền, mỗi cảnh là HỆ QUẢ + CĂNG hơn cảnh trước (cấm cảnh rời rạc cùng 1 mức cảm xúc).
+2. HOOK: nhân vật chính BẬT RA + TỰ XƯNG DANH (đặt TÊN riêng) + nhắm 1 ĐỐI TƯỢNG / KHOẢNH KHẮC cụ thể + khịa + cười. (VN: "tao là Quỷ Khô Khớp đây, mấy ông bà sáng dậy khớp kêu rắc rắc rén chưa?" // MY: "aku Hantu Sendi ni! Korang yang pagi-pagi sendi berbunyi tu, takut tak?")
+3. ẨN DỤ 1 THẾ GIỚI SÂU, vocab NHẤT QUÁN xuyên CẢ video (công trường/máy móc/chủ nhà…): chọn 1 thế giới rồi GIỮ (vd máy nghiền · đổ bê tông · gãy xẻng · đình công / rút dầu nhớt · siết ốc gỉ).
+4. KHOE CƠ CHẾ HẠI = gamified + GỌI TÊN THÓI XẤU thật của chủ (ăn cay, nuốt không nhai, thức khuya, nốc cà phê) + hình ảnh VISCERAL cụ thể (vd "đổ bê tông lấp lỗ chân lông").
+5. NEO ĐỜI THẬT: nỗi đau là 1 khoảnh khắc CỤ THỂ, hơi quê/ngại (leo 3 bậc đã thở dốc, nghe con nói "hả" 5 lần) — CẤM "đời mày tiêu / khổ lắm".
+6. FALSE-SOLUTION: đồ thường làm villain MẠNH THÊM / biến hình XẤU HƠN ("càng bôi tao càng khoái", "nước muối à? nhạt!") — KHÔNG để villain im.
+7. HERO VÀO = villain HOANG MANG TỰ CẢM NHẬN (CẤM hero hô khẩu hiệu kiểu "SP tới tiêu diệt mày"): "Ơ… cái gì mát lạnh thấm sâu vậy?!".
+8. DEFEAT = villain TỰ KHAI thua, đọc TÊN SẢN PHẨM + hoạt chất + LỢI ÍCH lúc TRÚNG ĐÒN; MỖI hoạt chất = 1 VŨ KHÍ có HÌNH (khiên/xích/hơi xanh/đạo quân/lốc xoáy). Benefit ra từ MIỆNG VILLAIN + có "hỗ trợ"(VN)/"bantu"(MY).
+9. VILLAIN BIẾN HÌNH theo arc cảm xúc: vênh → panic → tan → tí-hon-băng-bó/dỗi. Thoại = CÁ TÍNH + slang bản địa DÀY (VN: đầu má/muối mặt/bay màu/game là dễ // MY: weh/kot/power/bersepah — theo block giọng Mã); CẤM tường thuật chức năng phẳng ("tao làm mày đau").
+10. RESULT = CON NGƯỜI sống lại đúng KHOẢNH KHẮC đã mất ở hook (BOOKEND): leo cầu thang nhẹ tênh / ngủ ngon mỉm cười / mặc áo 2 dây tự tin.
+11. CTA TRONG VAI theo style đã chọn (villain xách vali "tao cút đây tìm đứa khác" / reverse "tao CẤM bấm giỏ" / sidekick imp nói nhanh) + 1 benefit + disclaimer "hiệu quả tùy cơ địa"(VN)/"hasil mungkin berbeza"(MY). CẤM giọng marketer phẳng.
 
 INSIGHT (đã phân tích):
 - Sản phẩm: ${insight.productInsight}
