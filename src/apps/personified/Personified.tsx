@@ -16,12 +16,13 @@ import {
   estimateProjectCredits, formatCreditEstimate, pickClipDuration, estimateSpeechSec, playbackWps,
 } from './constants'
 import { analyzeInsight, generateScript } from './services/personifiedBrain'
-import { renderPersonifiedScene } from './services/personifiedRenderer'   // P2a (cũng đăng ký dev helper __testRenderScene)
+import { renderKeyframe, renderClipFromKeyframe } from './services/personifiedRenderer'   // P2a (cũng đăng ký dev helper __testRenderScene)
 import { useAssetUrl } from '../../hooks/useAssetUrl'
 
 // P2a — trạng thái render 1 cảnh (persist cùng kịch bản).
+// CỔNG DUYỆT: kf (đang tạo ảnh) → kf_ready (xem ảnh, duyệt) → clip (đang i2v) → done.
 interface SceneRender {
-  status: 'idle' | 'rendering' | 'done' | 'failed'
+  status: 'idle' | 'kf' | 'kf_ready' | 'clip' | 'done' | 'failed'
   keyframeRef?: string
   clipRef?: string
   taskId?: string
@@ -86,6 +87,8 @@ export default function Personified() {
     () => script ? estimateProjectCredits(script.scenes, tier, true) : null,   // P2 — đã gồm lipsync
     [script, tier],
   )
+  // P2a — số cảnh đã duyệt keyframe (sẵn sàng i2v) → bật nút "Clip tất cả".
+  const kfReadyCount = useMemo(() => Object.values(clips).filter((c) => c.status === 'kf_ready').length, [clips])
 
   const noKey = !geminiKey
   const isVN = market === 'VN'
@@ -114,7 +117,17 @@ export default function Personified() {
           if (s.script) setScript(s.script)
           if (typeof s.variant === 'number') setVariant(s.variant)
           if (s.tier) setTier(s.tier)
-          if (s.clips) setClips(s.clips)
+          if (s.clips) {
+            // Sanitize trạng thái transient (đang render lúc F5) → trạng thái ổn định:
+            //   kf đang chạy → idle (chưa có ảnh) hoặc kf_ready (đã có ảnh); clip đang chạy → kf_ready.
+            const fixed: Record<number, SceneRender> = {}
+            for (const [k, v] of Object.entries(s.clips)) {
+              if (v.status === 'kf') fixed[+k] = { ...v, status: v.keyframeRef ? 'kf_ready' : 'idle' }
+              else if (v.status === 'clip') fixed[+k] = { ...v, status: v.keyframeRef ? 'kf_ready' : 'idle' }
+              else fixed[+k] = v
+            }
+            setClips(fixed)
+          }
         }
       }
     } catch { /* ignore corrupt cache */ }
@@ -184,35 +197,66 @@ export default function Personified() {
     })
   }
 
-  // P2a — render 1 cảnh: keyframe → Seedance i2v → clip. Lưu vào clips[idx] (persist).
-  async function handleRenderScene(scene: PersonifiedScene) {
+  // P2a — BƯỚC 1: render keyframe (ảnh tĩnh, rẻ) để DUYỆT trước i2v. → status 'kf_ready'.
+  async function handleRenderKeyframe(scene: PersonifiedScene) {
     if (!script) return
     if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
-    if (clips[scene.idx]?.status === 'rendering') return
+    if (clips[scene.idx]?.status === 'kf' || clips[scene.idx]?.status === 'clip') return
     const character = script.characters.find((c) => c.name === scene.speaker || c.role === scene.speaker) ?? script.characters[0]
-    setClips((p) => ({ ...p, [scene.idx]: { status: 'rendering' } }))
+    setClips((p) => ({ ...p, [scene.idx]: { status: 'kf' } }))
     try {
-      const res = await renderPersonifiedScene({
+      const { keyframeRef } = await renderKeyframe({
         apiKey: kieKey, scene, character,
         productRefs: scene.hasProduct ? productRefs : [],
-        tier,
-        onStage: (_st, info) => setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], status: 'rendering', ...info } })),
       })
-      setClips((p) => ({ ...p, [scene.idx]: { status: 'done', ...res } }))
+      setClips((p) => ({ ...p, [scene.idx]: { status: 'kf_ready', keyframeRef } }))
     } catch (e) {
       setClips((p) => ({ ...p, [scene.idx]: { status: 'failed', error: e instanceof Error ? e.message : String(e) } }))
     }
   }
 
-  // P2a — render tuần tự các cảnh CHƯA xong (tránh rate-limit KIE). Bỏ qua cảnh đã 'done'.
-  async function handleRenderAll() {
+  // P2a — BƯỚC 2: i2v từ keyframe ĐÃ DUYỆT (tốn credit). Yêu cầu có keyframeRef.
+  async function handleRenderClip(scene: PersonifiedScene) {
+    if (!script) return
+    if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
+    const cur = clips[scene.idx]
+    if (!cur?.keyframeRef) { setError('Cảnh này chưa có keyframe — tạo keyframe trước'); return }
+    if (cur.status === 'clip') return
+    setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], status: 'clip' } }))
+    try {
+      const { clipRef, taskId } = await renderClipFromKeyframe({
+        apiKey: kieKey, scene, tier, keyframeRef: cur.keyframeRef,
+      })
+      setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], status: 'done', clipRef, taskId } }))
+    } catch (e) {
+      setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], status: 'kf_ready', error: e instanceof Error ? e.message : String(e) } }))
+    }
+  }
+
+  // P2a — STORYBOARD: render keyframe TẤT CẢ cảnh (rẻ) để soi cả phim trước khi đốt i2v.
+  //   Bỏ qua cảnh đã có keyframe (kf_ready/clip/done).
+  async function handleRenderAllKeyframes() {
     if (!script || renderingAll) return
     if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
     setRenderingAll(true)
     try {
       for (const s of script.scenes) {
-        if (clips[s.idx]?.status === 'done') continue
-        await handleRenderScene(s)
+        const st = clips[s.idx]?.status
+        if (st === 'kf_ready' || st === 'clip' || st === 'done') continue
+        await handleRenderKeyframe(s)
+      }
+    } finally { setRenderingAll(false) }
+  }
+
+  // P2a — i2v TẤT CẢ cảnh đã duyệt keyframe (status kf_ready). Cảnh chưa có keyframe → bỏ qua.
+  async function handleRenderAllClips() {
+    if (!script || renderingAll) return
+    if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
+    setRenderingAll(true)
+    try {
+      for (const s of script.scenes) {
+        const st = clips[s.idx]?.status
+        if (st === 'kf_ready') await handleRenderClip(s)
       }
     } finally { setRenderingAll(false) }
   }
@@ -361,11 +405,16 @@ export default function Personified() {
                 </select>
               </label>
               {credit && <span className="rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700">{formatCreditEstimate(credit)}</span>}
-              {/* P2a — render tất cả cảnh (tuần tự) */}
-              <button onClick={handleRenderAll} disabled={renderingAll || !kieKey}
-                className="ml-auto flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 font-bold text-white transition-colors hover:bg-violet-700 disabled:opacity-40"
-                title={kieKey ? 'Render keyframe + i2v tất cả cảnh (tốn credit)' : 'Thiếu KIE key trong Cài đặt'}>
-                {renderingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang render…</> : <>🎬 Render tất cả</>}
+              {/* P2a — STORYBOARD GATE: keyframe tất cả (rẻ, để duyệt) → soi xong → clip tất cả (i2v, đắt) */}
+              <button onClick={handleRenderAllKeyframes} disabled={renderingAll || !kieKey}
+                className="ml-auto flex items-center gap-1 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 font-bold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-40"
+                title={kieKey ? 'Tạo keyframe (ảnh tĩnh, rẻ) cho mọi cảnh để duyệt visual trước khi i2v' : 'Thiếu KIE key trong Cài đặt'}>
+                {renderingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang chạy…</> : <>🖼️ Keyframe tất cả</>}
+              </button>
+              <button onClick={handleRenderAllClips} disabled={renderingAll || !kieKey || kfReadyCount === 0}
+                className="flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 font-bold text-white transition-colors hover:bg-violet-700 disabled:opacity-40"
+                title={kfReadyCount > 0 ? `i2v ${kfReadyCount} cảnh đã duyệt keyframe (tốn credit)` : 'Duyệt keyframe trước (chưa cảnh nào sẵn sàng i2v)'}>
+                {renderingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang chạy…</> : <>🎬 Clip tất cả{kfReadyCount > 0 && ` (${kfReadyCount})`}</>}
               </button>
               <button onClick={() => handleGenerate(variant + 1)} disabled={generating}
                 className="flex items-center gap-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 font-semibold text-gray-700 transition-colors hover:bg-black/5 disabled:opacity-40">
@@ -401,7 +450,10 @@ export default function Personified() {
                       <span className="w-20 shrink-0 truncate text-[11px] text-gray-400">{s.speaker}</span>
                       <span className="flex-1 truncate text-xs text-gray-900">"{s.dialoguePrimary}"</span>
                       <span className="w-5 shrink-0 text-center text-[11px]" title={clips[s.idx]?.status}>
-                        {clips[s.idx]?.status === 'rendering' ? '⏳' : clips[s.idx]?.status === 'done' ? '✅' : clips[s.idx]?.status === 'failed' ? '❌' : ''}
+                        {clips[s.idx]?.status === 'kf' || clips[s.idx]?.status === 'clip' ? '⏳'
+                          : clips[s.idx]?.status === 'kf_ready' ? '🖼️'
+                          : clips[s.idx]?.status === 'done' ? '✅'
+                          : clips[s.idx]?.status === 'failed' ? '❌' : ''}
                       </span>
                     </button>
                     {expandedScene === s.idx && (
@@ -421,20 +473,42 @@ export default function Personified() {
                         {s.action && <div className="text-gray-600"><span className="font-semibold">Hành động:</span> {s.action}</div>}
                         <div className="text-[11px] text-gray-400">🎥 {s.camera}{s.sfx.length > 0 && ` · 🔊 ${s.sfx.join(', ')}`}</div>
                         {s.videoPromptEn && <div className="text-[10px] text-gray-400"><span className="font-semibold">i2v:</span> {s.videoPromptEn}</div>}
-                        {/* P2a — render cảnh: keyframe → Seedance i2v → clip */}
-                        <div className="flex flex-wrap items-center gap-2 pt-1">
-                          <button onClick={() => handleRenderScene(s)} disabled={clips[s.idx]?.status === 'rendering' || renderingAll || !kieKey}
-                            className="flex items-center gap-1 rounded bg-violet-600 px-2 py-1 text-[11px] font-bold text-white transition-colors hover:bg-violet-700 disabled:opacity-40">
-                            {clips[s.idx]?.status === 'rendering'
-                              ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang render…</>
-                              : clips[s.idx]?.status === 'done'
-                              ? <><RefreshCw className="h-3 w-3" /> Render lại</>
-                              : <>🎬 Render cảnh</>}
-                          </button>
-                          {clips[s.idx]?.keyframeRef && clips[s.idx]?.status === 'rendering' && <span className="text-[10px] text-gray-400">keyframe xong · đang i2v…</span>}
-                          {clips[s.idx]?.status === 'failed' && <span className="text-[10px] text-rose-600">⚠ {clips[s.idx]?.error?.slice(0, 90)}</span>}
-                        </div>
-                        {clips[s.idx]?.status === 'done' && clips[s.idx]?.clipRef && <ClipPreview clipRef={clips[s.idx]!.clipRef!} />}
+                        {/* P2a — CỔNG DUYỆT: keyframe (rẻ) → soi ảnh → i2v (đắt). */}
+                        {(() => {
+                          const st = clips[s.idx]?.status
+                          const busy = st === 'kf' || st === 'clip'
+                          return (
+                            <div className="space-y-1.5 pt-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                {/* Bước 1 — keyframe (luôn có; khi đã có ảnh thì là "Đổi keyframe" / re-roll) */}
+                                <button onClick={() => handleRenderKeyframe(s)} disabled={busy || renderingAll || !kieKey}
+                                  className="flex items-center gap-1 rounded border border-violet-300 bg-violet-50 px-2 py-1 text-[11px] font-bold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-40">
+                                  {st === 'kf'
+                                    ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang tạo ảnh…</>
+                                    : clips[s.idx]?.keyframeRef
+                                    ? <><RefreshCw className="h-3 w-3" /> Đổi keyframe</>
+                                    : <>🖼️ Tạo keyframe</>}
+                                </button>
+                                {/* Bước 2 — i2v (chỉ bật khi đã có keyframe duyệt) */}
+                                {clips[s.idx]?.keyframeRef && (
+                                  <button onClick={() => handleRenderClip(s)} disabled={busy || renderingAll || !kieKey}
+                                    className="flex items-center gap-1 rounded bg-violet-600 px-2 py-1 text-[11px] font-bold text-white transition-colors hover:bg-violet-700 disabled:opacity-40">
+                                    {st === 'clip'
+                                      ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang i2v…</>
+                                      : st === 'done'
+                                      ? <><RefreshCw className="h-3 w-3" /> Tạo clip lại</>
+                                      : <>✅ Tạo clip (i2v)</>}
+                                  </button>
+                                )}
+                                {st === 'kf_ready' && <span className="text-[10px] font-semibold text-violet-600">👁️ Soi ảnh dưới — đẹp thì bấm "Tạo clip", drift thì "Đổi keyframe"</span>}
+                                {clips[s.idx]?.error && <span className="text-[10px] text-rose-600">⚠ {clips[s.idx]?.error?.slice(0, 90)}</span>}
+                              </div>
+                              {/* Preview: keyframe (ảnh) khi đã có; clip (video) khi xong */}
+                              {clips[s.idx]?.keyframeRef && st !== 'done' && <KeyframePreview keyframeRef={clips[s.idx]!.keyframeRef!} />}
+                              {st === 'done' && clips[s.idx]?.clipRef && <ClipPreview clipRef={clips[s.idx]!.clipRef!} />}
+                            </div>
+                          )
+                        })()}
                       </div>
                     )}
                   </div>
@@ -493,6 +567,13 @@ function Section({ step, title, children }: { step: number; title: string; child
       {children}
     </section>
   )
+}
+
+// P2a — keyframe (ảnh tĩnh) để DUYỆT trước i2v.
+function KeyframePreview({ keyframeRef }: { keyframeRef: string }) {
+  const url = useAssetUrl(keyframeRef)
+  if (!url) return <span className="text-[10px] text-gray-400">đang tải keyframe…</span>
+  return <img src={url} alt="keyframe" className="mt-1 w-full max-w-[220px] rounded-lg border border-violet-200" />
 }
 
 // P2a — clip đã render (lấy URL từ assetStore). Hook gọi ở đầu component → an toàn.

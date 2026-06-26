@@ -2,8 +2,11 @@
 -- Mỗi lần quét lưu số-đã-bán/SP/ngày. Quét lại sau vài ngày → tính tăng trưởng THẬT
 -- (đang lên hay đã bão hòa), vì sold trên TikTok Shop là số TÍCH LŨY không phân biệt được.
 -- CHẠY 1 LẦN: Supabase → SQL Editor → New query → dán toàn bộ → Run.
+-- (DROP đầu file để xoá bảng cũ sai cấu trúc nếu có — bảng này chỉ chứa lịch sử quét, xoá an toàn.)
 
-create table if not exists public.research_snapshots (
+drop table if exists public.research_snapshots cascade;
+
+create table public.research_snapshots (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references auth.users(id) on delete cascade,
   product_id  text not null,

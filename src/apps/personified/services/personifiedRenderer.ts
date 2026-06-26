@@ -45,12 +45,19 @@ export interface RenderSceneParams {
 
 export interface RenderSceneResult { keyframeRef: string; clipRef: string; taskId: string }
 
-/** Render 1 cảnh end-to-end → { keyframeRef, clipRef }. Throw nếu lỗi (caller surface). */
-export async function renderPersonifiedScene(p: RenderSceneParams): Promise<RenderSceneResult> {
+// ─────────────────────────────────────────────────────────────────────────────
+// CỔNG DUYỆT VISUAL (giống B2 hybrid): tách KEYFRAME (rẻ ~6cr, ảnh tĩnh để soi
+// mặt nhân vật + bao bì) khỏi i2v (đắt ~10-12cr, chỉ làm-động ảnh đã duyệt).
+// → user xem keyframe, re-roll nếu drift, OK mới tốn credit i2v.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Bước 1 — chỉ render KEYFRAME (ảnh tĩnh) → { keyframeRef }. Rẻ, để duyệt trước i2v. */
+export async function renderKeyframe(
+  p: Pick<RenderSceneParams, 'apiKey' | 'scene' | 'character' | 'productRefs' | 'signal'>,
+): Promise<{ keyframeRef: string }> {
   if (!p.apiKey) throw new Error('Thiếu KIE API key (Cài đặt)')
   if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
 
-  // ── 1. KEYFRAME ──────────────────────────────────────────────────────────
   const useProduct = !!(p.scene.hasProduct && p.productRefs && p.productRefs.length > 0)
   const filesUrl: string[] = []
   if (useProduct) {
@@ -66,11 +73,18 @@ export async function renderPersonifiedScene(p: RenderSceneParams): Promise<Rend
   })
   const kfBlob = await fetch(remoteUrl).then((r) => r.blob())
   const keyframeRef = await saveAsset(kfBlob, kfBlob.type || 'image/png')
-  p.onStage?.('keyframe', { keyframeRef })
+  return { keyframeRef }
+}
+
+/** Bước 2 — i2v từ KEYFRAME ĐÃ DUYỆT (Seedance 480p no-audio) → { clipRef }. Tốn credit. */
+export async function renderClipFromKeyframe(
+  p: Pick<RenderSceneParams, 'apiKey' | 'scene' | 'tier' | 'signal'> & { keyframeRef: string },
+): Promise<{ clipRef: string; taskId: string }> {
+  if (!p.apiKey) throw new Error('Thiếu KIE API key (Cài đặt)')
+  if (!p.keyframeRef) throw new Error('Chưa có keyframe — tạo keyframe trước')
   if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
 
-  // ── 2. i2v (Seedance 1.5 Pro 480p, no-audio = tier rẻ) ───────────────────
-  const kfPublic = await getUrl(keyframeRef)
+  const kfPublic = await getUrl(p.keyframeRef)
   if (!kfPublic) throw new Error('Không lấy được URL keyframe')
   const sub = await generateVideoJob({
     apiKey: p.apiKey,
@@ -81,7 +95,6 @@ export async function renderPersonifiedScene(p: RenderSceneParams): Promise<Rend
     duration: p.scene.clipDuration,
     startFrameUrl: kfPublic,
   })
-  p.onStage?.('i2v', { keyframeRef, taskId: sub.taskId })
 
   const clipUrl = await pollVideoJobUntilDone({
     apiKey: p.apiKey, taskId: sub.taskId, timeoutMs: 10 * 60 * 1000,
@@ -89,8 +102,19 @@ export async function renderPersonifiedScene(p: RenderSceneParams): Promise<Rend
   })
   const clipBlob = await fetch(clipUrl).then((r) => r.blob())
   const clipRef = await saveAsset(clipBlob, 'video/mp4')
-  p.onStage?.('done', { keyframeRef, clipRef, taskId: sub.taskId })
-  return { keyframeRef, clipRef, taskId: sub.taskId }
+  return { clipRef, taskId: sub.taskId }
+}
+
+/** Render 1 cảnh end-to-end (keyframe → i2v) → { keyframeRef, clipRef }. Dùng cho dev helper /
+ *  luồng không cần cổng duyệt. UI chính dùng renderKeyframe + renderClipFromKeyframe riêng. */
+export async function renderPersonifiedScene(p: RenderSceneParams): Promise<RenderSceneResult> {
+  const { keyframeRef } = await renderKeyframe(p)
+  p.onStage?.('keyframe', { keyframeRef })
+  if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
+  p.onStage?.('i2v', { keyframeRef })
+  const { clipRef, taskId } = await renderClipFromKeyframe({ ...p, keyframeRef })
+  p.onStage?.('done', { keyframeRef, clipRef, taskId })
+  return { keyframeRef, clipRef, taskId }
 }
 
 // ── Dev helper — test render 1 cảnh từ kịch bản đang lưu (console, P2a) ───────
