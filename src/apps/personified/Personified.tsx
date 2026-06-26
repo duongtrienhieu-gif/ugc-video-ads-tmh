@@ -16,7 +16,17 @@ import {
   estimateProjectCredits, formatCreditEstimate, pickClipDuration, estimateSpeechSec, playbackWps,
 } from './constants'
 import { analyzeInsight, generateScript } from './services/personifiedBrain'
-import './services/personifiedRenderer'   // P2a — đăng ký dev helper __testRenderScene(n)
+import { renderPersonifiedScene } from './services/personifiedRenderer'   // P2a (cũng đăng ký dev helper __testRenderScene)
+import { useAssetUrl } from '../../hooks/useAssetUrl'
+
+// P2a — trạng thái render 1 cảnh (persist cùng kịch bản).
+interface SceneRender {
+  status: 'idle' | 'rendering' | 'done' | 'failed'
+  keyframeRef?: string
+  clipRef?: string
+  taskId?: string
+  error?: string
+}
 
 const DEFAULT_CONFIG: PersonifiedConfig = {
   archetype: 'KB1_invader', length: 'medium', heroType: 'product_knight',
@@ -36,11 +46,13 @@ interface PersistedState {
   script: PersonifiedScript | null
   variant: number
   tier: RenderTier
+  clips?: Record<number, SceneRender>
 }
 
 export default function Personified() {
   const products = useBankStore((s) => s.products)
   const geminiKey = useSettingsStore((s) => s.geminiApiKey)
+  const kieKey = useSettingsStore((s) => s.kieApiKey)
 
   const [productId, setProductId] = useState('')
   const [market, setMarket] = useState<TargetMarket>('MY')
@@ -59,8 +71,17 @@ export default function Personified() {
   // C — kịch bản hiển thị dạng tab + bảng cảnh dày (bỏ scroll dài / cột voice trùng).
   const [scriptTab, setScriptTab] = useState<'table' | 'read' | 'chars'>('table')
   const [expandedScene, setExpandedScene] = useState<number | null>(null)
+  // P2a — clip đã render mỗi cảnh (keyed theo scene.idx), persist cùng kịch bản.
+  const [clips, setClips] = useState<Record<number, SceneRender>>({})
+  const [renderingAll, setRenderingAll] = useState(false)
 
   const product = useMemo(() => products.find((p) => p.id === productId), [products, productId])
+  // P2a — ảnh sản phẩm để khóa fidelity (cảnh hasProduct).
+  const productRefs = useMemo(() => {
+    if (!product) return [] as string[]
+    return (product.productImages?.length ? product.productImages : (product.productImage ? [product.productImage] : []))
+      .filter((r): r is string => !!r && r.trim() !== '')
+  }, [product])
   const credit = useMemo(
     () => script ? estimateProjectCredits(script.scenes, tier, true) : null,   // P2 — đã gồm lipsync
     [script, tier],
@@ -93,6 +114,7 @@ export default function Personified() {
           if (s.script) setScript(s.script)
           if (typeof s.variant === 'number') setVariant(s.variant)
           if (s.tier) setTier(s.tier)
+          if (s.clips) setClips(s.clips)
         }
       }
     } catch { /* ignore corrupt cache */ }
@@ -107,10 +129,10 @@ export default function Personified() {
     // pre-restore empty state) — never overwrite a good cache with nothing.
     if (!productId && !insight && !script && !problemHint) return
     try {
-      const s: PersistedState = { v: 1, productId, market, problemHint, insight, config, script, variant, tier }
+      const s: PersistedState = { v: 1, productId, market, problemHint, insight, config, script, variant, tier, clips }
       localStorage.setItem(CACHE_KEY, JSON.stringify(s))
     } catch { /* quota / serialization — non-fatal */ }
-  }, [productId, market, problemHint, insight, config, script, variant, tier])
+  }, [productId, market, problemHint, insight, config, script, variant, tier, clips])
 
   async function handleAnalyze() {
     if (!product || analyzing) return
@@ -131,7 +153,7 @@ export default function Personified() {
     setError(''); setGenerating(true)
     try {
       const sc = await generateScript(product, market, config, insight, geminiKey, nextVariant)
-      setScript(sc); setVariant(nextVariant)
+      setScript(sc); setVariant(nextVariant); setClips({})   // kịch bản mới → bỏ clip cũ (index đổi)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Tạo kịch bản lỗi')
     } finally {
@@ -160,6 +182,39 @@ export default function Personified() {
         totalSec: scenes.reduce((sum, s) => sum + s.clipDuration, 0),
       }
     })
+  }
+
+  // P2a — render 1 cảnh: keyframe → Seedance i2v → clip. Lưu vào clips[idx] (persist).
+  async function handleRenderScene(scene: PersonifiedScene) {
+    if (!script) return
+    if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
+    if (clips[scene.idx]?.status === 'rendering') return
+    const character = script.characters.find((c) => c.name === scene.speaker || c.role === scene.speaker) ?? script.characters[0]
+    setClips((p) => ({ ...p, [scene.idx]: { status: 'rendering' } }))
+    try {
+      const res = await renderPersonifiedScene({
+        apiKey: kieKey, scene, character,
+        productRefs: scene.hasProduct ? productRefs : [],
+        tier,
+        onStage: (_st, info) => setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], status: 'rendering', ...info } })),
+      })
+      setClips((p) => ({ ...p, [scene.idx]: { status: 'done', ...res } }))
+    } catch (e) {
+      setClips((p) => ({ ...p, [scene.idx]: { status: 'failed', error: e instanceof Error ? e.message : String(e) } }))
+    }
+  }
+
+  // P2a — render tuần tự các cảnh CHƯA xong (tránh rate-limit KIE). Bỏ qua cảnh đã 'done'.
+  async function handleRenderAll() {
+    if (!script || renderingAll) return
+    if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
+    setRenderingAll(true)
+    try {
+      for (const s of script.scenes) {
+        if (clips[s.idx]?.status === 'done') continue
+        await handleRenderScene(s)
+      }
+    } finally { setRenderingAll(false) }
   }
 
   return (
@@ -306,8 +361,14 @@ export default function Personified() {
                 </select>
               </label>
               {credit && <span className="rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700">{formatCreditEstimate(credit)}</span>}
+              {/* P2a — render tất cả cảnh (tuần tự) */}
+              <button onClick={handleRenderAll} disabled={renderingAll || !kieKey}
+                className="ml-auto flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 font-bold text-white transition-colors hover:bg-violet-700 disabled:opacity-40"
+                title={kieKey ? 'Render keyframe + i2v tất cả cảnh (tốn credit)' : 'Thiếu KIE key trong Cài đặt'}>
+                {renderingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang render…</> : <>🎬 Render tất cả</>}
+              </button>
               <button onClick={() => handleGenerate(variant + 1)} disabled={generating}
-                className="ml-auto flex items-center gap-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 font-semibold text-gray-700 transition-colors hover:bg-black/5 disabled:opacity-40">
+                className="flex items-center gap-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 font-semibold text-gray-700 transition-colors hover:bg-black/5 disabled:opacity-40">
                 {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Tạo lại
               </button>
             </div>
@@ -339,6 +400,9 @@ export default function Personified() {
                       <span className="w-9 shrink-0 text-[11px] font-bold text-amber-700">{s.clipDuration}s</span>
                       <span className="w-20 shrink-0 truncate text-[11px] text-gray-400">{s.speaker}</span>
                       <span className="flex-1 truncate text-xs text-gray-900">"{s.dialoguePrimary}"</span>
+                      <span className="w-5 shrink-0 text-center text-[11px]" title={clips[s.idx]?.status}>
+                        {clips[s.idx]?.status === 'rendering' ? '⏳' : clips[s.idx]?.status === 'done' ? '✅' : clips[s.idx]?.status === 'failed' ? '❌' : ''}
+                      </span>
                     </button>
                     {expandedScene === s.idx && (
                       <div className="space-y-1.5 bg-gray-50/70 px-3 pb-3 pl-10 pt-1 text-xs">
@@ -357,6 +421,20 @@ export default function Personified() {
                         {s.action && <div className="text-gray-600"><span className="font-semibold">Hành động:</span> {s.action}</div>}
                         <div className="text-[11px] text-gray-400">🎥 {s.camera}{s.sfx.length > 0 && ` · 🔊 ${s.sfx.join(', ')}`}</div>
                         {s.videoPromptEn && <div className="text-[10px] text-gray-400"><span className="font-semibold">i2v:</span> {s.videoPromptEn}</div>}
+                        {/* P2a — render cảnh: keyframe → Seedance i2v → clip */}
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                          <button onClick={() => handleRenderScene(s)} disabled={clips[s.idx]?.status === 'rendering' || renderingAll || !kieKey}
+                            className="flex items-center gap-1 rounded bg-violet-600 px-2 py-1 text-[11px] font-bold text-white transition-colors hover:bg-violet-700 disabled:opacity-40">
+                            {clips[s.idx]?.status === 'rendering'
+                              ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang render…</>
+                              : clips[s.idx]?.status === 'done'
+                              ? <><RefreshCw className="h-3 w-3" /> Render lại</>
+                              : <>🎬 Render cảnh</>}
+                          </button>
+                          {clips[s.idx]?.keyframeRef && clips[s.idx]?.status === 'rendering' && <span className="text-[10px] text-gray-400">keyframe xong · đang i2v…</span>}
+                          {clips[s.idx]?.status === 'failed' && <span className="text-[10px] text-rose-600">⚠ {clips[s.idx]?.error?.slice(0, 90)}</span>}
+                        </div>
+                        {clips[s.idx]?.status === 'done' && clips[s.idx]?.clipRef && <ClipPreview clipRef={clips[s.idx]!.clipRef!} />}
                       </div>
                     )}
                   </div>
@@ -415,6 +493,13 @@ function Section({ step, title, children }: { step: number; title: string; child
       {children}
     </section>
   )
+}
+
+// P2a — clip đã render (lấy URL từ assetStore). Hook gọi ở đầu component → an toàn.
+function ClipPreview({ clipRef }: { clipRef: string }) {
+  const url = useAssetUrl(clipRef)
+  if (!url) return <span className="text-[10px] text-gray-400">đang tải clip…</span>
+  return <video src={url} controls playsInline muted className="mt-1 w-full max-w-[220px] rounded-lg border border-black/10" />
 }
 
 function InsightRow({ label, value }: { label: string; value: string }) {
