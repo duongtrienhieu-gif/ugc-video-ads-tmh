@@ -4,7 +4,7 @@ import type { Market, ScoredProduct, SignalResult } from '../types'
 import { VERDICT_META, NICHES, MARKETS, MARKET_CURRENCY, NICHE_PRESETS, nicheLabel } from '../constants'
 import { useBankStore } from '../../../stores/bankStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
-import { directGeminiText, directGeminiVision, uploadFileToGemini } from '../../../utils/gemini'
+import { directGeminiText, directGeminiVision } from '../../../utils/gemini'
 import { formatMyr } from '../services/pricing'
 import { getVideosFor, getCreatorsFor, getCrossMarketFor, analyzeVideo, formatCount, formatKMyr } from '../services/evidence'
 import { useResearchStore, type DbVideo, type DbCreator } from '../store'
@@ -124,28 +124,6 @@ function coreTerms(title: string): string[] {
     if (out.length >= 6) break
   }
   return out
-}
-
-// Tải video về blob để đưa cho Gemini "xem". TikTok CDN hay chặn CORS → thử proxy dự phòng.
-async function fetchVideoBlob(url: string): Promise<Blob> {
-  const tries = [url, `https://corsproxy.io/?url=${encodeURIComponent(url)}`, `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`]
-  for (const u of tries) {
-    try {
-      const r = await fetch(u)
-      if (!r.ok) continue
-      const b = await r.blob()
-      if (b.size > 0) return b
-    } catch { /* thử proxy kế tiếp */ }
-  }
-  throw new Error('Không tải được video (CORS). Bấm Tải để lưu về rồi xem.')
-}
-function blobToB64(b: Blob): Promise<string> {
-  return new Promise((res, rej) => {
-    const r = new FileReader()
-    r.onload = () => res((r.result as string).split(',')[1] || '')
-    r.onerror = rej
-    r.readAsDataURL(b)
-  })
 }
 
 const STATUS_ICON: Record<SignalResult['status'], React.ReactNode> = {
@@ -421,20 +399,35 @@ Cụ thể, thực chiến, KHÔNG bịa chứng nhận. CHỈ trả JSON.`
     if (!geminiApiKey) { setReadErr('Cần Gemini API key trong Cài đặt'); return }
     setReadBusy(true); setReadErr(null); setReadResult(null)
     try {
-      const blob = await fetchVideoBlob(playVid.downloadUrl)
-      const mime = blob.type && blob.type.startsWith('video') ? blob.type : 'video/mp4'
-      let part: { inlineData: { mimeType: string; data: string } } | { fileData: { mimeType: string; fileUri: string } }
-      if (blob.size > 18 * 1024 * 1024) {
-        const up = await uploadFileToGemini({ apiKey: geminiApiKey, file: new Blob([blob], { type: mime }), displayName: 'tt-video' })
-        part = { fileData: { mimeType: up.mimeType, fileUri: up.fileUri } }
-      } else {
-        part = { inlineData: { mimeType: mime, data: await blobToB64(blob) } }
+      // 1) Server tải video (né CORS) + upload lên Gemini Files API → fileUri.
+      const up = await fetch('/api/gemini-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: playVid.downloadUrl, apiKey: geminiApiKey }),
+      }).then((r) => r.json())
+      if (up.error || !up.fileUri) throw new Error(up.error || 'tải/upload video thất bại')
+
+      // 2) Chờ Gemini xử lý video (PROCESSING → ACTIVE), poll client-side (né timeout Vercel).
+      let state: string = up.state
+      let uri: string = up.fileUri
+      let mime: string = up.mimeType || 'video/mp4'
+      const fileName: string = up.fileName
+      const t0 = Date.now()
+      while (state !== 'ACTIVE' && Date.now() - t0 < 90000) {
+        await new Promise((r) => setTimeout(r, 3000))
+        const st = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${geminiApiKey}`)
+          .then((r) => r.json()).catch(() => null)
+        if (st?.state) { state = st.state; uri = st.uri || uri; mime = st.mimeType || mime }
+        if (state === 'FAILED') throw new Error('Gemini xử lý video thất bại (format không hỗ trợ?)')
       }
+      if (state !== 'ACTIVE') throw new Error('Gemini xử lý video quá lâu — thử lại')
+
+      // 3) Gemini "xem" video → kịch bản + dịch + góc bán (tiếng Việt).
       const prompt = `Bạn đang xem 1 video TikTok BÁN HÀNG ở Malaysia (tiếng Malay/English). Người đọc là seller Việt Nam muốn HỌC cách họ bán. Trả JSON tiếng Việt:
 {"transcript":"toàn bộ lời thoại + chữ trên màn hình, DỊCH sang tiếng Việt theo trình tự, tự nhiên dễ hiểu","structure":"cấu trúc video: hook mở đầu → thân (chứng minh/cảm xúc) → CTA, mỗi ý 1 dòng","angle":"góc bán chính & vì sao video này chốt/viral","howto":"cách bắt chước cho sản phẩm của mình, mỗi ý 1 dòng cụ thể"}
 Mô tả gốc của video: ${playVid.desc}
 Nếu video không có lời thoại thì đọc chữ trên màn hình + hình ảnh. CHỈ trả JSON.`
-      const raw = await directGeminiVision({ apiKey: geminiApiKey, parts: [part, { text: prompt }], responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 4096 })
+      const raw = await directGeminiVision({ apiKey: geminiApiKey, parts: [{ fileData: { mimeType: mime, fileUri: uri } }, { text: prompt }], responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 4096 })
       setReadResult(JSON.parse(raw) as VideoRead)
     } catch (e) {
       setReadErr('Đọc video lỗi: ' + ((e as Error).message || '').slice(0, 140))
