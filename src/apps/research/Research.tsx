@@ -1,14 +1,16 @@
 // Research — entry component (P1, data mẫu).
 // Header (market + thời gian + preset) | FilterPanel | lưới thẻ cơ hội | drawer chi tiết.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Search } from 'lucide-react'
 import { useResearchStore } from './store'
+import { useWatchlistStore } from './watchlistStore'
 import { MARKETS, PRESETS, NICHE_PRESETS } from './constants'
 import OpportunityCard from './components/OpportunityCard'
 import FilterPanel from './components/FilterPanel'
 import ProductDetail from './components/ProductDetail'
 import ShopList from './components/ShopList'
 import CrossMarketPanel from './components/CrossMarketPanel'
+import WatchlistPanel from './components/WatchlistPanel'
 import type { Market } from './types'
 
 const MARKET_LANG: Record<string, string> = { MY: 'Malay', ID: 'Indonesia', VN: 'Việt', TH: 'Thái', PH: 'English/Tagalog' }
@@ -22,9 +24,15 @@ export default function Research() {
   const { market, setMarket, activePreset, applyPreset, getScored, selectedId, select, getSelected, realProducts } = useResearchStore()
   const { isLive, scanning, scanError, scanCredits, scanKeywords, setScanKeywords, scanLive } = useResearchStore()
   const { scanCross, clearCross, crossData, crossLoading, crossError, crossQuery } = useResearchStore()
+  const watchItems = useWatchlistStore((s) => s.items)
+  const loadWatch = useWatchlistStore((s) => s.load)
+  const removeWatch = useWatchlistStore((s) => s.remove)
   const [view, setView] = useState<'products' | 'shops'>('products')
+  const [showWatch, setShowWatch] = useState(false)
   const scored = getScored()
   const selected = getSelected()
+
+  useEffect(() => { void loadWatch() }, [loadWatch])
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#EEEEF2]">
@@ -149,20 +157,32 @@ export default function Research() {
             <CrossMarketPanel rows={crossData} query={crossQuery} loading={crossLoading} onClose={clearCross} />
           )}
 
-          {/* Toggle: Sản phẩm / Shop đối thủ */}
+          {/* Toggle: Sản phẩm / Shop đối thủ / Danh sách Test */}
           <div className="mb-3 flex items-center gap-3">
-            {!isLive && (
+            {!isLive && !showWatch && (
               <div className="inline-flex items-center gap-1 rounded-lg border border-black/10 bg-white p-0.5">
                 <button onClick={() => setView('products')} className={segCls(view === 'products')}>🛍 Sản phẩm</button>
                 <button onClick={() => setView('shops')} className={segCls(view === 'shops')}>🏪 Shop đối thủ</button>
               </div>
             )}
-            {view === 'products' && (
+            {!showWatch && view === 'products' && (
               <span className="text-sm font-semibold text-slate-500">{scored.length} cơ hội</span>
             )}
+            <button
+              onClick={() => setShowWatch((v) => !v)}
+              className={`ml-auto rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                showWatch
+                  ? 'border-violet-300 bg-violet-50 text-violet-700'
+                  : 'border-black/10 bg-white text-slate-600 hover:bg-black/[0.02]'
+              }`}
+            >
+              📌 Danh sách Test ({watchItems.length})
+            </button>
           </div>
 
-          {view === 'shops' ? (
+          {showWatch ? (
+            <WatchlistPanel items={watchItems} onOpen={select} onRemove={(id) => void removeWatch(id)} />
+          ) : view === 'shops' ? (
             <ShopList />
           ) : scored.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-black/10 text-center text-slate-400">

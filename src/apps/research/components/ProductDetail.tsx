@@ -9,6 +9,7 @@ import { directGeminiText } from '../../../utils/gemini'
 import { formatMyr } from '../services/pricing'
 import { getVideosFor, getCreatorsFor, getCrossMarketFor, analyzeVideo, formatCount, formatKMyr } from '../services/evidence'
 import { useResearchStore, type DbVideo, type DbCreator } from '../store'
+import { useWatchlistStore } from '../watchlistStore'
 import { useAppStore } from '../../../stores/appStore'
 import PricingCalculator from './PricingCalculator'
 
@@ -131,6 +132,8 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const addProduct = useBankStore((s) => s.addProduct)
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const [aiBusy, setAiBusy] = useState(false)
+  const addWatch = useWatchlistStore((s) => s.add)
+  const inWatch = useWatchlistStore((s) => s.items.some((i) => i.productId === product.productId))
   const [verdict, setVerdict] = useState<AiVerdict | null>(null)
   const [verdictBusy, setVerdictBusy] = useState(false)
   const [verdictErr, setVerdictErr] = useState<string | null>(null)
@@ -457,8 +460,16 @@ Cụ thể, thực chiến, KHÔNG bịa chứng nhận. CHỈ trả JSON.`
                 </ul>
               </div>
 
-              <button className="flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700">
-                <Plus className="h-4 w-4" /> Đưa vào danh sách Test
+              <button
+                onClick={() => { if (!inWatch) void addWatch(product) }}
+                disabled={inWatch}
+                className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+                  inWatch
+                    ? 'cursor-default border border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'bg-violet-600 text-white hover:bg-violet-700'
+                }`}
+              >
+                {inWatch ? <><Check className="h-4 w-4" /> Đã trong Danh sách Test</> : <><Plus className="h-4 w-4" /> Đưa vào danh sách Test</>}
               </button>
               <div className="grid grid-cols-2 gap-2">
                 <button

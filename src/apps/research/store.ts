@@ -8,6 +8,7 @@ import { DEFAULT_FILTERS, type ResearchFilters, type PresetKey, PRESETS, VERDICT
 import { SAMPLE_PRODUCTS } from './sampleData'
 import { scoreMany } from './services/scoring'
 import { classifyNiche, classifySkuRisk } from './services/niche'
+import { useWatchlistStore } from './watchlistStore'
 
 export interface DbVideo {
   videoId: string; market: Market; description: string; handle: string
@@ -376,7 +377,12 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
   getSelected: () => {
     const { selectedId } = get()
     if (!selectedId) return null
-    const found = get().source().find((p) => p.productId === selectedId)
+    let found = get().source().find((p) => p.productId === selectedId)
+    // Fallback: SP đã ghim trong Danh sách Test (có thể không nằm trong lần quét hiện tại).
+    if (!found) {
+      const w = useWatchlistStore.getState().items.find((i) => i.productId === selectedId)
+      if (w) found = w.product
+    }
     if (!found) return null
     return get().isLive ? scoreLive(found) : scoreMany([found])[0]
   },
