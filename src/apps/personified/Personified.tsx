@@ -53,7 +53,7 @@ export default function Personified() {
   const [generating, setGenerating] = useState(false)
   const [variant, setVariant] = useState(0)
 
-  const [tier, setTier] = useState<RenderTier>('seedance720')
+  const [tier, setTier] = useState<RenderTier>('seedance480')   // P2 — mặc định 480p (đẹp+rẻ, upscale 720p khi ghép)
   const [error, setError] = useState('')
   // C — kịch bản hiển thị dạng tab + bảng cảnh dày (bỏ scroll dài / cột voice trùng).
   const [scriptTab, setScriptTab] = useState<'table' | 'read' | 'chars'>('table')
@@ -61,7 +61,7 @@ export default function Personified() {
 
   const product = useMemo(() => products.find((p) => p.id === productId), [products, productId])
   const credit = useMemo(
-    () => script ? estimateProjectCredits(script.scenes.map((s) => s.clipDuration), tier) : null,
+    () => script ? estimateProjectCredits(script.scenes, tier, true) : null,   // P2 — đã gồm lipsync
     [script, tier],
   )
 

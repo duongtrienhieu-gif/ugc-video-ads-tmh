@@ -166,14 +166,17 @@ export const SCENE_TYPE_LABEL: Record<SceneType, string> = {
 export const CREDIT_USD = 0.005              // ~$0.005 / credit
 export const VND_PER_USD = 25_000            // theo benchmark user (6k = $0.24)
 
-export type RenderTier = 'seedance720' | 'grok480'
+export type RenderTier = 'seedance480' | 'seedance720' | 'grok480'
 export const RENDER_TIER_LABEL: Record<RenderTier, string> = {
-  seedance720: 'Seedance 720p (đẹp · backbone)',
-  grok480:     'Grok 480p (nháp · rẻ)',
+  seedance480: 'Seedance 480p (đẹp + rẻ · upscale 720p khi ghép) ⭐',
+  seedance720: 'Seedance 720p (đẹp nhất · đắt hơn)',
+  grok480:     'Grok 480p (ultra-nháp)',
 }
-/** credit / giây i2v (no-audio). Seedance 720p 3.5 · Grok 480p ~1.6. */
-const I2V_CR_PER_SEC: Record<RenderTier, number> = { seedance720: 3.5, grok480: 1.6 }
+/** credit / giây i2v (no-audio). Seedance 720p 3.5 · Seedance 480p ~2 (verify KIE) · Grok 480p ~1.6. */
+const I2V_CR_PER_SEC: Record<RenderTier, number> = { seedance480: 2, seedance720: 3.5, grok480: 1.6 }
 const KEYFRAME_CR = 6                         // 1 ảnh keyframe gpt-4o-image ≈ 6cr
+export const LIPSYNC_CR_PER_SEC = 3           // InfiniteTalk 480p ≈ 3cr/giây giọng (số từ v3)
+const LIPSYNC_SPEECH_FRAC = 0.75              // giọng ≈ 75% độ dài clip (đuôi là hình không lời)
 
 /** Mỗi cảnh chỉ 4s hoặc 8s (bỏ 12s). Thoại ngắn → 4s, còn lại 8s. */
 export function pickClipDuration(speechSec: number): ClipDuration {
@@ -203,12 +206,17 @@ export function wordBudgetHint(market: TargetMarket): string {
 
 export interface CreditEstimate { credits: number; usd: number; vnd: number }
 
-/** Tổng credit 1 video = mỗi cảnh (1 keyframe + i2v theo clipDuration). */
+/** Tổng credit 1 video = keyframe + i2v + lipsync (nếu bật). Lipsync CHỈ tính cho cảnh có thoại. */
 export function estimateProjectCredits(
-  clipDurations: ClipDuration[], tier: RenderTier,
+  scenes: { clipDuration: ClipDuration; dialoguePrimary?: string }[], tier: RenderTier, lipsyncOn = true,
 ): CreditEstimate {
-  const i2v = clipDurations.reduce((sum, d) => sum + Math.round(I2V_CR_PER_SEC[tier] * d), 0)
-  const credits = clipDurations.length * KEYFRAME_CR + i2v
+  const i2v = scenes.reduce((sum, s) => sum + Math.round(I2V_CR_PER_SEC[tier] * s.clipDuration), 0)
+  const keyframes = scenes.length * KEYFRAME_CR
+  const lipsync = lipsyncOn
+    ? scenes.reduce((sum, s) => (s.dialoguePrimary ?? '').trim()
+        ? sum + Math.round(s.clipDuration * LIPSYNC_SPEECH_FRAC * LIPSYNC_CR_PER_SEC) : sum, 0)
+    : 0
+  const credits = keyframes + i2v + lipsync
   const usd = credits * CREDIT_USD
   return { credits, usd, vnd: Math.round(usd * VND_PER_USD) }
 }
