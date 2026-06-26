@@ -93,13 +93,17 @@ export const ARCHETYPE_ORDER: ArchetypeId[] = [
  *  bắt buộc/cấm, ai làm CTA. Giải quyết gốc loạn-nhân-vật + pick-không-khóa. */
 export const ARCHETYPE_STRUCTURE: Record<ArchetypeId, string> = {
   KB1_invader:
-    'KHUÔN KB1: Người dẫn = VILLAIN (quái vật NHÌN THẤY được). Nhân vật = villain + hero(sản phẩm). Tối đa 1 nhân vật phụ = bộ-phận-bị-hại (organ) HOẶC bỏ — TUYỆT ĐỐI KHÔNG vừa có người-nạn-nhân VỪA có organ. CTA do HERO tự chốt (hoặc villain lúc bỏ chạy). KHÔNG tạo nhân vật sidekick/trợ-lý riêng.',
+    'KHUÔN KB1 — QUÁI VẬT XÂM LƯỢC (nhịp PHIM QUÁI VẬT). Người dẫn = VILLAIN nhìn-thấy-được. Nhân vật = villain + hero(SP); tối đa 1 phụ = organ-bị-hại HOẶC bỏ — TUYỆT ĐỐI KHÔNG vừa nạn-nhân-người VỪA organ; KHÔNG sidekick. CTA do HERO (hoặc villain lúc bỏ chạy). ' +
+    'SHAPE: (1) MỞ MÀN villain đang TÀN PHÁ + cười nhạo, khịa thẳng "tao-mày"; (2) LEO THANG — villain khoe đã phá HỎNG 1 KHOẢNH KHẮC ĐỜI THẬT cụ thể của chủ (vd nghe con gọi điện không rõ, ngại chỗ đông), CẤM chung chung "đời mày tiêu"; (3) hero xông vào, villain CƯỜI KHẨY / phản công trước (coi thường); (4) cơ chế SP giáng đòn → villain CHỐNG CỰ rồi mới thua, vừa tan vừa KHAI tên SP/hoạt chất; (5) kết quả sạch đẹp; (6) CTA. Climax = villain kháng cự rồi MỚI bại — KHÔNG thua tức thì.',
   KB2_inner_demon:
-    'KHUÔN KB2 (CHỈ cho vấn đề VÔ HÌNH — mất ngủ/lo âu/tự ti/stress/mệt mỏi): Người dẫn = VILLAIN (thực thể tâm lý trừu tượng). Nhân vật = villain + NGƯỜI THẬT (nạn nhân, ở gương/giường) + hero. KHÔNG tạo organ-bộ-phận. CTA do hero hoặc người-vừa-được-giải-thoát. KHÔNG sidekick riêng.',
+    'KHUÔN KB2 — QUỶ TÂM LÝ (nhịp THRILLER TÂM LÝ; CHỈ vấn đề VÔ HÌNH: mất ngủ/lo âu/tự ti/stress/mệt). Người dẫn = VILLAIN trừu tượng. Nhân vật = villain + NGƯỜI THẬT (nạn nhân ở gương/giường) + hero; KHÔNG organ; KHÔNG sidekick. CTA do hero hoặc người-vừa-thoát. ' +
+    'SHAPE: (1) quỷ THÌ THẦM vào tai người thật 1 nỗi tự ti/lo CỤ THỂ lúc yếu lòng (2h sáng / soi gương); (2) người thật LÚN sâu, quỷ lớn dần bám chặt (leo thang NỘI TÂM); (3) người chạm tới SP = bước ngoặt tự cứu; (4) quỷ GÀO / co rúm khi bị "bỏ đói"/đánh tan — CHỐNG CỰ trước khi vỡ; (5) người THỞ PHÀO, nhẹ nhõm (kết quả là sự GIẢI THOÁT cảm xúc, không chỉ "sạch"); (6) CTA. Climax = lựa chọn của người + quỷ giãy chết.',
   KB3_grumpy_organ:
-    'KHUÔN KB3: Người dẫn = CHÍNH BỘ PHẬN CƠ THỂ (organ) — tự kể khổ + mắng CHỦ (chủ = người xem, KHÔNG hiện thành nhân vật). Nhân vật = organ + hero (+ tùy chọn 1 villain nhỏ = vấn đề nhân cách hóa, để cảnh tan rã đã mắt). KHÔNG tạo người-nạn-nhân riêng. CTA do CHÍNH organ tự chốt (mạch nhất) hoặc hero. KHÔNG sidekick riêng.',
+    'KHUÔN KB3 — BỘ PHẬN CẰN NHẰN (nhịp ĐỘC THOẠI SITCOM). Người dẫn = CHÍNH ORGAN, mắng CHỦ (chủ = người xem, KHÔNG hiện thành nhân vật). Nhân vật = organ + hero (+ tùy chọn 1 villain nhỏ cho cảnh tan rã đã mắt); KHÔNG nạn-nhân-người; KHÔNG sidekick. CTA do CHÍNH organ. ' +
+    'SHAPE: (1) organ MỞ bằng 1 câu cằn nhằn DUYÊN + ẩn dụ công sở/xây dựng (gag chạy XUYÊN video); (2) LIỆT KÊ leo thang các "tội" CỤ THỂ của chủ (ăn khuya, lười uống nước…) — có thái độ, đá xoáy; (3) organ RA TỐI HẬU THƯ ("tao đình công!"); (4) chủ mang SP tới, organ THỬ với vẻ HOÀI NGHI; (5) organ QUAY XE 180° khen miễn cưỡng, CALLBACK gag mở màn; (6) CTA do organ. Climax = từ đình công → chịu SP, twist hài.',
   KB4_ingredient_battle:
-    'KHUÔN KB4: Người dẫn = VILLAIN, phải KHAI TÊN từng hoạt chất ĐÚNG LÚC BỊ ĐÁNH/THUA (cảnh application/destruction) — KHÔNG khai ở rootcause. Nhân vật = villain + hero (tối đa 1 phụ). application = 1 cảnh/hoạt chất nhưng TỐI ĐA 3 cảnh hoạt chất (gộp 2 hoạt chất/cảnh nếu sản phẩm có >3). CTA do hero. KHÔNG sidekick riêng.',
+    'KHUÔN KB4 — KHOE VŨ KHÍ HOẠT CHẤT (nhịp BOSS-FIGHT game). Người dẫn = VILLAIN (như boss có "máu/HP"). Nhân vật = villain + hero (tối đa 1 phụ); KHÔNG sidekick. CTA do hero. ' +
+    'SHAPE: (1) villain vênh váo "tao BẤT BẠI" + khịa; (2) hero vào trận; (3) MỖI hoạt chất = 1 ĐÒN COMBO riêng (application, TỐI ĐA 3 cảnh, gộp 2 hoạt chất/cảnh nếu >3): mỗi đòn villain TỤT MÁU + HOẢNG dần + tự KHAI tên+công dụng hoạt chất ĐÚNG LÚC trúng đòn (KHÔNG khai trước/ở rootcause); (4) hoạt chất cuối = đòn KẾT LIỄU, villain NỔ TUNG; (5) kết quả; (6) CTA. Climax = máu villain tụt dần + hoảng leo thang — KHÔNG thua 1 phát.',
 }
 
 /** Luật nhân vật + personify dùng chung mọi KB. */

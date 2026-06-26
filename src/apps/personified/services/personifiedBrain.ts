@@ -217,6 +217,13 @@ ${ARCHETYPE_STRUCTURE[config.archetype]}
 ${SHARED_CHAR_RULES}
 ${HERO_FORMFACTOR_RULE}
 
+🎬 LUẬT KỂ CHUYỆN (thứ làm video HẤP DẪN — quan trọng NGANG khuôn cứng; thiếu nó kịch bản thành "danh sách câu rời", chán):
+1. MẠCH LIỀN 1 truyện: mỗi cảnh là HỆ QUẢ của cảnh trước (vì thế… nên… và rồi…), KHÔNG phải mỗi cảnh 1 câu tuyên bố rời rạc. Cảnh sau ĐẨY/NHẮC cảnh trước.
+2. LEO THANG: mỗi cảnh phải CĂNG hơn cảnh trước — cấm 3 cảnh cùng 1 mức cảm xúc.
+3. CAO TRÀO CÓ CÚ LẬT: phản diện KHÔNG thua tức thì — nó CHỐNG CỰ / cười khẩy / phản công TRƯỚC, RỒI cơ chế CỤ THỂ của sản phẩm mới lật ngược. Chiến thắng phải GIÀNH được mới đã (cấm "SP xuất hiện → villain thua ngay").
+4. NEO VÀO ĐỜI THẬT: nỗi đau phải là 1 KHOẢNH KHẮC CỤ THỂ, dễ nhận ra, hơi quê/ngại (vd "nghe con nói Hả 5 lần", "ngại không dám nói chuyện") — CẤM chung chung "đời mày tiêu / khổ lắm".
+5. THOẠI = CÁ TÍNH + ẨN Ý, KHÔNG TƯỜNG THUẬT: mỗi nhân vật có thái độ riêng (villain láo/cợt, organ mệt mỏi đá xoáy). CẤM nhân vật đọc trắng chức năng mình ("tao làm mày điếc") — khoe hại/lợi qua THÁI ĐỘ + tình huống, không qua câu khai báo.
+
 INSIGHT (đã phân tích):
 - Sản phẩm: ${insight.productInsight}
 - Khách: ${insight.customerInsight}
