@@ -1,10 +1,12 @@
 // Research — entry component (P1, data mẫu).
 // Header (market + thời gian + preset) | FilterPanel | lưới thẻ cơ hội | drawer chi tiết.
 import { useEffect, useState } from 'react'
-import { Search } from 'lucide-react'
+import { Search, Sparkles, X } from 'lucide-react'
 import { useResearchStore } from './store'
 import { useWatchlistStore } from './watchlistStore'
-import { MARKETS, PRESETS, NICHE_PRESETS } from './constants'
+import { useSettingsStore } from '../../stores/settingsStore'
+import { directGeminiText } from '../../utils/gemini'
+import { MARKETS, PRESETS, NICHE_PRESETS, MARKET_CURRENCY } from './constants'
 import OpportunityCard from './components/OpportunityCard'
 import FilterPanel from './components/FilterPanel'
 import ProductDetail from './components/ProductDetail'
@@ -28,11 +30,37 @@ export default function Research() {
   const watchItems = useWatchlistStore((s) => s.items)
   const loadWatch = useWatchlistStore((s) => s.load)
   const removeWatch = useWatchlistStore((s) => s.remove)
+  const updateWatch = useWatchlistStore((s) => s.update)
   const [view, setView] = useState<'products' | 'shops'>('products')
   const [showWatch, setShowWatch] = useState(false)
   const activeNichePreset = NICHE_PRESETS.find((n) => n.label === scanNiche)
+  const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const scored = getScored()
   const selected = getSelected()
+
+  // AI Bản tin phiên quét: đọc top SP đã chấm điểm → chọn SP nên đánh hôm nay + lý do.
+  const [brief, setBrief] = useState<string | null>(null)
+  const [briefBusy, setBriefBusy] = useState(false)
+  const runBrief = async () => {
+    if (!geminiApiKey) { setBrief('⚠️ Cần Gemini API key trong Cài đặt.'); return }
+    if (!scored.length) return
+    setBriefBusy(true)
+    try {
+      const cur = MARKET_CURRENCY[market] ?? ''
+      const list = scored.slice(0, 15).map((p, i) =>
+        `${i + 1}. ${p.title.slice(0, 60)} — ${p.sale.toLocaleString('vi-VN')} bán · ${cur}${p.unitPrice} · ${p.rating || '—'}★ · điểm ${p.score}${p.isTracked ? ` · +${p.growthRate}%/ngày` : ''}`,
+      ).join('\n')
+      const prompt = `Bạn là chuyên gia COD chọn SP để TEST ADS hôm nay ở thị trường ${market}. Dưới đây là SP đang bán chạy trên TikTok Shop (đã chấm điểm). Chọn 3 SP ĐÁNG TEST NHẤT, mỗi SP 1 dòng: tên ngắn — vì sao đáng đánh (nhu cầu/biên/đối thủ), gạch đầu dòng. Cuối thêm 1 dòng "Lưu ý" nếu thấy rủi ro. Tiếng Việt, ngắn gọn, thực chiến.
+DANH SÁCH:
+${list}`
+      const raw = await directGeminiText({ apiKey: geminiApiKey, prompt, responseMimeType: 'text/plain', temperature: 0.5 })
+      setBrief(raw.trim())
+    } catch (e) {
+      setBrief('Lỗi AI: ' + ((e as Error).message || '').slice(0, 80))
+    } finally {
+      setBriefBusy(false)
+    }
+  }
 
   useEffect(() => { void loadWatch() }, [loadWatch])
 
@@ -179,20 +207,47 @@ export default function Research() {
             {!showWatch && view === 'products' && (
               <span className="text-sm font-semibold text-slate-500">{scored.length} cơ hội</span>
             )}
-            <button
-              onClick={() => setShowWatch((v) => !v)}
-              className={`ml-auto rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                showWatch
-                  ? 'border-violet-300 bg-violet-50 text-violet-700'
-                  : 'border-black/10 bg-white text-slate-600 hover:bg-black/[0.02]'
-              }`}
-            >
-              📌 Danh sách Test ({watchItems.length})
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              {isLive && !showWatch && scored.length > 0 && (
+                <button
+                  onClick={() => void runBrief()}
+                  disabled={briefBusy}
+                  className="inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:opacity-50"
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> {briefBusy ? 'Đang tóm tắt…' : '🌅 Bản tin AI'}
+                </button>
+              )}
+              <button
+                onClick={() => setShowWatch((v) => !v)}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  showWatch
+                    ? 'border-violet-300 bg-violet-50 text-violet-700'
+                    : 'border-black/10 bg-white text-slate-600 hover:bg-black/[0.02]'
+                }`}
+              >
+                📌 Danh sách Test ({watchItems.length})
+              </button>
+            </div>
           </div>
 
+          {/* Bản tin AI — SP nên đánh hôm nay */}
+          {brief && !showWatch && (
+            <div className="mb-3 rounded-2xl border border-violet-200 bg-violet-50 p-3">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-violet-700"><Sparkles className="h-3.5 w-3.5" /> Bản tin AI — SP nên đánh hôm nay</span>
+                <button onClick={() => setBrief(null)} className="rounded-full p-0.5 text-violet-400 hover:bg-violet-100"><X className="h-3.5 w-3.5" /></button>
+              </div>
+              <p className="whitespace-pre-line text-xs leading-relaxed text-slate-700">{brief}</p>
+            </div>
+          )}
+
           {showWatch ? (
-            <WatchlistPanel items={watchItems} onOpen={select} onRemove={(id) => void removeWatch(id)} />
+            <WatchlistPanel
+              items={watchItems}
+              onOpen={select}
+              onRemove={(id) => void removeWatch(id)}
+              onUpdate={(id, patch) => void updateWatch(id, patch)}
+            />
           ) : view === 'shops' ? (
             <ShopList />
           ) : scored.length === 0 ? (

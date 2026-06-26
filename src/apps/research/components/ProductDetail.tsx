@@ -298,6 +298,40 @@ Suy luận hợp lý từ tên + ngách. CHỈ trả JSON.`
     return created.id
   }
 
+  // Cross-market arbitrage: SP đang win ở nước khác → AI viết hồ sơ BÁN TẠI MALAYSIA (bản địa hóa).
+  const aiBringToMY = async () => {
+    if (product.market === 'MY') return
+    if (!geminiApiKey) { addToast('Cần Gemini API key trong Cài đặt', 'error'); return }
+    setAiBusy(true)
+    try {
+      const prompt = `Bạn là chuyên gia COD đem SP win từ nước khác về MALAYSIA bán. SP này đang BÁN CHẠY ở ${marketLabel} trên TikTok Shop — hãy viết hồ sơ ĐẦY ĐỦ bằng TIẾNG VIỆT để BÁN TẠI MALAYSIA, BẢN ĐỊA HÓA theo văn hóa/khẩu vị/ngôn ngữ Malaysia (KHÔNG bê nguyên si nước nguồn, KHÔNG bịa chứng nhận).
+SẢN PHẨM (nguồn ${marketLabel}):
+- Tên gốc: ${product.title}
+- Ngách: ${nicheText}
+- Giá nguồn: ${cur} ${product.unitPrice} · Đã bán: ${product.sale}
+Trả JSON đúng khóa: {"productName":"tên cho thị trường MY","productDescription":"2-3 câu","painPoints":"nỗi đau khách MY, mỗi ý 1 dòng","usps":"điểm độc nhất, mỗi ý 1 dòng","benefits":"lợi ích, mỗi ý 1 dòng","offer":"ưu đãi/combo hợp MY (RM, COD)","ingredients":"thành phần/chất liệu hoặc 'Cập nhật từ NCC'","usageGuide":"cách dùng"}
+CHỈ trả JSON.`
+      const raw = await directGeminiText({ apiKey: geminiApiKey, prompt, responseMimeType: 'application/json', temperature: 0.6 })
+      const d = JSON.parse(raw) as Record<string, string>
+      const created = await addProduct({
+        productName: d.productName || product.title,
+        productDescription: d.productDescription || '',
+        targetMarket: 'Malaysia',
+        painPoints: d.painPoints || '', usps: d.usps || '', benefits: d.benefits || '',
+        offer: d.offer || '', ingredients: d.ingredients || '', usageGuide: d.usageGuide || '',
+        productImage: product.imageUrl || '',
+        productImages: product.imageUrl ? [product.imageUrl] : [],
+      })
+      if (!created) return
+      addToast(`✅ Đã đem SP từ ${marketLabel} về MY (AI bản địa hóa) → vào Bank`, 'success')
+      sendToApp({ targetApp: 'finder', targetField: 'activeBank', data: 'products' })
+    } catch (e) {
+      addToast('AI lỗi: ' + ((e as Error).message || '').slice(0, 70), 'error')
+    } finally {
+      setAiBusy(false)
+    }
+  }
+
   // 1 chạm: tạo SP THẬT vào Bank (nếu chưa) → mở app đích bằng productId THẬT (generate chạy được).
   const aiFillAndGo = async (target?: { app: string; label: string }) => {
     setAiBusy(true)
@@ -529,6 +563,15 @@ Cụ thể, thực chiến, KHÔNG bịa chứng nhận. CHỈ trả JSON.`
                 {aiBusy ? '🤖 AI đang xử lý…' : bankProductId ? '✓ Đã tạo trong Bank — mở lại Thư viện' : '🤖 AI điền đủ → Tạo SP vào Bank'}
               </button>
               <p className="text-center text-[10px] text-slate-400">AI đọc SP → điền đủ field → tạo SP thật vào Bank. Ảnh: tự tải 4 ảnh sạch ở Thư viện để dùng app ảnh.</p>
+              {product.market !== 'MY' && (
+                <button
+                  onClick={() => void aiBringToMY()}
+                  disabled={aiBusy}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 py-2.5 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50"
+                >
+                  🇲🇾 {aiBusy ? 'Đang xử lý…' : `Đem SP từ ${marketLabel} về MY bán (AI bản địa hóa)`}
+                </button>
+              )}
             </div>
           )}
 

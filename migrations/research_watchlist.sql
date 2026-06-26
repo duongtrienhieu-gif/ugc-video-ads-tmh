@@ -12,6 +12,11 @@ create table if not exists public.research_watchlist (
   unique (user_id, product_id)              -- mỗi user không ghim trùng 1 SP
 );
 
+-- Cột nâng cấp (chạy lại file an toàn — add nếu chưa có): trạng thái test, người phụ trách, ghi chú.
+alter table public.research_watchlist add column if not exists status   text default 'new';
+alter table public.research_watchlist add column if not exists assignee text;
+alter table public.research_watchlist add column if not exists note     text;
+
 create index if not exists research_watchlist_user_idx
   on public.research_watchlist (user_id, created_at desc);
 
@@ -25,6 +30,10 @@ create policy research_watchlist_select_own on public.research_watchlist
 drop policy if exists research_watchlist_insert_own on public.research_watchlist;
 create policy research_watchlist_insert_own on public.research_watchlist
   for insert with check (auth.uid() = user_id);
+
+drop policy if exists research_watchlist_update_own on public.research_watchlist;
+create policy research_watchlist_update_own on public.research_watchlist
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 drop policy if exists research_watchlist_delete_own on public.research_watchlist;
 create policy research_watchlist_delete_own on public.research_watchlist
