@@ -1,7 +1,8 @@
 import { TrendingUp, TrendingDown, Users, Tag } from 'lucide-react'
 import type { ScoredProduct } from '../types'
-import { VERDICT_META, NICHES } from '../constants'
+import { VERDICT_META, NICHES, MARKET_CURRENCY } from '../constants'
 import { formatKMyr } from '../services/evidence'
+import { useResearchStore } from '../store'
 
 interface Props {
   product: ScoredProduct
@@ -12,6 +13,9 @@ export default function OpportunityCard({ product: p, onOpen }: Props) {
   const v = VERDICT_META[p.verdict]
   const niche = NICHES.find((n) => n.key === p.nicheKey)
   const up = p.growthRate >= 0
+  const isLive = useResearchStore((s) => s.isLive)
+  const cur = MARKET_CURRENCY[p.market] ?? ''
+  const priceStr = `${cur} ${p.unitPrice.toLocaleString('vi-VN')}`
 
   return (
     <button
@@ -43,8 +47,17 @@ export default function OpportunityCard({ product: p, onOpen }: Props) {
         <h3 className="line-clamp-2 text-sm font-semibold text-slate-800">{p.title}</h3>
 
         <div className="flex items-center gap-1.5 text-xs">
-          <span className="font-bold text-slate-800">{formatKMyr(p.revenue)}</span>
-          <span className="text-slate-400">· {p.sale} đơn</span>
+          {isLive ? (
+            <>
+              <span className="font-bold text-emerald-700">{p.sale.toLocaleString('vi-VN')}</span>
+              <span className="text-slate-400">đã bán · {priceStr}</span>
+            </>
+          ) : (
+            <>
+              <span className="font-bold text-slate-800">{formatKMyr(p.revenue)}</span>
+              <span className="text-slate-400">· {p.sale} đơn</span>
+            </>
+          )}
         </div>
 
         <ul className="flex flex-col gap-0.5 text-xs text-slate-500">
@@ -54,12 +67,21 @@ export default function OpportunityCard({ product: p, onOpen }: Props) {
         </ul>
 
         <div className="mt-auto flex items-center gap-3 pt-1 text-xs font-medium text-slate-600">
-          <span className={`flex items-center gap-1 ${up ? 'text-emerald-600' : 'text-red-500'}`}>
-            {up ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-            {up ? '+' : ''}{Math.round(p.growthRate)}%
-          </span>
-          <span className="flex items-center gap-1"><Tag className="h-3.5 w-3.5" />RM{p.unitPrice}</span>
-          <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" />{p.creatorNum}</span>
+          {isLive ? (
+            <>
+              <span className="flex items-center gap-1"><Tag className="h-3.5 w-3.5" />{priceStr}</span>
+              {p.rating > 0 && <span className="flex items-center gap-1">⭐ {p.rating}</span>}
+            </>
+          ) : (
+            <>
+              <span className={`flex items-center gap-1 ${up ? 'text-emerald-600' : 'text-red-500'}`}>
+                {up ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+                {up ? '+' : ''}{Math.round(p.growthRate)}%
+              </span>
+              <span className="flex items-center gap-1"><Tag className="h-3.5 w-3.5" />RM{p.unitPrice}</span>
+              <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" />{p.creatorNum}</span>
+            </>
+          )}
         </div>
       </div>
     </button>

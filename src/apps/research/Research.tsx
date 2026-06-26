@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Search, FlaskConical } from 'lucide-react'
 import { useResearchStore } from './store'
-import { MARKETS, PRESETS } from './constants'
+import { MARKETS, PRESETS, NICHE_PRESETS } from './constants'
 import OpportunityCard from './components/OpportunityCard'
 import FilterPanel from './components/FilterPanel'
 import ProductDetail from './components/ProductDetail'
@@ -80,21 +80,38 @@ export default function Research() {
           <div aria-hidden />
         </div>
 
-        {/* Quét LIVE — TikTok Shop theo thị trường + từ khóa ngách */}
+        {/* Quét LIVE — chọn NGÁCH (tự điền từ khóa + quét) hoặc gõ từ khóa tùy chỉnh */}
         <div className="flex flex-wrap items-center gap-2">
+          <select
+            value=""
+            onChange={(e) => {
+              const preset = NICHE_PRESETS.find((n) => n.label === e.target.value)
+              if (!preset) return
+              setScanKeywords(preset.keywords.join(', '))
+              void scanLive()
+            }}
+            disabled={scanning}
+            className="rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-sm font-medium disabled:opacity-50"
+            title="Chọn ngách → tự điền từ khóa + quét ngay"
+          >
+            <option value="">⚡ Chọn ngách → quét ngay</option>
+            {NICHE_PRESETS.map((n) => (
+              <option key={n.label} value={n.label}>{n.emoji} {n.label}</option>
+            ))}
+          </select>
           <input
             value={scanKeywords}
             onChange={(e) => setScanKeywords(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void scanLive() }}
-            placeholder={`Từ khóa ngách (tiếng ${MARKET_LANG[market] ?? ''}) — vd: garam bawang, suplemen...`}
-            className="min-w-[260px] flex-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm"
+            placeholder={`hoặc gõ từ khóa (tiếng ${MARKET_LANG[market] ?? ''}) — vd: garam bawang, suplemen...`}
+            className="min-w-[220px] flex-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm"
           />
           <button
             onClick={() => void scanLive()}
             disabled={scanning}
             className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
           >
-            {scanning ? 'Đang quét…' : '🔎 Quét live'}
+            {scanning ? 'Đang quét…' : '🔎 Quét'}
           </button>
           {scanCredits != null && <span className="text-xs text-slate-400">credit: {scanCredits}</span>}
           {scanError && <span className="text-xs text-red-500">{scanError}</span>}

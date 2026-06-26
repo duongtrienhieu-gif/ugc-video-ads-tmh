@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { X, Check, AlertTriangle, XCircle, Plus, Play, TrendingUp, TrendingDown, ExternalLink, Sparkles, Info, Download } from 'lucide-react'
 import type { Market, ScoredProduct, SignalResult } from '../types'
-import { VERDICT_META, NICHES, MARKETS } from '../constants'
+import { VERDICT_META, NICHES, MARKETS, MARKET_CURRENCY } from '../constants'
 import { formatMyr } from '../services/pricing'
 import { getVideosFor, getCreatorsFor, getCrossMarketFor, analyzeVideo, formatCount, formatKMyr } from '../services/evidence'
 import { useResearchStore, type DbVideo, type DbCreator } from '../store'
@@ -159,16 +159,24 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
 
   const crossMarket = useMemo(() => getCrossMarketFor(product), [product])
 
-  const metrics: { label: string; value: string }[] = [
-    { label: 'Doanh thu', value: formatKMyr(product.revenue) },
-    { label: 'Lượt bán', value: `${product.sale} đơn` },
-    { label: 'Đơn giá', value: `RM${product.unitPrice}` },
-    { label: 'DT từ video', value: formatKMyr(product.videoRevenue ?? 0) },
-    { label: 'Hoa hồng', value: `${Math.round(product.commissionRate)}%` },
-    { label: 'Số creator', value: `${product.creatorNum}` },
-    { label: 'Số shop bán', value: `${product.competitionShops}` },
-    { label: 'Đánh giá', value: `${product.rating.toFixed(1)}★` },
-  ]
+  const cur = MARKET_CURRENCY[product.market] ?? ''
+  const metrics: { label: string; value: string }[] = isLive
+    ? [
+        { label: 'Đã bán', value: product.sale.toLocaleString('vi-VN') },
+        { label: 'Đơn giá', value: `${cur} ${product.unitPrice.toLocaleString('vi-VN')}` },
+        { label: 'Đánh giá', value: product.rating ? `${product.rating.toFixed(1)}★` : '—' },
+        { label: 'Thị trường', value: product.market },
+      ]
+    : [
+        { label: 'Doanh thu', value: formatKMyr(product.revenue) },
+        { label: 'Lượt bán', value: `${product.sale} đơn` },
+        { label: 'Đơn giá', value: `RM${product.unitPrice}` },
+        { label: 'DT từ video', value: formatKMyr(product.videoRevenue ?? 0) },
+        { label: 'Hoa hồng', value: `${Math.round(product.commissionRate)}%` },
+        { label: 'Số creator', value: `${product.creatorNum}` },
+        { label: 'Số shop bán', value: `${product.competitionShops}` },
+        { label: 'Đánh giá', value: `${product.rating.toFixed(1)}★` },
+      ]
 
   const TABS: [Tab, string][] = [
     ['overview', 'Tổng quan'], ['video', 'Video win'], ['creator', 'Creator'], ['market', 'Thị trường'], ['pricing', 'Giá'],

@@ -44,6 +44,21 @@ export function nicheLabel(key: NicheKey): string {
   return NICHES.find((n) => n.key === key)?.label ?? key
 }
 
+// ── Tiền tệ theo thị trường (live TikTok Shop) ──
+export const MARKET_CURRENCY: Record<Market, string> = { MY: 'RM', ID: 'Rp', TH: '฿', VN: '₫', PH: '₱' }
+
+// ── Ngách-preset cho QUÉT LIVE: chọn 1 cái → tự điền từ khóa → quét ngay ──
+// Từ khóa kiểu universal/Malay-English (TikTok Shop search fuzzy, chạy được cả 5 nước).
+export const NICHE_PRESETS: { label: string; emoji: string; keywords: string[] }[] = [
+  { label: 'TPCN / Suplemen', emoji: '💊', keywords: ['suplemen', 'vitamin', 'collagen', 'probiotik'] },
+  { label: 'Đồ ăn vặt / Snack', emoji: '🍿', keywords: ['snack', 'kerepek', 'keripik', 'snek viral'] },
+  { label: 'Gia vị / Muối', emoji: '🧂', keywords: ['garam bawang', 'seasoning', 'perasa', 'bumbu'] },
+  { label: 'Dụng cụ sức khỏe', emoji: '💪', keywords: ['massage gun', 'alat urut', 'koyo', 'knee support'] },
+  { label: 'Chăm sóc da', emoji: '🧴', keywords: ['serum', 'skincare', 'whitening', 'sunscreen'] },
+  { label: 'Giảm cân', emoji: '🔥', keywords: ['slimming', 'diet drink', 'penurun berat', 'detox'] },
+  { label: 'Chăm sóc cá nhân', emoji: '🪥', keywords: ['oral care', 'deodorant', 'hair care', 'shaver'] },
+]
+
 // ── Verdict ──
 export const VERDICT_META: Record<Verdict, { label: string; emoji: string; color: string; bg: string }> = {
   go: { label: 'Nên test', emoji: '🟢', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },

@@ -4,7 +4,7 @@
 import { create } from 'zustand'
 import { supabase } from '../../lib/supabase'
 import type { Market, NicheKey, ResearchProduct, ScoredProduct, SkuRisk, Verdict, SignalResult } from './types'
-import { DEFAULT_FILTERS, type ResearchFilters, type PresetKey, PRESETS, VERDICT_THRESHOLDS } from './constants'
+import { DEFAULT_FILTERS, type ResearchFilters, type PresetKey, PRESETS, VERDICT_THRESHOLDS, MARKET_CURRENCY } from './constants'
 import { SAMPLE_PRODUCTS } from './sampleData'
 import { scoreMany } from './services/scoring'
 import { classifyNiche, classifySkuRisk } from './services/niche'
@@ -53,20 +53,22 @@ function liveToProduct(p: LiveApiProduct, market: Market): ResearchProduct {
 // Điểm dựa vào SỐ ĐÃ BÁN (tín hiệu winner thật trên TikTok Shop).
 function scoreLive(p: ResearchProduct): ScoredProduct {
   const sale = p.sale
+  const cur = MARKET_CURRENCY[p.market] || ''
+  const priceStr = p.unitPrice ? `${cur} ${p.unitPrice.toLocaleString('vi-VN')}` : '—'
   const score = Math.max(0, Math.min(100, Math.round(38 + 13 * Math.log10(sale + 1))))
   const verdict: Verdict = score >= VERDICT_THRESHOLDS.go ? 'go' : score >= VERDICT_THRESHOLDS.consider ? 'consider' : 'avoid'
   const reasons = [
     `${sale.toLocaleString('vi-VN')} đã bán`,
-    p.unitPrice ? `Giá RM ${p.unitPrice}` : '',
+    p.unitPrice ? `Giá ${priceStr}` : '',
     p.rating ? `⭐ ${p.rating}` : '',
   ].filter(Boolean)
   const signals: SignalResult[] = [
     { key: 'sale', label: 'Đã bán', display: sale.toLocaleString('vi-VN'),
       status: sale >= 5000 ? 'pass' : sale >= 1000 ? 'warn' : 'fail',
       detail: 'Số đã bán trên TikTok Shop — tín hiệu winner thật.' },
-    { key: 'price', label: 'Giá bán', display: p.unitPrice ? `RM ${p.unitPrice}` : '—',
-      status: p.unitPrice > 0 && p.unitPrice <= 60 ? 'pass' : 'warn',
-      detail: 'Giá bán lẻ trên sàn.' },
+    { key: 'price', label: 'Giá bán', display: priceStr,
+      status: p.unitPrice > 0 ? 'pass' : 'warn',
+      detail: 'Giá bán lẻ trên sàn (tiền tệ theo thị trường).' },
     { key: 'rating', label: 'Đánh giá', display: p.rating ? String(p.rating) : '—',
       status: p.rating >= 4.5 ? 'pass' : p.rating > 0 ? 'warn' : 'fail',
       detail: 'Điểm đánh giá sản phẩm.' },
@@ -304,14 +306,19 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
 
   getScored: () => {
     const { market, nicheFilter, filters, sortBy } = get()
+    const live = get().isLive
     let rows = get().source().filter((p) => p.market === market)
     if (nicheFilter !== 'all') rows = rows.filter((p) => p.nicheKey === nicheFilter)
     if (filters.hideHighSku) rows = rows.filter((p) => p.skuVarianceRisk !== 'high')
-    rows = rows.filter((p) => p.unitPrice <= filters.priceMaxMyr)
-    rows = rows.filter((p) => p.commissionRate >= filters.commissionMinPct)
-    rows = rows.filter((p) => p.growthRate >= filters.growthMinPct)
-    if (filters.lowSaturationOnly) rows = rows.filter((p) => p.competitionShops < 15)
-    if (filters.hasCreatorOnly) rows = rows.filter((p) => p.creatorNum > 0)
+    // Các bộ lọc dưới đây thuộc data Kalodata (giá RM / hoa hồng / tăng trưởng / creator).
+    // Với data LIVE TikTok Shop (giá local + không có các trường này) → BỎ QUA, nếu không sẽ lọc sạch SP nước ngoài.
+    if (!live) {
+      rows = rows.filter((p) => p.unitPrice <= filters.priceMaxMyr)
+      rows = rows.filter((p) => p.commissionRate >= filters.commissionMinPct)
+      rows = rows.filter((p) => p.growthRate >= filters.growthMinPct)
+      if (filters.lowSaturationOnly) rows = rows.filter((p) => p.competitionShops < 15)
+      if (filters.hasCreatorOnly) rows = rows.filter((p) => p.creatorNum > 0)
+    }
 
     const scored = get().isLive ? rows.map(scoreLive) : scoreMany(rows)
     scored.sort((a, b) => {
