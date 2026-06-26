@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { X, Check, AlertTriangle, XCircle, Plus, Play, TrendingUp, TrendingDown, ExternalLink, Sparkles, Info } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { X, Check, AlertTriangle, XCircle, Plus, Play, TrendingUp, TrendingDown, ExternalLink, Sparkles, Info, Download } from 'lucide-react'
 import type { Market, ScoredProduct, SignalResult } from '../types'
 import { VERDICT_META, NICHES, MARKETS } from '../constants'
 import { formatMyr } from '../services/pricing'
@@ -110,6 +110,27 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const realCreators = useResearchStore((s) => s.realCreators)
   const getVideosForProduct = useResearchStore((s) => s.getVideosForProduct)
   const getCreatorsForProduct = useResearchStore((s) => s.getCreatorsForProduct)
+  const isLive = useResearchStore((s) => s.isLive)
+
+  // LIVE: video BÁN thật của SP (ScrapeCreators keyword search) — chỉ khi quét live
+  interface LiveVid { id: string; desc: string; author: string; nickname: string; views: number; cover: string; downloadUrl: string; url: string; durationSec: number }
+  const [liveVideos, setLiveVideos] = useState<LiveVid[] | null>(null)
+  const [liveVidLoading, setLiveVidLoading] = useState(false)
+  const liveFetchedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!isLive || tab !== 'video') return
+    if (liveFetchedFor.current === product.productId) return
+    liveFetchedFor.current = product.productId
+    let cancelled = false
+    setLiveVidLoading(true); setLiveVideos(null)
+    const q = product.title.split(/\s+/).slice(0, 7).join(' ')
+    fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(q)}&limit=12`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setLiveVideos(Array.isArray(d.videos) ? d.videos : []) })
+      .catch(() => { if (!cancelled) setLiveVideos([]) })
+      .finally(() => { if (!cancelled) setLiveVidLoading(false) })
+    return () => { cancelled = true }
+  }, [isLive, tab, product.productId, product.market, product.title])
 
   // Video: nếu DB ĐÃ hydrate (kể cả empty), CHỈ dùng real — không lừa anh bằng sample.
   const videos = useMemo(() => {
@@ -260,8 +281,60 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
             </div>
           )}
 
-          {/* ── VIDEO WIN ── */}
-          {tab === 'video' && (
+          {/* ── VIDEO WIN (LIVE — TikTok Shop thật) ── */}
+          {tab === 'video' && isLive && (
+            <div className="flex flex-col gap-3">
+              <p className="text-xs text-slate-500">🎥 Video đang <b>BÁN</b> sản phẩm này trên TikTok Shop <b>{product.market}</b> — sắp theo lượt xem. Bấm <b>⬇ Tải</b> lấy video không logo về làm ladi.</p>
+              {liveVidLoading && (
+                <div className="rounded-xl border border-dashed border-black/10 p-6 text-center text-xs text-slate-400">Đang tìm video bán…</div>
+              )}
+              {!liveVidLoading && liveVideos && liveVideos.length === 0 && (
+                <div className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
+                  Không tìm thấy video bán cho từ khóa này.<br/>Thử mở SP trên TikTok Shop hoặc đổi từ khóa quét.
+                </div>
+              )}
+              {liveVideos && liveVideos.map((vid) => (
+                <div key={vid.id} className="rounded-xl border border-black/10 p-2.5">
+                  <div className="flex gap-3">
+                    <div className="relative h-20 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-200">
+                      {vid.cover
+                        ? <img src={vid.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+                        : <Play className="absolute inset-0 m-auto h-5 w-5 text-slate-500" />}
+                      {vid.durationSec ? <span className="absolute bottom-0.5 right-0.5 rounded bg-black/60 px-1 text-[9px] font-bold text-white">{vid.durationSec}s</span> : null}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-xs font-semibold text-slate-700">{vid.desc || '(video)'}</p>
+                      <p className="text-[11px] text-slate-400">@{vid.author}</p>
+                      <div className="mt-1 text-[11px] font-medium text-slate-600">👁 {formatCount(vid.views)} view</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={() => setEmbedVideo({ id: vid.id, handle: vid.author || undefined })}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+                    >
+                      <Play className="h-3.5 w-3.5" /> Xem
+                    </button>
+                    {vid.downloadUrl && (
+                      <a href={vid.downloadUrl} target="_blank" rel="noopener noreferrer"
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100">
+                        <Download className="h-3.5 w-3.5" /> Tải
+                      </a>
+                    )}
+                    {vid.url && (
+                      <a href={vid.url} target="_blank" rel="noopener noreferrer"
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-black/10 bg-slate-50 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100">
+                        <ExternalLink className="h-3.5 w-3.5" /> TikTok
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── VIDEO WIN (Kalodata — data cũ, chỉ khi KHÔNG live) ── */}
+          {tab === 'video' && !isLive && (
             <div className="flex flex-col gap-3">
               <p className="text-xs text-slate-500">🎥 Video đang bán tốt sản phẩm này (thị trường <b>{product.market}</b>). Bấm <b>▶ Phát video</b> để xem ngay trong app.</p>
               {videos.some((v) => /\.(vn|id|th)\b/i.test(v.handle) || /[ăâđêôơưĐ]/.test(v.caption)) && (
