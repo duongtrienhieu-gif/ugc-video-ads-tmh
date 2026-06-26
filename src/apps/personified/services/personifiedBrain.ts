@@ -211,6 +211,9 @@ export async function generateScript(
   const arch = ARCHETYPES[config.archetype]
   const sceneCount = LENGTH_SCENE_COUNT[config.length]
   const targetSec = LENGTH_TARGET_SEC[config.length]
+  // #5 — lộ sản phẩm MUỘN (~66-70%) cho video vừa/dài → villain diễn lâu, kịch tính sâu, SP đập mạnh.
+  // Video ngắn (≤5 cảnh) giữ hero ~cảnh 3 (đừng ép muộn kẻo SP gấp).
+  const heroSceneIdx = sceneCount <= 5 ? 3 : Math.round(sceneCount * 0.7)
   const langName = TARGET_MARKET_GEMINI_NAME[market]
   const isVN = market === 'VN'
 
@@ -264,6 +267,12 @@ KHUNG CẢNH (chọn & sắp đúng thứ tự, bỏ cảnh tùy chọn nếu kh
 challenger(hook khịa) → rootcause(khoe cách gây hại) → agitation(làm nặng thêm) →
 ${config.falseSolution ? 'false_solution(đồ thường thất bại) → ' : ''}hero_entrance(SẢN PHẨM THẬT xuất hiện cứu nguy) →
 application(sản phẩm thật tác động; KB4 = mỗi hoạt chất 1 cảnh) → destruction(phản diện tan rã) → result(bộ phận sạch đẹp + sản phẩm thật) → cta(packshot SP thật + chốt đơn mua hàng).
+
+🎯 NHỊP LỘ SẢN PHẨM (giữ VILLAIN diễn LÂU = kịch tính sâu, sản phẩm vào đập mạnh hơn):
+- Dồn ~70% ĐẦU cho VILLAIN/VẤN ĐỀ: hook → khoe cơ chế hại → **agitation LEO THANG (với ${sceneCount} cảnh: dùng 2 cảnh agitation phá 2 KHOẢNH KHẮC ĐỜI THẬT khác nhau, villain mạnh dần)** → đồ thường thất bại (villain biến hình mạnh thêm).
+- **hero_entrance CHỈ vào ở ~cảnh ${heroSceneIdx}/${sceneCount}** (KHÔNG sớm hơn). Trước đó TUYỆT ĐỐI chưa cho sản phẩm xuất hiện.
+- ĐÓNG GỌN 30% cuối: application+destruction nhịp NHANH (có thể gộp), result 1 cảnh (người sống lại — bookend), cta 1 câu cộc. KHÔNG kéo dài phần sản phẩm.
+- (Ngoại lệ: video ${sceneCount} cảnh mà ≤5 thì hero vào ~cảnh 3 — giữ đủ đất cho sản phẩm, đừng ép muộn.)
 
 LUẬT VIẾT (bắt buộc):
 1. THOẠI NATIVE, KHÔNG DỊCH MÁY: ${arch.narratorVi}. Dùng slang đời thường ${isVN ? 'tiếng Việt' : 'tiếng Mã + chêm sức sống bản địa'} (vd VN: "xả lũ axit", "đình công", "bay màu", "tao cút đây").
