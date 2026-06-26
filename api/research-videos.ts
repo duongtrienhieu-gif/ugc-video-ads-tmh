@@ -41,8 +41,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const marketRaw = typeof req.query.market === 'string' ? req.query.market.toUpperCase() : 'MY'
   const region = VALID_REGIONS.has(marketRaw) ? marketRaw : 'MY'
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
-  // Lọc thời lượng tối thiểu (mặc định >20s — clip quá ngắn không hợp FB ads).
+  // Lọc thời lượng: >minSec (clip ngắn vô dụng) và ≤maxSec (video quá dài = vlog/news, không hợp FB ads).
   const minSec = Math.max(0, parseInt(typeof req.query.minSec === 'string' ? req.query.minSec : '20', 10) || 0)
+  const maxSec = Math.max(minSec + 1, parseInt(typeof req.query.maxSec === 'string' ? req.query.maxSec : '90', 10) || 90)
   const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : ''
   // terms[0] ~ brand (trọng số cao nhất), còn lại = danh từ cốt lõi của SP.
   // Video phải chứa ≥1 token trong desc → bỏ news/drift sang SP khác.
@@ -74,8 +75,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         url: a.share_url ?? a.url ?? '',
         durationSec: a.video?.duration ? Math.round(a.video.duration / 1000) : 0,
       }))
-      // Chỉ video đủ dài cho FB ads.
-      .filter((v) => v.durationSec > minSec)
+      // Trong khoảng phù hợp FB ads: đủ dài (>minSec) nhưng không quá dài (≤maxSec).
+      .filter((v) => v.durationSec > minSec && v.durationSec <= maxSec)
 
     // Chấm điểm LIÊN QUAN: video phải nhắc tới SP trong desc. Khớp token[0] (brand) = +3,
     // mỗi token khác = +1. Bỏ video score 0 (news/drift). Nếu KHÔNG có terms thì giữ tất cả.

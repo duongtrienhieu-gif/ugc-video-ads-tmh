@@ -164,7 +164,8 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
 
   // LIVE: video BÁN thật của SP (ScrapeCreators keyword search) — chỉ khi quét live
   interface LiveVid { id: string; desc: string; author: string; nickname: string; views: number; cover: string; downloadUrl: string; url: string; durationSec: number }
-  const MIN_SEC = 20   // chỉ video >20s (đủ dài cho FB ads, không quá ngặt)
+  const MIN_SEC = 20   // >20s: đủ dài cho FB ads
+  const MAX_SEC = 90   // ≤90s: bỏ vlog/news quá dài
   const [liveVideos, setLiveVideos] = useState<LiveVid[] | null>(null)
   const [liveVidLoading, setLiveVidLoading] = useState(false)
   const [liveCursor, setLiveCursor] = useState<string | null>(null)
@@ -185,7 +186,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
     if (!liveCursor || liveMoreLoading) return
     setLiveMoreLoading(true)
     try {
-      const d = await fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(liveQuery)}&minSec=${MIN_SEC}&terms=${termsParam}&cursor=${encodeURIComponent(liveCursor)}`).then((r) => r.json())
+      const d = await fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(liveQuery)}&minSec=${MIN_SEC}&maxSec=${MAX_SEC}&terms=${termsParam}&cursor=${encodeURIComponent(liveCursor)}`).then((r) => r.json())
       const more: LiveVid[] = Array.isArray(d.videos) ? d.videos : []
       setLiveVideos((prev) => {
         const seen = new Set((prev || []).map((v) => v.id))
@@ -204,7 +205,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
     liveFetchedFor.current = product.productId
     let cancelled = false
     setLiveVidLoading(true); setLiveVideos(null); setLiveCursor(null); setLiveHasMore(false)
-    fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(liveQuery)}&minSec=${MIN_SEC}&terms=${termsParam}`)
+    fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(liveQuery)}&minSec=${MIN_SEC}&maxSec=${MAX_SEC}&terms=${termsParam}`)
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return
@@ -588,13 +589,13 @@ Cụ thể, thực chiến, KHÔNG bịa chứng nhận. CHỈ trả JSON.`
           {/* ── VIDEO WIN (LIVE — TikTok Shop thật) ── */}
           {tab === 'video' && isLive && (
             <div className="flex flex-col gap-3">
-              <p className="text-xs text-slate-500">🎥 Video <b>liên quan SP này</b> (lọc theo brand/từ khóa cốt lõi → bỏ news/drift), <b>≥20s</b> đủ dài cho <b>FB ads</b>. Bấm <b>⬇ Tải</b> lấy video không logo.</p>
+              <p className="text-xs text-slate-500">🎥 Video <b>liên quan SP này</b> (lọc theo brand/từ khóa cốt lõi → bỏ news/drift), <b>20–90s</b> hợp <b>FB ads</b>. Bấm <b>⬇ Tải</b> lấy video không logo.</p>
               {liveVidLoading && (
                 <div className="rounded-xl border border-dashed border-black/10 p-6 text-center text-xs text-slate-400">Đang tìm video liên quan…</div>
               )}
               {!liveVidLoading && liveVideos && liveVideos.length === 0 && (
                 <div className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
-                  Chưa thấy video liên quan SP này (≥20s).<br/>Bấm <b>Tải thêm</b> để quét tiếp, hoặc đổi từ khóa.
+                  Chưa thấy video liên quan SP này (20–90s).<br/>Bấm <b>Tải thêm</b> để quét tiếp, hoặc đổi từ khóa.
                   {liveHasMore && (
                     <button onClick={() => void loadMoreVideos()} disabled={liveMoreLoading}
                       className="mt-3 block w-full rounded-lg border border-violet-300 bg-white py-2 text-xs font-semibold text-violet-700 hover:bg-violet-50 disabled:opacity-50">
