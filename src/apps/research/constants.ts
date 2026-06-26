@@ -73,9 +73,11 @@ export const NICHE_PRESETS: { label: string; emoji: string; keywords: string[] }
   { label: 'Mắt / Thị lực', emoji: '👁️', keywords: ['lutein', 'eye vitamin', 'mata', 'penglihatan', 'eye care', 'vitamin mata', 'mata kabur', 'bilberry eye', 'eye supplement', 'kesihatan mata'] },
   { label: 'Ngủ ngon / Giảm stress', emoji: '😴', keywords: ['sleep', 'insomnia', 'magnesium', 'stress relief', 'susah tidur', 'melatonin', 'tidur lena', 'relax', 'anti stress', 'calm mind'] },
   { label: 'Vệ sinh PN / Trắng body', emoji: '🌺', keywords: ['feminine wash', 'body whitening', 'deodoran', 'ketiak', 'miss v', 'pemutih badan', 'bau badan', 'lotion pemutih', 'intimate wash', 'underarm'] },
-  { label: 'Trang điểm / Son', emoji: '💄', keywords: ['lipstick', 'cushion', 'makeup', 'gincu', 'foundation', 'lip tint', 'bedak', 'mascara', 'eyeliner', 'mekap'] },
   { label: 'Đường huyết / Tim mạch', emoji: '🩸', keywords: ['diabetes', 'kolesterol', 'darah tinggi', 'gula darah', 'blood pressure', 'jantung', 'kawal gula', 'lemak darah', 'sugar control', 'kesihatan jantung'] },
   { label: 'Trị mụn / Trị nám', emoji: '🧖', keywords: ['acne', 'jerawat', 'dark spot', 'melasma', 'rawatan jerawat', 'parut jerawat', 'pigmentation', 'anti acne', 'kulit berjerawat', 'spot corrector'] },
+  { label: 'Gia dụng / Nhà bếp', emoji: '🏠', keywords: ['kitchen gadget', 'chopper', 'blender', 'alat dapur', 'peralatan dapur', 'food container', 'organizer', 'penyimpanan', 'rak dapur', 'gadget rumah'] },
+  { label: 'Tiện ích độc lạ / Viral', emoji: '🪄', keywords: ['viral gadget', 'gadget unik', 'barang viral', 'tiktok viral', 'barang unik', 'creative gadget', 'must have item', 'gadget murah', 'trending gadget', 'barang berguna'] },
+  { label: 'Đồ thông minh / Điện tử', emoji: '🤖', keywords: ['smart home', 'smart gadget', 'lampu sensor', 'wireless charger', 'mini fan', 'led light', 'gadget pintar', 'elektronik', 'power bank', 'usb gadget'] },
 ]
 
 // ── Verdict ──
