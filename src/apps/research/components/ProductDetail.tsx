@@ -5,6 +5,7 @@ import { VERDICT_META, NICHES, MARKETS, MARKET_CURRENCY } from '../constants'
 import { formatMyr } from '../services/pricing'
 import { getVideosFor, getCreatorsFor, getCrossMarketFor, analyzeVideo, formatCount, formatKMyr } from '../services/evidence'
 import { useResearchStore, type DbVideo, type DbCreator } from '../store'
+import { useAppStore } from '../../../stores/appStore'
 import PricingCalculator from './PricingCalculator'
 
 type Tab = 'overview' | 'video' | 'creator' | 'market' | 'pricing'
@@ -112,6 +113,8 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const getVideosForProduct = useResearchStore((s) => s.getVideosForProduct)
   const getCreatorsForProduct = useResearchStore((s) => s.getCreatorsForProduct)
   const isLive = useResearchStore((s) => s.isLive)
+  const openApp = useAppStore((s) => s.openApp)
+  const addToast = useAppStore((s) => s.addToast)
 
   // LIVE: video BÁN thật của SP (ScrapeCreators keyword search) — chỉ khi quét live
   interface LiveVid { id: string; desc: string; author: string; nickname: string; views: number; cover: string; downloadUrl: string; url: string; durationSec: number }
@@ -133,6 +136,19 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
       .finally(() => { if (!cancelled) setLiveVidLoading(false) })
     return () => { cancelled = true }
   }, [isLive, tab, product.productId, product.market, product.title])
+
+  // Creator (live) = tác giả của các video đang BÁN sản phẩm → người đang đẩy SP
+  const liveCreators = useMemo(() => {
+    if (!liveVideos) return []
+    const m = new Map<string, { author: string; videos: number; views: number }>()
+    for (const v of liveVideos) {
+      if (!v.author) continue
+      const e = m.get(v.author) || { author: v.author, videos: 0, views: 0 }
+      e.videos += 1; e.views += v.views
+      m.set(v.author, e)
+    }
+    return [...m.values()].sort((a, b) => b.views - a.views)
+  }, [liveVideos])
 
   // Video: nếu DB ĐÃ hydrate (kể cả empty), CHỈ dùng real — không lừa anh bằng sample.
   const videos = useMemo(() => {
@@ -181,7 +197,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
       ]
 
   const TABS: [Tab, string][] = isLive
-    ? [['overview', 'Tổng quan'], ['video', 'Video win'], ['pricing', 'Giá']]
+    ? [['overview', 'Tổng quan'], ['video', 'Video win'], ['creator', 'Creator'], ['pricing', 'Giá']]
     : [['overview', 'Tổng quan'], ['video', 'Video win'], ['creator', 'Creator'], ['market', 'Thị trường'], ['pricing', 'Giá']]
 
   return (
@@ -295,6 +311,16 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
 
               <button className="flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700">
                 <Plus className="h-4 w-4" /> Đưa vào danh sách Test
+              </button>
+              <button
+                onClick={() => {
+                  openApp('ads-content')
+                  try { void navigator.clipboard.writeText(product.title) } catch { /* clipboard có thể bị chặn */ }
+                  addToast(`Đã mở Ads Content · copy tên SP: ${product.title.slice(0, 40)}`, 'success')
+                }}
+                className="flex items-center justify-center gap-2 rounded-xl border border-violet-300 bg-white py-2.5 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50"
+              >
+                <Sparkles className="h-4 w-4" /> → Tạo content (UGC Lab)
               </button>
             </div>
           )}
@@ -434,6 +460,29 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
                   </div>
                 )
               })}
+            </div>
+          )}
+
+          {/* ── CREATOR (LIVE — lấy từ tác giả video bán) ── */}
+          {tab === 'creator' && isLive && (
+            <div className="flex flex-col gap-3">
+              <p className="text-xs text-slate-500">👤 Creator đang <b>ĐẨY</b> sản phẩm này (lấy từ video bán) — bấm <b>TikTok</b> xem kênh để tuyển.</p>
+              {liveVidLoading && <div className="rounded-xl border border-dashed border-black/10 p-6 text-center text-xs text-slate-400">Đang tải…</div>}
+              {!liveVidLoading && liveCreators.length === 0 && (
+                <div className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">Chưa có creator — thử mở tab Video win để quét trước.</div>
+              )}
+              {liveCreators.map((c) => (
+                <div key={c.author} className="flex items-center gap-3 rounded-xl border border-black/10 p-2.5">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-400 to-pink-400 text-sm font-bold text-white">{c.author.charAt(0).toUpperCase()}</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-slate-700">@{c.author}</p>
+                    <div className="mt-0.5 flex gap-3 text-[11px] text-slate-600"><span>{c.videos} video bán</span><span>👁 {formatCount(c.views)} view</span></div>
+                  </div>
+                  <a href={`https://www.tiktok.com/@${c.author}`} target="_blank" rel="noopener noreferrer" className="flex shrink-0 items-center gap-1 rounded-lg border border-black/10 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 transition-colors hover:bg-slate-100">
+                    <ExternalLink className="h-3 w-3" /> TikTok
+                  </a>
+                </div>
+              ))}
             </div>
           )}
 
