@@ -258,6 +258,13 @@ export default function Personified() {
               })}
             </div>
 
+            {/* B — guard KB2: cảnh báo nhẹ khi chọn Quỷ Tâm Lý cho vấn đề AI gợi ý kiểu khác (thường là nhìn-thấy-được). */}
+            {config.archetype === 'KB2_inner_demon' && insight.recommendedArchetype !== 'KB2_inner_demon' && (
+              <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-800">
+                ⚠️ <b>Quỷ Tâm Lý</b> hợp vấn đề <b>VÔ HÌNH</b> (tự ti / mất ngủ / lo âu). Vấn đề này AI gợi ý <b>{ARCHETYPES[insight.recommendedArchetype].labelVi}</b> — KB2 vẫn chạy nhưng sẽ đánh qua góc <b>TÂM LÝ (xấu hổ)</b> + bắt buộc có người thật. Muốn villain nhìn-thấy-được thì chọn kiểu AI gợi ý.
+              </p>
+            )}
+
             <div className="mt-4 grid items-start gap-3 md:grid-cols-2">
               <Picker label="Độ dài" value={config.length} options={Object.keys(LENGTH_LABEL) as VideoLength[]}
                 labels={LENGTH_LABEL} onChange={(v) => setConfig((c) => ({ ...c, length: v }))}
