@@ -7,13 +7,13 @@ import { useBankStore } from '../../stores/bankStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import {
   type TargetMarket, type PersonifiedConfig, type ProductInsight,
-  type PersonifiedScript, type ArchetypeId, type HeroType, type CtaStyle, type VideoLength,
+  type PersonifiedScript, type PersonifiedScene, type ArchetypeId, type HeroType, type CtaStyle, type VideoLength,
   TARGET_MARKET_LABEL,
 } from './types'
 import {
   ARCHETYPES, ARCHETYPE_ORDER, HERO_TYPE_LABEL, HERO_TYPE_DESC, FALSE_SOLUTION_DESC,
   CTA_STYLE_LABEL, LENGTH_LABEL, LENGTH_TARGET_SEC, SCENE_TYPE_LABEL, RENDER_TIER_LABEL, type RenderTier,
-  estimateProjectCredits, formatCreditEstimate,
+  estimateProjectCredits, formatCreditEstimate, pickClipDuration, estimateSpeechSec, playbackWps,
 } from './constants'
 import { analyzeInsight, generateScript } from './services/personifiedBrain'
 
@@ -136,6 +136,29 @@ export default function Personified() {
     } finally {
       setGenerating(false)
     }
+  }
+
+  // #2 — cho phép SỬA kịch bản: cập nhật thoại 1 cảnh → tính lại clip/credit + full voice script,
+  // ghi thẳng vào state (đã persist localStorage) → bước render (P2) sẽ nhận đúng bản đã sửa.
+  function updateScene(idx: number, patch: Partial<PersonifiedScene>) {
+    setScript((prev) => {
+      if (!prev) return prev
+      const scenes = prev.scenes.map((s) => {
+        if (s.idx !== idx) return s
+        const next = { ...s, ...patch }
+        if (patch.dialoguePrimary !== undefined) {
+          const sp = estimateSpeechSec(next.dialoguePrimary || next.dialogueVi || '', playbackWps(market))
+          next.clipDuration = pickClipDuration(sp)
+        }
+        return next
+      })
+      return {
+        ...prev, scenes,
+        fullVoiceScriptPrimary: scenes.map((s) => s.dialoguePrimary).filter(Boolean).join('\n'),
+        fullVoiceScriptVi: scenes.map((s) => s.dialogueVi).filter(Boolean).join('\n'),
+        totalSec: scenes.reduce((sum, s) => sum + s.clipDuration, 0),
+      }
+    })
   }
 
   return (
@@ -311,8 +334,18 @@ export default function Personified() {
                     </button>
                     {expandedScene === s.idx && (
                       <div className="space-y-1.5 bg-gray-50/70 px-3 pb-3 pl-10 pt-1 text-xs">
-                        <div className="text-sm font-medium text-gray-900">"{s.dialoguePrimary}"</div>
-                        {!isVN && s.dialogueVi && <div className="italic text-gray-500">↳ {s.dialogueVi}</div>}
+                        <label className="block">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-600">✏️ Thoại — sửa được (render sẽ dùng bản này)</span>
+                          <textarea value={s.dialoguePrimary} onChange={(e) => updateScene(s.idx, { dialoguePrimary: e.target.value })}
+                            rows={2} className="mt-0.5 w-full resize-none rounded border border-violet-200 bg-white p-2 text-sm font-medium text-gray-900 focus:border-violet-400 focus:outline-none" />
+                        </label>
+                        {!isVN && (
+                          <label className="block">
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">↳ Nghĩa VN — sửa được</span>
+                            <textarea value={s.dialogueVi} onChange={(e) => updateScene(s.idx, { dialogueVi: e.target.value })}
+                              rows={2} className="mt-0.5 w-full resize-none rounded border border-gray-200 bg-white p-2 text-xs italic text-gray-600 focus:border-violet-400 focus:outline-none" />
+                          </label>
+                        )}
                         {s.action && <div className="text-gray-600"><span className="font-semibold">Hành động:</span> {s.action}</div>}
                         <div className="text-[11px] text-gray-400">🎥 {s.camera}{s.sfx.length > 0 && ` · 🔊 ${s.sfx.join(', ')}`}</div>
                         {s.videoPromptEn && <div className="text-[10px] text-gray-400"><span className="font-semibold">i2v:</span> {s.videoPromptEn}</div>}

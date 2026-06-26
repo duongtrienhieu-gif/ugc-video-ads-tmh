@@ -68,6 +68,23 @@ function stripFence(raw: string): string {
   return s
 }
 
+// #3 — KHÓA CỨNG cảnh CTA: chỉ còn lời kêu mua. Lưới an toàn deterministic (prompt là lớp 1):
+// gỡ disclaimer "tùy cơ địa / hasil berbeza", GIÁ (RM/đ/k), và ƯU ĐÃI ("mua 1 tặng 1 / beli 1 dapat 2").
+function stripCtaExtras(text: string): string {
+  return (text ?? '')
+    // disclaimer (VN + MY) — gỡ cả câu chứa nó
+    .replace(/[^.!?]*\b(hiệu quả|kết quả)\b[^.!?]*\b(tùy|phụ thuộc)[^.!?]*cơ địa[^.!?]*[.!?]?/gi, '')
+    .replace(/[^.!?]*\b(hasil|kesan)\b[^.!?]*\bberbeza\b[^.!?]*[.!?]?/gi, '')
+    .replace(/\*+[^*]*\*+/g, '')   // dạng *Hiệu quả…* in nghiêng
+    // giá
+    .replace(/\b(rm|usd|\$)\s*\d[\d.,]*/gi, '')
+    .replace(/\b\d[\d.,]*\s*(đ|k|vnd|nghìn|ngàn|ribu)\b/gi, '')
+    .replace(/\bgiá\b[^.!?]*\d[\d.,]*/gi, '')
+    // ưu đãi
+    .replace(/\b(mua|beli)\s*\d+\s*(tặng|dapat|free|percuma)\s*\d+/gi, '')
+    .replace(/\s{2,}/g, ' ').replace(/\s+([.!?])/g, '$1').trim()
+}
+
 // ══ PASS 1 — INSIGHT ═════════════════════════════════════════════════════════
 
 const INSIGHT_SCHEMA = {
@@ -240,7 +257,7 @@ ${buildProductContext(product)}
 🎯 SẢN PHẨM THẬT = HERO NHÂN CÁCH HÓA (đây là video BÁN HÀNG — KHÔNG phải nuôi kênh):
 - Sản phẩm CÓ THẬT (xem bao bì/nhãn ở [SẢN PHẨM]). Nhân vật role='hero' = CHÍNH sản phẩm thật được nhân cách hóa: thêm MẮT biểu cảm + TAY nhỏ thành hiệp sĩ, NHƯNG giữ nguyên bao bì/nhãn/màu/dáng thật (vẫn nhận ra đúng sản phẩm — KHÔNG bịa bao bì mới). appearance + imagePromptEn của hero phải mô tả đúng bao bì thật + chi tiết mắt/tay thêm vào.
 - Từ hero_entrance trở đi, sản phẩm-hiệp sĩ này là thứ diệt phản diện (tự tay xịt/đánh, hoặc tung hoạt chất).
-- Mọi video KẾT bằng cảnh cta: KÊU GỌI MUA/ĐẶT HÀNG. dialoguePrimary nói gọn 1 lời kêu mua + "bấm giỏ hàng / link dưới" + (tối đa 1 mức giá/ưu đãi CHÍNH, đừng đọc 3-4 bậc giá) + "hiệu quả tùy cơ địa". Hướng khách ĐẶT MUA, tuyệt đối KHÔNG "follow kênh". ⛔ videoPromptEn/action cảnh cta CHỈ tả packshot sản phẩm thật + tay chỉ xuống — KHÔNG bắt model render chữ/giá/nút (giá + nút "Add to Cart" sẽ chèn bằng caption ở bước sau).
+- Mọi video KẾT bằng cảnh cta: CHỈ DUY NHẤT lời KÊU GỌI MUA/ĐẶT HÀNG (in-character theo style đã chọn) + "bấm giỏ hàng / link dưới". ⛔ KHÓA CỨNG cảnh cta — TUYỆT ĐỐI KHÔNG: nhắc GIÁ (RM/đ/k/số tiền), nhắc ƯU ĐÃI/khuyến mãi ("mua 1 tặng 1", "beli 1 dapat 2"), nhắc DISCLAIMER ("hiệu quả tùy cơ địa" / "hasil mungkin berbeza" / "kết quả phụ thuộc cơ địa"), nói "follow kênh". Chỉ 1 lời kêu mua cộc, gắt, trong vai. ⛔ videoPromptEn/action cảnh cta CHỈ tả packshot sản phẩm thật + tay chỉ xuống — KHÔNG bắt model render chữ/giá/nút (giá + nút "Add to Cart" sẽ chèn bằng caption ở bước sau).
 - hasProduct: mỗi cảnh đặt true nếu sản phẩm thật trong khung (thường hero_entrance/application/result/cta, đôi khi false_solution để so sánh), false nếu cảnh chỉ có phản diện/nỗi đau (challenger/rootcause/agitation).
 
 KHUNG CẢNH (chọn & sắp đúng thứ tự, bỏ cảnh tùy chọn nếu không hợp số lượng):
@@ -275,16 +292,21 @@ XUẤT JSON: { characters:[...], scenes:[${sceneCount} cảnh đúng thứ tự]
 
   // Snap mỗi cảnh về 4 hoặc 8s theo độ dài thoại; hasProduct tính deterministic theo sceneType.
   const scenes: PersonifiedScene[] = (parsed.scenes ?? []).map((s, i): PersonifiedScene => {
-    const speech = estimateSpeechSec(s.dialoguePrimary || s.dialogueVi || '', playbackWps(market))
     const sceneType = VALID_SCENE_TYPES.has(s.sceneType) ? (s.sceneType as PersonifiedScene['sceneType']) : 'challenger'
+    // #3 — cảnh cta: gỡ cứng giá/ưu đãi/disclaimer (lưới an toàn sau prompt).
+    const isCta = sceneType === 'cta'
+    const dPrimary = isCta ? stripCtaExtras(s.dialoguePrimary ?? '') : (s.dialoguePrimary ?? '')
+    const dViRaw = isVN ? (s.dialoguePrimary ?? s.dialogueVi ?? '') : (s.dialogueVi ?? '')
+    const dVi = isCta ? stripCtaExtras(dViRaw) : dViRaw
+    const speech = estimateSpeechSec(dPrimary || dVi || '', playbackWps(market))
     return {
       idx: i + 1,
       sceneType,
       clipDuration: pickClipDuration(speech),
       hasProduct: SCENE_HAS_PRODUCT.has(sceneType),  // deterministic — không để AI đoán
       speaker: s.speaker ?? '',
-      dialoguePrimary: s.dialoguePrimary ?? '',
-      dialogueVi: isVN ? (s.dialoguePrimary ?? s.dialogueVi ?? '') : (s.dialogueVi ?? ''),
+      dialoguePrimary: dPrimary,
+      dialogueVi: dVi,
       emotion: s.emotion ?? '',
       camera: s.camera ?? '',
       sfx: Array.isArray(s.sfx) ? s.sfx : [],
