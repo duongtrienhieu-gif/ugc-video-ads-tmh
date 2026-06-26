@@ -1,7 +1,7 @@
 // Research — entry component (P1, data mẫu).
 // Header (market + thời gian + preset) | FilterPanel | lưới thẻ cơ hội | drawer chi tiết.
-import { useEffect, useState } from 'react'
-import { Search, FlaskConical } from 'lucide-react'
+import { useState } from 'react'
+import { Search } from 'lucide-react'
 import { useResearchStore } from './store'
 import { MARKETS, PRESETS, NICHE_PRESETS } from './constants'
 import OpportunityCard from './components/OpportunityCard'
@@ -19,14 +19,10 @@ const segCls = (active: boolean) =>
   }`
 
 export default function Research() {
-  const { market, setMarket, activePreset, applyPreset, getScored, selectedId, select, getSelected, hydrate, realProducts } = useResearchStore()
+  const { market, setMarket, activePreset, applyPreset, getScored, selectedId, select, getSelected, realProducts } = useResearchStore()
   const { isLive, scanning, scanError, scanCredits, scanKeywords, setScanKeywords, scanLive } = useResearchStore()
   const { scanCross, clearCross, crossData, crossLoading, crossError, crossQuery } = useResearchStore()
-  const realVideos = useResearchStore((s) => s.realVideos)
-  const realCreators = useResearchStore((s) => s.realCreators)
-  const realShops = useResearchStore((s) => s.realShops)
   const [view, setView] = useState<'products' | 'shops'>('products')
-  useEffect(() => { void hydrate() }, [hydrate])
   const scored = getScored()
   const selected = getSelected()
 
@@ -40,23 +36,16 @@ export default function Research() {
               <Search className="h-4 w-4 text-violet-600" />
             </div>
             <h1 className="text-base font-bold text-slate-800">Research</h1>
-            {isLive && realProducts ? (
+            {realProducts && realProducts.length > 0 ? (
               <span
                 className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600"
-                title={'Data LIVE từ TikTok Shop (ScrapeCreators) theo thị trường + từ khóa. Chấm điểm theo SỐ ĐÃ BÁN.'}
+                title="Data LIVE từ TikTok Shop (ScrapeCreators) theo thị trường + từ khóa. Chấm điểm theo SỐ ĐÃ BÁN."
               >
                 ✓ {realProducts.length} SP · TikTok Shop LIVE
               </span>
-            ) : realProducts ? (
-              <span
-                className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600"
-                title={`DB hiện có:\n• ${realProducts.length} sản phẩm\n• ${realCreators?.length || 0} creator\n• ${realVideos?.length || 0} video\n• ${realShops?.length || 0} shop\n\nSố liệu là DATA THẬT từ Kalodata. Tên hiển thị tiếng Việt do Kalodata tự dịch.`}
-              >
-                ✓ {realProducts.length} SP · {realCreators?.length || 0} creator · {realVideos?.length || 0} video · {realShops?.length || 0} shop ⓘ
-              </span>
             ) : (
               <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-600">
-                <FlaskConical className="h-3 w-3" /> Bản thử — data mẫu
+                Chọn ngách hoặc gõ từ khóa → bấm Quét
               </span>
             )}
           </div>
@@ -162,10 +151,12 @@ export default function Research() {
 
           {/* Toggle: Sản phẩm / Shop đối thủ */}
           <div className="mb-3 flex items-center gap-3">
-            <div className="inline-flex items-center gap-1 rounded-lg border border-black/10 bg-white p-0.5">
-              <button onClick={() => setView('products')} className={segCls(view === 'products')}>🛍 Sản phẩm</button>
-              <button onClick={() => setView('shops')} className={segCls(view === 'shops')}>🏪 Shop đối thủ</button>
-            </div>
+            {!isLive && (
+              <div className="inline-flex items-center gap-1 rounded-lg border border-black/10 bg-white p-0.5">
+                <button onClick={() => setView('products')} className={segCls(view === 'products')}>🛍 Sản phẩm</button>
+                <button onClick={() => setView('shops')} className={segCls(view === 'shops')}>🏪 Shop đối thủ</button>
+              </div>
+            )}
             {view === 'products' && (
               <span className="text-sm font-semibold text-slate-500">{scored.length} cơ hội</span>
             )}
@@ -176,8 +167,8 @@ export default function Research() {
           ) : scored.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-black/10 text-center text-slate-400">
               <Search className="h-8 w-8" />
-              <p className="text-sm">Không có sản phẩm khớp bộ lọc.</p>
-              <p className="text-xs">Thử nới bộ lọc hoặc đổi thị trường.</p>
+              <p className="text-sm">Chưa có sản phẩm.</p>
+              <p className="text-xs">Chọn <b>thị trường</b> + <b>ngách</b> (hoặc gõ từ khóa) rồi bấm <b>🔎 Quét</b> để tìm SP win.</p>
             </div>
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
