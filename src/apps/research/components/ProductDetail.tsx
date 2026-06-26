@@ -3,6 +3,9 @@ import { X, Check, AlertTriangle, XCircle, Plus, Play, TrendingUp, TrendingDown,
 import type { Market, ScoredProduct, SignalResult } from '../types'
 import { VERDICT_META, NICHES, MARKETS, MARKET_CURRENCY, nicheLabel } from '../constants'
 import type { Product } from '../../../stores/types'
+import { useBankStore } from '../../../stores/bankStore'
+import { useSettingsStore } from '../../../stores/settingsStore'
+import { directGeminiText } from '../../../utils/gemini'
 import { formatMyr } from '../services/pricing'
 import { getVideosFor, getCreatorsFor, getCrossMarketFor, analyzeVideo, formatCount, formatKMyr } from '../services/evidence'
 import { useResearchStore, type DbVideo, type DbCreator } from '../store'
@@ -116,6 +119,9 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const isLive = useResearchStore((s) => s.isLive)
   const sendToApp = useAppStore((s) => s.sendToApp)
   const addToast = useAppStore((s) => s.addToast)
+  const addProduct = useBankStore((s) => s.addProduct)
+  const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
+  const [aiBusy, setAiBusy] = useState(false)
 
   // LIVE: video BÁN thật của SP (ScrapeCreators keyword search) — chỉ khi quét live
   interface LiveVid { id: string; desc: string; author: string; nickname: string; views: number; cover: string; downloadUrl: string; url: string; durationSec: number }
@@ -196,6 +202,43 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const sendResearchTo = (targetApp: string, label: string) => {
     sendToApp({ targetApp, targetField: 'researchProduct', data: tempProduct })
     addToast(`Đã gửi "${product.title.slice(0, 30)}…" sang ${label}`, 'success')
+  }
+  // AI đọc SP research → suy luận → điền ĐẦY ĐỦ field → tạo SP vào Bank (4 ảnh user tự tải sau).
+  const aiCreateToBank = async () => {
+    if (!geminiApiKey) { addToast('Cần Gemini API key trong Cài đặt để AI điền', 'error'); return }
+    setAiBusy(true)
+    try {
+      const prompt = `Bạn là chuyên gia nghiên cứu sản phẩm COD/affiliate. Đọc 1 sản phẩm đang bán chạy trên TikTok Shop và SUY LUẬN viết hồ sơ ĐẦY ĐỦ bằng TIẾNG VIỆT để tạo content quảng cáo + landing page.
+SẢN PHẨM:
+- Tên gốc: ${product.title}
+- Ngách: ${nicheLabel(product.nicheKey)}
+- Thị trường: ${marketLabel}
+- Giá: ${cur} ${product.unitPrice} · Đã bán: ${product.sale} · Đánh giá: ${product.rating || '—'}
+Trả JSON đúng khóa (tiếng Việt, cụ thể, KHÔNG bịa chứng nhận y tế/giấy phép):
+{"productName":"tên gọn rõ","productDescription":"2-3 câu SP là gì, cho ai","painPoints":"nỗi đau khách, mỗi ý 1 dòng","usps":"điểm độc nhất, mỗi ý 1 dòng","benefits":"lợi ích chính, mỗi ý 1 dòng","offer":"gợi ý ưu đãi/combo (vd mua 2 tặng 1, freeship COD)","ingredients":"thành phần/chất liệu nếu suy luận được, không thì 'Cập nhật từ NCC'","usageGuide":"cách dùng gợi ý"}
+Suy luận hợp lý từ tên + ngách. CHỈ trả JSON.`
+      const raw = await directGeminiText({ apiKey: geminiApiKey, prompt, responseMimeType: 'application/json', temperature: 0.5 })
+      const d = JSON.parse(raw) as Record<string, string>
+      await addProduct({
+        productName: d.productName || product.title,
+        productDescription: d.productDescription || '',
+        targetMarket: marketLabel,
+        painPoints: d.painPoints || '',
+        usps: d.usps || '',
+        benefits: d.benefits || '',
+        offer: d.offer || '',
+        ingredients: d.ingredients || '',
+        usageGuide: d.usageGuide || '',
+        productImage: product.imageUrl || '',
+        productImages: product.imageUrl ? [product.imageUrl] : [],
+      })
+      addToast('✅ AI đã tạo SP vào Bank (điền đủ). Vào Thư viện → tải thêm 3 ảnh để dùng app ảnh.', 'success')
+      sendToApp({ targetApp: 'finder', targetField: 'activeBank', data: 'products' })
+    } catch (e) {
+      addToast('AI điền lỗi: ' + ((e as Error).message || '').slice(0, 70), 'error')
+    } finally {
+      setAiBusy(false)
+    }
   }
   const metrics: { label: string; value: string }[] = isLive
     ? [
@@ -345,6 +388,13 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
                   <Sparkles className="h-4 w-4" /> → Dựng Ladi
                 </button>
               </div>
+              <button
+                onClick={() => void aiCreateToBank()}
+                disabled={aiBusy}
+                className="flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
+              >
+                {aiBusy ? '🤖 AI đang đọc SP & điền…' : '🤖 AI điền đủ → Tạo SP vào Bank'}
+              </button>
             </div>
           )}
 
