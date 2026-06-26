@@ -7,7 +7,7 @@ import { useBankStore } from '../../stores/bankStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import {
   type TargetMarket, type PersonifiedConfig, type ProductInsight,
-  type PersonifiedScript, type PersonifiedScene, type ArchetypeId, type HeroType, type CtaStyle, type VideoLength,
+  type PersonifiedScript, type PersonifiedScene, type PersonifiedCharacter, type ArchetypeId, type HeroType, type CtaStyle, type VideoLength,
   TARGET_MARKET_LABEL,
 } from './types'
 import {
@@ -16,7 +16,7 @@ import {
   estimateProjectCredits, formatCreditEstimate, pickClipDuration, estimateSpeechSec, playbackWps,
 } from './constants'
 import { analyzeInsight, generateScript } from './services/personifiedBrain'
-import { renderKeyframe, renderClipFromKeyframe } from './services/personifiedRenderer'   // P2a (cũng đăng ký dev helper __testRenderScene)
+import { renderKeyframe, renderClipFromKeyframe, renderCharacterRef } from './services/personifiedRenderer'   // P2a/P2b (cũng đăng ký dev helper __testRenderScene)
 import { useAssetUrl } from '../../hooks/useAssetUrl'
 
 // P2a — trạng thái render 1 cảnh (persist cùng kịch bản).
@@ -26,6 +26,14 @@ interface SceneRender {
   keyframeRef?: string
   clipRef?: string
   taskId?: string
+  error?: string
+}
+
+// P2b — Character Bank: ảnh chân dung chuẩn mỗi nhân vật (render 1 lần, khóa diện mạo
+// xuyên cảnh). Keyed theo character.name. Persist cùng kịch bản.
+interface CharRef {
+  status: 'idle' | 'rendering' | 'done' | 'failed'
+  refImage?: string
   error?: string
 }
 
@@ -48,6 +56,7 @@ interface PersistedState {
   variant: number
   tier: RenderTier
   clips?: Record<number, SceneRender>
+  charBank?: Record<string, CharRef>
 }
 
 export default function Personified() {
@@ -75,6 +84,9 @@ export default function Personified() {
   // P2a — clip đã render mỗi cảnh (keyed theo scene.idx), persist cùng kịch bản.
   const [clips, setClips] = useState<Record<number, SceneRender>>({})
   const [renderingAll, setRenderingAll] = useState(false)
+  // P2b — Character Bank (keyed theo character.name).
+  const [charBank, setCharBank] = useState<Record<string, CharRef>>({})
+  const [bankRunning, setBankRunning] = useState(false)
 
   const product = useMemo(() => products.find((p) => p.id === productId), [products, productId])
   // P2a — ảnh sản phẩm để khóa fidelity (cảnh hasProduct).
@@ -128,6 +140,14 @@ export default function Personified() {
             }
             setClips(fixed)
           }
+          if (s.charBank) {
+            // Sanitize: nhân vật đang render lúc F5 → idle (chưa có ảnh) hoặc done (đã có).
+            const fixedBank: Record<string, CharRef> = {}
+            for (const [k, v] of Object.entries(s.charBank)) {
+              fixedBank[k] = v.status === 'rendering' ? { ...v, status: v.refImage ? 'done' : 'idle' } : v
+            }
+            setCharBank(fixedBank)
+          }
         }
       }
     } catch { /* ignore corrupt cache */ }
@@ -142,10 +162,10 @@ export default function Personified() {
     // pre-restore empty state) — never overwrite a good cache with nothing.
     if (!productId && !insight && !script && !problemHint) return
     try {
-      const s: PersistedState = { v: 1, productId, market, problemHint, insight, config, script, variant, tier, clips }
+      const s: PersistedState = { v: 1, productId, market, problemHint, insight, config, script, variant, tier, clips, charBank }
       localStorage.setItem(CACHE_KEY, JSON.stringify(s))
     } catch { /* quota / serialization — non-fatal */ }
-  }, [productId, market, problemHint, insight, config, script, variant, tier, clips])
+  }, [productId, market, problemHint, insight, config, script, variant, tier, clips, charBank])
 
   async function handleAnalyze() {
     if (!product || analyzing) return
@@ -166,7 +186,7 @@ export default function Personified() {
     setError(''); setGenerating(true)
     try {
       const sc = await generateScript(product, market, config, insight, geminiKey, nextVariant)
-      setScript(sc); setVariant(nextVariant); setClips({})   // kịch bản mới → bỏ clip cũ (index đổi)
+      setScript(sc); setVariant(nextVariant); setClips({}); setCharBank({})   // kịch bản mới → bỏ clip + bank cũ (nhân vật đổi)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Tạo kịch bản lỗi')
     } finally {
@@ -197,7 +217,34 @@ export default function Personified() {
     })
   }
 
+  // P2b — render CHARACTER SHEET 1 nhân vật → Character Bank (khóa diện mạo xuyên cảnh).
+  async function handleRenderCharacterRef(character: PersonifiedCharacter) {
+    if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
+    if (charBank[character.name]?.status === 'rendering') return
+    setCharBank((p) => ({ ...p, [character.name]: { status: 'rendering' } }))
+    try {
+      const { refImage } = await renderCharacterRef({ apiKey: kieKey, character })
+      setCharBank((p) => ({ ...p, [character.name]: { status: 'done', refImage } }))
+    } catch (e) {
+      setCharBank((p) => ({ ...p, [character.name]: { status: 'failed', error: e instanceof Error ? e.message : String(e) } }))
+    }
+  }
+
+  // P2b — render bank cho TẤT CẢ nhân vật chưa có (tuần tự). Làm trước khi render cảnh.
+  async function handleRenderAllChars() {
+    if (!script || bankRunning) return
+    if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
+    setBankRunning(true)
+    try {
+      for (const c of script.characters) {
+        if (charBank[c.name]?.status === 'done') continue
+        await handleRenderCharacterRef(c)
+      }
+    } finally { setBankRunning(false) }
+  }
+
   // P2a — BƯỚC 1: render keyframe (ảnh tĩnh, rẻ) để DUYỆT trước i2v. → status 'kf_ready'.
+  //   Nếu nhân vật đã có ảnh trong Character Bank → truyền làm ref khóa diện mạo (P2b).
   async function handleRenderKeyframe(scene: PersonifiedScene) {
     if (!script) return
     if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
@@ -207,6 +254,7 @@ export default function Personified() {
     try {
       const { keyframeRef } = await renderKeyframe({
         apiKey: kieKey, scene, character,
+        characterRef: character ? charBank[character.name]?.refImage : undefined,
         productRefs: scene.hasProduct ? productRefs : [],
       })
       setClips((p) => ({ ...p, [scene.idx]: { status: 'kf_ready', keyframeRef } }))
@@ -477,8 +525,15 @@ export default function Personified() {
                         {(() => {
                           const st = clips[s.idx]?.status
                           const busy = st === 'kf' || st === 'clip'
+                          const sceneChar = script.characters.find((c) => c.name === s.speaker || c.role === s.speaker)
+                          const charLocked = !!(sceneChar && charBank[sceneChar.name]?.refImage)
                           return (
                             <div className="space-y-1.5 pt-1">
+                              {sceneChar && (
+                                charLocked
+                                  ? <div className="text-[10px] font-semibold text-emerald-600">🎭 Khóa diện mạo "{sceneChar.name}" từ bank</div>
+                                  : <div className="text-[10px] text-amber-600">🎭 "{sceneChar.name}" chưa có ảnh bank → mặt có thể lệch giữa các cảnh. Tạo bank ở tab Nhân vật trước.</div>
+                              )}
                               <div className="flex flex-wrap items-center gap-2">
                                 {/* Bước 1 — keyframe (luôn có; khi đã có ảnh thì là "Đổi keyframe" / re-roll) */}
                                 <button onClick={() => handleRenderKeyframe(s)} disabled={busy || renderingAll || !kieKey}
@@ -533,19 +588,52 @@ export default function Personified() {
               </div>
             )}
 
-            {/* ── Nhân vật ── */}
+            {/* ── Nhân vật + Character Bank (P2b) ── */}
             {scriptTab === 'chars' && (
               script.characters.length > 0 ? (
-                <div className="grid gap-2 md:grid-cols-2">
-                  {script.characters.map((ch, i) => (
-                    <div key={i} className="rounded-lg border border-black/10 bg-white p-3 text-xs">
-                      <div className="font-bold text-gray-900">{ch.name} <span className="font-normal text-gray-400">· {ch.role}</span></div>
-                      <div className="mt-0.5 text-gray-600">{ch.represents}</div>
-                      {ch.voice.vungMien && !/không có/i.test(ch.voice.vungMien) && (
-                        <div className="mt-1 text-[10px] text-gray-400">Giọng: {ch.voice.vungMien} · {ch.voice.gioiTinh} · {ch.voice.tuoi} · {ch.voice.texture}</div>
-                      )}
-                    </div>
-                  ))}
+                <div className="space-y-2">
+                  {/* Hướng dẫn + nút tạo bank tất cả */}
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-violet-200 bg-violet-50/60 px-3 py-2 text-[11px] text-violet-800">
+                    <span>🎭 <b>Character Bank</b> — render ảnh chuẩn mỗi nhân vật <b>1 lần</b>. Render cảnh sẽ dùng ảnh này để <b>giữ y mặt/dáng xuyên các cảnh</b> (chống mỗi cảnh một mặt). Nên làm <b>trước</b> khi render keyframe cảnh.</span>
+                    <button onClick={handleRenderAllChars} disabled={bankRunning || !kieKey}
+                      className="ml-auto flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 font-bold text-white transition-colors hover:bg-violet-700 disabled:opacity-40">
+                      {bankRunning ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang tạo…</> : <>🎭 Tạo bank tất cả</>}
+                    </button>
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {script.characters.map((ch, i) => {
+                      const bank = charBank[ch.name]
+                      return (
+                        <div key={i} className="flex gap-3 rounded-lg border border-black/10 bg-white p-3 text-xs">
+                          {/* Ảnh bank (nếu có) */}
+                          <div className="w-20 shrink-0">
+                            {bank?.refImage
+                              ? <CharRefPreview refImage={bank.refImage} />
+                              : <div className="flex h-28 w-20 items-center justify-center rounded-lg border border-dashed border-violet-200 bg-violet-50/40 text-center text-[18px]">{bank?.status === 'rendering' ? <Loader2 className="h-4 w-4 animate-spin text-violet-500" /> : '🎭'}</div>}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-gray-900">{ch.name} <span className="font-normal text-gray-400">· {ch.role}</span></div>
+                            <div className="mt-0.5 text-gray-600">{ch.represents}</div>
+                            {ch.voice.vungMien && !/không có/i.test(ch.voice.vungMien) && (
+                              <div className="mt-1 text-[10px] text-gray-400">Giọng: {ch.voice.vungMien} · {ch.voice.gioiTinh} · {ch.voice.tuoi} · {ch.voice.texture}</div>
+                            )}
+                            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                              <button onClick={() => handleRenderCharacterRef(ch)} disabled={bank?.status === 'rendering' || bankRunning || !kieKey}
+                                className="flex items-center gap-1 rounded border border-violet-300 bg-violet-50 px-2 py-1 text-[11px] font-bold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-40">
+                                {bank?.status === 'rendering'
+                                  ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang tạo…</>
+                                  : bank?.refImage
+                                  ? <><RefreshCw className="h-3 w-3" /> Đổi ảnh</>
+                                  : <>🎭 Tạo ảnh nhân vật</>}
+                              </button>
+                              {bank?.status === 'done' && <span className="text-[10px] font-semibold text-emerald-600">✅ đã khóa diện mạo</span>}
+                              {bank?.status === 'failed' && <span className="text-[10px] text-rose-600">⚠ {bank.error?.slice(0, 70)}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               ) : <p className="text-xs text-gray-400">Chưa có nhân vật.</p>
             )}
@@ -567,6 +655,13 @@ function Section({ step, title, children }: { step: number; title: string; child
       {children}
     </section>
   )
+}
+
+// P2b — ảnh chân dung nhân vật trong Character Bank.
+function CharRefPreview({ refImage }: { refImage: string }) {
+  const url = useAssetUrl(refImage)
+  if (!url) return <div className="flex h-28 w-20 items-center justify-center rounded-lg border border-violet-200 text-[10px] text-gray-400">tải…</div>
+  return <img src={url} alt="nhân vật" className="h-28 w-20 rounded-lg border border-violet-200 object-cover" />
 }
 
 // P2a — keyframe (ảnh tĩnh) để DUYỆT trước i2v.

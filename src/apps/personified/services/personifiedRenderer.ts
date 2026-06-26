@@ -18,17 +18,34 @@ function tierToRes(tier: RenderTier): Resolution {
   return tier === 'seedance720' ? '720p' : '480p'
 }
 
-/** Prompt KEYFRAME 1 cảnh: nhân vật 3D (imagePromptEn) + biểu cảm + (nếu hasProduct) KHÓA sản phẩm
- *  thật từ ảnh ref (copy bao bì, cấm bịa) — đúng luật "preserve product" của repo. */
+/** Prompt CHARACTER SHEET — render 1 lần/nhân vật để khóa diện mạo (Character Bank, P2b).
+ *  Pose trung tính, nền studio trơn → dễ dùng làm reference i2i cho mọi cảnh sau. */
+function buildCharacterSheetPrompt(character: PersonifiedCharacter): string {
+  const base = (character.imagePromptEn ?? '').trim() || (character.appearance ?? '').trim() || 'A 3D Pixar cartoon character'
+  return `${base} Full-body character reference, neutral standing pose, facing camera, plain soft studio backdrop, even lighting, 3D Pixar cartoon style, vertical 9:16 framing. NO on-screen text, NO captions, NO watermark, NO subtitles.`
+}
+
+/** Prompt KEYFRAME 1 cảnh. Index ảnh ref phụ thuộc có ảnh nhân vật (bank) hay không:
+ *  - có charRef → #1 = NHÂN VẬT (giữ y diện mạo), #2 = sản phẩm thật (nếu hasProduct)
+ *  - không charRef → sinh nhân vật từ text; #1 = sản phẩm thật (nếu hasProduct)
+ *  Giữ luật "preserve product" của repo (copy bao bì, cấm bịa). */
 function buildKeyframePrompt(
-  scene: PersonifiedScene, character: PersonifiedCharacter | undefined, hasProductRef: boolean,
+  scene: PersonifiedScene, character: PersonifiedCharacter | undefined,
+  opts: { hasCharRef: boolean; hasProductRef: boolean },
 ): string {
   const base = (character?.imagePromptEn ?? '').trim() || (scene.action ?? '').trim() || 'A 3D Pixar cartoon character'
   const mood = scene.emotion ? ` Expression / mood: ${scene.emotion}.` : ''
-  const product = hasProductRef
-    ? ' The REAL PRODUCT appears in frame EXACTLY as reference image #1 — same packaging, label, colour, shape and on-pack text; do NOT invent, alter, or re-spell any packaging or text, copy it from the reference.'
+  const act = (scene.action ?? '').trim() ? ` Scene: ${scene.action.trim()}.` : ''
+  const charLock = opts.hasCharRef
+    ? ' The MAIN CHARACTER is reference image #1 — keep the EXACT same face, body, colour, material and outfit; only change the pose and expression to match this scene. Do NOT redesign the character.'
     : ''
-  return `${base}${mood}${product} 3D Pixar cartoon style, cinematic lighting, vertical 9:16 framing. NO on-screen text, NO captions, NO watermark, NO subtitles.`
+  const productIdx = opts.hasCharRef ? '#2' : '#1'
+  const product = opts.hasProductRef
+    ? ` The REAL PRODUCT appears in frame EXACTLY as reference image ${productIdx} — same packaging, label, colour, shape and on-pack text; do NOT invent, alter, or re-spell any packaging or text, copy it from the reference.`
+    : ''
+  // Khi đã khóa nhân vật bằng ảnh ref thì không cần tả lại base (tránh prompt "đè" lên ảnh).
+  const desc = opts.hasCharRef ? '' : `${base} `
+  return `${desc}${charLock}${mood}${act}${product} 3D Pixar cartoon style, cinematic lighting, vertical 9:16 framing. NO on-screen text, NO captions, NO watermark, NO subtitles.`
 }
 
 export interface RenderSceneParams {
@@ -36,6 +53,8 @@ export interface RenderSceneParams {
   scene: PersonifiedScene
   /** Nhân vật nói/chủ thể của cảnh (cho imagePromptEn). */
   character?: PersonifiedCharacter
+  /** Ảnh chân dung nhân vật từ Character Bank (P2b) — khóa diện mạo xuyên cảnh (i2i ref #1). */
+  characterRef?: string
   /** Ảnh sản phẩm thật (asset ref hoặc URL) — chỉ dùng khi scene.hasProduct. */
   productRefs?: string[]
   tier: RenderTier
@@ -51,22 +70,53 @@ export interface RenderSceneResult { keyframeRef: string; clipRef: string; taskI
 // → user xem keyframe, re-roll nếu drift, OK mới tốn credit i2v.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Bước 1 — chỉ render KEYFRAME (ảnh tĩnh) → { keyframeRef }. Rẻ, để duyệt trước i2v. */
+/** Resolve asset ref → URL công khai (KIE đọc được). Bỏ qua ref rỗng/hỏng. */
+async function refToUrl(ref: string | undefined): Promise<string | null> {
+  if (!ref || !ref.trim()) return null
+  return isAssetRef(ref) ? await getUrl(ref) : ref
+}
+
+/** P2b — render CHARACTER SHEET 1 nhân vật (1 lần) → { refImage }. Lưu vào Character Bank,
+ *  dùng làm ref khóa diện mạo cho mọi cảnh có nhân vật đó. */
+export async function renderCharacterRef(
+  p: { apiKey: string; character: PersonifiedCharacter; signal?: AbortSignal },
+): Promise<{ refImage: string }> {
+  if (!p.apiKey) throw new Error('Thiếu KIE API key (Cài đặt)')
+  if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
+  const prompt = buildCharacterSheetPrompt(p.character)
+  const remoteUrl = await generateGpt4oImageFast({
+    apiKey: p.apiKey, prompt, filesUrl: [], size: '2:3',
+    softTimeoutMs: 100_000, attemptTimeoutMs: 150_000, maxAttempts: 3, signal: p.signal,
+  })
+  const blob = await fetch(remoteUrl).then((r) => r.blob())
+  const refImage = await saveAsset(blob, blob.type || 'image/png')
+  return { refImage }
+}
+
+/** Bước 1 — chỉ render KEYFRAME (ảnh tĩnh) → { keyframeRef }. Rẻ, để duyệt trước i2v.
+ *  Nếu có characterRef (Character Bank) → ref #1 khóa diện mạo nhân vật; SP thật → ref #2. */
 export async function renderKeyframe(
-  p: Pick<RenderSceneParams, 'apiKey' | 'scene' | 'character' | 'productRefs' | 'signal'>,
+  p: Pick<RenderSceneParams, 'apiKey' | 'scene' | 'character' | 'characterRef' | 'productRefs' | 'signal'>,
 ): Promise<{ keyframeRef: string }> {
   if (!p.apiKey) throw new Error('Thiếu KIE API key (Cài đặt)')
   if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
 
-  const useProduct = !!(p.scene.hasProduct && p.productRefs && p.productRefs.length > 0)
+  // Thứ tự ref BẮT BUỘC khớp index trong prompt: [nhân vật, ...sản phẩm].
   const filesUrl: string[] = []
+  const charUrl = await refToUrl(p.characterRef)
+  if (charUrl) filesUrl.push(charUrl)
+
+  const useProduct = !!(p.scene.hasProduct && p.productRefs && p.productRefs.length > 0)
   if (useProduct) {
     for (const ref of p.productRefs!.slice(0, 4)) {
-      const url = isAssetRef(ref) ? await getUrl(ref) : ref
+      const url = await refToUrl(ref)
       if (url) filesUrl.push(url)
     }
   }
-  const kfPrompt = buildKeyframePrompt(p.scene, p.character, filesUrl.length > 0)
+  const kfPrompt = buildKeyframePrompt(p.scene, p.character, {
+    hasCharRef: !!charUrl,
+    hasProductRef: useProduct,
+  })
   const remoteUrl = await generateGpt4oImageFast({
     apiKey: p.apiKey, prompt: kfPrompt, filesUrl, size: '2:3',
     softTimeoutMs: 100_000, attemptTimeoutMs: 150_000, maxAttempts: 3, signal: p.signal,
