@@ -158,7 +158,7 @@ interface BankState {
 
   loadAll: () => Promise<void>
 
-  addProduct: (product: Omit<Product, 'id' | 'createdAt'>) => Promise<void>
+  addProduct: (product: Omit<Product, 'id' | 'createdAt'>) => Promise<Product | null>
   updateProduct: (id: string, updates: Partial<Product>) => Promise<void>
   deleteProduct: (id: string) => Promise<void>
   getProductById: (id: string) => Product | undefined
@@ -295,12 +295,17 @@ export const useBankStore = create<BankState>((set, get) => ({
       if (error) {
         reportError('Lưu sản phẩm', error)
         set((s) => ({ products: s.products.filter((p) => p.id !== tempId) }))
+        return null
       } else if (row) {
-        set((s) => ({ products: s.products.map((p) => p.id === tempId ? toProduct(row) : p) }))
+        const created = toProduct(row)
+        set((s) => ({ products: s.products.map((p) => p.id === tempId ? created : p) }))
+        return created
       }
+      return null
     } catch (e) {
       reportError('Lưu sản phẩm', { message: e instanceof Error ? e.message : String(e) })
       set((s) => ({ products: s.products.filter((p) => p.id !== tempId) }))
+      return null
     }
   },
 

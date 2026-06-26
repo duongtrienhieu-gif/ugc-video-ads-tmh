@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X, Check, AlertTriangle, XCircle, Plus, Play, TrendingUp, TrendingDown, ExternalLink, Sparkles, Info, Download } from 'lucide-react'
 import type { Market, ScoredProduct, SignalResult } from '../types'
 import { VERDICT_META, NICHES, MARKETS, MARKET_CURRENCY, nicheLabel } from '../constants'
-import type { Product } from '../../../stores/types'
 import { useBankStore } from '../../../stores/bankStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { directGeminiText } from '../../../utils/gemini'
@@ -95,6 +94,30 @@ function TikTokEmbedPlayer({ videoId, handle }: { videoId: string; handle?: stri
   )
 }
 
+// Trích token cốt lõi từ tên SP (brand + danh từ chính) để lọc video ĐÚNG SP, bỏ news/drift.
+// Bỏ bracket + từ marketing + đơn vị; token[0] ~ brand → server chấm trọng số cao nhất.
+const TERM_STOP = new Set([
+  'new', 'promo', 'sale', 'hot', 'big', 'free', 'buy', 'beli', 'murah', 'viral', 'original', 'ori', 'ready', 'stock',
+  'pek', 'pcs', 'pc', 'pack', 'set', 'box', 'botol', 'bottle', 'tablet', 'tablets', 'kapsul', 'capsule', 'gummies', 'sachet',
+  'untuk', 'dengan', 'dan', 'yang', 'the', 'for', 'and', 'plus', 'best', 'seller', 'halal', 'tiktok', 'shop', 'exclusive',
+  'combo', 'bundle', 'isi', 'satu', 'dua', 'ml', 'gm', 'gram', 'mg', 'kg', 'official', 'store',
+])
+function coreTerms(title: string): string[] {
+  const cleaned = title
+    .replace(/【[^】]*】/g, ' ')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^A-Za-z0-9À-ɏ ]+/g, ' ')
+  const out: string[] = []
+  for (const raw of cleaned.split(/\s+/)) {
+    const low = raw.trim().toLowerCase()
+    if (low.length < 3 || TERM_STOP.has(low) || /^\d+$/.test(low) || out.includes(low)) continue
+    out.push(low)
+    if (out.length >= 6) break
+  }
+  return out
+}
+
 const STATUS_ICON: Record<SignalResult['status'], React.ReactNode> = {
   pass: <Check className="h-4 w-4 text-emerald-500" />,
   warn: <AlertTriangle className="h-4 w-4 text-amber-500" />,
@@ -132,6 +155,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const addProduct = useBankStore((s) => s.addProduct)
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const [aiBusy, setAiBusy] = useState(false)
+  const [bankProductId, setBankProductId] = useState<string | null>(null)
   const addWatch = useWatchlistStore((s) => s.add)
   const inWatch = useWatchlistStore((s) => s.items.some((i) => i.productId === product.productId))
   const [verdict, setVerdict] = useState<AiVerdict | null>(null)
@@ -140,7 +164,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
 
   // LIVE: video BÁN thật của SP (ScrapeCreators keyword search) — chỉ khi quét live
   interface LiveVid { id: string; desc: string; author: string; nickname: string; views: number; cover: string; downloadUrl: string; url: string; durationSec: number }
-  const MIN_SEC = 30   // chỉ video >30s (giàu scene/kịch bản, hợp FB ads)
+  const MIN_SEC = 20   // chỉ video >20s (đủ dài cho FB ads, không quá ngặt)
   const [liveVideos, setLiveVideos] = useState<LiveVid[] | null>(null)
   const [liveVidLoading, setLiveVidLoading] = useState(false)
   const [liveCursor, setLiveCursor] = useState<string | null>(null)
@@ -153,12 +177,15 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
     () => (product.title.split(/[|\-–—[\](]/)[0] || product.title).trim().split(/\s+/).slice(0, 8).join(' '),
     [product.title],
   )
+  // Token cốt lõi của SP → server lọc video phải chứa (bỏ news/drift sang SP khác).
+  const liveTerms = useMemo(() => coreTerms(product.title), [product.title])
+  const termsParam = useMemo(() => encodeURIComponent(liveTerms.join(',')), [liveTerms])
 
   const loadMoreVideos = useCallback(async () => {
     if (!liveCursor || liveMoreLoading) return
     setLiveMoreLoading(true)
     try {
-      const d = await fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(liveQuery)}&minSec=${MIN_SEC}&cursor=${encodeURIComponent(liveCursor)}`).then((r) => r.json())
+      const d = await fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(liveQuery)}&minSec=${MIN_SEC}&terms=${termsParam}&cursor=${encodeURIComponent(liveCursor)}`).then((r) => r.json())
       const more: LiveVid[] = Array.isArray(d.videos) ? d.videos : []
       setLiveVideos((prev) => {
         const seen = new Set((prev || []).map((v) => v.id))
@@ -169,7 +196,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
     } catch { /* bỏ qua */ } finally {
       setLiveMoreLoading(false)
     }
-  }, [liveCursor, liveMoreLoading, product.market, liveQuery])
+  }, [liveCursor, liveMoreLoading, product.market, liveQuery, termsParam])
 
   useEffect(() => {
     if (!isLive || (tab !== 'video' && tab !== 'creator')) return
@@ -177,7 +204,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
     liveFetchedFor.current = product.productId
     let cancelled = false
     setLiveVidLoading(true); setLiveVideos(null); setLiveCursor(null); setLiveHasMore(false)
-    fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(liveQuery)}&minSec=${MIN_SEC}`)
+    fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(liveQuery)}&minSec=${MIN_SEC}&terms=${termsParam}`)
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return
@@ -188,7 +215,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
       .catch(() => { if (!cancelled) setLiveVideos([]) })
       .finally(() => { if (!cancelled) setLiveVidLoading(false) })
     return () => { cancelled = true }
-  }, [isLive, tab, product.productId, product.market, liveQuery])
+  }, [isLive, tab, product.productId, product.market, liveQuery, termsParam])
 
   // Creator (live) = tác giả của các video đang BÁN sản phẩm → người đang đẩy SP
   const liveCreators = useMemo(() => {
@@ -232,29 +259,13 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
 
   const cur = MARKET_CURRENCY[product.market] ?? ''
   const marketLabel = MARKETS.find((m) => m.key === product.market)?.label ?? product.market
-  // Đổi SP research → Product TẠM (không ghi bank) để gửi sang app viết content / dựng ladi.
-  const tempProduct: Product = {
-    id: `research-${product.productId}`,
-    productImage: product.imageUrl || '',
-    productImages: product.imageUrl ? [product.imageUrl] : [],
-    productName: product.title,
-    productDescription: `Ngách: ${nicheLabel(product.nicheKey)} · Giá ${cur} ${product.unitPrice.toLocaleString('vi-VN')} · ${product.sale.toLocaleString('vi-VN')} đã bán trên TikTok Shop ${marketLabel}.`,
-    targetMarket: marketLabel,
-    painPoints: '',
-    usps: `Đã bán ${product.sale.toLocaleString('vi-VN')} · Đánh giá ${product.rating || '—'}★`,
-    benefits: '', offer: '', ingredients: '', usageGuide: '',
-    createdAt: Date.now(),
-  }
-  const sendResearchTo = (targetApp: string, label: string) => {
-    sendToApp({ targetApp, targetField: 'researchProduct', data: tempProduct })
-    addToast(`Đã gửi "${product.title.slice(0, 30)}…" sang ${label}`, 'success')
-  }
-  // AI đọc SP research → suy luận → điền ĐẦY ĐỦ field → tạo SP vào Bank (4 ảnh user tự tải sau).
-  const aiCreateToBank = async () => {
-    if (!geminiApiKey) { addToast('Cần Gemini API key trong Cài đặt để AI điền', 'error'); return }
-    setAiBusy(true)
-    try {
-      const prompt = `Bạn là chuyên gia nghiên cứu sản phẩm COD/affiliate. Đọc 1 sản phẩm đang bán chạy trên TikTok Shop và SUY LUẬN viết hồ sơ ĐẦY ĐỦ bằng TIẾNG VIỆT để tạo content quảng cáo + landing page.
+
+  // AI đọc SP research → suy luận → điền ĐẦY ĐỦ field → tạo SP THẬT vào Bank, trả id thật.
+  // Dedup trong phiên: tạo 1 lần, các nút sau tái dùng id (không tạo trùng).
+  const ensureInBank = async (): Promise<string | null> => {
+    if (bankProductId) return bankProductId
+    if (!geminiApiKey) { addToast('Cần Gemini API key trong Cài đặt để AI điền', 'error'); return null }
+    const prompt = `Bạn là chuyên gia nghiên cứu sản phẩm COD/affiliate. Đọc 1 sản phẩm đang bán chạy trên TikTok Shop và SUY LUẬN viết hồ sơ ĐẦY ĐỦ bằng TIẾNG VIỆT để tạo content quảng cáo + landing page.
 SẢN PHẨM:
 - Tên gốc: ${product.title}
 - Ngách: ${nicheLabel(product.nicheKey)}
@@ -263,25 +274,41 @@ SẢN PHẨM:
 Trả JSON đúng khóa (tiếng Việt, cụ thể, KHÔNG bịa chứng nhận y tế/giấy phép):
 {"productName":"tên gọn rõ","productDescription":"2-3 câu SP là gì, cho ai","painPoints":"nỗi đau khách, mỗi ý 1 dòng","usps":"điểm độc nhất, mỗi ý 1 dòng","benefits":"lợi ích chính, mỗi ý 1 dòng","offer":"gợi ý ưu đãi/combo (vd mua 2 tặng 1, freeship COD)","ingredients":"thành phần/chất liệu nếu suy luận được, không thì 'Cập nhật từ NCC'","usageGuide":"cách dùng gợi ý"}
 Suy luận hợp lý từ tên + ngách. CHỈ trả JSON.`
-      const raw = await directGeminiText({ apiKey: geminiApiKey, prompt, responseMimeType: 'application/json', temperature: 0.5 })
-      const d = JSON.parse(raw) as Record<string, string>
-      await addProduct({
-        productName: d.productName || product.title,
-        productDescription: d.productDescription || '',
-        targetMarket: marketLabel,
-        painPoints: d.painPoints || '',
-        usps: d.usps || '',
-        benefits: d.benefits || '',
-        offer: d.offer || '',
-        ingredients: d.ingredients || '',
-        usageGuide: d.usageGuide || '',
-        productImage: product.imageUrl || '',
-        productImages: product.imageUrl ? [product.imageUrl] : [],
-      })
-      addToast('✅ AI đã tạo SP vào Bank (điền đủ). Vào Thư viện → tải thêm 3 ảnh để dùng app ảnh.', 'success')
-      sendToApp({ targetApp: 'finder', targetField: 'activeBank', data: 'products' })
+    const raw = await directGeminiText({ apiKey: geminiApiKey, prompt, responseMimeType: 'application/json', temperature: 0.5 })
+    const d = JSON.parse(raw) as Record<string, string>
+    const created = await addProduct({
+      productName: d.productName || product.title,
+      productDescription: d.productDescription || '',
+      targetMarket: marketLabel,
+      painPoints: d.painPoints || '',
+      usps: d.usps || '',
+      benefits: d.benefits || '',
+      offer: d.offer || '',
+      ingredients: d.ingredients || '',
+      usageGuide: d.usageGuide || '',
+      productImage: product.imageUrl || '',
+      productImages: product.imageUrl ? [product.imageUrl] : [],
+    })
+    if (!created) return null   // addProduct đã toast lỗi (vd chưa đăng nhập)
+    setBankProductId(created.id)
+    return created.id
+  }
+
+  // 1 chạm: tạo SP THẬT vào Bank (nếu chưa) → mở app đích bằng productId THẬT (generate chạy được).
+  const aiFillAndGo = async (target?: { app: string; label: string }) => {
+    setAiBusy(true)
+    try {
+      const id = await ensureInBank()
+      if (!id) return
+      if (target) {
+        sendToApp({ targetApp: target.app, targetField: 'productId', data: id })
+        addToast(`✅ Đã tạo SP + mở ${target.label}`, 'success')
+      } else {
+        addToast('✅ AI đã tạo SP vào Bank (điền đủ). Vào Thư viện → tải thêm 3 ảnh để dùng app ảnh.', 'success')
+        sendToApp({ targetApp: 'finder', targetField: 'activeBank', data: 'products' })
+      }
     } catch (e) {
-      addToast('AI điền lỗi: ' + ((e as Error).message || '').slice(0, 70), 'error')
+      addToast('AI lỗi: ' + ((e as Error).message || '').slice(0, 70), 'error')
     } finally {
       setAiBusy(false)
     }
@@ -473,25 +500,28 @@ Cụ thể, thực chiến, KHÔNG bịa chứng nhận. CHỈ trả JSON.`
               </button>
               <div className="grid grid-cols-2 gap-2">
                 <button
-                  onClick={() => sendResearchTo('ads-content', 'Ads Content')}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-violet-300 bg-white py-2.5 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50"
+                  onClick={() => void aiFillAndGo({ app: 'ads-content', label: 'Ads Content' })}
+                  disabled={aiBusy}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-violet-300 bg-white py-2.5 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:opacity-50"
                 >
-                  <Sparkles className="h-4 w-4" /> → Viết content
+                  <Sparkles className="h-4 w-4" /> AI điền + Viết content
                 </button>
                 <button
-                  onClick={() => sendResearchTo('super-ladipage', 'Super Ladipage')}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-violet-300 bg-white py-2.5 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50"
+                  onClick={() => void aiFillAndGo({ app: 'super-ladipage', label: 'Dựng Ladi' })}
+                  disabled={aiBusy}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-violet-300 bg-white py-2.5 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:opacity-50"
                 >
-                  <Sparkles className="h-4 w-4" /> → Dựng Ladi
+                  <Sparkles className="h-4 w-4" /> AI điền + Dựng Ladi
                 </button>
               </div>
               <button
-                onClick={() => void aiCreateToBank()}
+                onClick={() => void aiFillAndGo()}
                 disabled={aiBusy}
                 className="flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
               >
-                {aiBusy ? '🤖 AI đang đọc SP & điền…' : '🤖 AI điền đủ → Tạo SP vào Bank'}
+                {aiBusy ? '🤖 AI đang xử lý…' : bankProductId ? '✓ Đã tạo trong Bank — mở lại Thư viện' : '🤖 AI điền đủ → Tạo SP vào Bank'}
               </button>
+              <p className="text-center text-[10px] text-slate-400">AI đọc SP → điền đủ field → tạo SP thật vào Bank. Ảnh: tự tải 4 ảnh sạch ở Thư viện để dùng app ảnh.</p>
             </div>
           )}
 
@@ -543,10 +573,11 @@ Cụ thể, thực chiến, KHÔNG bịa chứng nhận. CHỈ trả JSON.`
                       {verdictBusy ? 'Đang…' : '↻ Phân tích lại'}
                     </button>
                     <button
-                      onClick={() => sendResearchTo('ads-content', 'Ads Content')}
-                      className="rounded-xl bg-violet-600 py-2 text-xs font-semibold text-white hover:bg-violet-700"
+                      onClick={() => void aiFillAndGo({ app: 'ads-content', label: 'Ads Content' })}
+                      disabled={aiBusy}
+                      className="rounded-xl bg-violet-600 py-2 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
                     >
-                      → Viết content
+                      AI điền + Viết content
                     </button>
                   </div>
                 </div>
@@ -557,13 +588,13 @@ Cụ thể, thực chiến, KHÔNG bịa chứng nhận. CHỈ trả JSON.`
           {/* ── VIDEO WIN (LIVE — TikTok Shop thật) ── */}
           {tab === 'video' && isLive && (
             <div className="flex flex-col gap-3">
-              <p className="text-xs text-slate-500">🎥 Video <b>BÁN</b> sản phẩm này — <b>chỉ video &gt;30s</b>, sắp theo <b>độ dài</b> (video dài = giàu cảnh/kịch bản, hợp tái dùng cho <b>FB ads</b>). Bấm <b>⬇ Tải</b> lấy video không logo.</p>
+              <p className="text-xs text-slate-500">🎥 Video <b>liên quan SP này</b> (lọc theo brand/từ khóa cốt lõi → bỏ news/drift), <b>≥20s</b> đủ dài cho <b>FB ads</b>. Bấm <b>⬇ Tải</b> lấy video không logo.</p>
               {liveVidLoading && (
-                <div className="rounded-xl border border-dashed border-black/10 p-6 text-center text-xs text-slate-400">Đang tìm video &gt;30s…</div>
+                <div className="rounded-xl border border-dashed border-black/10 p-6 text-center text-xs text-slate-400">Đang tìm video liên quan…</div>
               )}
               {!liveVidLoading && liveVideos && liveVideos.length === 0 && (
                 <div className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
-                  Không thấy video &gt;30s cho từ khóa này.<br/>Bấm <b>Tải thêm</b> để quét tiếp, hoặc đổi từ khóa.
+                  Chưa thấy video liên quan SP này (≥20s).<br/>Bấm <b>Tải thêm</b> để quét tiếp, hoặc đổi từ khóa.
                   {liveHasMore && (
                     <button onClick={() => void loadMoreVideos()} disabled={liveMoreLoading}
                       className="mt-3 block w-full rounded-lg border border-violet-300 bg-white py-2 text-xs font-semibold text-violet-700 hover:bg-violet-50 disabled:opacity-50">
@@ -616,7 +647,7 @@ Cụ thể, thực chiến, KHÔNG bịa chứng nhận. CHỈ trả JSON.`
                 </button>
               )}
               {liveVideos && liveVideos.length > 0 && !liveHasMore && (
-                <p className="py-1 text-center text-[11px] text-slate-400">— Hết video &gt;30s cho từ khóa này —</p>
+                <p className="py-1 text-center text-[11px] text-slate-400">— Hết video liên quan cho từ khóa này —</p>
               )}
             </div>
           )}

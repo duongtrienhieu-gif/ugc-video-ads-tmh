@@ -80,9 +80,6 @@ export default function AdsContent() {
       const product = getProductById(interAppPayload.data as string)
       if (product) setSelectedProduct(product)
     }
-    if (interAppPayload.targetField === 'researchProduct' && interAppPayload.data) {
-      setSelectedProduct(interAppPayload.data as Product)
-    }
     consumePayload()
   }, [interAppPayload, activeApp, consumePayload, getProductById])
 

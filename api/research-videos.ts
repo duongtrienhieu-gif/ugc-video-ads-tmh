@@ -1,9 +1,9 @@
-// ── Vercel serverless — Video BÁN của 1 SP (ScrapeCreators keyword search) ────
-// Frontend gọi: /api/research-videos?market=MY&q=<tên SP / từ khóa>&minSec=30&cursor=<n>
-// Mục tiêu: lấy video DÀI (giàu scene/kịch bản) để tái dùng cho FB ads — KHÁC nền tảng
-// TikTok nên KHÔNG xếp theo view (clip 15s triệu view vô dụng cho FB). Lọc thời lượng,
-// sắp theo ĐỘ DÀI (proxy cho giàu kịch bản). Có cursor để "Tải thêm".
-// Key SC_KEY server-side (Vercel). 1 credit/request.
+// ── Vercel serverless — Video LIÊN QUAN 1 SP (ScrapeCreators keyword search) ──
+// Frontend gọi: /api/research-videos?market=MY&q=<tên SP>&minSec=20&terms=brand,token2..&cursor=<n>
+// Mục tiêu: video CHỨA chính SP đó (lọc theo brand/từ khóa cốt lõi → bỏ news/drift),
+// đủ dài cho FB ads. API keyword KHÔNG trả product_id/giỏ-hàng nên không lọc cart được;
+// thay bằng chấm điểm liên quan trên desc (terms[0]=brand +3, token khác +1, bỏ score 0).
+// Xếp theo điểm liên quan rồi độ dài. Có cursor để "Tải thêm". Key SC_KEY server-side, 1 credit/req.
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
@@ -41,9 +41,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const marketRaw = typeof req.query.market === 'string' ? req.query.market.toUpperCase() : 'MY'
   const region = VALID_REGIONS.has(marketRaw) ? marketRaw : 'MY'
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
-  // Lọc thời lượng tối thiểu (mặc định >30s — clip ngắn không hợp FB ads).
-  const minSec = Math.max(0, parseInt(typeof req.query.minSec === 'string' ? req.query.minSec : '30', 10) || 0)
+  // Lọc thời lượng tối thiểu (mặc định >20s — clip quá ngắn không hợp FB ads).
+  const minSec = Math.max(0, parseInt(typeof req.query.minSec === 'string' ? req.query.minSec : '20', 10) || 0)
   const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : ''
+  // terms[0] ~ brand (trọng số cao nhất), còn lại = danh từ cốt lõi của SP.
+  // Video phải chứa ≥1 token trong desc → bỏ news/drift sang SP khác.
+  const terms = (typeof req.query.terms === 'string' ? req.query.terms : '')
+    .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean).slice(0, 6)
   if (!q) return res.status(400).json({ error: 'Cần q (tên SP / từ khóa)' })
 
   try {
@@ -52,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const r = await fetch(u, { headers: { 'x-api-key': key } })
     const d = (await r.json()) as KwResp
     const list = Array.isArray(d.search_item_list) ? d.search_item_list : []
-    const videos = list
+    const mapped = list
       .map((it) => it.aweme_info)
       .filter((a): a is Aweme => !!a && !!a.aweme_id)
       .map((a) => ({
@@ -70,10 +74,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         url: a.share_url ?? a.url ?? '',
         durationSec: a.video?.duration ? Math.round(a.video.duration / 1000) : 0,
       }))
-      // Chỉ video DÀI hơn ngưỡng (giàu scene/kịch bản cho FB ads).
+      // Chỉ video đủ dài cho FB ads.
       .filter((v) => v.durationSec > minSec)
-      // KHÔNG xếp theo view — xếp theo ĐỘ DÀI giảm dần (dài = nhiều cảnh/kịch bản hơn).
-      .sort((x, y) => y.durationSec - x.durationSec)
+
+    // Chấm điểm LIÊN QUAN: video phải nhắc tới SP trong desc. Khớp token[0] (brand) = +3,
+    // mỗi token khác = +1. Bỏ video score 0 (news/drift). Nếu KHÔNG có terms thì giữ tất cả.
+    const scored = mapped
+      .map((v) => {
+        const desc = v.desc.toLowerCase()
+        let score = 0
+        terms.forEach((t, i) => { if (desc.includes(t)) score += i === 0 ? 3 : 1 })
+        return { v, score }
+      })
+      .filter((s) => terms.length === 0 ? true : s.score > 0)
+      // Liên quan nhất trước; cùng điểm thì video DÀI hơn (giàu cảnh/kịch bản) trước.
+      .sort((a, b) => b.score - a.score || b.v.durationSec - a.v.durationSec)
+    const videos = scored.slice(0, 40).map((s) => s.v)
 
     // has_more: ưu tiên field của API; nếu thiếu thì suy từ việc còn cursor + còn item thô.
     const hasMore = d.has_more != null ? !!d.has_more : (!!d.cursor && list.length > 0)
@@ -84,7 +100,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       hasMore,
       rawCount: list.length,
       credits: d.credits_remaining ?? null,
-      note: videos.length ? undefined : (d.error || d.message || `no videos >${minSec}s`),
+      note: videos.length ? undefined : (d.error || d.message || `no relevant videos >${minSec}s`),
     })
   } catch (e) {
     return res.status(500).json({ error: (e as Error).message })

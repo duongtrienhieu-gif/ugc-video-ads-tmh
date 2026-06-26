@@ -29,6 +29,8 @@ export default function Research() {
   const removeWatch = useWatchlistStore((s) => s.remove)
   const [view, setView] = useState<'products' | 'shops'>('products')
   const [showWatch, setShowWatch] = useState(false)
+  const [activeNiche, setActiveNiche] = useState('')   // ngách đang chọn (để hiển thị, đỡ quên)
+  const activeNichePreset = NICHE_PRESETS.find((n) => n.label === activeNiche)
   const scored = getScored()
   const selected = getSelected()
 
@@ -54,6 +56,14 @@ export default function Research() {
             ) : (
               <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-600">
                 Chọn ngách hoặc gõ từ khóa → bấm Quét
+              </span>
+            )}
+            {activeNichePreset && (
+              <span
+                className="flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700"
+                title="Ngách đang quét"
+              >
+                {activeNichePreset.emoji} {activeNichePreset.label}
               </span>
             )}
           </div>
@@ -84,10 +94,11 @@ export default function Research() {
         {/* Quét LIVE — chọn NGÁCH (tự điền từ khóa + quét) hoặc gõ từ khóa tùy chỉnh */}
         <div className="flex flex-wrap items-center gap-2">
           <select
-            value=""
+            value={activeNiche}
             onChange={(e) => {
               const preset = NICHE_PRESETS.find((n) => n.label === e.target.value)
-              if (!preset) return
+              if (!preset) { setActiveNiche(''); return }
+              setActiveNiche(preset.label)
               setScanKeywords(preset.keywords.join(', '))
               void scanLive()
             }}
@@ -102,7 +113,7 @@ export default function Research() {
           </select>
           <input
             value={scanKeywords}
-            onChange={(e) => setScanKeywords(e.target.value)}
+            onChange={(e) => { setScanKeywords(e.target.value); setActiveNiche('') }}
             onKeyDown={(e) => { if (e.key === 'Enter') void scanLive() }}
             placeholder={`hoặc gõ từ khóa (tiếng ${MARKET_LANG[market] ?? ''}) — vd: garam bawang, suplemen...`}
             className="min-w-[220px] flex-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm"
