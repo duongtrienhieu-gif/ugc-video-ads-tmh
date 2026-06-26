@@ -214,27 +214,23 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   // Token cốt lõi của SP → server lọc video phải chứa (bỏ news/drift sang SP khác).
   const liveTerms = useMemo(() => coreTerms(product.title), [product.title])
   const termsParam = useMemo(() => encodeURIComponent(liveTerms.join(',')), [liveTerms])
-  // Search bằng BRAND + dòng SP (2 token đầu) thay vì cả title dài → trúng đúng SP hơn nhiều.
-  // Title messy/không có brand rõ → fallback về liveQuery (8 từ đầu) như cũ.
-  const liveSearchQ = useMemo(() => liveTerms.slice(0, 2).join(' ') || liveQuery, [liveTerms, liveQuery])
 
   const loadMoreVideos = useCallback(async () => {
     if (!liveCursor || liveMoreLoading) return
     setLiveMoreLoading(true)
     try {
-      const d = await fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(liveSearchQ)}&minSec=${MIN_SEC}&maxSec=${MAX_SEC}&terms=${termsParam}&cursor=${encodeURIComponent(liveCursor)}`).then((r) => r.json())
+      const d = await fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(liveQuery)}&minSec=${MIN_SEC}&maxSec=${MAX_SEC}&terms=${termsParam}&cursor=${encodeURIComponent(liveCursor)}`).then((r) => r.json())
       const more: LiveVid[] = Array.isArray(d.videos) ? d.videos : []
-      // Giữ thứ tự LIÊN QUAN (server đã sắp theo điểm brand) — chỉ nối + khử trùng, KHÔNG sort lại theo độ dài.
       setLiveVideos((prev) => {
         const seen = new Set((prev || []).map((v) => v.id))
-        return [...(prev || []), ...more.filter((v) => !seen.has(v.id))]
+        return [...(prev || []), ...more.filter((v) => !seen.has(v.id))].sort((a, b) => b.durationSec - a.durationSec)
       })
       setLiveCursor(d.cursor != null ? String(d.cursor) : null)
       setLiveHasMore(!!d.hasMore && d.cursor != null)
     } catch { /* bỏ qua */ } finally {
       setLiveMoreLoading(false)
     }
-  }, [liveCursor, liveMoreLoading, product.market, liveSearchQ, termsParam])
+  }, [liveCursor, liveMoreLoading, product.market, liveQuery, termsParam])
 
   useEffect(() => {
     if (!isLive || (tab !== 'video' && tab !== 'creator')) return
@@ -242,7 +238,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
     liveFetchedFor.current = product.productId
     let cancelled = false
     setLiveVidLoading(true); setLiveVideos(null); setLiveCursor(null); setLiveHasMore(false)
-    fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(liveSearchQ)}&minSec=${MIN_SEC}&maxSec=${MAX_SEC}&terms=${termsParam}`)
+    fetch(`/api/research-videos?market=${product.market}&q=${encodeURIComponent(liveQuery)}&minSec=${MIN_SEC}&maxSec=${MAX_SEC}&terms=${termsParam}`)
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return
@@ -253,7 +249,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
       .catch(() => { if (!cancelled) setLiveVideos([]) })
       .finally(() => { if (!cancelled) setLiveVidLoading(false) })
     return () => { cancelled = true }
-  }, [isLive, tab, product.productId, product.market, liveSearchQ, termsParam])
+  }, [isLive, tab, product.productId, product.market, liveQuery, termsParam])
 
   // Creator (live) = tác giả của các video đang BÁN sản phẩm → người đang đẩy SP
   const liveCreators = useMemo(() => {
@@ -704,7 +700,7 @@ Nếu video không có lời thoại thì đọc chữ trên màn hình + hình 
           {/* ── VIDEO WIN (LIVE — TikTok Shop thật) ── */}
           {tab === 'video' && isLive && (
             <div className="flex flex-col gap-3">
-              <p className="text-xs text-slate-500">🎥 Video <b>đúng SP này</b> — search theo <b>brand</b> + ưu tiên video gọi đúng tên SP (từ chung như "probiotic/fiber" tính nhẹ → bớt video ngách chung), <b>20–90s</b> hợp <b>FB ads</b>. Bấm <b>⬇ Tải</b> lấy video không logo.</p>
+              <p className="text-xs text-slate-500">🎥 Video <b>liên quan SP này</b> (lọc theo brand/từ khóa cốt lõi → bỏ news/drift), <b>20–90s</b> hợp <b>FB ads</b>. Bấm <b>⬇ Tải</b> lấy video không logo.</p>
               {liveVidLoading && (
                 <div className="rounded-xl border border-dashed border-black/10 p-6 text-center text-xs text-slate-400">Đang tìm video liên quan…</div>
               )}
