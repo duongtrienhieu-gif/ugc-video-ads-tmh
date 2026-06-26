@@ -29,6 +29,12 @@ export interface DbShop {
 
 type SortKey = 'score' | 'revenue' | 'growth' | 'commission' | 'sale'
 
+// Cross-market: 1 từ khóa quét 5 nước → tóm tắt mỗi nước
+export interface CrossRow {
+  market: Market; count: number; totalSold: number
+  topSold: number; topTitle: string; topImage: string
+}
+
 // ── LIVE: TikTok Shop (ScrapeCreators) → ResearchProduct ─────────────────────
 interface LiveApiProduct {
   productId: string; title: string; imageUrl: string
@@ -171,6 +177,12 @@ interface ResearchStore {
   scanCredits: number | null
   scanKeywords: string
 
+  // Cross-market
+  crossLoading: boolean
+  crossError: string | null
+  crossData: CrossRow[] | null
+  crossQuery: string
+
   setMarket: (m: Market) => void
   setNiche: (n: NicheKey | 'all') => void
   applyPreset: (k: PresetKey) => void
@@ -181,6 +193,8 @@ interface ResearchStore {
   hydrate: () => Promise<void>
   setScanKeywords: (s: string) => void
   scanLive: () => Promise<void>
+  scanCross: (q: string) => Promise<void>
+  clearCross: () => void
 
   source: () => ResearchProduct[]
   getScored: () => ScoredProduct[]
@@ -208,6 +222,10 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
   scanError: null,
   scanCredits: null,
   scanKeywords: 'garam bawang, suplemen kesihatan, vitamin, kolagen, alat urut',
+  crossLoading: false,
+  crossError: null,
+  crossData: null,
+  crossQuery: '',
 
   setMarket: (market) => set({ market }),
   setNiche: (nicheFilter) => set({ nicheFilter }),
@@ -243,6 +261,25 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
       set({ scanning: false, scanError: (e as Error).message || 'Lỗi kết nối' })
     }
   },
+
+  scanCross: async (q: string) => {
+    const kw = (q || '').trim()
+    if (!kw) { set({ crossError: 'Cần 1 từ khóa để so 5 nước' }); return }
+    set({ crossLoading: true, crossError: null, crossQuery: kw })
+    try {
+      const r = await fetch(`/api/research-cross?q=${encodeURIComponent(kw)}&markets=MY,ID,TH,VN,PH`)
+      const d = await r.json()
+      if (d.error) { set({ crossLoading: false, crossError: d.error }); return }
+      set({
+        crossData: Array.isArray(d.markets) ? (d.markets as CrossRow[]) : [],
+        crossLoading: false,
+        scanCredits: d.credits ?? get().scanCredits,
+      })
+    } catch (e) {
+      set({ crossLoading: false, crossError: (e as Error).message || 'Lỗi kết nối' })
+    }
+  },
+  clearCross: () => set({ crossData: null, crossError: null, crossQuery: '' }),
 
   hydrate: async () => {
     if (get().hydrated) return

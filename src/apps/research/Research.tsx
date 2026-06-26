@@ -8,6 +8,7 @@ import OpportunityCard from './components/OpportunityCard'
 import FilterPanel from './components/FilterPanel'
 import ProductDetail from './components/ProductDetail'
 import ShopList from './components/ShopList'
+import CrossMarketPanel from './components/CrossMarketPanel'
 import type { Market } from './types'
 
 const MARKET_LANG: Record<string, string> = { MY: 'Malay', ID: 'Indonesia', VN: 'Việt', TH: 'Thái', PH: 'English/Tagalog' }
@@ -20,6 +21,7 @@ const segCls = (active: boolean) =>
 export default function Research() {
   const { market, setMarket, activePreset, applyPreset, getScored, selectedId, select, getSelected, hydrate, realProducts } = useResearchStore()
   const { isLive, scanning, scanError, scanCredits, scanKeywords, setScanKeywords, scanLive } = useResearchStore()
+  const { scanCross, clearCross, crossData, crossLoading, crossError, crossQuery } = useResearchStore()
   const realVideos = useResearchStore((s) => s.realVideos)
   const realCreators = useResearchStore((s) => s.realCreators)
   const realShops = useResearchStore((s) => s.realShops)
@@ -113,8 +115,17 @@ export default function Research() {
           >
             {scanning ? 'Đang quét…' : '🔎 Quét'}
           </button>
+          <button
+            onClick={() => void scanCross((scanKeywords.split(',')[0] || '').trim())}
+            disabled={crossLoading || scanning}
+            className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:opacity-50"
+            title="So từ khóa đầu tiên giữa 5 thị trường (MY/ID/TH/VN/PH)"
+          >
+            {crossLoading ? '🌏 Đang so…' : '🌏 So 5 nước'}
+          </button>
           {scanCredits != null && <span className="text-xs text-slate-400">credit: {scanCredits}</span>}
           {scanError && <span className="text-xs text-red-500">{scanError}</span>}
+          {crossError && <span className="text-xs text-red-500">{crossError}</span>}
         </div>
 
         {/* Preset chọn nhanh */}
@@ -141,6 +152,10 @@ export default function Research() {
         <FilterPanel />
 
         <main className="flex-1 overflow-y-auto p-5">
+          {(crossData || crossLoading) && (
+            <CrossMarketPanel rows={crossData} query={crossQuery} loading={crossLoading} onClose={clearCross} />
+          )}
+
           {/* Toggle: Sản phẩm / Shop đối thủ */}
           <div className="mb-3 flex items-center gap-3">
             <div className="inline-flex items-center gap-1 rounded-lg border border-black/10 bg-white p-0.5">
