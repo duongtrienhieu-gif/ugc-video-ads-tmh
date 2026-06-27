@@ -24,7 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const buf = Buffer.from(await r.arrayBuffer())
     res.setHeader('Content-Type', r.headers.get('content-type') || 'video/mp4')
     res.setHeader('Content-Length', String(buf.length))
-    res.setHeader('Content-Disposition', `attachment; filename="${name.endsWith('.mp4') ? name : name + '.mp4'}"`)
+    res.setHeader('Content-Disposition', `attachment; filename="${/\.\w{2,4}$/.test(name) ? name : name + '.mp4'}"`)
     res.setHeader('Cache-Control', 'private, max-age=600')
     return res.status(200).send(buf)
   } catch (e) {
