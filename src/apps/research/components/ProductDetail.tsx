@@ -578,6 +578,13 @@ Nếu video không có lời thoại thì đọc chữ trên màn hình + hình 
                     {product.sale.toLocaleString('vi-VN')} đã bán × {cur} {product.unitPrice.toLocaleString('vi-VN')} (số tích lũy).
                     {product.isTracked && product.growthRate > 0 && <span className="font-bold"> · 📈 +{product.growthRate}%/ngày (so mốc trước)</span>}
                   </p>
+                  {(product.growth7 != null || product.growth15 != null || product.growth30 != null) && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {product.growth7 != null && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">7 ngày +{product.growth7}%</span>}
+                      {product.growth15 != null && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">15 ngày +{product.growth15}%</span>}
+                      {product.growth30 != null && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">30 ngày +{product.growth30}%</span>}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="rounded-xl border border-black/10 bg-slate-50 p-3">
@@ -654,6 +661,23 @@ Nếu video không có lời thoại thì đọc chữ trên màn hình + hình 
                 {aiBusy ? '🤖 AI đang xử lý…' : bankProductId ? '✓ Đã tạo trong Bank — mở lại Thư viện' : '🤖 AI điền đủ → Tạo SP vào Bank'}
               </button>
               <p className="text-center text-[10px] text-slate-400">AI đọc SP → điền đủ field → tạo SP thật vào Bank. Ảnh: tự tải 4 ảnh sạch ở Thư viện để dùng app ảnh.</p>
+
+              {product.imageUrl && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5">
+                  <div className="mb-1.5 text-[11px] font-bold text-amber-700">🔍 Check giá nhập trước khi test</div>
+                  <div className="flex gap-2">
+                    <a href={`https://lens.google.com/uploadbyurl?url=${encodeURIComponent(product.imageUrl)}`} target="_blank" rel="noopener noreferrer"
+                      className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-amber-300 bg-white py-1.5 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-100">
+                      🔎 Google Lens
+                    </a>
+                    <a href={`https://s.1688.com/youyuan/index.htm?tab=imageSearch&imageAddress=${encodeURIComponent(product.imageUrl)}`} target="_blank" rel="noopener noreferrer"
+                      className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-amber-300 bg-white py-1.5 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-100">
+                      🛒 1688 (ảnh)
+                    </a>
+                  </div>
+                  <p className="mt-1 text-[10px] text-amber-600/80">Tìm bằng ảnh SP → biết giá nhập gốc → sang tab <b>Giá</b> nhập giá vốn để tính CPA/lợi nhuận, biết còn cửa lời không trước khi test.</p>
+                </div>
+              )}
               {product.market !== 'MY' && (
                 <button
                   onClick={() => void aiBringToMY()}

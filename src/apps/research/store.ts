@@ -64,8 +64,10 @@ function liveToProduct(p: LiveApiProduct, market: Market, scanNiche?: string): R
 // ── Momentum: snapshot số-bán/ngày (Supabase research_snapshots) → tăng trưởng THẬT ──
 // Best-effort: bảng chưa tạo / chưa đăng nhập / lỗi → bỏ qua, không vỡ scan.
 const TODAY = () => new Date().toISOString().slice(0, 10)
-async function fetchPriorSnapshots(productIds: string[]): Promise<Map<string, { sold: number; on: string }>> {
-  const out = new Map<string, { sold: number; on: string }>()
+interface Snap { sold: number; on: string }
+// Lấy TOÀN BỘ lịch sử snapshot (mọi mốc trước hôm nay) theo từng productId.
+async function fetchSnapshotHistory(productIds: string[]): Promise<Map<string, Snap[]>> {
+  const out = new Map<string, Snap[]>()
   if (!productIds.length) return out
   try {
     const { data: { user } } = await supabase.auth.getUser()
@@ -81,22 +83,51 @@ async function fetchPriorSnapshots(productIds: string[]): Promise<Map<string, { 
     for (const r of data as Record<string, unknown>[]) {
       const pid = String(r.product_id)
       const on = String(r.captured_on)
-      if (on >= today) continue                 // cần mốc TRƯỚC hôm nay
-      if (!out.has(pid)) out.set(pid, { sold: Number(r.sold) || 0, on })  // bản gần nhất trước hôm nay
+      if (on >= today) continue                 // chỉ lấy mốc TRƯỚC hôm nay
+      if (!out.has(pid)) out.set(pid, [])
+      out.get(pid)!.push({ sold: Number(r.sold) || 0, on })   // đã sort desc theo ngày
     }
     return out
   } catch { return out }
 }
+// % tăng số bán trong cửa sổ w ngày: tìm mốc GẦN (today - w) nhất, đủ già (≥ w/2 ngày).
+function windowGrowth(list: Snap[], sold: number, todayMs: number, w: number): number | undefined {
+  const target = todayMs - w * 86400000
+  let best: Snap | null = null, bestDiff = Infinity
+  for (const s of list) {
+    const ms = Date.parse(s.on)
+    const diff = Math.abs(ms - target)
+    if (diff < bestDiff) { bestDiff = diff; best = s }
+  }
+  if (!best || best.sold <= 0 || sold <= best.sold) return undefined
+  const ageDays = (todayMs - Date.parse(best.on)) / 86400000
+  if (ageDays < w * 0.5) return undefined       // mốc quá mới so với cửa sổ → chưa tính
+  return Math.round((sold - best.sold) / best.sold * 100)
+}
 async function applyMomentum(products: ResearchProduct[]): Promise<ResearchProduct[]> {
-  const prior = await fetchPriorSnapshots(products.map((p) => p.productId))
-  if (!prior.size) return products
-  const today = TODAY()
+  const hist = await fetchSnapshotHistory(products.map((p) => p.productId))
+  if (!hist.size) return products
+  const todayMs = Date.parse(TODAY())
   return products.map((p) => {
-    const pv = prior.get(p.productId)
-    if (!pv || pv.sold <= 0 || p.sale <= pv.sold) return p
-    const days = Math.max(1, Math.round((Date.parse(today) - Date.parse(pv.on)) / 86400000))
-    const growthPerDay = ((p.sale - pv.sold) / pv.sold) * 100 / days
-    return { ...p, growthRate: Math.round(growthPerDay * 10) / 10, isTracked: true }
+    const list = hist.get(p.productId)
+    if (!list || !list.length) return p
+    const patch: Partial<ResearchProduct> = {}
+    // Mốc gần nhất trước hôm nay → tăng trưởng %/ngày (cho badge thẻ, ra ngay sau 2 lần quét).
+    const prev = list[0]
+    if (prev && prev.sold > 0 && p.sale > prev.sold) {
+      const days = Math.max(1, Math.round((todayMs - Date.parse(prev.on)) / 86400000))
+      patch.growthRate = Math.round((p.sale - prev.sold) / prev.sold * 100 / days * 10) / 10
+      patch.isTracked = true
+    }
+    // Cửa sổ 7/15/30 ngày (cần tích đủ lịch sử mới hiện).
+    const g7 = windowGrowth(list, p.sale, todayMs, 7)
+    const g15 = windowGrowth(list, p.sale, todayMs, 15)
+    const g30 = windowGrowth(list, p.sale, todayMs, 30)
+    if (g7 !== undefined) patch.growth7 = g7
+    if (g15 !== undefined) patch.growth15 = g15
+    if (g30 !== undefined) patch.growth30 = g30
+    if (g7 !== undefined || g15 !== undefined || g30 !== undefined) patch.isTracked = true
+    return Object.keys(patch).length ? { ...p, ...patch } : p
   })
 }
 async function saveSnapshots(products: ResearchProduct[], market: Market) {

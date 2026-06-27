@@ -41,6 +41,9 @@ export interface ResearchProduct {
   seller?: string          // tên shop bán (live)
   scanNiche?: string       // nhãn ngách user pick lúc quét (live) — để UI + AI dùng đúng ngách
   isTracked?: boolean      // có mốc snapshot trước → growthRate là tăng trưởng THẬT (momentum)
+  growth7?: number         // % tăng số bán trong ~7 ngày (momentum, cần đủ lịch sử)
+  growth15?: number        // % tăng ~15 ngày
+  growth30?: number        // % tăng ~30 ngày
 }
 
 export interface SignalResult {
