@@ -1,7 +1,7 @@
 // Spy Ads — creative QUẢNG CÁO video đối thủ từ Facebook Ad Library (ScrapeCreators).
 // Khác "Video win" (organic): đây là ad MKT đối thủ đang chạy → tải về dựng lại cho FB ads.
 // Win signal: đang ACTIVE + chạy lâu + advertiser nhiều ad. AI dịch VO + bóc kịch bản cắt ghép.
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Megaphone, Search, Play, Download, ExternalLink, X, Sparkles, Link2, FileText, PenLine, Target, Flame } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useBankStore } from '../../stores/bankStore'
@@ -131,6 +131,22 @@ export default function SpyAds() {
   const [adaptBusy, setAdaptBusy] = useState(false)
   const [adaptErr, setAdaptErr] = useState<string | null>(null)
   const [adaptResult, setAdaptResult] = useState<AdaptScript | null>(null)
+
+  // Cache kết quả RIÊNG theo platform → đổi tab FB↔TikTok không mất kết quả cũ.
+  type AdCache = { ads: FbAd[] | null; cursor: string | null; hasMore: boolean; q: string }
+  const adCache = useRef<Record<'fb' | 'tiktok', AdCache>>({
+    fb: { ads: null, cursor: null, hasMore: false, q: '' },
+    tiktok: { ads: null, cursor: null, hasMore: false, q: '' },
+  })
+  const switchPlatform = (p: 'fb' | 'tiktok') => {
+    if (p === platform) return
+    adCache.current[platform] = { ads, cursor, hasMore, q }   // lưu tab hiện tại
+    const c = adCache.current[p]                               // nạp tab đích
+    setPlatform(p)
+    setAds(c.ads); setCursor(c.cursor); setHasMore(c.hasMore); setQ(c.q)
+    setSelected(new Set()); setError(null)
+    setViewPageId(null); setViewPageName(null)                 // advertiser view là FB-only
+  }
 
   const buildUrl = (query: string, cur?: string, pageId?: string) => {
     const st = platform === 'fb' ? `&status=${activeOnly ? 'ACTIVE' : 'ALL'}` : ''
@@ -462,9 +478,9 @@ CHỈ trả JSON.`
             )}
             <div className="flex flex-wrap items-center gap-2">
               <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
-                <button onClick={() => { setPlatform('fb'); setAds(null) }}
+                <button onClick={() => switchPlatform('fb')}
                   className={`rounded-md px-3 py-1 text-xs font-semibold ${platform === 'fb' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>👍 Facebook</button>
-                <button onClick={() => { setPlatform('tiktok'); setAds(null) }}
+                <button onClick={() => switchPlatform('tiktok')}
                   className={`rounded-md px-3 py-1 text-xs font-semibold ${platform === 'tiktok' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>🎵 TikTok</button>
               </div>
               <input
