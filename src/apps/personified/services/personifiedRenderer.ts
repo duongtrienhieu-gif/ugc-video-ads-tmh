@@ -11,7 +11,7 @@ import { textToSpeech } from '../../../utils/elevenlabs'
 import { submitLatentSync, pollLatentSyncUntilDone } from '../../../utils/falai'
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
 import type { PersonifiedScene, PersonifiedCharacter, VoiceProfile } from '../types'
-import type { RenderTier } from '../constants'
+import { type RenderTier, CINEMATIC_STYLE, CHARACTER_SHEET_STYLE } from '../constants'
 
 function tierToModel(tier: RenderTier): string {
   return tier === 'grok480' ? 'grok-imagine/image-to-video' : 'bytedance/seedance-1.5-pro'
@@ -30,9 +30,9 @@ function buildCharacterSheetPrompt(character: PersonifiedCharacter, hasProductRe
     // HERO = sản phẩm thật. Reference image = bao bì thật → giữ NGUYÊN packaging.
     // CHỈ nhân cách hóa 1 đơn vị = cái TUÝP (lõi SP); references có thể kèm hộp/carton →
     // KHÔNG biến hộp thành nhân vật thứ 2, hộp chỉ là tham chiếu nhãn/màu.
-    return `The references show the REAL PRODUCT. Create EXACTLY ONE single cartoon character: personify ONLY the squeeze TUBE (the primary product unit). If the references also show an outer box / carton / a second unit, do NOT personify it and do NOT add a second character — render ONE tube character only; treat the box solely as a colour and label reference. Keep the tube's packaging, label text, brand name, colours, gradients and shape EXACTLY as in the reference — do NOT change the colour, do NOT recolour, do NOT invent a new label. ONLY add expressive cartoon eyes, small cartoon arms with gloved hands, and little legs with shoes, while the body stays the real tube. ${character.represents ? `It represents: ${character.represents}.` : ''} Ignore any colour or packaging described in words — the colour and label come ONLY from the reference product image. Full-body single-character reference, neutral confident standing pose, facing camera, plain soft studio backdrop, even lighting, 3D Pixar cartoon style, vertical 9:16 framing. NO on-screen text, NO captions, NO watermark, NO subtitles.`
+    return `The references show the REAL PRODUCT. Create EXACTLY ONE single cartoon character: personify ONLY the squeeze TUBE (the primary product unit). If the references also show an outer box / carton / a second unit, do NOT personify it and do NOT add a second character — render ONE tube character only; treat the box solely as a colour and label reference. Keep the tube's packaging, label text, brand name, colours, gradients and shape EXACTLY as in the reference — do NOT change the colour, do NOT recolour, do NOT invent a new label. ONLY add expressive cartoon eyes, small cartoon arms with gloved hands, and little legs with shoes, while the body stays the real tube. ${character.represents ? `It represents: ${character.represents}.` : ''} Ignore any colour or packaging described in words — the colour and label come ONLY from the reference product image. ${CHARACTER_SHEET_STYLE}`
   }
-  return `${base} Full-body character reference, neutral standing pose, facing camera, plain soft studio backdrop, even lighting, 3D Pixar cartoon style, vertical 9:16 framing. NO on-screen text, NO captions, NO watermark, NO subtitles.`
+  return `${base} ${CHARACTER_SHEET_STYLE}`
 }
 
 /** Prompt KEYFRAME 1 cảnh. Index ảnh ref phụ thuộc có ảnh nhân vật (bank) hay không:
@@ -55,7 +55,7 @@ function buildKeyframePrompt(
     : ''
   // Khi đã khóa nhân vật bằng ảnh ref thì không cần tả lại base (tránh prompt "đè" lên ảnh).
   const desc = opts.hasCharRef ? '' : `${base} `
-  return `${desc}${charLock}${mood}${act}${product} 3D Pixar cartoon style, cinematic lighting, vertical 9:16 framing. NO on-screen text, NO captions, NO watermark, NO subtitles.`
+  return `${desc}${charLock}${mood}${act}${product} ${CINEMATIC_STYLE}`
 }
 
 export interface RenderSceneParams {

@@ -17,6 +17,32 @@ export function playbackWps(market: TargetMarket): number {
   return WORDS_PER_SEC[market] * EXPRESSIVE_SPEED
 }
 
+// ── DNA VISUAL (chưng cất từ video mẫu viral) ────────────────────────────────
+// 1 nguồn duy nhất cho "chất render phim" → nhồi vào suffix keyframe + ảnh nhân vật.
+// Mục tiêu: chất Pixar/Disney feature-film, ánh sáng kịch tính, bối cảnh có chiều sâu,
+// grade ấm/lạnh tương phản — KHÔNG để ra đồ chơi phẳng "even lighting".
+
+/** Suffix cho KEYFRAME CẢNH (full scene): chất render phim + lighting kịch tính + bối
+ *  cảnh sâu + grade. KHÔNG mô tả subject/bối cảnh cụ thể (brain lo phần đó). */
+export const CINEMATIC_STYLE =
+  'Pixar / Disney feature-film quality 3D render, rendered in Octane / Unreal Engine, ' +
+  'hyper-detailed, subsurface scattering, glossy wet micro-detailed surfaces, soft global illumination, ' +
+  'dramatic cinematic lighting with a warm key light and a cool rim light, volumetric god rays, ' +
+  'glowing energy accents, atmospheric haze and floating particles, rich organic environment with ' +
+  'deep depth of field and creamy bokeh, low heroic camera angle, high-contrast warm-vs-cool colour ' +
+  'grade, vibrant and saturated, shot on a cinema lens, vertical 9:16 framing. ' +
+  'NO on-screen text, NO captions, NO watermark, NO subtitles.'
+
+/** Suffix cho ẢNH NHÂN VẬT BANK (clean ref để i2i): GIỮ nền sạch nhưng nâng từ
+ *  "even lighting" → studio key+rim bóng bẩy + cùng chất render phim. */
+export const CHARACTER_SHEET_STYLE =
+  'Pixar / Disney feature-film quality 3D render, rendered in Octane / Unreal Engine, hyper-detailed, ' +
+  'subsurface scattering, glossy micro-detailed surfaces, soft global illumination, ' +
+  'cinematic three-point studio lighting with a soft warm key light and a crisp cool rim light, ' +
+  'subtle vignette, smooth neutral gradient studio backdrop, vibrant saturated colours, ' +
+  'full-body single-character reference, neutral confident pose, facing camera, vertical 9:16 framing. ' +
+  'NO on-screen text, NO captions, NO watermark, NO subtitles.'
+
 // ── 4 Kiểu kịch bản (pickable) ───────────────────────────────────────────────
 export interface ArchetypeDef {
   id: ArchetypeId

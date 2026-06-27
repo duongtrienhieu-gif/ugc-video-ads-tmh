@@ -279,8 +279,8 @@ LUẬT VIẾT (bắt buộc):
 2. Thoại NGẮN GỌN theo độ dài TỰ NHIÊN của cảnh (đừng kéo dài cho đầy clip): ${wordBudgetHint(market)} Mỗi cảnh chỉ render 4s/8s — viết quá số từ trên sẽ bị CẮT CHỮ khi ghép. Punchy, cộc.
 3. COMPLIANCE (ngách sức khỏe/mỹ phẩm): dùng từ "hỗ trợ", KHÔNG hứa tuyệt đối/chữa khỏi. Cảnh CTA phải có ý "hiệu quả tùy cơ địa".
 4. dialoguePrimary = thoại bằng ${langName} (đưa vào giọng đọc). dialogueVi = ${isVN ? 'GIỐNG HỆT dialoguePrimary' : 'bản dịch NGHĨA sang tiếng Việt cho operator hiểu'}.
-5. videoPromptEn = 1 prompt image-to-video TIẾNG ANH: shot type + hành động cụ thể + bối cảnh (3D Pixar character trên nền cơ thể tả thực). KHÔNG bắt model render chữ.
-6. imagePromptEn cho mỗi nhân vật = prompt EN tạo ảnh nhân vật 3D (Pixar style, cinematic lighting, --ar 9:16).
+5. videoPromptEn = 1 prompt image-to-video TIẾNG ANH GIÀU HÌNH ẢNH: shot type + hành động cụ thể + BỐI CẢNH GIÀU CHI TIẾT (vd "deep glistening intestinal tunnel, wet folds, warm light pouring through, floating particles, cavernous depth") + bề mặt nhân vật chi tiết (glossy, wet, sweaty, subsurface skin) + cảm xúc/động lực. KHÔNG bắt model render chữ. (Hệ thống TỰ THÊM chất render điện ảnh — chỉ cần tả NỘI DUNG khung hình thật giàu, đừng ghi camera/lens.)
+6. imagePromptEn mỗi nhân vật = prompt EN tả NHÂN VẬT 3D THẬT CHI TIẾT: hình khối + MÀU + chất liệu bề mặt (glossy/wet/subsurface) + ĐÔI MẮT to biểu cảm + biểu cảm đặc trưng + (nếu hero) phụ kiện anh hùng "glowing energy shield, flowing cape". KHÔNG cần ghi camera/style/--ar (hệ thống tự thêm chất render điện ảnh).
 ${market === 'MY' ? buildMyNativeVoiceBlock() : ''}
 XUẤT JSON: { characters:[...], scenes:[${sceneCount} cảnh đúng thứ tự] }. Không markdown.`
 
