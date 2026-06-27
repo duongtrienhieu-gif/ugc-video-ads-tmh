@@ -187,7 +187,13 @@ export default function Personified() {
     try {
       const ins = await analyzeInsight(product, market, problemHint, geminiKey)
       setInsight(ins)
-      setConfig((c) => ({ ...c, archetype: ins.recommendedArchetype }))
+      // AI gợi ý cả 3: kiểu kịch bản + dạng hero + kiểu CTA → auto-chọn (user vẫn đổi được).
+      setConfig((c) => ({
+        ...c,
+        archetype: ins.recommendedArchetype,
+        heroType: ins.recommendedHeroType ?? c.heroType,
+        ctaStyle: ins.recommendedCtaStyle ?? c.ctaStyle,
+      }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Phân tích lỗi')
     } finally {
@@ -474,9 +480,10 @@ export default function Personified() {
                 hint="Tổng giây thực tế hiện ở bước 3 (mỗi cảnh chỉ 4s hoặc 8s nên có thể lệch nhẹ)." />
               <Picker label="Sản phẩm thật ra tay kiểu gì?" value={config.heroType} options={Object.keys(HERO_TYPE_LABEL) as HeroType[]}
                 labels={HERO_TYPE_LABEL} onChange={(v) => setConfig((c) => ({ ...c, heroType: v }))}
-                hint={HERO_TYPE_DESC[config.heroType]} />
+                hint={HERO_TYPE_DESC[config.heroType]} recommended={insight?.recommendedHeroType} />
               <Picker label="Kiểu CTA" value={config.ctaStyle} options={Object.keys(CTA_STYLE_LABEL) as CtaStyle[]}
-                labels={CTA_STYLE_LABEL} onChange={(v) => setConfig((c) => ({ ...c, ctaStyle: v }))} />
+                labels={CTA_STYLE_LABEL} onChange={(v) => setConfig((c) => ({ ...c, ctaStyle: v }))}
+                recommended={insight?.recommendedCtaStyle} />
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
                   <input type="checkbox" checked={config.falseSolution}
@@ -552,6 +559,7 @@ export default function Personified() {
               <div className="overflow-hidden rounded-lg border border-black/10">
                 <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                   <span className="w-5 shrink-0">#</span>
+                  <span className="w-10 shrink-0">Ảnh</span>
                   <span className="w-28 shrink-0">Loại</span>
                   <span className="w-9 shrink-0">Giây</span>
                   <span className="w-20 shrink-0">Nhân vật</span>
@@ -562,6 +570,12 @@ export default function Personified() {
                     <button onClick={() => setExpandedScene(expandedScene === s.idx ? null : s.idx)}
                       className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-violet-50/40">
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[10px] font-bold text-violet-700">{s.idx}</span>
+                      {/* Thumbnail keyframe — luôn hiện sau khi render → duyệt cả storyboard 1 phát */}
+                      <span className="h-12 w-10 shrink-0 overflow-hidden rounded border border-black/10 bg-gray-100">
+                        {clips[s.idx]?.keyframeRef
+                          ? <RowThumb assetRef={clips[s.idx]!.keyframeRef!} />
+                          : <span className="flex h-full w-full items-center justify-center text-[14px] text-gray-300">{clips[s.idx]?.status === 'kf' ? '⏳' : '🖼️'}</span>}
+                      </span>
                       <span className="w-28 shrink-0 truncate text-[11px] font-semibold text-gray-600">{SCENE_TYPE_LABEL[s.sceneType]}{s.hasProduct && ' 📦'}</span>
                       <span className="w-9 shrink-0 text-[11px] font-bold text-amber-700">{s.clipDuration}s</span>
                       <span className="w-20 shrink-0 truncate text-[11px] text-gray-400">{s.speaker}</span>
@@ -754,6 +768,13 @@ function Section({ step, title, children }: { step: number; title: string; child
   )
 }
 
+// P2a — thumbnail nhỏ trên dòng bảng cảnh (storyboard) — duyệt nhanh không cần bung dòng.
+function RowThumb({ assetRef }: { assetRef: string }) {
+  const url = useAssetUrl(assetRef)
+  if (!url) return <span className="flex h-full w-full items-center justify-center text-[10px] text-gray-300">…</span>
+  return <img src={url} alt="" className="h-full w-full object-cover" />
+}
+
 // P2b — ảnh chân dung nhân vật trong Character Bank.
 function CharRefPreview({ refImage }: { refImage: string }) {
   const url = useAssetUrl(refImage)
@@ -781,15 +802,15 @@ function InsightRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function Picker<T extends string>({ label, value, options, labels, onChange, hint }: {
-  label: string; value: T; options: T[]; labels: Record<T, string>; onChange: (v: T) => void; hint?: string
+function Picker<T extends string>({ label, value, options, labels, onChange, hint, recommended }: {
+  label: string; value: T; options: T[]; labels: Record<T, string>; onChange: (v: T) => void; hint?: string; recommended?: T
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-semibold text-gray-600">{label}</span>
+      <span className="mb-1 block text-xs font-semibold text-gray-600">{label}{recommended && <span className="ml-1 font-normal text-violet-600">· ⭐ AI gợi ý: {labels[recommended]}</span>}</span>
       <select value={value} onChange={(e) => onChange(e.target.value as T)}
         className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm">
-        {options.map((o) => <option key={o} value={o}>{labels[o]}</option>)}
+        {options.map((o) => <option key={o} value={o}>{labels[o]}{o === recommended ? ' ⭐' : ''}</option>)}
       </select>
       {hint && <span className="mt-1 block text-[11px] leading-snug text-gray-400">{hint}</span>}
     </label>

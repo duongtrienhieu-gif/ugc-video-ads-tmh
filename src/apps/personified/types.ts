@@ -106,6 +106,8 @@ export interface ProductInsight {
   painCore: string             // nỗi đau cốt lõi 1 câu
   metaphor: string             // ẩn dụ chọn (xâm lược / công trường / quỷ tâm lý…)
   recommendedArchetype: ArchetypeId
+  recommendedHeroType: HeroType   // AI gợi ý dạng hero ra tay (auto-chọn ở UI)
+  recommendedCtaStyle: CtaStyle   // AI gợi ý kiểu CTA (auto-chọn ở UI)
   reasonVi: string             // vì sao gợi ý KB đó
 }
 

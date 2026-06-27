@@ -13,7 +13,7 @@ import { directGeminiText } from '../../../utils/gemini'
 import type { Product } from '../../../stores/types'
 import {
   type TargetMarket, type PersonifiedConfig, type ProductInsight,
-  type PersonifiedScript, type PersonifiedScene, type ArchetypeId,
+  type PersonifiedScript, type PersonifiedScene, type ArchetypeId, type HeroType, type CtaStyle,
   TARGET_MARKET_GEMINI_NAME,
 } from '../types'
 import {
@@ -95,9 +95,11 @@ const INSIGHT_SCHEMA = {
     painCore: { type: 'string' },
     metaphor: { type: 'string' },
     recommendedArchetype: { type: 'string' },
+    recommendedHeroType: { type: 'string' },
+    recommendedCtaStyle: { type: 'string' },
     reasonVi: { type: 'string' },
   },
-  required: ['productInsight', 'customerInsight', 'painCore', 'metaphor', 'recommendedArchetype', 'reasonVi'],
+  required: ['productInsight', 'customerInsight', 'painCore', 'metaphor', 'recommendedArchetype', 'recommendedHeroType', 'recommendedCtaStyle', 'reasonVi'],
 } as const
 
 export async function analyzeInsight(
@@ -120,7 +122,9 @@ Phân tích và xuất JSON:
 - painCore: nỗi đau CỐT LÕI gói trong 1 câu ngắn.
 - metaphor: ẩn dụ nên dùng để nhân cách hóa vấn đề (vd "quái vật xâm lược da", "công nhân nội tạng đình công", "quỷ tự ti soi gương").
 - recommendedArchetype: CHỌN ĐÚNG 1 id trong [${ARCHETYPE_ORDER.join(', ')}] hợp nhất với sản phẩm/vấn đề.
-- reasonVi: 1 câu vì sao chọn kiểu đó.`
+- recommendedHeroType: CHỌN 1 id trong [${(Object.keys(HERO_TYPE_LABEL) as Array<keyof typeof HERO_TYPE_LABEL>).join(', ')}] — product_knight (SP tự ra tay, mặc định) / ingredient_weapon (serum/nhiều hoạt chất vung tia) / helper_army (probiotic/collagen — đạo quân lợi khuẩn).
+- recommendedCtaStyle: CHỌN 1 id trong [${(Object.keys(CTA_STYLE_LABEL) as Array<keyof typeof CTA_STYLE_LABEL>).join(', ')}] — villain_flees (phản diện thua bỏ chạy) / reverse_psych ("đừng bấm giỏ") / sidekick_disclaimer (sidekick chốt + cơ địa).
+- reasonVi: 1 câu vì sao chọn KIỂU KỊCH BẢN + heroType đó.`
 
   const userPrompt = problemHint.trim()
     ? `Vấn đề khách muốn nhân cách hóa: "${problemHint.trim()}". Phân tích cho thị trường ${TARGET_MARKET_GEMINI_NAME[market]}.`
@@ -134,12 +138,18 @@ Phân tích và xuất JSON:
   const p = JSON.parse(stripFence(raw)) as Partial<ProductInsight>
   const rec = (ARCHETYPE_ORDER as string[]).includes(p.recommendedArchetype ?? '')
     ? (p.recommendedArchetype as ArchetypeId) : 'KB1_invader'
+  const recHero = (Object.keys(HERO_TYPE_LABEL) as string[]).includes(p.recommendedHeroType ?? '')
+    ? (p.recommendedHeroType as HeroType) : 'product_knight'
+  const recCta = (Object.keys(CTA_STYLE_LABEL) as string[]).includes(p.recommendedCtaStyle ?? '')
+    ? (p.recommendedCtaStyle as CtaStyle) : 'villain_flees'
   return {
     productInsight: p.productInsight ?? '',
     customerInsight: p.customerInsight ?? '',
     painCore: p.painCore ?? '',
     metaphor: p.metaphor ?? '',
     recommendedArchetype: rec,
+    recommendedHeroType: recHero,
+    recommendedCtaStyle: recCta,
     reasonVi: p.reasonVi ?? '',
   }
 }
@@ -283,7 +293,9 @@ LUẬT VIẾT (bắt buộc):
 3. COMPLIANCE (ngách sức khỏe/mỹ phẩm): dùng từ "hỗ trợ", KHÔNG hứa tuyệt đối/chữa khỏi. Cảnh CTA phải có ý "hiệu quả tùy cơ địa".
 4. dialoguePrimary = thoại bằng ${langName} (đưa vào giọng đọc). dialogueVi = ${isVN ? 'GIỐNG HỆT dialoguePrimary' : 'bản dịch NGHĨA sang tiếng Việt cho operator hiểu'}.
 5. videoPromptEn = 1 prompt image-to-video TIẾNG ANH GIÀU HÌNH ẢNH: shot type + hành động cụ thể + BỐI CẢNH GIÀU CHI TIẾT (vd "deep glistening intestinal tunnel, wet folds, warm light pouring through, floating particles, cavernous depth") + bề mặt nhân vật chi tiết (glossy, wet, sweaty, subsurface skin) + cảm xúc/động lực. KHÔNG bắt model render chữ. (Hệ thống TỰ THÊM chất render điện ảnh — chỉ cần tả NỘI DUNG khung hình thật giàu, đừng ghi camera/lens.)
-6. imagePromptEn mỗi nhân vật = prompt EN tả NHÂN VẬT 3D THẬT CHI TIẾT: hình khối + MÀU + chất liệu bề mặt (glossy/subsurface) + ĐÔI MẮT to biểu cảm + biểu cảm đặc trưng + (nếu hero) phụ kiện anh hùng "glowing energy shield, flowing cape". VILLAIN phải là MASCOT CARTOON DỄ THƯƠNG/tinh nghịch kiểu phim hoạt hình (như cục-phân-có-mặt, blob giận dỗi) — hình tròn mềm, KHÔNG ghê rợn/máu me/giải phẫu/xương sọ (sẽ bị model chặn). KHÔNG cần ghi camera/style/--ar (hệ thống tự thêm chất render điện ảnh).
+6. imagePromptEn mỗi nhân vật = prompt EN tả NHÂN VẬT 3D THẬT CHI TIẾT: hình khối + MÀU + chất liệu bề mặt (glossy/subsurface) + ĐÔI MẮT to biểu cảm + biểu cảm đặc trưng + (nếu hero) phụ kiện anh hùng "glowing energy shield, flowing cape".
+   VILLAIN: HÌNH HÀI phải GỢI ĐÚNG vấn đề/bộ phận bị hại (đọc được ngay là gì), KHÔNG để ra "cục tròn vô danh". Lấy chính HÌNH DẠNG bộ phận/ẩn dụ làm thân: vd đau khớp gối → "a gnarled, knobbly knee-joint creature with cracked stiff segments and a grumpy old face"; mụn → "a fat oily pimple blob"; vi khuẩn → "a spiky green germ"; đờm → "a gooey mucus blob". Mascot cartoon dễ thương/tinh nghịch kiểu phim hoạt hình, hình mềm, có mặt + tay chân nhỏ — KHÔNG ghê rợn/máu me/giải phẫu/xương sọ (sẽ bị model chặn).
+   KHÔNG cần ghi camera/style/--ar (hệ thống tự thêm chất render điện ảnh).
 ${market === 'MY' ? buildMyNativeVoiceBlock() : ''}
 XUẤT JSON: { characters:[...], scenes:[${sceneCount} cảnh đúng thứ tự] }. Không markdown.`
 
