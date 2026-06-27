@@ -80,17 +80,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Chấm điểm LIÊN QUAN: video phải nhắc tới SP trong desc. Khớp token[0] (brand) = +3,
     // mỗi token khác = +1. Bỏ video score 0 (news/drift). Nếu KHÔNG có terms thì giữ tất cả.
-    const scored = mapped
-      .map((v) => {
-        const desc = v.desc.toLowerCase()
-        let score = 0
-        terms.forEach((t, i) => { if (desc.includes(t)) score += i === 0 ? 3 : 1 })
-        return { v, score }
-      })
-      .filter((s) => terms.length === 0 ? true : s.score > 0)
-      // Liên quan nhất trước; cùng điểm thì video DÀI hơn (giàu cảnh/kịch bản) trước.
-      .sort((a, b) => b.score - a.score || b.v.durationSec - a.v.durationSec)
-    const videos = scored.slice(0, 40).map((s) => s.v)
+    const scoredAll = mapped.map((v) => {
+      const desc = v.desc.toLowerCase()
+      let score = 0
+      terms.forEach((t, i) => { if (desc.includes(t)) score += i === 0 ? 3 : 1 })
+      return { v, score }
+    })
+    let chosen: typeof scoredAll
+    if (terms.length === 0) {
+      chosen = scoredAll
+    } else {
+      const hits = scoredAll.filter((s) => s.score > 0)
+      // Đủ video khớp token → giữ strict. Quá ít (<5) → BÙ bằng video còn lại (query đã sạch
+      // nên vẫn đúng ngách) để KHÔNG bị trống. Hits luôn xếp trên nhờ điểm cao hơn.
+      chosen = hits.length >= 5 ? hits : hits.concat(scoredAll.filter((s) => s.score === 0))
+    }
+    // Liên quan nhất trước; cùng điểm thì video DÀI hơn (giàu cảnh/kịch bản) trước.
+    chosen.sort((a, b) => b.score - a.score || b.v.durationSec - a.v.durationSec)
+    const videos = chosen.slice(0, 40).map((s) => s.v)
 
     // has_more: ưu tiên field của API; nếu thiếu thì suy từ việc còn cursor + còn item thô.
     const hasMore = d.has_more != null ? !!d.has_more : (!!d.cursor && list.length > 0)

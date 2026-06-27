@@ -197,14 +197,17 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const [liveMoreLoading, setLiveMoreLoading] = useState(false)
   const liveFetchedFor = useRef<string | null>(null)
 
-  // Tên SP trước dấu phân tách (| - [ ( ) → tìm video ĐÚNG SP hơn, không chung chung.
-  const liveQuery = useMemo(
-    () => (product.title.split(/[|\-–—[\](]/)[0] || product.title).trim().split(/\s+/).slice(0, 8).join(' '),
-    [product.title],
-  )
-  // Token cốt lõi của SP → server lọc video phải chứa (bỏ news/drift sang SP khác).
+  // Token cốt lõi (đã bỏ [...]/khuyến mãi/đơn vị) → dùng CHUNG cho lọc liên quan + làm từ khóa search.
   const liveTerms = useMemo(() => coreTerms(product.title), [product.title])
   const termsParam = useMemo(() => encodeURIComponent(liveTerms.join(',')), [liveTerms])
+  // Từ khóa search video = 6 token cốt lõi (tránh tên SP rác kiểu "[Buy 3 Free 1]..." làm hỏng search).
+  // Fallback: tên SP đã gỡ đoạn ngoặc đầu, lấy 8 từ đầu.
+  const liveQuery = useMemo(() => {
+    const clean = liveTerms.slice(0, 6).join(' ')
+    if (clean.length >= 4) return clean
+    return (product.title.replace(/[【[(][^】\])]*[】\])]/g, ' ').split(/[|\-–—]/)[0] || product.title)
+      .trim().split(/\s+/).filter(Boolean).slice(0, 8).join(' ')
+  }, [product.title, liveTerms])
 
   const loadMoreVideos = useCallback(async () => {
     if (!liveCursor || liveMoreLoading) return
