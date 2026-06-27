@@ -2,7 +2,7 @@
 // Khác "Video win" (organic): đây là ad MKT đối thủ đang chạy → tải về dựng lại cho FB ads.
 // Win signal: đang ACTIVE + chạy lâu + advertiser nhiều ad. AI dịch VO + bóc kịch bản cắt ghép.
 import { useState } from 'react'
-import { Megaphone, Search, Play, Download, ExternalLink, X, Sparkles, Link2, FileText, PenLine } from 'lucide-react'
+import { Megaphone, Search, Play, Download, ExternalLink, X, Sparkles, Link2, FileText, PenLine, Target, Flame } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useBankStore } from '../../stores/bankStore'
 import { useAppStore } from '../../stores/appStore'
@@ -17,6 +17,23 @@ const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 :
 interface AdRead { transcript: string; structure: string }
 interface LadiRead { headline: string; offer: string; structure: string; cta: string; steal: string }
 interface AdaptScript { hook: string; script: string; shots: string; caption: string }
+// SP win từ TikTok Shop (tái dùng /api/research) — Bước 1 của Radar.
+interface WinProduct { productId: string; title: string; imageUrl: string; sale: number; unitPrice: string; seller: string; url: string; niche: string }
+
+// Rút LÕI từ khóa từ tên SP (bỏ [..], (..), đơn vị, từ marketing) để mồi ô tìm ad sạch.
+const MKT_RE = /\b(beli|percuma|free|gift|cod|promosi|diskaun|sale|offer|ready|stock|stok|terhad|viral|terlaris|original|ori|new|hot|murah|jimat|harga|runtuh|borong|set|pack|pcs|pc|tawaran|hebat|bundle|combo|pengar|pengiriman|gratis|terbaru|berkualiti)\b/gi
+function coreTerms(title: string): string {
+  const core = title
+    .replace(/\[[^\]]*\]/g, ' ').replace(/\([^)]*\)/g, ' ').replace(/【[^】]*】/g, ' ')
+    .replace(/\b\d+\s*(ml|mg|g|kg|gram|pcs|pc|set|pack|x|tablet|kapsul|sachet|botol)\b/gi, ' ')
+    .replace(MKT_RE, ' ')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/).filter((w) => w.length > 1).slice(0, 6).join(' ').trim()
+  if (core.length >= 2) return core
+  return title.replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean).slice(0, 5).join(' ').trim()
+}
+// Ngách COD phổ biến để bấm dò nhanh (Bước 1).
+const NICHE_CHIPS = ['kurus', 'collagen', 'sakit lutut', 'sakit sendi', 'jerawat', 'gugur rambut', 'kencing manis', 'buasir', 'gastrik', 'detox', 'pemutih', 'tenaga batin']
 
 // FB hay bọc link đích trong l.facebook.com/l.php?u=... → gỡ ra link thật.
 function cleanLink(u: string): string {
@@ -63,8 +80,15 @@ export default function SpyAds() {
   const sendToApp = useAppStore((s) => s.sendToApp)
   const addToast = useAppStore((s) => s.addToast)
 
+  const [mode, setMode] = useState<'radar' | 'ads'>('radar') // 🎯 Radar SP win | 🔍 tìm ad
   const [platform, setPlatform] = useState<'fb' | 'tiktok'>('fb')
   const [q, setQ] = useState('')
+  // Radar SP win (Bước 1): dò TikTok Shop theo ngách
+  const [niche, setNiche] = useState('')
+  const [winners, setWinners] = useState<WinProduct[] | null>(null)
+  const [radarLoading, setRadarLoading] = useState(false)
+  const [radarErr, setRadarErr] = useState<string | null>(null)
+  const [spyingFor, setSpyingFor] = useState<string | null>(null) // tên SP đang spy ad (breadcrumb)
   const [country, setCountry] = useState('MY')
   const [activeOnly, setActiveOnly] = useState(true)
   const [ladiOnly, setLadiOnly] = useState(false)   // chỉ ad dẫn về web/ladipage (bỏ chat/sàn)
@@ -129,6 +153,29 @@ export default function SpyAds() {
       setHasMore(!!d.hasMore && d.cursor != null)
       setCredits(d.credits ?? credits)
     } catch { /* bỏ qua */ } finally { setMoreLoading(false) }
+  }
+
+  // Bước 1 — Radar: dò SP đang bán chạy trên TikTok Shop (tái dùng /api/research).
+  const radarSearch = async (term?: string) => {
+    const nq = (term ?? niche).trim()
+    if (!nq) { setRadarErr('Nhập ngách (vd: kurus, collagen…)'); return }
+    if (term != null) setNiche(term)
+    setRadarLoading(true); setRadarErr(null); setWinners(null)
+    try {
+      const d = await fetch(`/api/research?market=${country}&niches=${encodeURIComponent(nq)}&amount=50`).then((r) => r.json())
+      if (d.error) { setRadarErr(d.error); setRadarLoading(false); return }
+      const list: WinProduct[] = Array.isArray(d.products) ? d.products : []
+      setWinners(list)
+      setCredits(d.credits ?? credits)
+      if (!list.length) setRadarErr('Không thấy SP — đổi ngách/nước')
+    } catch (e) { setRadarErr((e as Error).message) } finally { setRadarLoading(false) }
+  }
+
+  // Bước 2 — bắc cầu: từ 1 SP win → rút lõi từ khóa → spy ad của SP đó (luồng cũ).
+  const spyProduct = (p: WinProduct) => {
+    setSpyingFor(p.title)
+    setMode('ads')
+    void search(coreTerms(p.title))
   }
 
   const resetAd = () => {
@@ -292,64 +339,164 @@ CHỈ trả JSON.`
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-100"><Megaphone className="h-4 w-4 text-rose-600" /></div>
           <div>
             <h1 className="text-base font-bold text-slate-800">Spy Ads — Quảng cáo đối thủ</h1>
-            <p className="text-[11px] text-slate-400">{platform === 'fb' ? 'Video ads đang chạy trên Facebook Ad Library' : 'Top video ads TikTok (Creative Center)'} → tải về dựng lại cho FB ads</p>
+            <p className="text-[11px] text-slate-400">{mode === 'radar' ? 'Dò SP đang bán chạy (TikTok Shop) → spy ad của SP đó để clone' : (platform === 'fb' ? 'Video ads đang chạy trên Facebook Ad Library' : 'Top video ads TikTok (Creative Center)') + ' → tải về dựng lại cho FB ads'}</p>
           </div>
           {credits != null && <span className="ml-auto text-xs text-slate-400">credit: {credits}</span>}
         </div>
+        {/* Mode + nước (dùng chung 2 mode) */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
-            <button onClick={() => { setPlatform('fb'); setAds(null) }}
-              className={`rounded-md px-3 py-1 text-xs font-semibold ${platform === 'fb' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>👍 Facebook</button>
-            <button onClick={() => { setPlatform('tiktok'); setAds(null) }}
-              className={`rounded-md px-3 py-1 text-xs font-semibold ${platform === 'tiktok' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>🎵 TikTok</button>
+            <button onClick={() => setMode('radar')}
+              className={`rounded-md px-3 py-1 text-xs font-semibold ${mode === 'radar' ? 'bg-rose-600 text-white' : 'text-slate-500'}`}>🎯 Radar SP win</button>
+            <button onClick={() => setMode('ads')}
+              className={`rounded-md px-3 py-1 text-xs font-semibold ${mode === 'ads' ? 'bg-rose-600 text-white' : 'text-slate-500'}`}>🔍 Tìm ad theo từ khóa</button>
           </div>
           <select value={country} onChange={(e) => setCountry(e.target.value)} className="rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-sm font-medium">
             {COUNTRIES.map((x) => <option key={x.c} value={x.c}>{x.f} {x.c}</option>)}
           </select>
-          <input
-            value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void search() }}
-            placeholder="từ khóa / ngách (vd: collagen, sakit lutut, kurus...)"
-            className="min-w-[220px] flex-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm"
-          />
-          <button onClick={() => void search()} disabled={loading}
-            className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50">
-            <Search className="h-4 w-4" /> {loading ? 'Đang tìm…' : 'Tìm ad'}
-          </button>
-          {platform === 'fb' && (
-            <>
-              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
-                <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} /> Chỉ ad đang chạy
-              </label>
-              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
-                <input type="checkbox" checked={ladiOnly} onChange={(e) => setLadiOnly(e.target.checked)} /> 🔗 Chỉ ad có Ladipage/Sale page
-              </label>
-            </>
-          )}
-          {error && <span className="text-xs text-red-500">{error}</span>}
         </div>
-        {/* Chip từ khóa COD chung — bấm là quét rộng */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-medium text-slate-400">Từ khóa COD:</span>
-          {COD_CHIPS.map((c) => (
-            <button key={c} onClick={() => void search(c)} disabled={loading}
-              className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50">
-              {c}
-            </button>
-          ))}
-        </div>
+
+        {/* MODE: Radar SP win — dò TikTok Shop theo ngách (Bước 1) */}
+        {mode === 'radar' && (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={niche} onChange={(e) => setNiche(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void radarSearch() }}
+                placeholder="ngách COD (vd: kurus, collagen, sakit lutut…) → tìm SP đang bán chạy"
+                className="min-w-[260px] flex-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm"
+              />
+              <button onClick={() => void radarSearch()} disabled={radarLoading}
+                className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50">
+                <Target className="h-4 w-4" /> {radarLoading ? 'Đang dò…' : 'Dò SP win'}
+              </button>
+              {radarErr && <span className="text-xs text-red-500">{radarErr}</span>}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-medium text-slate-400">Ngách:</span>
+              {NICHE_CHIPS.map((c) => (
+                <button key={c} onClick={() => void radarSearch(c)} disabled={radarLoading}
+                  className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50">
+                  {c}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* MODE: Tìm ad theo từ khóa (luồng cũ) */}
+        {mode === 'ads' && (
+          <>
+            {spyingFor && (
+              <div className="flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-1.5 text-xs text-rose-700">
+                <span>🎯 Đang spy ad cho SP: <b>{spyingFor}</b></span>
+                <button onClick={() => { setSpyingFor(null); setMode('radar') }}
+                  className="ml-auto rounded-md border border-rose-200 bg-white px-2 py-0.5 font-semibold hover:bg-rose-100">← Về Radar</button>
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
+                <button onClick={() => { setPlatform('fb'); setAds(null) }}
+                  className={`rounded-md px-3 py-1 text-xs font-semibold ${platform === 'fb' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>👍 Facebook</button>
+                <button onClick={() => { setPlatform('tiktok'); setAds(null) }}
+                  className={`rounded-md px-3 py-1 text-xs font-semibold ${platform === 'tiktok' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>🎵 TikTok</button>
+              </div>
+              <input
+                value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void search() }}
+                placeholder="từ khóa / ngách (vd: collagen, sakit lutut, kurus...)"
+                className="min-w-[220px] flex-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm"
+              />
+              <button onClick={() => void search()} disabled={loading}
+                className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50">
+                <Search className="h-4 w-4" /> {loading ? 'Đang tìm…' : 'Tìm ad'}
+              </button>
+              {platform === 'fb' && (
+                <>
+                  <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                    <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} /> Chỉ ad đang chạy
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                    <input type="checkbox" checked={ladiOnly} onChange={(e) => setLadiOnly(e.target.checked)} /> 🔗 Chỉ ad có Ladipage/Sale page
+                  </label>
+                </>
+              )}
+              {error && <span className="text-xs text-red-500">{error}</span>}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-medium text-slate-400">Từ khóa COD:</span>
+              {COD_CHIPS.map((c) => (
+                <button key={c} onClick={() => void search(c)} disabled={loading}
+                  className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50">
+                  {c}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </header>
 
       {/* Results */}
       <main className="flex-1 overflow-y-auto p-5">
-        {!ads && !loading && (
+        {/* ── MODE RADAR: SP đang bán chạy ── */}
+        {mode === 'radar' && (
+          <>
+            {!winners && !radarLoading && (
+              <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-black/10 text-center text-slate-400">
+                <Target className="h-8 w-8" />
+                <p className="text-sm">Nhập ngách + chọn nước → <b>Dò SP win</b>.</p>
+                <p className="text-xs">Xếp theo <b>số đã bán</b> (sự thật bán hàng) → bấm <b>Spy ad SP này</b> để kéo creative về clone.</p>
+              </div>
+            )}
+            {radarLoading && <div className="py-10 text-center text-sm text-slate-400">Đang dò SP bán chạy trên TikTok Shop…</div>}
+            {winners && winners.length > 0 && (
+              <>
+                <div className="mb-2 text-xs font-semibold text-slate-500">{winners.length} SP — xếp theo 🔥 đã bán</div>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+                  {winners.map((p, i) => (
+                    <div key={p.productId} className="flex flex-col overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm">
+                      <div className="relative aspect-square bg-slate-100">
+                        {p.imageUrl ? <img src={p.imageUrl} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
+                        {i < 3 && <span className="absolute left-1.5 top-1.5 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-900">#{i + 1}</span>}
+                        <span className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
+                          <Flame className="h-3 w-3 text-orange-400" /> {fmtK(p.sale)} bán
+                        </span>
+                      </div>
+                      <div className="flex flex-1 flex-col gap-1 p-2.5">
+                        <p className="line-clamp-2 text-[11px] font-semibold text-slate-700">{p.title}</p>
+                        <div className="flex flex-wrap gap-x-2 text-[10px] font-medium text-slate-500">
+                          {p.unitPrice && <span>{p.unitPrice}</span>}
+                          {p.seller && <span className="line-clamp-1">🏪 {p.seller}</span>}
+                        </div>
+                        <div className="mt-auto flex gap-1.5 pt-1.5">
+                          <button onClick={() => spyProduct(p)}
+                            className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-rose-600 py-1.5 text-[11px] font-semibold text-white hover:bg-rose-700">
+                            <Target className="h-3 w-3" /> Spy ad SP này
+                          </button>
+                          {p.url && (
+                            <a href={p.url} target="_blank" rel="noopener noreferrer" title="Mở trên TikTok Shop"
+                              className="flex items-center justify-center rounded-lg border border-black/10 bg-slate-50 px-2 py-1.5 text-slate-600 hover:bg-slate-100">
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* ── MODE TÌM AD ── */}
+        {mode === 'ads' && !ads && !loading && (
           <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-black/10 text-center text-slate-400">
             <Megaphone className="h-8 w-8" />
             <p className="text-sm">Nhập ngách/từ khóa + chọn nước → <b>Tìm ad</b>.</p>
             <p className="text-xs">Ad <b>đang chạy + lâu + advertiser nhiều bản</b> = winner (đốt tiền lâu chứng tỏ có lời).</p>
           </div>
         )}
-        {loading && <div className="py-10 text-center text-sm text-slate-400">{platform === 'fb' ? 'Đang quét Facebook Ad Library…' : 'Đang quét TikTok Top Ads…'}</div>}
-        {ads && ads.length > 0 && (
+        {mode === 'ads' && loading && <div className="py-10 text-center text-sm text-slate-400">{platform === 'fb' ? 'Đang quét Facebook Ad Library…' : 'Đang quét TikTok Top Ads…'}</div>}
+        {mode === 'ads' && ads && ads.length > 0 && (
           <>
             <div className="mb-2 flex items-center justify-between gap-2">
               <div className="text-xs font-semibold text-slate-500">
