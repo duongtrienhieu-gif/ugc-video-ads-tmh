@@ -294,6 +294,26 @@ p, span, div, label, button, a, li, td, th, h1, h2, h3, h4, h5, h6 {
 [data-theme="dark"] [class*="bg-teal-500/"] { background-color: rgba(20, 184, 166, 0.18) !important; }
 [data-theme="dark"] [class*="bg-cyan-500/"] { background-color: rgba(6, 182, 212, 0.18) !important; }
 
+/* Pastel tint boxes (bg-{color}-50 / -100, incl. opacity like bg-violet-50/60) —
+   these were NOT covered, so a light pastel card stayed bright in dark mode and any
+   remapped gray text on it (→ white) became invisible. Map to a translucent hue so
+   the box reads dark and white text shows. Exact `.bg-x-50` + `[class*="bg-x-50/"]`
+   selectors so they never collide with `bg-x-500` (already handled above). */
+[data-theme="dark"] .bg-violet-50, [data-theme="dark"] [class*="bg-violet-50/"] { background-color: rgba(139, 92, 246, 0.12) !important; }
+[data-theme="dark"] .bg-violet-100 { background-color: rgba(139, 92, 246, 0.18) !important; }
+[data-theme="dark"] .bg-emerald-50, [data-theme="dark"] [class*="bg-emerald-50/"] { background-color: rgba(16, 185, 129, 0.12) !important; }
+[data-theme="dark"] .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.18) !important; }
+[data-theme="dark"] .bg-amber-50, [data-theme="dark"] [class*="bg-amber-50/"] { background-color: rgba(245, 158, 11, 0.12) !important; }
+[data-theme="dark"] .bg-amber-100 { background-color: rgba(245, 158, 11, 0.18) !important; }
+[data-theme="dark"] .bg-rose-50, [data-theme="dark"] [class*="bg-rose-50/"] { background-color: rgba(244, 63, 94, 0.12) !important; }
+[data-theme="dark"] .bg-fuchsia-50, [data-theme="dark"] [class*="bg-fuchsia-50/"] { background-color: rgba(217, 70, 239, 0.12) !important; }
+[data-theme="dark"] .bg-sky-50, [data-theme="dark"] [class*="bg-sky-50/"] { background-color: rgba(14, 165, 233, 0.12) !important; }
+[data-theme="dark"] .bg-green-50, [data-theme="dark"] [class*="bg-green-50/"] { background-color: rgba(34, 197, 94, 0.12) !important; }
+/* Neutral gray with opacity (bg-gray-50/70, bg-gray-100/60…) — the exact `.bg-gray-50`
+   rule above does NOT match the opacity token, so these stayed bright. */
+[data-theme="dark"] [class*="bg-gray-50/"] { background-color: var(--color-surface) !important; }
+[data-theme="dark"] [class*="bg-gray-100/"] { background-color: var(--color-card-elevated) !important; }
+
 /* Border variants — slate / stone */
 [data-theme="dark"] [class*="border-slate-200"],
 [data-theme="dark"] [class*="border-slate-100"] { border-color: var(--color-border) !important; }

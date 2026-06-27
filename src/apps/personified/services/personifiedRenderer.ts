@@ -41,11 +41,12 @@ function buildCharacterSheetPrompt(character: PersonifiedCharacter, hasProductRe
  *  Giữ luật "preserve product" của repo (copy bao bì, cấm bịa). */
 function buildKeyframePrompt(
   scene: PersonifiedScene, character: PersonifiedCharacter | undefined,
-  opts: { hasCharRef: boolean; hasProductRef: boolean; worldEnv?: string },
+  opts: { hasCharRef: boolean; hasProductRef: boolean; worldEnv?: string; dropAction?: boolean },
 ): string {
   const base = (character?.imagePromptEn ?? '').trim() || (scene.action ?? '').trim() || 'A 3D Pixar cartoon character'
   const mood = scene.emotion ? ` Expression / mood: ${scene.emotion}.` : ''
-  const act = (scene.action ?? '').trim() ? ` Scene: ${scene.action.trim()}.` : ''
+  // dropAction = bản an toàn (tầng 2 retry): bỏ mô tả hành động (nơi chứa từ gore).
+  const act = (!opts.dropAction && (scene.action ?? '').trim()) ? ` Scene: ${scene.action.trim()}.` : ''
   // A — BIOME CỐ ĐỊNH: nhồi vào MỌI cảnh → 9 cảnh chung 1 thế giới (như video mẫu).
   const world = (opts.worldEnv ?? '').trim()
     ? ` The whole scene takes place inside this consistent environment: ${opts.worldEnv!.trim()}.`
@@ -112,21 +113,45 @@ const SAFE_CARTOON_CLAUSE =
   'NON-graphic, NO gore, NO blood, NO open wounds, NO realistic human anatomy, NO skeleton, ' +
   'NO surgical or medical-textbook imagery, NO body horror. Stylised and brand-safe.'
 
-/** Gọi gpt-4o-image; nếu dính content-policy → thử lại 1 lần với mệnh đề cartoon an toàn. */
+// TẦNG 1 — bộ lọc từ-độc deterministic: thay từ gore/y-khoa-thật bằng từ cartoon an toàn
+// NGAY TRƯỚC KHI gửi (ăn cho cả kịch bản cũ Gemini viết "flesh crumble, rusty, mục nát").
+const GORE_SCRUB: Array<[RegExp, string]> = [
+  [/\bflesh\b/gi, 'clay'],
+  [/\bbloody\b/gi, 'colourful'], [/\bblood\b/gi, 'paint'],
+  [/\bgory\b/gi, 'cartoonish'], [/\bgore\b/gi, 'cartoon mess'],
+  [/\bwounds?\b/gi, 'dents'], [/\bwounded\b/gi, 'dented'],
+  [/\bcrumbl(e|es|ing|ed)\b/gi, 'wobble'],
+  [/\b(stress )?cracks?\b/gi, 'cartoon cracks'], [/\bcrack(ed|ing)\b/gi, 'cartoon-cracked'],
+  [/\brust(y|ed)?\b/gi, 'worn'],
+  [/\brot(ten|ting)?\b/gi, 'dusty'], [/\bdecay(ing|ed)?\b/gi, 'dusty'],
+  [/\bcorrod(e|ed|ing)\b/gi, 'worn'],
+  [/\bskeletons?\b/gi, ''], [/\bskulls?\b/gi, ''],
+  [/\bnứt (vỡ|nẻ)\b/gi, 'rạn kiểu hoạt hình'],
+  [/\bmục nát\b/gi, 'cũ kỹ'], [/\bsắt vụn\b/gi, 'đồ chơi cũ'], [/\bmáu\b/gi, 'màu'],
+]
+function scrubGore(s: string): string {
+  let out = s
+  for (const [re, rep] of GORE_SCRUB) out = out.replace(re, rep)
+  return out
+}
+
+/** Gọi gpt-4o-image; nếu dính content-policy → thử lại với prompt AN TOÀN HƠN (bỏ phần
+ *  gore) + mệnh đề cartoon. softPrompt = bản rút gọn không có action gore (tầng 2). */
 async function genImageModSafe(p: {
-  apiKey: string; prompt: string; filesUrl: string[]; signal?: AbortSignal
+  apiKey: string; prompt: string; filesUrl: string[]; signal?: AbortSignal; softPrompt?: string
 }): Promise<string> {
   try {
     return await generateGpt4oImageFast({
-      apiKey: p.apiKey, prompt: p.prompt, filesUrl: p.filesUrl, size: '2:3',
+      apiKey: p.apiKey, prompt: scrubGore(p.prompt), filesUrl: p.filesUrl, size: '2:3',
       softTimeoutMs: 100_000, attemptTimeoutMs: 150_000, maxAttempts: 3, signal: p.signal,
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     if (!isContentViolation(msg)) throw e
-    // Thử lại 1 lần: ép cartoon an toàn (làm mềm mô tả gore/y khoa).
+    // Tầng 2: dùng bản rút gọn an toàn (bỏ action gore) nếu có, + scrub + mệnh đề cartoon.
+    const retry = scrubGore((p.softPrompt ?? p.prompt)) + SAFE_CARTOON_CLAUSE
     return await generateGpt4oImageFast({
-      apiKey: p.apiKey, prompt: p.prompt + SAFE_CARTOON_CLAUSE, filesUrl: p.filesUrl, size: '2:3',
+      apiKey: p.apiKey, prompt: retry, filesUrl: p.filesUrl, size: '2:3',
       softTimeoutMs: 100_000, attemptTimeoutMs: 150_000, maxAttempts: 2, signal: p.signal,
     })
   }
@@ -175,11 +200,13 @@ export async function renderKeyframe(
     }
   }
   const kfPrompt = buildKeyframePrompt(p.scene, p.character, {
-    hasCharRef: !!charUrl,
-    hasProductRef: useProduct,
-    worldEnv: p.worldEnv,
+    hasCharRef: !!charUrl, hasProductRef: useProduct, worldEnv: p.worldEnv,
   })
-  const remoteUrl = await genImageModSafe({ apiKey: p.apiKey, prompt: kfPrompt, filesUrl, signal: p.signal })
+  // Bản an toàn (bỏ action gore) cho lần retry nếu dính content-policy.
+  const softPrompt = buildKeyframePrompt(p.scene, p.character, {
+    hasCharRef: !!charUrl, hasProductRef: useProduct, worldEnv: p.worldEnv, dropAction: true,
+  })
+  const remoteUrl = await genImageModSafe({ apiKey: p.apiKey, prompt: kfPrompt, softPrompt, filesUrl, signal: p.signal })
   const kfBlob = await fetch(remoteUrl).then((r) => r.blob())
   const keyframeRef = await saveAsset(kfBlob, kfBlob.type || 'image/png')
   return { keyframeRef }

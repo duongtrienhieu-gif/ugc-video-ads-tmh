@@ -417,7 +417,7 @@ export default function Personified() {
       </div>
 
       {noKey && (
-        <div className="mx-6 mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <div className="mx-6 mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-gray-800">
           <AlertCircle className="h-4 w-4 shrink-0" />
           Chưa có Gemini API key — vào Cài đặt để nhập trước khi phân tích.
         </div>
@@ -499,7 +499,7 @@ export default function Personified() {
 
             {/* B — guard KB2: cảnh báo nhẹ khi chọn Quỷ Tâm Lý cho vấn đề AI gợi ý kiểu khác (thường là nhìn-thấy-được). */}
             {config.archetype === 'KB2_inner_demon' && insight.recommendedArchetype !== 'KB2_inner_demon' && (
-              <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-800">
+              <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-snug text-gray-800">
                 ⚠️ <b>Quỷ Tâm Lý</b> hợp vấn đề <b>VÔ HÌNH</b> (tự ti / mất ngủ / lo âu). Vấn đề này AI gợi ý <b>{ARCHETYPES[insight.recommendedArchetype].labelVi}</b> — KB2 vẫn chạy nhưng sẽ đánh qua góc <b>TÂM LÝ (xấu hổ)</b> + bắt buộc có người thật. Muốn villain nhìn-thấy-được thì chọn kiểu AI gợi ý.
               </p>
             )}
@@ -758,7 +758,7 @@ export default function Personified() {
               script.characters.length > 0 ? (
                 <div className="space-y-2">
                   {/* Hướng dẫn + nút tạo bank tất cả */}
-                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-violet-200 bg-violet-50/60 px-3 py-2 text-[11px] text-violet-800">
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-violet-200 bg-violet-50/60 px-3 py-2 text-[11px] text-gray-700">
                     <span>🎭 <b>Character Bank</b> — render ảnh chuẩn mỗi nhân vật <b>1 lần</b>. Render cảnh sẽ dùng ảnh này để <b>giữ y mặt/dáng xuyên các cảnh</b> (chống mỗi cảnh một mặt). Nên làm <b>trước</b> khi render keyframe cảnh.</span>
                     <button onClick={handleRenderAllChars} disabled={bankRunning || !kieKey}
                       className="ml-auto flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 font-bold text-white transition-colors hover:bg-violet-700 disabled:opacity-40">
