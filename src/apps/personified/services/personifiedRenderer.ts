@@ -98,6 +98,40 @@ async function refToUrl(ref: string | undefined): Promise<string | null> {
   return isAssetRef(ref) ? await getUrl(ref) : ref
 }
 
+/** OpenAI/gpt-4o-image chặn nội dung gore/y-khoa-thật (vd "quỷ xương khớp", "swollen red
+ *  tissue, bone ends"). Phát hiện lỗi content-policy để thử lại bản đã làm mềm. */
+function isContentViolation(msg: string): boolean {
+  const l = msg.toLowerCase()
+  return l.includes('content polic') || l.includes('violate') || l.includes('inappropriate')
+    || l.includes('unsafe') || l.includes('community guidelines') || l.includes('safety system')
+    || l.includes('rejected')
+}
+/** Mệnh đề ép cartoon brand-safe — gắn vào lần thử lại khi bị chặn. */
+const SAFE_CARTOON_CLAUSE =
+  ' IMPORTANT: keep it a wholesome, friendly kids-movie 3D cartoon with soft rounded shapes — ' +
+  'NON-graphic, NO gore, NO blood, NO open wounds, NO realistic human anatomy, NO skeleton, ' +
+  'NO surgical or medical-textbook imagery, NO body horror. Stylised and brand-safe.'
+
+/** Gọi gpt-4o-image; nếu dính content-policy → thử lại 1 lần với mệnh đề cartoon an toàn. */
+async function genImageModSafe(p: {
+  apiKey: string; prompt: string; filesUrl: string[]; signal?: AbortSignal
+}): Promise<string> {
+  try {
+    return await generateGpt4oImageFast({
+      apiKey: p.apiKey, prompt: p.prompt, filesUrl: p.filesUrl, size: '2:3',
+      softTimeoutMs: 100_000, attemptTimeoutMs: 150_000, maxAttempts: 3, signal: p.signal,
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (!isContentViolation(msg)) throw e
+    // Thử lại 1 lần: ép cartoon an toàn (làm mềm mô tả gore/y khoa).
+    return await generateGpt4oImageFast({
+      apiKey: p.apiKey, prompt: p.prompt + SAFE_CARTOON_CLAUSE, filesUrl: p.filesUrl, size: '2:3',
+      softTimeoutMs: 100_000, attemptTimeoutMs: 150_000, maxAttempts: 2, signal: p.signal,
+    })
+  }
+}
+
 /** P2b — render CHARACTER SHEET 1 nhân vật (1 lần) → { refImage }. Lưu vào Character Bank,
  *  dùng làm ref khóa diện mạo cho mọi cảnh có nhân vật đó.
  *  productRefs: chỉ truyền cho nhân vật HERO (= SP nhân cách hóa) → khóa bao bì thật,
@@ -114,10 +148,7 @@ export async function renderCharacterRef(
     if (url) filesUrl.push(url)
   }
   const prompt = buildCharacterSheetPrompt(p.character, filesUrl.length > 0)
-  const remoteUrl = await generateGpt4oImageFast({
-    apiKey: p.apiKey, prompt, filesUrl, size: '2:3',
-    softTimeoutMs: 100_000, attemptTimeoutMs: 150_000, maxAttempts: 3, signal: p.signal,
-  })
+  const remoteUrl = await genImageModSafe({ apiKey: p.apiKey, prompt, filesUrl, signal: p.signal })
   const blob = await fetch(remoteUrl).then((r) => r.blob())
   const refImage = await saveAsset(blob, blob.type || 'image/png')
   return { refImage }
@@ -148,10 +179,7 @@ export async function renderKeyframe(
     hasProductRef: useProduct,
     worldEnv: p.worldEnv,
   })
-  const remoteUrl = await generateGpt4oImageFast({
-    apiKey: p.apiKey, prompt: kfPrompt, filesUrl, size: '2:3',
-    softTimeoutMs: 100_000, attemptTimeoutMs: 150_000, maxAttempts: 3, signal: p.signal,
-  })
+  const remoteUrl = await genImageModSafe({ apiKey: p.apiKey, prompt: kfPrompt, filesUrl, signal: p.signal })
   const kfBlob = await fetch(remoteUrl).then((r) => r.blob())
   const keyframeRef = await saveAsset(kfBlob, kfBlob.type || 'image/png')
   return { keyframeRef }
