@@ -36,6 +36,7 @@ import VideoBuilder from './apps/video-builder/VideoBuilder'
 import StudioBrandKit from './apps/studio-brand-kit/StudioBrandKit'
 import TikTokShop from './apps/tiktok-shop/TikTokShop'
 import Research from './apps/research/Research'
+import SpyAds from './apps/spy-ads/SpyAds'
 import ChatBot from './apps/chat-bot/ChatBot'
 import ImageStudio from './apps/image-studio/ImageStudio'
 
@@ -61,6 +62,7 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'studio-brand-kit': StudioBrandKit,
   'tiktok-shop': TikTokShop,
   'research': Research,
+  'spy-ads': SpyAds,
   'chat-bot': ChatBot,
   'image-studio': ImageStudio,
 }
@@ -87,6 +89,7 @@ const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> =
   'studio-brand-kit':  { name: 'Studio Brand Kit', resetKeys: ['ugc-lab:brand-kits'] },
   'tiktok-shop':       { name: 'TikTok Shop',      resetKeys: [] },
   'research':          { name: 'Research',         resetKeys: [] },
+  'spy-ads':           { name: 'Spy Ads',          resetKeys: [] },
   'chat-bot':          { name: 'Chat Bot',         resetKeys: ['chat-bot-configs-v1'] },
   'image-studio':      { name: 'Xưởng Ảnh',        resetKeys: ['gift-studio-draft-v1', 'form-bg-studio-draft-v1', 'rebrand-studio-draft-v1', 'image-studio-mode-v1'] },
 }

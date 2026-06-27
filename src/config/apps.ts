@@ -12,7 +12,7 @@
 import {
   User, Mic, PenLine, Sparkles, Images,
   Megaphone, ShoppingBag, Rocket, MessageCircle, TrendingUp,
-  Palette, Package, History as HistoryIcon, LayoutGrid,
+  Palette, Package, History as HistoryIcon, LayoutGrid, Radar,
 } from 'lucide-react'
 
 export interface AppMeta {
@@ -56,6 +56,7 @@ export const APP_GROUPS: AppGroup[] = [
       { id: 'super-ladipage', label: 'Super Ladipage', desc: 'Landing AI',          icon: Rocket,        tint: 'emerald' },
       { id: 'chat-bot',       label: 'Chat Bot',       desc: 'Chốt đơn tự động',    icon: MessageCircle, tint: 'indigo' },
       { id: 'research',       label: 'Research',       desc: 'Phân tích thị trường', icon: TrendingUp,   tint: 'sky' },
+      { id: 'spy-ads',        label: 'Spy Ads',        desc: 'QC video đối thủ (FB)', icon: Radar,       tint: 'rose',    hot: true },
     ],
   },
   {
