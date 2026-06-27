@@ -21,6 +21,7 @@ const COUNTRIES = [
 export default function SpyAds() {
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
 
+  const [platform, setPlatform] = useState<'fb' | 'tiktok'>('fb')
   const [q, setQ] = useState('')
   const [country, setCountry] = useState('MY')
   const [activeOnly, setActiveOnly] = useState(true)
@@ -37,8 +38,11 @@ export default function SpyAds() {
   const [readErr, setReadErr] = useState<string | null>(null)
   const [readResult, setReadResult] = useState<AdRead | null>(null)
 
-  const buildUrl = (cur?: string) =>
-    `/api/fb-ads?q=${encodeURIComponent(q.trim())}&country=${country}&status=${activeOnly ? 'ACTIVE' : 'ALL'}${cur ? `&cursor=${encodeURIComponent(cur)}` : ''}`
+  const buildUrl = (cur?: string) => {
+    const base = platform === 'fb' ? '/api/fb-ads' : '/api/tiktok-ads'
+    const st = platform === 'fb' ? `&status=${activeOnly ? 'ACTIVE' : 'ALL'}` : ''
+    return `${base}?q=${encodeURIComponent(q.trim())}&country=${country}${st}${cur ? `&cursor=${encodeURIComponent(cur)}` : ''}`
+  }
 
   const search = async () => {
     if (!q.trim()) { setError('Nhập từ khóa / ngách'); return }
@@ -130,6 +134,12 @@ CHỈ trả JSON.`
           {credits != null && <span className="ml-auto text-xs text-slate-400">credit: {credits}</span>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
+            <button onClick={() => { setPlatform('fb'); setAds(null) }}
+              className={`rounded-md px-3 py-1 text-xs font-semibold ${platform === 'fb' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>👍 Facebook</button>
+            <button onClick={() => { setPlatform('tiktok'); setAds(null) }}
+              className={`rounded-md px-3 py-1 text-xs font-semibold ${platform === 'tiktok' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>🎵 TikTok</button>
+          </div>
           <select value={country} onChange={(e) => setCountry(e.target.value)} className="rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-sm font-medium">
             {COUNTRIES.map((x) => <option key={x.c} value={x.c}>{x.f} {x.c}</option>)}
           </select>
@@ -142,9 +152,11 @@ CHỈ trả JSON.`
             className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50">
             <Search className="h-4 w-4" /> {loading ? 'Đang tìm…' : 'Tìm ad'}
           </button>
-          <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
-            <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} /> Chỉ ad đang chạy
-          </label>
+          {platform === 'fb' && (
+            <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+              <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} /> Chỉ ad đang chạy
+            </label>
+          )}
           {error && <span className="text-xs text-red-500">{error}</span>}
         </div>
       </header>
