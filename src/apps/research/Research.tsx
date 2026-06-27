@@ -13,7 +13,8 @@ import ProductDetail from './components/ProductDetail'
 import ShopList from './components/ShopList'
 import CrossMarketPanel from './components/CrossMarketPanel'
 import WatchlistPanel from './components/WatchlistPanel'
-import type { Market } from './types'
+import SourceFinder from './components/SourceFinder'
+import type { Market, ScoredProduct } from './types'
 
 const MARKET_LANG: Record<string, string> = { MY: 'Malay', ID: 'Indonesia', VN: 'Việt', TH: 'Thái', PH: 'English/Tagalog' }
 
@@ -33,6 +34,9 @@ export default function Research() {
   const updateWatch = useWatchlistStore((s) => s.update)
   const [view, setView] = useState<'products' | 'shops'>('products')
   const [showWatch, setShowWatch] = useState(false)
+  const [showSource, setShowSource] = useState(false)
+  const [sourceInit, setSourceInit] = useState<{ name: string; imageUrl?: string } | null>(null)
+  const openSource = (p?: ScoredProduct) => { setSourceInit(p ? { name: p.title, imageUrl: p.imageUrl } : null); setShowSource(true) }
   const activeNichePreset = NICHE_PRESETS.find((n) => n.label === scanNiche)
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const scored = getScored()
@@ -218,6 +222,13 @@ ${list}`
                 </button>
               )}
               <button
+                onClick={() => openSource()}
+                className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-50"
+                title="Tìm nguyên liệu video (clip có SP + cảnh B-roll) cho 1 sản phẩm"
+              >
+                🎬 Tìm Source
+              </button>
+              <button
                 onClick={() => setShowWatch((v) => !v)}
                 className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
                   showWatch
@@ -266,7 +277,8 @@ ${list}`
         </main>
       </div>
 
-      {selected && selectedId && <ProductDetail product={selected} onClose={() => select(null)} />}
+      {selected && selectedId && <ProductDetail product={selected} onClose={() => select(null)} onFindSource={openSource} />}
+      {showSource && <SourceFinder initial={sourceInit} onClose={() => setShowSource(false)} />}
     </div>
   )
 }

@@ -153,7 +153,7 @@ function Sparkline({ data }: { data?: number[] }) {
   )
 }
 
-export default function ProductDetail({ product, onClose }: { product: ScoredProduct; onClose: () => void }) {
+export default function ProductDetail({ product, onClose, onFindSource }: { product: ScoredProduct; onClose: () => void; onFindSource?: (p: ScoredProduct) => void }) {
   const [tab, setTab] = useState<Tab>('overview')
   const [analyzeId, setAnalyzeId] = useState<string | null>(null)
   const [embedVideo, setEmbedVideo] = useState<{ id: string; handle?: string } | null>(null)
@@ -598,7 +598,16 @@ CHỈ trả JSON.`
               )}
             </div>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-black/5"><X className="h-5 w-5" /></button>
+          <div className="flex items-center gap-1.5">
+            {onFindSource && (
+              <button onClick={() => onFindSource(product)}
+                className="flex items-center gap-1 rounded-lg bg-violet-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-violet-700"
+                title="Tìm clip có SP + cảnh B-roll liên quan để cắt ghép">
+                🎬 Tìm source SP này
+              </button>
+            )}
+            <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-black/5"><X className="h-5 w-5" /></button>
+          </div>
         </div>
 
         {/* Tabs */}
