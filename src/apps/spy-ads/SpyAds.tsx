@@ -68,6 +68,7 @@ export default function SpyAds() {
   const [country, setCountry] = useState('MY')
   const [activeOnly, setActiveOnly] = useState(true)
   const [ladiOnly, setLadiOnly] = useState(false)   // chỉ ad dẫn về web/ladipage (bỏ chat/sàn)
+  const [groupView, setGroupView] = useState(false) // gom theo advertiser/SP thay vì lưới phẳng
   const [ads, setAds] = useState<FbAd[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -245,6 +246,26 @@ CHỈ trả JSON.`
     (a) => !(ladiOnly && platform === 'fb') || (!!a.linkUrl && linkKind(cleanLink(a.linkUrl)).web),
   )
 
+  // Gom theo SP/advertiser: 1 brand chạy NHIỀU ad + chạy LÂU = đang scale = winner.
+  const groups = (() => {
+    const m = new Map<string, { key: string; page: string; ads: FbAd[]; totalLikes: number; maxDays: number; active: boolean; score: number }>()
+    for (const a of shownAds) {
+      const page = a.page || '(không rõ advertiser)'
+      const key = page.toLowerCase()
+      let g = m.get(key)
+      if (!g) { g = { key, page, ads: [], totalLikes: 0, maxDays: 0, active: false, score: 0 }; m.set(key, g) }
+      g.ads.push(a)
+      g.totalLikes += a.likes || 0
+      g.maxDays = Math.max(g.maxDays, a.daysRunning || 0)
+      if (a.isActive) g.active = true
+    }
+    const arr = [...m.values()]
+    for (const g of arr) {
+      g.score = (g.active ? 40 : 0) + Math.min(g.maxDays, 180) * 0.4 + Math.log10(g.ads.length + 1) * 40 + Math.log10(g.totalLikes + 1) * 8
+    }
+    return arr.sort((x, y) => y.score - x.score)
+  })()
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#EEEEF2]">
       {/* Header + search */}
@@ -312,14 +333,54 @@ CHỈ trả JSON.`
         {loading && <div className="py-10 text-center text-sm text-slate-400">{platform === 'fb' ? 'Đang quét Facebook Ad Library…' : 'Đang quét TikTok Top Ads…'}</div>}
         {ads && ads.length > 0 && (
           <>
-            <div className="mb-2 text-xs font-semibold text-slate-500">
-              {shownAds.length} ad{ladiOnly && platform === 'fb' ? ' có Ladipage/Sale page' : ''}
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold text-slate-500">
+                {shownAds.length} ad{ladiOnly && platform === 'fb' ? ' có Ladipage/Sale page' : ''}
+                {groupView && shownAds.length > 0 ? ` · ${groups.length} SP/advertiser` : ''}
+              </div>
+              <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
+                <button onClick={() => setGroupView(false)}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${!groupView ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>▦ Lưới</button>
+                <button onClick={() => setGroupView(true)}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${groupView ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>📦 Gom theo SP</button>
+              </div>
             </div>
             {ladiOnly && platform === 'fb' && shownAds.length === 0 && (
               <p className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
                 Lượt này không có ad nào dẫn về web/ladipage (đa số đi WhatsApp/Shopee). Bỏ tick lọc hoặc bấm "Tải thêm".
               </p>
             )}
+            {groupView ? (
+              <div className="flex flex-col gap-3">
+                <p className="text-[11px] text-slate-400">SP/brand chạy <b>nhiều video-ad + lâu</b> = đang scale = winner. Xếp trên cùng là mạnh nhất.</p>
+                {groups.map((g, gi) => (
+                  <div key={g.key} className="rounded-xl border border-black/10 bg-white p-3 shadow-sm">
+                    <div className="mb-2 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                      {gi === 0 && <span className="text-sm">🏆</span>}
+                      <span className="text-sm font-bold text-slate-800">{g.page}</span>
+                      <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700">📢 {g.ads.length} ad</span>
+                      {g.maxDays > 0 && <span className="text-[11px] font-medium text-slate-500">⏳ lâu nhất {g.maxDays}d</span>}
+                      {g.totalLikes > 0 && <span className="text-[11px] font-medium text-slate-500">❤️ {fmtK(g.totalLikes)}</span>}
+                      {g.active && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">● đang chạy</span>}
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {g.ads.map((a) => (
+                        <button key={a.id} onClick={() => openAd(a)}
+                          className="relative aspect-[3/4] w-[104px] shrink-0 overflow-hidden rounded-lg bg-slate-900">
+                          {a.cover ? <img src={a.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
+                          <Play className="absolute inset-0 m-auto h-6 w-6 text-white/90 drop-shadow" />
+                          {(a.daysRunning > 0 || a.likes) ? (
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1 py-0.5 text-[9px] font-semibold text-white">
+                              {a.daysRunning > 0 ? `⏳${a.daysRunning}d ` : ''}{a.likes ? `❤️${fmtK(a.likes)}` : ''}
+                            </div>
+                          ) : null}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
               {shownAds.map((a) => (
                 <div key={a.id} className="flex flex-col overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm">
@@ -342,6 +403,7 @@ CHỈ trả JSON.`
                 </div>
               ))}
             </div>
+            )}
             {hasMore && (
               <button onClick={() => void loadMore()} disabled={moreLoading}
                 className="mt-4 w-full rounded-xl border border-rose-300 bg-white py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">
