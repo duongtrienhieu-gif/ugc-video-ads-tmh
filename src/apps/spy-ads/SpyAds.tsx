@@ -17,6 +17,28 @@ interface AdRead { transcript: string; structure: string }
 interface LadiRead { headline: string; offer: string; structure: string; cta: string; steal: string }
 interface AdaptScript { hook: string; script: string; shots: string; caption: string }
 
+// FB hay bọc link đích trong l.facebook.com/l.php?u=... → gỡ ra link thật.
+function cleanLink(u: string): string {
+  try {
+    if (/l\.facebook\.com\/l\.php/i.test(u)) {
+      const m = u.match(/[?&]u=([^&]+)/)
+      if (m) return decodeURIComponent(m[1])
+    }
+  } catch { /* giữ nguyên */ }
+  return u
+}
+// Nhận loại link đích — nhiều ad COD MY đẩy về WhatsApp/Shopee chứ không phải ladipage.
+function linkKind(u: string): { label: string; emoji: string; web: boolean } {
+  const s = u.toLowerCase()
+  if (/wa\.me|whatsapp|wasap/.test(s)) return { label: 'WhatsApp (chat chốt đơn)', emoji: '💬', web: false }
+  if (/m\.me|messenger/.test(s)) return { label: 'Messenger', emoji: '💬', web: false }
+  if (/shopee/.test(s)) return { label: 'Shopee', emoji: '🛒', web: false }
+  if (/lazada/.test(s)) return { label: 'Lazada', emoji: '🛒', web: false }
+  if (/tiktok/.test(s)) return { label: 'TikTok Shop', emoji: '🛒', web: false }
+  if (/instagram/.test(s)) return { label: 'Instagram', emoji: '📷', web: false }
+  return { label: 'Web / Ladipage', emoji: '🔗', web: true }
+}
+
 // Từ khóa CHUNG (tín hiệu ad COD, mọi ngách) — bấm là quét rộng rồi lọc mắt.
 const COD_CHIPS = [
   'percuma', 'free gift', 'beli', 'beli sekarang', 'cod', 'bayar bila terima', 'promosi',
@@ -155,10 +177,12 @@ CHỈ trả JSON.`
   // Đọc LADIPAGE đối thủ: lấy nội dung trang đích (jina) → AI tóm tắt cấu trúc/offer/CTA.
   const readLadipage = async () => {
     if (!playAd?.linkUrl) { setLadiErr('Ad này không có link ladipage'); return }
+    const dest = cleanLink(playAd.linkUrl)
+    if (!linkKind(dest).web) { setLadiErr('Link đích là WhatsApp/Shopee/Chat — không phải trang web để đọc'); return }
     if (!geminiApiKey) { setLadiErr('Cần Gemini API key trong Cài đặt'); return }
     setLadiBusy(true); setLadiErr(null); setLadiResult(null)
     try {
-      const md = await fetch(`https://r.jina.ai/${playAd.linkUrl}`).then((r) => r.text())
+      const md = await fetch(`https://r.jina.ai/${dest}`).then((r) => r.text())
       if (!md || md.length < 50) throw new Error('Không đọc được trang đích')
       const prompt = `Đây là nội dung trang đích (ladipage) của 1 ad COD đối thủ ở ${playAd.country}. Tóm tắt cho marketer Việt. Trả JSON tiếng Việt:
 {"headline":"tiêu đề/hook chính của trang","offer":"ưu đãi/giá/combo (vd mua 2 tặng 1, freeship COD)","structure":"các khối trang theo thứ tự, mỗi ý 1 dòng","cta":"cách kêu gọi đặt hàng (form/nút/WhatsApp)","steal":"điểm hay đáng học/áp dụng, mỗi ý 1 dòng"}
@@ -379,45 +403,53 @@ CHỈ trả JSON.`
                 </div>
               )}
 
-              {/* 📄 Đọc Ladipage đối thủ */}
-              {playAd.linkUrl && (
-                <div className="mt-3">
-                  {!ladiResult && (
-                    <button onClick={() => void readLadipage()} disabled={ladiBusy}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50">
-                      <FileText className="h-3.5 w-3.5" /> {ladiBusy ? 'Đang đọc trang…' : '📄 Đọc Ladipage đối thủ (AI)'}
-                    </button>
-                  )}
-                  {ladiErr && <p className="mt-1 text-[11px] text-red-600">{ladiErr}</p>}
-                  {ladiResult && (
-                    <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
-                      <div className="text-xs font-bold text-amber-700">📄 Ladipage đối thủ</div>
-                      {[
-                        { label: 'Headline', text: ladiResult.headline },
-                        { label: 'Ưu đãi', text: ladiResult.offer },
-                        { label: 'Cấu trúc trang', text: ladiResult.structure },
-                        { label: 'CTA', text: ladiResult.cta },
-                        { label: 'Điểm đáng học', text: ladiResult.steal },
-                      ].map((b) => (
-                        <div key={b.label}>
-                          <div className="text-[11px] font-bold text-slate-700">{b.label}</div>
-                          <p className="whitespace-pre-line text-[11px] text-slate-600">{b.text}</p>
-                        </div>
-                      ))}
+              {/* 🔗 Link đích thật (hiện rõ để bấm/copy) + đọc ladipage nếu là web */}
+              {playAd.linkUrl && (() => {
+                const dest = cleanLink(playAd.linkUrl)
+                const kind = linkKind(dest)
+                return (
+                  <div className="mt-3 flex flex-col gap-2">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5">
+                      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-amber-700">
+                        <Link2 className="h-3 w-3" /> Link đích: {kind.emoji} {kind.label}
+                      </div>
+                      <a href={dest} target="_blank" rel="noopener noreferrer" className="block break-all text-[11px] text-blue-600 underline">{dest}</a>
+                      <button onClick={() => { navigator.clipboard?.writeText(dest); addToast('Đã copy link', 'success') }}
+                        className="mt-1 rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-amber-700 hover:bg-amber-100">📋 Copy link</button>
+                      {!kind.web && <p className="mt-1 text-[10px] text-amber-700/80">Ad này chốt đơn qua {kind.label} — không có ladipage để bóc.</p>}
                     </div>
-                  )}
-                </div>
-              )}
+                    {kind.web && !ladiResult && (
+                      <button onClick={() => void readLadipage()} disabled={ladiBusy}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50">
+                        <FileText className="h-3.5 w-3.5" /> {ladiBusy ? 'Đang đọc trang…' : '📄 Đọc Ladipage đối thủ (AI)'}
+                      </button>
+                    )}
+                    {ladiErr && <p className="text-[11px] text-red-600">{ladiErr}</p>}
+                    {ladiResult && (
+                      <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                        <div className="text-xs font-bold text-amber-700">📄 Ladipage đối thủ</div>
+                        {[
+                          { label: 'Headline', text: ladiResult.headline },
+                          { label: 'Ưu đãi', text: ladiResult.offer },
+                          { label: 'Cấu trúc trang', text: ladiResult.structure },
+                          { label: 'CTA', text: ladiResult.cta },
+                          { label: 'Điểm đáng học', text: ladiResult.steal },
+                        ].map((b) => (
+                          <div key={b.label}>
+                            <div className="text-[11px] font-bold text-slate-700">{b.label}</div>
+                            <p className="whitespace-pre-line text-[11px] text-slate-600">{b.text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
 
               <div className="mt-3 flex flex-wrap gap-2">
                 <a href={playAd.videoUrl} target="_blank" rel="noopener noreferrer" className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100">
                   <Download className="h-3.5 w-3.5" /> Tải video
                 </a>
-                {playAd.linkUrl && (
-                  <a href={playAd.linkUrl} target="_blank" rel="noopener noreferrer" className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100">
-                    <Link2 className="h-3.5 w-3.5" /> Ladipage đối thủ
-                  </a>
-                )}
                 {playAd.libraryUrl && (
                   <a href={playAd.libraryUrl} target="_blank" rel="noopener noreferrer" className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-black/10 bg-slate-50 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">
                     <ExternalLink className="h-3.5 w-3.5" /> Ad Library
