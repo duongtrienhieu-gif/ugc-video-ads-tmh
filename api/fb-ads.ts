@@ -57,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let credits: number | null = null
     let nextCursor: string | number | null = null
     let pages = 0
-    while (pages < 5 && allRaw.length < 24) {
+    while (pages < 7 && allRaw.length < 40) {
       const u = baseUrl + (cur ? `&cursor=${encodeURIComponent(cur)}` : '')
       const r = await fetch(u, { headers: { 'x-api-key': key } })
       if (!r.ok) {

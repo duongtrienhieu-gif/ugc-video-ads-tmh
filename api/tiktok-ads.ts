@@ -18,31 +18,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : ''
 
   try {
-    // period=30 (mặc định, nhẹ hơn 180 — giảm rủi ro 500); order_by=like (top theo thích).
-    // KHÔNG set limit (API giới hạn max thấp → limit=50 gây 500 'Limit failed on max'); dùng mặc định.
-    let u = `https://api.scrapecreators.com/v1/tiktok/ad-library/search?query=${encodeURIComponent(q)}&region=${region}&period=30&order_by=like`
-    if (cursor) u += `&cursor=${encodeURIComponent(cursor)}`
+    // period=180 (rộng nhất → nhiều ad nhất); order_by=like; KHÔNG set limit (max thấp → 500).
+    const baseUrl = `https://api.scrapecreators.com/v1/tiktok/ad-library/search?query=${encodeURIComponent(q)}&region=${region}&period=180&order_by=like`
+    // GOM tới 5 trang/lần → nhiều creative/lần bấm. Bắt lỗi thật ở trang đầu.
+    const raw: AnyObj[] = []
+    let cur = cursor
+    let credits: number | null = null
+    let nextCursor: string | number | null = null
+    let pages = 0
+    while (pages < 5 && raw.length < 40) {
+      const u = baseUrl + (cur ? `&cursor=${encodeURIComponent(cur)}` : '')
+      const r = await fetch(u, { headers: { 'x-api-key': key } })
+      const body = await r.text()
+      if (!r.ok) {
+        if (pages === 0) return res.status(502).json({ error: `TikTok Ad Library lỗi ${r.status}: ${body.slice(0, 200)}` })
+        break
+      }
+      let d: AnyObj
+      try { d = JSON.parse(body) as AnyObj } catch { if (pages === 0) return res.status(502).json({ error: 'TikTok trả về không phải JSON: ' + body.slice(0, 150) }); break }
+      if (!Array.isArray(d.ads) && (d.error || d.message)) {
+        if (pages === 0) return res.status(502).json({ error: 'TikTok Ad Library: ' + String(d.error || d.message).slice(0, 200) })
+        break
+      }
+      credits = (d.credits_remaining as number | undefined) ?? credits
+      const arr = Array.isArray(d.ads) ? (d.ads as AnyObj[]) : []
+      for (const a of arr) raw.push(a)
+      nextCursor = (d.cursor as string | number | undefined) ?? null
+      pages++
+      if (nextCursor == null || arr.length === 0) break
+      cur = String(nextCursor)
+    }
 
-    // Gọi + retry 1 lần nếu 5xx; BẮT lỗi thật (status + body) thay vì nuốt.
-    let r: Response | null = null
-    let body = ''
-    for (let attempt = 0; attempt < 2; attempt++) {
-      r = await fetch(u, { headers: { 'x-api-key': key } })
-      body = await r.text()
-      if (r.ok) break
-      if (attempt === 0 && r.status >= 500) { await new Promise((res) => setTimeout(res, 1500)); continue }
-      break
-    }
-    if (!r || !r.ok) {
-      return res.status(502).json({ error: `TikTok Ad Library lỗi ${r?.status ?? '?'}: ${body.slice(0, 200)}` })
-    }
-    let d: AnyObj
-    try { d = JSON.parse(body) as AnyObj } catch { return res.status(502).json({ error: 'TikTok trả về không phải JSON: ' + body.slice(0, 150) }) }
-    if (!Array.isArray(d.ads) && (d.error || d.message)) {
-      return res.status(502).json({ error: 'TikTok Ad Library: ' + String(d.error || d.message).slice(0, 200) })
-    }
-    const raw = Array.isArray(d.ads) ? (d.ads as AnyObj[]) : []
-
+    const seenV = new Set<string>()
     const ads = raw
       .map((a, i) => {
         const vi = (a.video_info as AnyObj) || {}
@@ -66,18 +73,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           libraryUrl: `https://library.tiktok.com/ads?region=${region}`,
         }
       })
-      .filter((a) => a.id && a.videoUrl)
+      .filter((a) => {
+        if (!a.id || !a.videoUrl || seenV.has(a.videoUrl)) return false
+        seenV.add(a.videoUrl); return true
+      })
       .sort((x, y) => y.likes - x.likes)                 // top theo lượt thích = winner
 
-    const nextCursor = (d.cursor as string | number | undefined) ?? null
     res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=900')
     return res.status(200).json({
       ads: ads.slice(0, 60),
       cursor: nextCursor,
-      hasMore: d.has_more != null ? !!d.has_more : (nextCursor != null && raw.length > 0),
+      hasMore: nextCursor != null,
       rawCount: raw.length,
-      credits: (d.credits_remaining as number | undefined) ?? null,
-      note: ads.length ? undefined : ((d.error as string) || (d.message as string) || 'no tiktok video ads'),
+      credits,
+      note: ads.length ? undefined : 'no tiktok video ads (top list có hạn — thử từ khóa khác)',
     })
   } catch (e) {
     return res.status(500).json({ error: (e as Error).message })
