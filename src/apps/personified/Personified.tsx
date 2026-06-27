@@ -98,6 +98,8 @@ export default function Personified() {
   const [bankRunning, setBankRunning] = useState(false)
   // P2d — video cuối (ghép + upscale 720p).
   const [finalVideo, setFinalVideo] = useState<{ status: 'idle' | 'running' | 'done' | 'failed'; videoRef?: string; stage?: string; error?: string }>({ status: 'idle' })
+  // Keyframe đang render dở lúc F5 → tự nối lại (chỉ keyframe, rẻ). idx gom khi restore.
+  const kfResume = useRef<number[]>([])
 
   const product = useMemo(() => products.find((p) => p.id === productId), [products, productId])
   // P2a — ảnh sản phẩm để khóa fidelity (cảnh hasProduct).
@@ -151,14 +153,18 @@ export default function Personified() {
             // Sanitize trạng thái transient (đang render lúc F5) → trạng thái ổn định:
             //   kf đang chạy → idle (chưa có ảnh) hoặc kf_ready (đã có ảnh); clip đang chạy → kf_ready.
             const fixed: Record<number, SceneRender> = {}
+            const resume: number[] = []
             for (const [k, v] of Object.entries(s.clips)) {
               let nv: SceneRender = v
               if (v.status === 'kf' || v.status === 'clip') nv = { ...nv, status: v.keyframeRef ? 'kf_ready' : 'idle' }
+              // keyframe đang render dở (chưa có ảnh) lúc F5 → gom để TỰ NỐI LẠI (rẻ).
+              if (v.status === 'kf' && !v.keyframeRef) resume.push(+k)
               // lipsync đang chạy lúc F5 → reset về done (đã có) / undefined (chưa) để bấm lại.
               if (v.lipStatus === 'tts' || v.lipStatus === 'lip') nv = { ...nv, lipStatus: v.lipsyncRef ? 'done' : undefined }
               fixed[+k] = nv
             }
             setClips(fixed)
+            kfResume.current = resume
           }
           if (s.charBank) {
             // Sanitize: nhân vật đang render lúc F5 → idle (chưa có ảnh) hoặc done (đã có).
@@ -187,6 +193,19 @@ export default function Personified() {
       localStorage.setItem(CACHE_KEY, JSON.stringify(s))
     } catch { /* quota / serialization — non-fatal */ }
   }, [productId, market, problemHint, insight, config, script, variant, tier, clips, charBank, finalVideo.videoRef])
+
+  // F5-resume: tự render lại các keyframe đang dở lúc reload (chỉ keyframe — rẻ). Chạy 1
+  // lần khi đã có script + KIE key; consume hàng đợi để không lặp.
+  useEffect(() => {
+    if (!hydrated.current || !script || !kieKey || !kfResume.current.length) return
+    const ids = kfResume.current
+    kfResume.current = []
+    ids.forEach((idx) => {
+      const sc = script.scenes.find((s) => s.idx === idx)
+      if (sc && !clips[idx]?.keyframeRef) void handleRenderKeyframe(sc)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [script, kieKey])
 
   async function handleAnalyze() {
     if (!product || analyzing) return
