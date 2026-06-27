@@ -19,7 +19,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // period=30 (mặc định, nhẹ hơn 180 — giảm rủi ro 500); order_by=like (top theo thích).
-    let u = `https://api.scrapecreators.com/v1/tiktok/ad-library/search?query=${encodeURIComponent(q)}&region=${region}&period=30&order_by=like&limit=50`
+    // KHÔNG set limit (API giới hạn max thấp → limit=50 gây 500 'Limit failed on max'); dùng mặc định.
+    let u = `https://api.scrapecreators.com/v1/tiktok/ad-library/search?query=${encodeURIComponent(q)}&region=${region}&period=30&order_by=like`
     if (cursor) u += `&cursor=${encodeURIComponent(cursor)}`
 
     // Gọi + retry 1 lần nếu 5xx; BẮT lỗi thật (status + body) thay vì nuốt.

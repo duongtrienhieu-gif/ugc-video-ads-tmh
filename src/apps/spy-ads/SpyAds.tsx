@@ -32,11 +32,16 @@ function cleanLink(u: string): string {
 function linkKind(u: string): { label: string; emoji: string; web: boolean } {
   const s = u.toLowerCase()
   if (/wa\.me|whatsapp|wasap/.test(s)) return { label: 'WhatsApp (chat chốt đơn)', emoji: '💬', web: false }
-  if (/m\.me|messenger/.test(s)) return { label: 'Messenger', emoji: '💬', web: false }
+  if (/m\.me|messenger|fb\.me|facebook\.com|fb\.com|fb\.watch/.test(s)) return { label: 'Facebook/Messenger', emoji: '💬', web: false }
+  if (/play\.google\.com|apps\.apple\.com|itunes\.apple|app store/.test(s)) return { label: 'App Store (tải app)', emoji: '📱', web: false }
+  if (/t\.me|telegram/.test(s)) return { label: 'Telegram', emoji: '💬', web: false }
+  if (/zalo\./.test(s)) return { label: 'Zalo', emoji: '💬', web: false }
+  if (/line\.me/.test(s)) return { label: 'Line', emoji: '💬', web: false }
   if (/shopee/.test(s)) return { label: 'Shopee', emoji: '🛒', web: false }
   if (/lazada/.test(s)) return { label: 'Lazada', emoji: '🛒', web: false }
   if (/tiktok/.test(s)) return { label: 'TikTok Shop', emoji: '🛒', web: false }
   if (/instagram/.test(s)) return { label: 'Instagram', emoji: '📷', web: false }
+  if (/linktr\.ee|lnk\.bio|beacons\.ai|bio\.link|linkin\.bio|linkinbio|carrd\.co|taplink/.test(s)) return { label: 'Link-in-bio', emoji: '🔗', web: false }
   return { label: 'Web / Ladipage', emoji: '🔗', web: true }
 }
 

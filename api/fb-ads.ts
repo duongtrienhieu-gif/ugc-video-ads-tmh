@@ -49,21 +49,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : ''
 
   try {
-    let u = `https://api.scrapecreators.com/v1/facebook/adLibrary/search/ads?query=${encodeURIComponent(q)}&country=${country}&status=${status}&media_type=VIDEO&ad_type=all`
-    if (cursor) u += `&cursor=${encodeURIComponent(cursor)}`
-    const r = await fetch(u, { headers: { 'x-api-key': key } })
-    const d = (await r.json()) as Record<string, unknown>
-    const raw = pickAds(d)
+    const baseUrl = `https://api.scrapecreators.com/v1/facebook/adLibrary/search/ads?query=${encodeURIComponent(q)}&country=${country}&status=${status}&media_type=VIDEO&ad_type=all`
+    // Mỗi trang SC chỉ trả ~5 ad → GOM tới 5 trang/lần để trả ~24 ad, đỡ bấm "Tải thêm" nhiều.
+    const allRaw: FbAd[] = []
+    const seen = new Set<string>()
+    let cur = cursor
+    let credits: number | null = null
+    let nextCursor: string | number | null = null
+    let pages = 0
+    while (pages < 5 && allRaw.length < 24) {
+      const u = baseUrl + (cur ? `&cursor=${encodeURIComponent(cur)}` : '')
+      const r = await fetch(u, { headers: { 'x-api-key': key } })
+      if (!r.ok) {
+        if (pages === 0) { const b = await r.text().catch(() => ''); return res.status(502).json({ error: `FB Ad Library lỗi ${r.status}: ${b.slice(0, 180)}` }) }
+        break
+      }
+      const d = (await r.json()) as Record<string, unknown>
+      credits = (d.credits_remaining as number | undefined) ?? credits
+      for (const a of pickAds(d)) {
+        const id = String(a.ad_archive_id ?? '')
+        if (id && !seen.has(id)) { seen.add(id); allRaw.push(a) }
+      }
+      nextCursor = (d.cursor as string | number | undefined) ?? null
+      pages++
+      if (nextCursor == null) break
+      cur = String(nextCursor)
+    }
 
     // Đếm số ad theo advertiser (page) → tín hiệu "đang scale".
     const adCountByPage = new Map<string, number>()
-    for (const a of raw) {
+    for (const a of allRaw) {
       const p = String(a.page_name ?? a.page_id ?? '')
       if (p) adCountByPage.set(p, (adCountByPage.get(p) || 0) + 1)
     }
 
     const now = Date.now()
-    const ads = raw
+    const ads = allRaw
       .map((a) => {
         const snap = a.snapshot || {}
         const vid = (snap.videos || [])[0] || {}
@@ -94,15 +115,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .sort((x, y) => y._score - x._score)
       .map(({ _score, ...a }) => { void _score; return a })
 
-    const nextCursor = (d.cursor as string | number | undefined) ?? null
     res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=900')
     return res.status(200).json({
       ads: ads.slice(0, 60),
       cursor: nextCursor,
-      hasMore: nextCursor != null && raw.length > 0,
-      rawCount: raw.length,
-      credits: (d.credits_remaining as number | undefined) ?? null,
-      note: ads.length ? undefined : ((d.error as string) || (d.message as string) || 'no video ads'),
+      hasMore: nextCursor != null,
+      rawCount: allRaw.length,
+      credits,
+      note: ads.length ? undefined : 'no video ads',
     })
   } catch (e) {
     return res.status(500).json({ error: (e as Error).message })
