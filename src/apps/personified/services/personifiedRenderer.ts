@@ -7,8 +7,9 @@
 import {
   generateGpt4oImageFast, generateVideoJob, pollVideoJobUntilDone, type Resolution,
 } from '../../../utils/kieai'
+import { fetchFile } from '@ffmpeg/util'
 import { textToSpeech } from '../../../utils/elevenlabs'
-import { submitLatentSync, pollLatentSyncUntilDone } from '../../../utils/falai'
+import { getFFmpeg } from '../../video-builder/v3/services/ffmpegLoader'
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
 import type { PersonifiedScene, PersonifiedCharacter, VoiceProfile } from '../types'
 import { type RenderTier, CINEMATIC_STYLE, CHARACTER_SHEET_STYLE } from '../constants'
@@ -221,10 +222,16 @@ export async function renderClipFromKeyframe(
 
   const kfPublic = await getUrl(p.keyframeRef)
   if (!kfPublic) throw new Error('Không lấy được URL keyframe')
+  // Cảnh có thoại → để nhân vật DIỄN + mồm mấp máy như đang nói (voiceover sẽ đè lên,
+  // không cần khớp từng chữ). Không thoại → chuyển động hành động bình thường.
+  const talking = (p.scene.dialoguePrimary ?? '').trim()
+    ? ' The character is talking and gesturing expressively, mouth opening and moving naturally as if speaking.'
+    : ''
+  const i2vPrompt = ((p.scene.videoPromptEn ?? '').trim() || (p.scene.action ?? '').trim() || 'subtle natural motion') + talking
   const sub = await generateVideoJob({
     apiKey: p.apiKey,
     jobModelId: tierToModel(p.tier),
-    prompt: (p.scene.videoPromptEn ?? '').trim() || (p.scene.action ?? '').trim() || 'subtle natural motion',
+    prompt: i2vPrompt,
     aspectRatio: '9:16',
     resolution: tierToRes(p.tier),
     duration: p.scene.clipDuration,
@@ -253,10 +260,11 @@ export async function renderPersonifiedScene(p: RenderSceneParams): Promise<Rend
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// P2c — LIPSYNC: thoại nhân vật. TTS ElevenLabs multilingual_v2 (chuẩn MY/VN) →
-// LatentSync (fal.ai, video→video) NHÉP MỒM lên clip i2v đã render (giữ chuyển động
-// Seedance, chỉ thêm khẩu hình). Chỉ cảnh CÓ dialoguePrimary. Clip i2v giữ nguyên →
-// nếu sync mồm cartoon kém có thể đổi engine mà không phải render lại i2v.
+// P2c — LỒNG GIỌNG: thoại nhân vật. TTS ElevenLabs multilingual_v2 (chuẩn MY/VN) →
+// GHÉP voiceover vào clip i2v bằng ffmpeg (0 credit). KHÔNG dùng lipsync engine: video
+// 3D cartoon viral vốn để nhân vật i2v DIỄN (mồm mấp máy) + giọng đè + caption — không
+// cần khớp mồm từng chữ như mặt người thật. Giữ FULL action của Seedance, rẻ, 2 ví
+// (KIE keyframe+i2v + ElevenLabs giọng), bỏ hẳn fal. Chỉ cảnh CÓ dialoguePrimary.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ElevenLabs premade multilingual voices (lấy từ voiceCategories.ts).
@@ -276,27 +284,26 @@ function pickVoiceId(v?: VoiceProfile): string {
   return punch ? EL_VOICE.domi : EL_VOICE.bella
 }
 
-export interface LipsyncSceneParams {
+export interface VoiceoverSceneParams {
   elevenKey: string
-  falKey: string
   scene: PersonifiedScene
   character?: PersonifiedCharacter
-  /** Clip i2v CÂM đã render (P2a/b) — LatentSync nhép mồm lên đây. */
+  /** Clip i2v CÂM đã render (P2a/b) — ghép voiceover lên đây bằng ffmpeg. */
   clipRef: string
-  /** Tốc độ đọc (atempo nằm trong textToSpeech ElevenLabs); mặc định 1.0. */
+  /** Tốc độ đọc (atempo trong textToSpeech ElevenLabs); mặc định 1.0. */
   speed?: number
   signal?: AbortSignal
-  onStage?: (stage: 'tts' | 'lip' | 'done', info?: { audioRef?: string; lipsyncRef?: string; status?: string }) => void
+  onStage?: (stage: 'tts' | 'mux' | 'done', info?: { audioRef?: string; voicedRef?: string }) => void
 }
 
-export interface LipsyncSceneResult { audioRef: string; lipsyncRef: string }
+export interface VoiceoverSceneResult { audioRef: string; voicedRef: string }
 
-/** P2c — nhép mồm 1 cảnh: TTS → LatentSync lên clip i2v → { audioRef, lipsyncRef }. */
-export async function renderSceneLipsync(p: LipsyncSceneParams): Promise<LipsyncSceneResult> {
+/** P2c — lồng giọng 1 cảnh: TTS ElevenLabs → ghép voiceover vào clip i2v bằng ffmpeg
+ *  (0 credit) → { audioRef, voicedRef }. Không lipsync — giữ full action của i2v. */
+export async function addSceneVoiceover(p: VoiceoverSceneParams): Promise<VoiceoverSceneResult> {
   if (!p.elevenKey) throw new Error('Thiếu ElevenLabs API key (Cài đặt)')
-  if (!p.falKey) throw new Error('Thiếu fal.ai API key (Cài đặt)')
   const text = (p.scene.dialoguePrimary ?? '').trim()
-  if (!text) throw new Error('Cảnh không có thoại — không cần lipsync')
+  if (!text) throw new Error('Cảnh không có thoại — không cần lồng giọng')
   if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
 
   // ── 1. TTS (ElevenLabs multilingual — đọc đúng ngôn ngữ đích) ──────────────
@@ -307,26 +314,37 @@ export async function renderSceneLipsync(p: LipsyncSceneParams): Promise<Lipsync
     modelId: 'eleven_multilingual_v2',
     speed: p.speed ?? 1.0,
   })
-  const audioRef = await saveAsset(new Blob([buf], { type: 'audio/mpeg' }), 'audio/mpeg')
+  const audioBytes = new Uint8Array(buf.byteLength)
+  audioBytes.set(new Uint8Array(buf))
+  const audioRef = await saveAsset(new Blob([audioBytes], { type: 'audio/mpeg' }), 'audio/mpeg')
   p.onStage?.('tts', { audioRef })
   if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
 
-  // ── 2. LatentSync nhép mồm lên clip i2v (cần URL công khai cho cả audio + video) ──
-  const audioUrl = await getUrl(audioRef)
+  // ── 2. Ghép voiceover vào clip i2v (ffmpeg.wasm — 0 credit) ────────────────
   const clipUrl = isAssetRef(p.clipRef) ? await getUrl(p.clipRef) : p.clipRef
-  if (!audioUrl) throw new Error('Không lấy được URL audio')
   if (!clipUrl) throw new Error('Không lấy được URL clip i2v')
-
-  const { requestId } = await submitLatentSync({ apiKey: p.falKey, videoUrl: clipUrl, audioUrl })
-  p.onStage?.('lip', { audioRef })
-  const res = await pollLatentSyncUntilDone({
-    apiKey: p.falKey, requestId, timeoutMs: 15 * 60 * 1000,
-    onStatusChange: (status) => p.onStage?.('lip', { audioRef, status }),
-  })
-  const vidBlob = await fetch(res.videoUrl).then((r) => r.blob())
-  const lipsyncRef = await saveAsset(vidBlob, res.contentType || 'video/mp4')
-  p.onStage?.('done', { audioRef, lipsyncRef })
-  return { audioRef, lipsyncRef }
+  p.onStage?.('mux', { audioRef })
+  const ffmpeg = await getFFmpeg()
+  const vIn = 'vo_in.mp4', aIn = 'vo_in.mp3', out = 'vo_out.mp4'
+  await ffmpeg.writeFile(vIn, await fetchFile(clipUrl))
+  await ffmpeg.writeFile(aIn, audioBytes)
+  // Giữ video (copy), thay audio = giọng; -shortest cắt theo clip (clip đã sized theo thoại).
+  await ffmpeg.exec([
+    '-i', vIn, '-i', aIn,
+    '-map', '0:v:0', '-map', '1:a:0',
+    '-c:v', 'copy', '-c:a', 'aac', '-ar', '44100', '-ac', '2',
+    '-shortest', '-movflags', '+faststart', '-y', out,
+  ])
+  const data = await ffmpeg.readFile(out)
+  const src = typeof data === 'string' ? new TextEncoder().encode(data) : data
+  const outBytes = new Uint8Array(src.byteLength)   // copy khỏi SharedArrayBuffer (wasm)
+  outBytes.set(src)
+  const voicedRef = await saveAsset(new Blob([outBytes], { type: 'video/mp4' }), 'video/mp4')
+  await ffmpeg.deleteFile(vIn).catch(() => {})
+  await ffmpeg.deleteFile(aIn).catch(() => {})
+  await ffmpeg.deleteFile(out).catch(() => {})
+  p.onStage?.('done', { audioRef, voicedRef })
+  return { audioRef, voicedRef }
 }
 
 // ── Dev helper — test render 1 cảnh từ kịch bản đang lưu (console, P2a) ───────

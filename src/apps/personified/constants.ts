@@ -200,9 +200,7 @@ export const RENDER_TIER_LABEL: Record<RenderTier, string> = {
 }
 /** credit / giây i2v (no-audio). Seedance 720p 3.5 · Seedance 480p 1.75 (kieai.ts xác nhận) · Grok 480p ~1.6. */
 const I2V_CR_PER_SEC: Record<RenderTier, number> = { seedance480: 1.75, seedance720: 3.5, grok480: 1.6 }
-const KEYFRAME_CR = 6                         // 1 ảnh keyframe gpt-4o-image ≈ 6cr
-export const LIPSYNC_CR_PER_SEC = 3           // InfiniteTalk 480p ≈ 3cr/giây giọng (số từ v3)
-const LIPSYNC_SPEECH_FRAC = 0.75              // giọng ≈ 75% độ dài clip (đuôi là hình không lời)
+const KEYFRAME_CR = 6                         // 1 ảnh keyframe / ảnh nhân vật gpt-4o-image ≈ 6cr
 
 /** Mỗi cảnh chỉ 4s hoặc 8s (bỏ 12s). Thoại ngắn → 4s, còn lại 8s. */
 export function pickClipDuration(speechSec: number): ClipDuration {
@@ -232,17 +230,16 @@ export function wordBudgetHint(market: TargetMarket): string {
 
 export interface CreditEstimate { credits: number; usd: number; vnd: number }
 
-/** Tổng credit 1 video = keyframe + i2v + lipsync (nếu bật). Lipsync CHỈ tính cho cảnh có thoại. */
+/** Tổng credit KIE 1 video = ảnh nhân vật (bank) + keyframe + i2v. KHÔNG còn lipsync:
+ *  giọng do ElevenLabs (ví riêng, ~free quota) + ghép bằng ffmpeg (0 credit). charCount =
+ *  số nhân vật cần render bank (mỗi nhân vật 1 ảnh). */
 export function estimateProjectCredits(
-  scenes: { clipDuration: ClipDuration; dialoguePrimary?: string }[], tier: RenderTier, lipsyncOn = true,
+  scenes: { clipDuration: ClipDuration }[], tier: RenderTier, charCount = 0,
 ): CreditEstimate {
   const i2v = scenes.reduce((sum, s) => sum + Math.round(I2V_CR_PER_SEC[tier] * s.clipDuration), 0)
   const keyframes = scenes.length * KEYFRAME_CR
-  const lipsync = lipsyncOn
-    ? scenes.reduce((sum, s) => (s.dialoguePrimary ?? '').trim()
-        ? sum + Math.round(s.clipDuration * LIPSYNC_SPEECH_FRAC * LIPSYNC_CR_PER_SEC) : sum, 0)
-    : 0
-  const credits = keyframes + i2v + lipsync
+  const bank = charCount * KEYFRAME_CR
+  const credits = bank + keyframes + i2v
   const usd = credits * CREDIT_USD
   return { credits, usd, vnd: Math.round(usd * VND_PER_USD) }
 }

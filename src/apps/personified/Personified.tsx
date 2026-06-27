@@ -16,7 +16,7 @@ import {
   estimateProjectCredits, formatCreditEstimate, pickClipDuration, estimateSpeechSec, playbackWps,
 } from './constants'
 import { analyzeInsight, generateScript } from './services/personifiedBrain'
-import { renderKeyframe, renderClipFromKeyframe, renderCharacterRef, renderSceneLipsync } from './services/personifiedRenderer'   // P2a/P2b/P2c (cũng đăng ký dev helper __testRenderScene)
+import { renderKeyframe, renderClipFromKeyframe, renderCharacterRef, addSceneVoiceover } from './services/personifiedRenderer'   // P2a/P2b/P2c (cũng đăng ký dev helper __testRenderScene)
 import { assemblePersonifiedVideo } from './services/personifiedAssembler'   // P2d
 import { useAssetUrl } from '../../hooks/useAssetUrl'
 
@@ -28,8 +28,9 @@ interface SceneRender {
   clipRef?: string
   taskId?: string
   error?: string
-  // P2c — lipsync (TTS → LatentSync). Chạy sau khi clip i2v 'done', chỉ cảnh có thoại.
-  lipStatus?: 'idle' | 'tts' | 'lip' | 'done' | 'failed'
+  // P2c — lồng giọng (TTS → ghép voiceover vào clip). Sau khi clip i2v 'done', cảnh có thoại.
+  //   lipsyncRef = clip ĐÃ CÓ GIỌNG (tên field giữ nguyên cho gọn). mux = đang ghép ffmpeg.
+  lipStatus?: 'idle' | 'tts' | 'mux' | 'done' | 'failed'
   audioRef?: string
   lipsyncRef?: string
   lipError?: string
@@ -70,8 +71,7 @@ export default function Personified() {
   const products = useBankStore((s) => s.products)
   const geminiKey = useSettingsStore((s) => s.geminiApiKey)
   const kieKey = useSettingsStore((s) => s.kieApiKey)
-  const elevenKey = useSettingsStore((s) => s.elevenLabsApiKey)   // P2c — TTS
-  const falKey = useSettingsStore((s) => s.falApiKey)             // P2c — LatentSync lipsync
+  const elevenKey = useSettingsStore((s) => s.elevenLabsApiKey)   // P2c — TTS giọng nhân vật
 
   const [productId, setProductId] = useState('')
   const [market, setMarket] = useState<TargetMarket>('MY')
@@ -109,12 +109,12 @@ export default function Personified() {
       .filter((r): r is string => !!r && r.trim() !== '')
   }, [product])
   const credit = useMemo(
-    () => script ? estimateProjectCredits(script.scenes, tier, true) : null,   // P2 — đã gồm lipsync
+    () => script ? estimateProjectCredits(script.scenes, tier, script.characters.length) : null,   // KIE: bank + keyframe + i2v (giọng = ElevenLabs, ví riêng)
     [script, tier],
   )
   // P2a — số cảnh đã duyệt keyframe (sẵn sàng i2v) → bật nút "Clip tất cả".
   const kfReadyCount = useMemo(() => Object.values(clips).filter((c) => c.status === 'kf_ready').length, [clips])
-  // P2c — số cảnh đã có clip + có thoại + chưa nhép mồm → bật nút "Nhép mồm tất cả".
+  // P2c — số cảnh đã có clip + có thoại + chưa lồng giọng → bật nút "Lồng giọng tất cả".
   const lipReadyCount = useMemo(() => {
     if (!script) return 0
     return script.scenes.filter((s) => clips[s.idx]?.clipRef && (s.dialoguePrimary ?? '').trim() && clips[s.idx]?.lipStatus !== 'done').length
@@ -160,7 +160,7 @@ export default function Personified() {
               // keyframe đang render dở (chưa có ảnh) lúc F5 → gom để TỰ NỐI LẠI (rẻ).
               if (v.status === 'kf' && !v.keyframeRef) resume.push(+k)
               // lipsync đang chạy lúc F5 → reset về done (đã có) / undefined (chưa) để bấm lại.
-              if (v.lipStatus === 'tts' || v.lipStatus === 'lip') nv = { ...nv, lipStatus: v.lipsyncRef ? 'done' : undefined }
+              if (v.lipStatus === 'tts' || v.lipStatus === 'mux') nv = { ...nv, lipStatus: v.lipsyncRef ? 'done' : undefined }
               fixed[+k] = nv
             }
             setClips(fixed)
@@ -348,37 +348,35 @@ export default function Personified() {
     } finally { setRenderingAll(false) }
   }
 
-  // P2c — nhép mồm 1 cảnh (TTS → LatentSync lên clip i2v). Yêu cầu: clip 'done' + có thoại.
-  async function handleLipsyncScene(scene: PersonifiedScene) {
+  // P2c — lồng giọng 1 cảnh (TTS → ghép voiceover vào clip i2v, 0 credit). Cần clip + thoại.
+  async function handleVoiceoverScene(scene: PersonifiedScene) {
     const cur = clips[scene.idx]
     if (!cur?.clipRef) { setError('Cảnh chưa có clip i2v — render clip trước'); return }
-    if (!(scene.dialoguePrimary ?? '').trim()) { setError('Cảnh không có thoại — không cần nhép mồm'); return }
-    if (!elevenKey) { setError('Thiếu ElevenLabs API key (TTS) trong Cài đặt'); return }
-    if (!falKey) { setError('Thiếu fal.ai API key (lipsync) trong Cài đặt'); return }
-    if (cur.lipStatus === 'tts' || cur.lipStatus === 'lip') return
+    if (!(scene.dialoguePrimary ?? '').trim()) { setError('Cảnh không có thoại — không cần lồng giọng'); return }
+    if (!elevenKey) { setError('Thiếu ElevenLabs API key (giọng) trong Cài đặt'); return }
+    if (cur.lipStatus === 'tts' || cur.lipStatus === 'mux') return
     const character = script?.characters.find((c) => c.name === scene.speaker || c.role === scene.speaker) ?? script?.characters[0]
     setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: 'tts', lipError: undefined } }))
     try {
-      const { audioRef, lipsyncRef } = await renderSceneLipsync({
-        elevenKey, falKey, scene, character, clipRef: cur.clipRef,
+      const { audioRef, voicedRef } = await addSceneVoiceover({
+        elevenKey, scene, character, clipRef: cur.clipRef,
         onStage: (stage) => setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: stage === 'done' ? 'done' : stage } })),
       })
-      setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: 'done', audioRef, lipsyncRef } }))
+      setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: 'done', audioRef, lipsyncRef: voicedRef } }))
     } catch (e) {
       setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: 'failed', lipError: e instanceof Error ? e.message : String(e) } }))
     }
   }
 
-  // P2c — nhép mồm TẤT CẢ cảnh có clip + có thoại + chưa lipsync.
-  async function handleLipsyncAll() {
+  // P2c — lồng giọng TẤT CẢ cảnh có clip + có thoại + chưa lồng.
+  async function handleVoiceoverAll() {
     if (!script || renderingAll) return
-    if (!elevenKey) { setError('Thiếu ElevenLabs API key (TTS) trong Cài đặt'); return }
-    if (!falKey) { setError('Thiếu fal.ai API key (lipsync) trong Cài đặt'); return }
+    if (!elevenKey) { setError('Thiếu ElevenLabs API key (giọng) trong Cài đặt'); return }
     setRenderingAll(true)
     try {
       for (const s of script.scenes) {
         const c = clips[s.idx]
-        if (c?.clipRef && (s.dialoguePrimary ?? '').trim() && c.lipStatus !== 'done') await handleLipsyncScene(s)
+        if (c?.clipRef && (s.dialoguePrimary ?? '').trim() && c.lipStatus !== 'done') await handleVoiceoverScene(s)
       }
     } finally { setRenderingAll(false) }
   }
@@ -563,7 +561,7 @@ export default function Personified() {
                   {(Object.keys(RENDER_TIER_LABEL) as RenderTier[]).map((t) => <option key={t} value={t}>{RENDER_TIER_LABEL[t]}</option>)}
                 </select>
               </label>
-              {credit && <span className="rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700">{formatCreditEstimate(credit)}</span>}
+              {credit && <span className="rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700" title="Credit KIE: ảnh nhân vật (bank) + keyframe + i2v. Giọng do ElevenLabs (ví riêng) + ghép ffmpeg (0 credit).">KIE {formatCreditEstimate(credit)} · giọng riêng</span>}
               {/* P2a — STORYBOARD GATE: keyframe tất cả (rẻ, để duyệt) → soi xong → clip tất cả (i2v, đắt) */}
               <button onClick={handleRenderAllKeyframes} disabled={renderingAll || !kieKey}
                 className="ml-auto flex items-center gap-1 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 font-bold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-40"
@@ -575,11 +573,11 @@ export default function Personified() {
                 title={kfReadyCount > 0 ? `i2v ${kfReadyCount} cảnh đã duyệt keyframe (tốn credit)` : 'Duyệt keyframe trước (chưa cảnh nào sẵn sàng i2v)'}>
                 {renderingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang chạy…</> : <>🎬 Clip tất cả{kfReadyCount > 0 && ` (${kfReadyCount})`}</>}
               </button>
-              {/* P2c — nhép mồm tất cả cảnh có clip + thoại */}
-              <button onClick={handleLipsyncAll} disabled={renderingAll || !elevenKey || !falKey || lipReadyCount === 0}
+              {/* P2c — lồng giọng tất cả cảnh có clip + thoại (TTS + ghép ffmpeg, 0 credit KIE) */}
+              <button onClick={handleVoiceoverAll} disabled={renderingAll || !elevenKey || lipReadyCount === 0}
                 className="flex items-center gap-1 rounded-lg bg-fuchsia-600 px-3 py-1.5 font-bold text-white transition-colors hover:bg-fuchsia-700 disabled:opacity-40"
-                title={!elevenKey || !falKey ? 'Cần ElevenLabs (TTS) + fal.ai (lipsync) key trong Cài đặt' : lipReadyCount > 0 ? `Nhép mồm ${lipReadyCount} cảnh (TTS + LatentSync)` : 'Render clip i2v trước'}>
-                {renderingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang chạy…</> : <>🎤 Nhép mồm tất cả{lipReadyCount > 0 && ` (${lipReadyCount})`}</>}
+                title={!elevenKey ? 'Cần ElevenLabs key (giọng) trong Cài đặt' : lipReadyCount > 0 ? `Lồng giọng ${lipReadyCount} cảnh (TTS, 0 credit KIE)` : 'Render clip i2v trước'}>
+                {renderingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang chạy…</> : <>🎙️ Lồng giọng tất cả{lipReadyCount > 0 && ` (${lipReadyCount})`}</>}
               </button>
               {/* P2d — ghép video cuối (nối clip + upscale 720p) */}
               <button onClick={handleAssemble} disabled={finalVideo.status === 'running' || clipCount === 0}
@@ -654,10 +652,10 @@ export default function Personified() {
                       <span className="w-20 shrink-0 truncate text-[11px] text-gray-400">{s.speaker}</span>
                       <span className="flex-1 truncate text-xs text-gray-900">"{s.dialoguePrimary}"</span>
                       <span className="w-6 shrink-0 text-center text-[11px]" title={`${clips[s.idx]?.status ?? ''}${clips[s.idx]?.lipStatus ? ' · lip:' + clips[s.idx]?.lipStatus : ''}`}>
-                        {clips[s.idx]?.lipStatus === 'tts' || clips[s.idx]?.lipStatus === 'lip' ? '🎤'
+                        {clips[s.idx]?.lipStatus === 'tts' || clips[s.idx]?.lipStatus === 'mux' ? '🎙️'
                           : clips[s.idx]?.status === 'kf' || clips[s.idx]?.status === 'clip' ? '⏳'
                           : clips[s.idx]?.status === 'kf_ready' ? '🖼️'
-                          : clips[s.idx]?.status === 'done' ? (clips[s.idx]?.lipStatus === 'done' ? '✅🎤' : '✅')
+                          : clips[s.idx]?.status === 'done' ? (clips[s.idx]?.lipStatus === 'done' ? '✅🎙️' : '✅')
                           : clips[s.idx]?.status === 'failed' ? '❌' : ''}
                       </span>
                     </button>
@@ -722,28 +720,28 @@ export default function Personified() {
                                 {st === 'kf_ready' && <span className="text-[10px] font-semibold text-violet-600">👁️ Soi ảnh dưới — đẹp thì bấm "Tạo clip", drift thì "Đổi keyframe"</span>}
                                 {clips[s.idx]?.error && <span className="text-[10px] text-rose-600">⚠ {clips[s.idx]?.error?.slice(0, 90)}</span>}
                               </div>
-                              {/* P2c — Bước 3: nhép mồm (chỉ khi clip xong + cảnh có thoại) */}
+                              {/* P2c — Bước 3: lồng giọng (chỉ khi clip xong + cảnh có thoại) */}
                               {(() => {
                                 const lip = clips[s.idx]?.lipStatus
-                                const lipBusy = lip === 'tts' || lip === 'lip'
+                                const lipBusy = lip === 'tts' || lip === 'mux'
                                 const hasDialogue = !!(s.dialoguePrimary ?? '').trim()
                                 if (st !== 'done' || !hasDialogue) return null
                                 return (
                                   <div className="flex flex-wrap items-center gap-2 border-t border-black/5 pt-1.5">
-                                    <button onClick={() => handleLipsyncScene(s)} disabled={lipBusy || renderingAll || !elevenKey || !falKey}
+                                    <button onClick={() => handleVoiceoverScene(s)} disabled={lipBusy || renderingAll || !elevenKey}
                                       className="flex items-center gap-1 rounded bg-fuchsia-600 px-2 py-1 text-[11px] font-bold text-white transition-colors hover:bg-fuchsia-700 disabled:opacity-40"
-                                      title={!elevenKey || !falKey ? 'Cần ElevenLabs (TTS) + fal.ai (lipsync) key' : 'TTS giọng nhân vật → nhép mồm lên clip'}>
+                                      title={!elevenKey ? 'Cần ElevenLabs key (giọng)' : 'TTS giọng nhân vật → ghép voiceover vào clip (0 credit KIE)'}>
                                       {lip === 'tts'
                                         ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang tạo giọng…</>
-                                        : lip === 'lip'
-                                        ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang nhép mồm…</>
+                                        : lip === 'mux'
+                                        ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang ghép giọng…</>
                                         : lip === 'done'
-                                        ? <><RefreshCw className="h-3 w-3" /> Nhép mồm lại</>
-                                        : <>🎤 Nhép mồm</>}
+                                        ? <><RefreshCw className="h-3 w-3" /> Lồng giọng lại</>
+                                        : <>🎙️ Lồng giọng</>}
                                     </button>
-                                    {lip === 'done' && <span className="text-[10px] font-semibold text-fuchsia-600">✅ đã có khẩu hình</span>}
+                                    {lip === 'done' && <span className="text-[10px] font-semibold text-fuchsia-600">✅ đã có giọng</span>}
                                     {lip === 'failed' && <span className="text-[10px] text-rose-600">⚠ {clips[s.idx]?.lipError?.slice(0, 80)}</span>}
-                                    {(!elevenKey || !falKey) && <span className="text-[10px] text-amber-600">cần key ElevenLabs + fal.ai</span>}
+                                    {!elevenKey && <span className="text-[10px] text-amber-600">cần key ElevenLabs</span>}
                                   </div>
                                 )
                               })()}
