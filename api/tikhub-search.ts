@@ -31,12 +31,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sort = req.query.sort === 'latest' ? '2' : req.query.sort === 'general' ? '0' : '1' // mặc định 1 = nhiều like
   const debug = req.query.debug === '1'
 
-  // Douyin web — tìm video theo keyword. v2 là bản hiện hành (param `page`);
-  // fetch_video_search_result (offset/count) đã deprecated → để fallback.
-  const enc = encodeURIComponent(q)
+  // Douyin search video — POST + JSON body (xác minh từ OpenAPI spec).
+  // sort_type: 0 tổng hợp / 1 nhiều like / 2 mới nhất. content_type 1 = chỉ video.
+  const payload = JSON.stringify({ keyword: q, cursor: 0, sort_type: sort, publish_time: '0', filter_duration: '0', content_type: '1' })
   const candidates = [
-    `https://api.tikhub.io/api/v1/douyin/web/fetch_video_search_result_v2?keyword=${enc}&sort_type=${sort}&publish_time=0&page=1`,
-    `https://api.tikhub.io/api/v1/douyin/web/fetch_video_search_result?keyword=${enc}&offset=0&count=20&sort_type=${sort}&publish_time=0`,
+    'https://api.tikhub.io/api/v1/douyin/search/fetch_video_search_v1',
+    'https://api.tikhub.io/api/v1/douyin/search/fetch_video_search_v2',
   ]
   let body = ''
   let ok = false
@@ -45,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   for (const u of candidates) {
     for (let attempt = 0; attempt < 2 && !ok; attempt++) {
       try {
-        const r = await fetch(u, { headers: { Authorization: `Bearer ${key}`, 'User-Agent': 'ugc-lab' } })
+        const r = await fetch(u, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'User-Agent': 'ugc-lab' }, body: payload })
         lastStatus = r.status; body = await r.text(); usedUrl = u
         if (r.ok) { ok = true; break }
         if (r.status === 401 || r.status === 403) return res.status(502).json({ error: `TikHub auth lỗi ${r.status} — kiểm tra TIKHUB_KEY/scope`, detail: body.slice(0, 200) })

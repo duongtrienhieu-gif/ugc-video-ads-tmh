@@ -112,11 +112,12 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
   }
 
   const genBrief = async () => {
-    if (!name.trim()) { setErr('Chọn SP từ Kho hoặc gõ tên SP'); return }
+    if (!name.trim() && !imageUrl) { setErr('Chọn SP từ Kho, gõ tên, hoặc tải ảnh lên'); return }
     if (!geminiApiKey) { setErr('Cần Gemini API key trong Cài đặt'); return }
     setBusy(true); setErr(null); setBrief(null)
     try {
-      const prompt = `Bạn là đạo diễn B-roll cho quảng cáo COD bán ở Malaysia. Sản phẩm: "${name}".${imageUrl ? ' (Có ảnh sản phẩm kèm theo — NHÌN ẢNH để hiểu đúng sản phẩm.)' : ''}
+      const label = name.trim() || '(không cho tên — TỰ NHẬN DIỆN sản phẩm từ ảnh)'
+      const prompt = `Bạn là đạo diễn B-roll cho quảng cáo COD bán ở Malaysia. Sản phẩm: "${label}".${imageUrl ? ' (Có ảnh sản phẩm kèm theo — NHÌN ẢNH để nhận diện đúng sản phẩm; nếu không có tên thì dựa hoàn toàn vào ảnh.)' : ''}
 Mục tiêu: giúp marketer tìm NGUYÊN LIỆU VIDEO NGẮN để cắt ghép quảng cáo.
 Trả JSON tiếng Việt:
 - "productGuessVi": đoán sản phẩm này là gì (ngắn gọn).
