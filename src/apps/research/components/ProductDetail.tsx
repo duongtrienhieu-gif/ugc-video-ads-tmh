@@ -152,6 +152,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const [readBusy, setReadBusy] = useState(false)
   const [readErr, setReadErr] = useState<string | null>(null)
   const [readResult, setReadResult] = useState<VideoRead | null>(null)
+  const [vidSort, setVidSort] = useState<'relevant' | 'view' | 'long'>('relevant')   // sort video win
   const v = VERDICT_META[product.verdict]
   const niche = NICHES.find((n) => n.key === product.nicheKey)
   const passCount = product.signals.filter((s) => s.status === 'pass').length
@@ -201,7 +202,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
       const more: LiveVid[] = Array.isArray(d.videos) ? d.videos : []
       setLiveVideos((prev) => {
         const seen = new Set((prev || []).map((v) => v.id))
-        return [...(prev || []), ...more.filter((v) => !seen.has(v.id))].sort((a, b) => b.durationSec - a.durationSec)
+        return [...(prev || []), ...more.filter((v) => !seen.has(v.id))]   // giữ thứ tự; sort ở shownVideos
       })
       setLiveCursor(d.cursor != null ? String(d.cursor) : null)
       setLiveHasMore(!!d.hasMore && d.cursor != null)
@@ -241,6 +242,15 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
     }
     return [...m.values()].sort((a, b) => b.views - a.views)
   }, [liveVideos])
+
+  // Video hiển thị theo lựa chọn sort. 'relevant' = giữ thứ tự server (điểm liên quan).
+  const shownVideos = useMemo(() => {
+    if (!liveVideos) return []
+    const arr = [...liveVideos]
+    if (vidSort === 'view') arr.sort((a, b) => b.views - a.views)
+    else if (vidSort === 'long') arr.sort((a, b) => b.durationSec - a.durationSec)
+    return arr
+  }, [liveVideos, vidSort])
 
   // Video: nếu DB ĐÃ hydrate (kể cả empty), CHỈ dùng real — không lừa anh bằng sample.
   const videos = useMemo(() => {
@@ -719,7 +729,28 @@ Nếu video không có lời thoại thì đọc chữ trên màn hình + hình 
           {/* ── VIDEO WIN (LIVE — TikTok Shop thật) ── */}
           {tab === 'video' && isLive && (
             <div className="flex flex-col gap-3">
-              <p className="text-xs text-slate-500">🎥 Video <b>liên quan SP này</b> (lọc theo brand/từ khóa cốt lõi → bỏ news/drift), <b>20–90s</b> hợp <b>FB ads</b>. Bấm <b>⬇ Tải</b> lấy video không logo.</p>
+              <p className="text-xs text-slate-500">🎥 <b>Creative tham khảo</b> để học/tái dùng (lọc theo từ khóa SP, <b>20–90s</b> hợp FB ads) — <b>KHÔNG xếp theo doanh số</b> (API không có lượt-mua/GMV theo video). Tín hiệu WIN nằm ở <b>số đã bán của SP</b> ở tab Tổng quan.</p>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-400">Sắp xếp:</span>
+                {([['relevant', 'Liên quan'], ['view', 'View'], ['long', 'Dài nhất']] as const).map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => setVidSort(k)}
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${vidSort === k ? 'bg-violet-600 text-white' : 'bg-white text-slate-600 border border-black/10 hover:bg-black/[0.02]'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+                <a
+                  href={kalodataUrl(product.productId, product.market)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-auto inline-flex items-center gap-1 rounded-lg border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-black/[0.02]"
+                  title="Xem video → doanh thu (GMV) thật của SP này trên Kalodata"
+                >
+                  <ExternalLink className="h-3 w-3" /> Video→doanh thu (Kalodata)
+                </a>
+              </div>
               {liveVidLoading && (
                 <div className="rounded-xl border border-dashed border-black/10 p-6 text-center text-xs text-slate-400">Đang tìm video liên quan…</div>
               )}
@@ -734,7 +765,7 @@ Nếu video không có lời thoại thì đọc chữ trên màn hình + hình 
                   )}
                 </div>
               )}
-              {liveVideos && liveVideos.map((vid) => (
+              {shownVideos.map((vid) => (
                 <div key={vid.id} className="rounded-xl border border-black/10 p-2.5">
                   <div className="flex gap-3">
                     <div className="relative h-20 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-200">
