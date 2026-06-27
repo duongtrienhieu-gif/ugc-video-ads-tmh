@@ -13,6 +13,11 @@ interface Snapshot {
   images?: { original_image_url?: string }[]
   link_url?: string
   page_name?: string
+  cta_text?: string
+  cta_type?: string
+  title?: string
+  caption?: string
+  display_format?: string
 }
 interface FbAd {
   ad_archive_id?: string | number
@@ -23,6 +28,15 @@ interface FbAd {
   is_active?: boolean
   country_iso_code?: string
   snapshot?: Snapshot
+  collation_count?: number
+  total_active_time?: number
+  publisher_platform?: string | string[]
+  cta_text?: string
+  cta_type?: string
+  display_format?: string
+  reach_estimate?: number | string
+  spend?: number | string
+  currency?: string
 }
 
 // Tìm mảng ads trong response (wrapper key có thể khác nhau).
@@ -47,9 +61,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const country = VALID_COUNTRY.has(cRaw) ? cRaw : 'MY'
   const status = req.query.status === 'ALL' ? 'ALL' : 'ACTIVE'   // mặc định chỉ ad đang chạy = winner
   const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : ''
+  const searchType = req.query.exact === '1' ? 'keyword_exact_phrase' : 'keyword_unordered'
 
   try {
-    const baseUrl = `https://api.scrapecreators.com/v1/facebook/adLibrary/search/ads?query=${encodeURIComponent(q)}&country=${country}&status=${status}&media_type=VIDEO&ad_type=all`
+    const baseUrl = `https://api.scrapecreators.com/v1/facebook/adLibrary/search/ads?query=${encodeURIComponent(q)}&country=${country}&status=${status}&media_type=VIDEO&ad_type=all&search_type=${searchType}`
     // Mỗi trang SC chỉ trả ~5 ad → GOM tới 5 trang/lần để trả ~24 ad, đỡ bấm "Tải thêm" nhiều.
     const allRaw: FbAd[] = []
     const seen = new Set<string>()
@@ -90,8 +105,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const vid = (snap.videos || [])[0] || {}
         const videoUrl = vid.video_hd_url || vid.video_url || vid.video_sd_url || ''
         const startMs = a.start_date ? a.start_date * 1000 : 0
-        const daysRunning = startMs ? Math.max(0, Math.floor((now - startMs) / 86400000)) : 0
+        // Ngày chạy: ưu tiên total_active_time (chính xác), fallback start_date.
+        const activeSec = Number(a.total_active_time ?? 0) || 0
+        const daysRunning = activeSec > 0
+          ? Math.floor(activeSec / 86400)
+          : (startMs ? Math.max(0, Math.floor((now - startMs) / 86400000)) : 0)
         const page = String(a.page_name ?? snap.page_name ?? '')
+        const platforms = Array.isArray(a.publisher_platform)
+          ? a.publisher_platform.map(String)
+          : (a.publisher_platform ? [String(a.publisher_platform)] : [])
+        const cta = String(snap.cta_text ?? a.cta_text ?? snap.cta_type ?? a.cta_type ?? '').replace(/_/g, ' ').trim()
         return {
           id: String(a.ad_archive_id ?? ''),
           page,
@@ -103,14 +126,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           isActive: a.is_active !== false,
           daysRunning,
           advertiserAds: adCountByPage.get(page) || 1,
+          variations: Number(a.collation_count ?? 0) || 0,
+          cta,
+          platforms,
+          format: String(a.display_format ?? snap.display_format ?? '').replace(/_/g, ' ').trim(),
+          reach: Number(a.reach_estimate ?? 0) || 0,
+          spend: a.spend != null ? String(a.spend) : '',
+          currency: a.currency || '',
           libraryUrl: a.ad_archive_id ? `https://www.facebook.com/ads/library/?id=${a.ad_archive_id}` : '',
         }
       })
       .filter((a) => a.id && a.videoUrl)   // chỉ giữ AD CÓ VIDEO
-      // WIN: active + chạy lâu + advertiser nhiều ad. Điểm để xếp hạng.
+      // WIN: active + chạy lâu + advertiser nhiều ad + nhiều biến thể (đang scale). Điểm xếp hạng.
       .map((a) => ({
         ...a,
-        _score: (a.isActive ? 40 : 0) + Math.min(a.daysRunning, 180) * 0.4 + Math.log10(a.advertiserAds + 1) * 25,
+        _score: (a.isActive ? 40 : 0) + Math.min(a.daysRunning, 180) * 0.4 + Math.log10(a.advertiserAds + 1) * 25 + Math.log10(a.variations + 1) * 20,
       }))
       .sort((x, y) => y._score - x._score)
       .map(({ _score, ...a }) => { void _score; return a })

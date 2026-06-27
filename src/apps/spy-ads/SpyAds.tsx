@@ -12,6 +12,8 @@ interface FbAd {
   id: string; page: string; text: string; videoUrl: string; cover: string
   linkUrl: string; country: string; isActive: boolean; daysRunning: number
   advertiserAds: number; libraryUrl: string; likes?: number; ctr?: string
+  variations?: number; cta?: string; platforms?: string[]; format?: string
+  reach?: number; spend?: string; currency?: string
 }
 const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : String(n))
 interface AdRead { transcript: string; structure: string }
@@ -94,6 +96,13 @@ export default function SpyAds() {
   const [ladiOnly, setLadiOnly] = useState(false)   // chỉ ad dẫn về web/ladipage (bỏ chat/sàn)
   const [groupView, setGroupView] = useState(false) // gom theo advertiser/SP thay vì lưới phẳng
   const [selected, setSelected] = useState<Set<string>>(new Set()) // ad đã chọn để tải hàng loạt
+  // Bộ lọc nâng cao (Phase 1 — khai thác field FB Ad Library)
+  const [showFilters, setShowFilters] = useState(false)
+  const [sortMode, setSortMode] = useState<'win' | 'days' | 'variations' | 'new'>('win')
+  const [minDays, setMinDays] = useState(0)
+  const [platformFilter, setPlatformFilter] = useState('')   // '', FACEBOOK, INSTAGRAM, MESSENGER
+  const [ctaFilter, setCtaFilter] = useState('')
+  const [exact, setExact] = useState(false)                  // tìm chính xác cụm (server param)
   const [ads, setAds] = useState<FbAd[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -120,7 +129,8 @@ export default function SpyAds() {
   const buildUrl = (query: string, cur?: string) => {
     const base = platform === 'fb' ? '/api/fb-ads' : '/api/tiktok-ads'
     const st = platform === 'fb' ? `&status=${activeOnly ? 'ACTIVE' : 'ALL'}` : ''
-    return `${base}?q=${encodeURIComponent(query.trim())}&country=${country}${st}${cur ? `&cursor=${encodeURIComponent(cur)}` : ''}`
+    const ex = platform === 'fb' && exact ? '&exact=1' : ''
+    return `${base}?q=${encodeURIComponent(query.trim())}&country=${country}${st}${ex}${cur ? `&cursor=${encodeURIComponent(cur)}` : ''}`
   }
 
   const search = async (term?: string) => {
@@ -289,10 +299,23 @@ CHỈ trả JSON.`
     } finally { setAdaptBusy(false) }
   }
 
-  // Lọc "chỉ ad có ladipage/sale page" (web, bỏ WhatsApp/Messenger/Shopee/Lazada/TikTok).
-  const shownAds = (ads || []).filter(
-    (a) => !(ladiOnly && platform === 'fb') || (!!a.linkUrl && linkKind(cleanLink(a.linkUrl)).web),
-  )
+  // Lọc + sắp xếp: ladipage + bộ lọc nâng cao (ngày chạy / nền tảng / CTA) + sort.
+  const shownAds = (() => {
+    let r = ads || []
+    if (ladiOnly && platform === 'fb') r = r.filter((a) => !!a.linkUrl && linkKind(cleanLink(a.linkUrl)).web)
+    if (platform === 'fb') {
+      if (minDays > 0) r = r.filter((a) => (a.daysRunning || 0) >= minDays)
+      if (platformFilter) r = r.filter((a) => (a.platforms || []).some((p) => p.toUpperCase().includes(platformFilter)))
+      if (ctaFilter) r = r.filter((a) => (a.cta || '').toLowerCase() === ctaFilter.toLowerCase())
+    }
+    const s = [...r]
+    if (sortMode === 'days') s.sort((x, y) => (y.daysRunning || 0) - (x.daysRunning || 0))
+    else if (sortMode === 'new') s.sort((x, y) => (x.daysRunning || 0) - (y.daysRunning || 0))
+    else if (sortMode === 'variations') s.sort((x, y) => (y.variations || 0) - (x.variations || 0))
+    return s   // 'win' = giữ thứ tự server (đã chấm điểm)
+  })()
+  // Danh sách CTA có trong kết quả → đổ vào dropdown lọc.
+  const ctaOptions = [...new Set((ads || []).map((a) => (a.cta || '').trim()).filter(Boolean))].sort()
 
   // Gom theo SP/advertiser: 1 brand chạy NHIỀU ad + chạy LÂU = đang scale = winner.
   const groups = (() => {
@@ -429,7 +452,53 @@ CHỈ trả JSON.`
                   {c}
                 </button>
               ))}
+              <button onClick={() => setShowFilters((v) => !v)}
+                className={`ml-auto rounded-full border px-2.5 py-1 text-[11px] font-semibold ${showFilters ? 'border-rose-300 bg-rose-50 text-rose-700' : 'border-black/10 bg-white text-slate-600 hover:bg-slate-50'}`}>
+                ⚙ Bộ lọc nâng cao {showFilters ? '▲' : '▼'}
+              </button>
             </div>
+            {showFilters && (
+              <div className="flex flex-wrap items-end gap-x-4 gap-y-2 rounded-xl border border-black/10 bg-slate-50 p-3">
+                <label className="flex flex-col gap-0.5 text-[10px] font-semibold text-slate-500">Sắp xếp
+                  <select value={sortMode} onChange={(e) => setSortMode(e.target.value as typeof sortMode)} className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                    <option value="win">🏆 Winner (mặc định)</option>
+                    <option value="days">⏳ Chạy lâu nhất</option>
+                    <option value="variations">📑 Nhiều biến thể</option>
+                    <option value="new">🆕 Mới nhất</option>
+                  </select>
+                </label>
+                {platform === 'fb' && (
+                  <>
+                    <label className="flex flex-col gap-0.5 text-[10px] font-semibold text-slate-500">Chạy tối thiểu
+                      <select value={minDays} onChange={(e) => setMinDays(Number(e.target.value))} className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                        <option value={0}>Tất cả</option>
+                        <option value={7}>≥ 7 ngày</option>
+                        <option value={14}>≥ 14 ngày</option>
+                        <option value={30}>≥ 30 ngày (đã proven)</option>
+                        <option value={60}>≥ 60 ngày</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-0.5 text-[10px] font-semibold text-slate-500">Nền tảng
+                      <select value={platformFilter} onChange={(e) => setPlatformFilter(e.target.value)} className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                        <option value="">Tất cả</option>
+                        <option value="FACEBOOK">Facebook</option>
+                        <option value="INSTAGRAM">Instagram</option>
+                        <option value="MESSENGER">Messenger</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-0.5 text-[10px] font-semibold text-slate-500">Nút CTA
+                      <select value={ctaFilter} onChange={(e) => setCtaFilter(e.target.value)} className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                        <option value="">Tất cả</option>
+                        {ctaOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-1.5 self-center pt-3 text-[11px] font-medium text-slate-600">
+                      <input type="checkbox" checked={exact} onChange={(e) => setExact(e.target.checked)} /> Tìm chính xác cụm <span className="text-slate-400">(tìm lại để áp dụng)</span>
+                    </label>
+                  </>
+                )}
+              </div>
+            )}
           </>
         )}
       </header>
@@ -577,8 +646,10 @@ CHỈ trả JSON.`
                     <div className="mt-auto flex flex-wrap gap-x-2 gap-y-0.5 pt-1 text-[10px] font-medium text-slate-500">
                       {a.daysRunning > 0 && <span>⏳ {a.daysRunning}d</span>}
                       {a.advertiserAds > 1 && <span>📢 {a.advertiserAds} ad</span>}
+                      {a.variations && a.variations > 1 ? <span>📑 {a.variations}</span> : null}
                       {a.likes ? <span>❤️ {fmtK(a.likes)}</span> : null}
                       {a.ctr ? <span>CTR {a.ctr}</span> : null}
+                      {a.cta ? <span className="rounded bg-slate-100 px-1 text-slate-600">🔘 {a.cta}</span> : null}
                       <span>{COUNTRIES.find((c) => c.c === a.country)?.f ?? ''}{a.country}</span>
                     </div>
                   </div>
@@ -624,8 +695,11 @@ CHỈ trả JSON.`
               <p className="mb-2 text-[11px] text-slate-400">
                 {playAd.daysRunning > 0 ? `⏳ chạy ${playAd.daysRunning} ngày · ` : ''}
                 {playAd.advertiserAds > 1 ? `📢 ${playAd.advertiserAds} ad · ` : ''}
+                {playAd.variations && playAd.variations > 1 ? `📑 ${playAd.variations} biến thể · ` : ''}
                 {playAd.likes ? `❤️ ${fmtK(playAd.likes)} · ` : ''}
                 {playAd.ctr ? `CTR ${playAd.ctr} · ` : ''}
+                {playAd.cta ? `🔘 ${playAd.cta} · ` : ''}
+                {playAd.platforms && playAd.platforms.length ? `${playAd.platforms.join('/')} · ` : ''}
                 {playAd.country}
               </p>
               {playAd.text && <p className="mb-3 whitespace-pre-line rounded-lg bg-slate-50 p-2 text-[11px] text-slate-600">{playAd.text}</p>}
