@@ -98,7 +98,7 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
     setClipQuery(kw); setClips(null); setClipsErr(null); setClipsBusy(true)
     try {
       const d = await fetch(`/api/tikhub-search?q=${encodeURIComponent(kw)}&platform=douyin&sort=like`).then((r) => r.json())
-      if (d.error) { setClipsErr(d.error); setClipsBusy(false); return }
+      if (d.error) { setClipsErr(d.error + (d.detail ? ` — ${String(d.detail).slice(0, 160)}` : '')); setClipsBusy(false); return }
       setClips(Array.isArray(d.clips) ? d.clips : [])
       if (!d.clips?.length) setClipsErr(d.note || 'Không có clip — đổi từ khóa')
     } catch (e) { setClipsErr((e as Error).message) } finally { setClipsBusy(false) }

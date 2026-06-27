@@ -31,22 +31,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sort = req.query.sort === 'latest' ? '2' : req.query.sort === 'general' ? '0' : '1' // mặc định 1 = nhiều like
   const debug = req.query.debug === '1'
 
-  // Douyin web — tìm video theo keyword.
-  const url = `https://api.tikhub.io/api/v1/douyin/web/fetch_video_search_result?keyword=${encodeURIComponent(q)}&offset=0&count=20&sort_type=${sort}&publish_time=0`
-
+  // Douyin web — tìm video theo keyword. v2 là bản hiện hành (param `page`);
+  // fetch_video_search_result (offset/count) đã deprecated → để fallback.
+  const enc = encodeURIComponent(q)
+  const candidates = [
+    `https://api.tikhub.io/api/v1/douyin/web/fetch_video_search_result_v2?keyword=${enc}&sort_type=${sort}&publish_time=0&page=1`,
+    `https://api.tikhub.io/api/v1/douyin/web/fetch_video_search_result?keyword=${enc}&offset=0&count=20&sort_type=${sort}&publish_time=0`,
+  ]
   let body = ''
   let ok = false
-  // TikHub video search có <5% lỗi → retry tối đa 3 lần.
-  for (let attempt = 0; attempt < 3 && !ok; attempt++) {
-    try {
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${key}`, 'User-Agent': 'ugc-lab' } })
-      body = await r.text()
-      if (r.ok) { ok = true; break }
-      if (r.status === 401 || r.status === 403) return res.status(502).json({ error: `TikHub auth lỗi ${r.status} — kiểm tra TIKHUB_KEY/scope` })
-      if (r.status === 429) return res.status(502).json({ error: 'TikHub 429 — hết quota/balance' })
-    } catch { /* retry */ }
+  let lastStatus = 0
+  let usedUrl = ''
+  for (const u of candidates) {
+    for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+      try {
+        const r = await fetch(u, { headers: { Authorization: `Bearer ${key}`, 'User-Agent': 'ugc-lab' } })
+        lastStatus = r.status; body = await r.text(); usedUrl = u
+        if (r.ok) { ok = true; break }
+        if (r.status === 401 || r.status === 403) return res.status(502).json({ error: `TikHub auth lỗi ${r.status} — kiểm tra TIKHUB_KEY/scope`, detail: body.slice(0, 200) })
+        if (r.status === 429) return res.status(502).json({ error: 'TikHub 429 — hết quota/balance' })
+        if (r.status >= 400 && r.status < 500) break   // 4xx: thử URL khác, không retry
+      } catch { /* network → retry */ }
+    }
+    if (ok) break
   }
-  if (!ok) return res.status(502).json({ error: 'TikHub không phản hồi (đã thử 3 lần)', detail: body.slice(0, 200) })
+  if (!ok) return res.status(502).json({ error: `TikHub lỗi ${lastStatus || '(no response)'}`, detail: body.slice(0, 300), tried: candidates.length })
 
   let data: AnyObj
   try { data = JSON.parse(body) as AnyObj } catch { return res.status(502).json({ error: 'TikHub trả về không phải JSON', detail: body.slice(0, 200) }) }
@@ -82,7 +91,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({
     clips,
     count: clips.length,
-    ...(debug ? { rawKeys: Object.keys(data), awemeCount: awemes.length, sample: awemes[0] ? Object.keys(awemes[0]) : [] } : {}),
+    ...(debug ? { usedUrl, rawKeys: Object.keys(data), awemeCount: awemes.length, sample: awemes[0] ? Object.keys(awemes[0]) : [], videoKeys: awemes[0]?.video ? Object.keys(awemes[0].video as object) : [] } : {}),
     note: clips.length ? undefined : 'no douyin clips (đổi từ khóa, hoặc xem debug=1 để soi shape)',
   })
 }
