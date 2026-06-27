@@ -595,7 +595,7 @@ export default function Personified() {
 
             {/* Biome cố định (worldEnv) — bối cảnh chung cho mọi keyframe; sửa được rồi render lại. */}
             <label className="mb-3 block rounded-lg border border-emerald-200 bg-emerald-50/50 p-2">
-              <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">🌍 Bối cảnh chung (mọi cảnh diễn trong đây) — sửa được</span>
+              <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">🌍 Biome nội tại mặc định (cảnh "trong cơ thể") — mỗi cảnh còn có bối cảnh riêng ở bảng dưới</span>
               <textarea value={script.worldEnv ?? ''} onChange={(e) => setScript((prev) => (prev ? { ...prev, worldEnv: e.target.value } : prev))}
                 rows={2} placeholder="VD: inside an inflamed knee joint, glistening cartilage, swollen red tissue…"
                 className="mt-0.5 w-full resize-none rounded border border-emerald-200 bg-white p-2 text-xs text-gray-800 focus:border-emerald-400 focus:outline-none" />
@@ -676,6 +676,13 @@ export default function Personified() {
                           </label>
                         )}
                         {s.action && <div className="text-gray-600"><span className="font-semibold">Hành động:</span> {s.action}</div>}
+                        {/* Bối cảnh riêng cảnh (đời thực/nội tại) — sửa được; render keyframe dùng bản này */}
+                        <label className="block">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">🎬 Bối cảnh cảnh này — sửa được</span>
+                          <input value={s.setting ?? ''} onChange={(e) => updateScene(s.idx, { setting: e.target.value })}
+                            placeholder="vd: a crowded morning wet market / inside the knee joint cavern…"
+                            className="mt-0.5 w-full rounded border border-emerald-200 bg-white px-2 py-1 text-[11px] text-gray-800 focus:border-emerald-400 focus:outline-none" />
+                        </label>
                         <div className="text-[11px] text-gray-400">🎥 {s.camera}{s.sfx.length > 0 && ` · 🔊 ${s.sfx.join(', ')}`}</div>
                         {s.videoPromptEn && <div className="text-[10px] text-gray-400"><span className="font-semibold">i2v:</span> {s.videoPromptEn}</div>}
                         {/* P2a — CỔNG DUYỆT: keyframe (rẻ) → soi ảnh → i2v (đắt). */}

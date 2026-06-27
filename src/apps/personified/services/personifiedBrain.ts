@@ -196,9 +196,10 @@ const SCRIPT_SCHEMA = {
           camera: { type: 'string' },
           sfx: { type: 'array', items: { type: 'string' } },
           action: { type: 'string' },
+          setting: { type: 'string' },
           videoPromptEn: { type: 'string' },
         },
-        required: ['sceneType', 'speaker', 'dialoguePrimary', 'dialogueVi', 'emotion', 'camera', 'sfx', 'action', 'videoPromptEn'],
+        required: ['sceneType', 'speaker', 'dialoguePrimary', 'dialogueVi', 'emotion', 'camera', 'sfx', 'action', 'setting', 'videoPromptEn'],
       },
     },
   },
@@ -207,7 +208,7 @@ const SCRIPT_SCHEMA = {
 
 interface RawScene {
   sceneType: string; speaker: string; dialoguePrimary: string; dialogueVi: string
-  emotion: string; camera: string; sfx: string[]; action: string; videoPromptEn: string
+  emotion: string; camera: string; sfx: string[]; action: string; setting: string; videoPromptEn: string
 }
 
 const VALID_SCENE_TYPES = new Set<string>([
@@ -285,14 +286,21 @@ application(sản phẩm thật tác động; KB4 = mỗi hoạt chất 1 cảnh
 - ĐÓNG GỌN 30% cuối: application+destruction nhịp NHANH (có thể gộp), result 1 cảnh (người sống lại — bookend), cta 1 câu cộc. KHÔNG kéo dài phần sản phẩm.
 - (Ngoại lệ: video ${sceneCount} cảnh mà ≤5 thì hero vào ~cảnh 3 — giữ đủ đất cho sản phẩm, đừng ép muộn.)
 
-🌍 worldEnv = 1 BIOME CỐ ĐỊNH (tiếng Anh, 1-2 câu) cho TOÀN video — như video mẫu LUÔN ở 1 thế giới (vd trong ruột). Suy ra từ ẨN DỤ + bộ phận cơ thể, NHƯNG tả kiểu CARTOON CÁCH ĐIỆU PHIM HOẠT HÌNH (Pixar) — KHÔNG tả giải phẫu thật/máu me/y khoa (sẽ bị model chặn). vd khớp→"a stylised glowing cartoon cavern inside a knee joint, smooth glossy coral-pink walls, soft floating light orbs, warm cinematic glow, cavernous depth"; dạ dày→"a whimsical cartoon stomach cavern, glossy rounded walls, bubbling pools"; da→"a vast stylised skin landscape with soft rolling pores". MỌI cảnh (action + videoPromptEn) PHẢI diễn ra TRONG worldEnv này — đừng nhảy ra cầu thang/phòng/đời thực; nếu cần đời thực thì lồng vào biome (vd nhìn từ BÊN TRONG khớp). ⛔ Cấm: "blood, gore, wound, swollen red tissue, realistic anatomy, skeleton, surgical".
+🌍 worldEnv = BIOME NỘI TẠI MẶC ĐỊNH (tiếng Anh, 1-2 câu, cartoon cách điệu Pixar) — chỉ DÙNG cho beat "trong cơ thể". Suy từ ẨN DỤ + bộ phận, KHÔNG tả giải phẫu thật/máu me (model chặn). vd khớp→"a stylised glowing cartoon cavern inside a knee joint, glossy coral-pink walls, floating light orbs, warm glow"; dạ dày→"a whimsical cartoon stomach cavern"; da→"a vast stylised skin landscape with soft pores". ⛔ Cấm: "blood, gore, wound, swollen red tissue, realistic anatomy, skeleton, surgical".
+
+🎬 setting (MỖI cảnh, EN, 1 câu giàu) = BỐI CẢNH RIÊNG bám NGỮ CẢNH THOẠI — TUYỆT ĐỐI KHÔNG nhét mọi cảnh vào trong cơ thể (nghèo + lặp):
+- Câu thoại nhắc ĐỜI THỰC (đi chợ, leo cầu thang, tập gym, nấu ăn, soi gương, ra nắng, bế con, đi làm…) → setting = ĐÚNG NƠI ĐÓ ("a crowded morning wet market", "a steep apartment stairwell", "a gym floor"…), nhân vật nhân-cách-hóa hiện diện/lừng lững khổng lồ TRONG cảnh đời thực đó.
+- Beat NỘI TẠI (sản phẩm vào cơ thể cứu nguy, diệt phản diện, bộ phận hồi phục) → setting ≈ worldEnv (trong cơ thể).
+- Phân bổ điển hình: hook/agitation = ĐỜI THỰC đa dạng (mỗi cảnh 1 nơi khác); hero_entrance→destruction = NỘI TẠI; result = đời thực (người sống vui) hoặc nội tại; cta = packshot.
+- Nhất quán giữ bằng NHÂN VẬT tái dùng + phong cách điện ảnh (hệ thống lo), KHÔNG bằng ép 1 địa điểm.
+- ÁP MỌI NGÁCH (đừng cứng theo 1 ví dụ): da→"bathroom mirror, sunny street"; ruột→"kitchen, dining table, toilet"; khớp→"stairwell, wet market, gym"; tóc→"shower, windy street, salon"; mất ngủ→"dark bedroom 3am, office desk". Đời thực bám đúng thoại.
 
 LUẬT VIẾT (bắt buộc):
 1. THOẠI NATIVE, KHÔNG DỊCH MÁY: ${arch.narratorVi}. Dùng slang đời thường ${isVN ? 'tiếng Việt' : 'tiếng Mã + chêm sức sống bản địa'} (vd VN: "xả lũ axit", "đình công", "bay màu", "tao cút đây").
 2. Thoại NGẮN GỌN theo độ dài TỰ NHIÊN của cảnh (đừng kéo dài cho đầy clip): ${wordBudgetHint(market)} Mỗi cảnh chỉ render 4s/8s — viết quá số từ trên sẽ bị CẮT CHỮ khi ghép. Punchy, cộc.
 3. COMPLIANCE (ngách sức khỏe/mỹ phẩm): dùng từ "hỗ trợ", KHÔNG hứa tuyệt đối/chữa khỏi. Cảnh CTA phải có ý "hiệu quả tùy cơ địa".
 4. dialoguePrimary = thoại bằng ${langName} (đưa vào giọng đọc). dialogueVi = ${isVN ? 'GIỐNG HỆT dialoguePrimary' : 'bản dịch NGHĨA sang tiếng Việt cho operator hiểu'}.
-5. videoPromptEn = 1 prompt image-to-video TIẾNG ANH GIÀU HÌNH ẢNH: shot type + hành động cụ thể + BỐI CẢNH GIÀU CHI TIẾT (vd "deep glistening intestinal tunnel, wet folds, warm light pouring through, floating particles, cavernous depth") + bề mặt nhân vật chi tiết (glossy, wet, sweaty, subsurface skin) + cảm xúc/động lực. KHÔNG bắt model render chữ. (Hệ thống TỰ THÊM chất render điện ảnh — chỉ cần tả NỘI DUNG khung hình thật giàu, đừng ghi camera/lens.)
+5. videoPromptEn = 1 prompt image-to-video TIẾNG ANH GIÀU HÌNH ẢNH: shot type + hành động cụ thể + ĐÚNG bối cảnh của cảnh (KHỚP trường "setting" — đời thực thì tả nơi đó, nội tại thì tả trong cơ thể) + bề mặt nhân vật chi tiết (glossy, subsurface) + cảm xúc/động lực. KHÔNG bắt model render chữ. (Hệ thống TỰ THÊM chất render điện ảnh — chỉ cần tả NỘI DUNG khung hình thật giàu, đừng ghi camera/lens.)
 6. imagePromptEn mỗi nhân vật = prompt EN tả NHÂN VẬT 3D THẬT CHI TIẾT: hình khối + MÀU + chất liệu bề mặt (glossy/subsurface) + ĐÔI MẮT to biểu cảm + biểu cảm đặc trưng + (nếu hero) phụ kiện anh hùng "glowing energy shield, flowing cape".
    VILLAIN: HÌNH HÀI phải GỢI ĐÚNG vấn đề/bộ phận bị hại (đọc được ngay là gì), KHÔNG để ra "cục tròn vô danh". Lấy chính HÌNH DẠNG bộ phận/ẩn dụ làm thân: vd đau khớp gối → "a gnarled, knobbly knee-joint creature with cracked stiff segments and a grumpy old face"; mụn → "a fat oily pimple blob"; vi khuẩn → "a spiky green germ"; đờm → "a gooey mucus blob". Mascot cartoon dễ thương/tinh nghịch kiểu phim hoạt hình, hình mềm, có mặt + tay chân nhỏ — KHÔNG ghê rợn/máu me/giải phẫu/xương sọ (sẽ bị model chặn).
    KHÔNG cần ghi camera/style/--ar (hệ thống tự thêm chất render điện ảnh).
@@ -335,6 +343,7 @@ XUẤT JSON: { characters:[...], scenes:[${sceneCount} cảnh đúng thứ tự]
       camera: s.camera ?? '',
       sfx: Array.isArray(s.sfx) ? s.sfx : [],
       action: s.action ?? '',
+      setting: s.setting ?? '',
       videoPromptEn: s.videoPromptEn ?? '',
     }
   })

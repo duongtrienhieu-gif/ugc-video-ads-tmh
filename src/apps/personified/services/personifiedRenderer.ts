@@ -47,10 +47,9 @@ function buildKeyframePrompt(
   const mood = scene.emotion ? ` Expression / mood: ${scene.emotion}.` : ''
   // dropAction = bản an toàn (tầng 2 retry): bỏ mô tả hành động (nơi chứa từ gore).
   const act = (!opts.dropAction && (scene.action ?? '').trim()) ? ` Scene: ${scene.action.trim()}.` : ''
-  // A — BIOME CỐ ĐỊNH: nhồi vào MỌI cảnh → 9 cảnh chung 1 thế giới (như video mẫu).
-  const world = (opts.worldEnv ?? '').trim()
-    ? ` The whole scene takes place inside this consistent environment: ${opts.worldEnv!.trim()}.`
-    : ''
+  // BỐI CẢNH: ưu tiên setting RIÊNG của cảnh (đời thực/nội tại bám thoại); fallback worldEnv.
+  const env = (scene.setting ?? '').trim() || (opts.worldEnv ?? '').trim()
+  const world = env ? ` This scene takes place in: ${env}.` : ''
   // B — HERO VFX: nhân vật hero (= sản phẩm) ở cảnh hành động (KHÔNG phải cta) được THÊM
   // hiệu ứng anh hùng (hào quang/khiên/áo choàng) — chỉ là EFFECT, KHÔNG đổi bao bì.
   const isHeroVfx = character?.role === 'hero' && scene.sceneType !== 'cta'

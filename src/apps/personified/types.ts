@@ -97,6 +97,9 @@ export interface PersonifiedScene {
   camera: string
   sfx: string[]
   action: string           // chuyện gì xảy ra trên màn hình
+  /** Bối cảnh RIÊNG của cảnh (EN) — bám ngữ cảnh thoại: đời thực (chợ/cầu thang/gym…)
+   *  cho beat agitation, hoặc trong-cơ-thể cho beat nội tại. Rỗng → fallback worldEnv. */
+  setting: string
   videoPromptEn: string    // prompt i2v cho cảnh (dùng ở P3)
 }
 
