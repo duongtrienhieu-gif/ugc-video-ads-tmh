@@ -1,13 +1,29 @@
 // ── Vercel serverless — Video LIÊN QUAN 1 SP (ScrapeCreators keyword search) ──
 // Frontend gọi: /api/research-videos?market=MY&q=<tên SP>&minSec=20&terms=brand,token2..&cursor=<n>
-// Mục tiêu: video CHỨA chính SP đó (lọc theo brand/từ khóa cốt lõi → bỏ news/drift),
-// đủ dài cho FB ads. API keyword KHÔNG trả product_id/giỏ-hàng nên không lọc cart được;
-// thay bằng chấm điểm liên quan trên desc (terms[0]=brand +3, token khác +1, bỏ score 0).
-// Xếp theo điểm liên quan rồi độ dài. Có cursor để "Tải thêm". Key SC_KEY server-side, 1 credit/req.
+// Mục tiêu: video CHỨA chính SP đó. API keyword KHÔNG trả product_id/giỏ-hàng nên không lọc
+// cart được → chấm điểm liên quan trên desc: BRAND (token đặc trưng đầu, không phải từ chung) +3,
+// token riêng +1.5, từ ngách-chung +0.3 (khớp theo ranh giới từ). Đủ ≥4 video đúng brand → chỉ giữ
+// brand (zero drift); ít quá thì bù tối đa 12 video. Lọc 20-90s. Cursor để "Tải thêm". 1 credit/req.
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 const VALID_REGIONS = new Set(['MY', 'TH', 'ID', 'VN', 'PH'])
+
+// Từ NGÁCH-CHUNG: khớp = tín hiệu yếu (chấm rất nhẹ) để brand/tên-riêng nổi lên, bớt drift.
+const GENERIC_TERMS = new Set([
+  'probiotic', 'probiotik', 'prebiotic', 'prebiotik', 'fiber', 'serat', 'enzyme', 'collagen', 'kolagen',
+  'glutathione', 'vitamin', 'multivitamin', 'suplemen', 'supplement', 'serum', 'detox', 'slim', 'slimming',
+  'kurus', 'whitening', 'drink', 'minuman', 'gummies', 'gummy', 'mask', 'oil', 'minyak', 'cream', 'krim',
+  'skincare', 'health', 'sihat', 'beauty', 'acne', 'jerawat', 'hair', 'rambut', 'sleep', 'tidur', 'joint',
+  'sendi', 'eye', 'mata', 'gastrik', 'lutein', 'magnesium', 'omega', 'zinc', 'tongkat', 'men', 'women',
+  'lelaki', 'wanita', 'kids', 'baby', 'energy', 'daily', 'wellness', 'complex', 'powder', 'gel', 'spray',
+  'patch', 'kuat', 'cantik', 'glow', 'original', 'gummy', 'capsule', 'natural',
+])
+// Khớp theo RANH GIỚI TỪ (tránh "men" lọt vào "women/complement").
+function descHas(desc: string, t: string): boolean {
+  const e = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(^|[^a-z0-9])${e}([^a-z0-9]|$)`).test(desc)
+}
 
 interface UrlList { url_list?: string[] }
 interface Aweme {
@@ -78,22 +94,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Trong khoảng phù hợp FB ads: đủ dài (>minSec) nhưng không quá dài (≤maxSec).
       .filter((v) => v.durationSec > minSec && v.durationSec <= maxSec)
 
-    // Chấm điểm LIÊN QUAN: video phải nhắc tới SP trong desc. Khớp token[0] (brand) = +3,
-    // mỗi token khác = +1. Bỏ video score 0 (news/drift). Nếu KHÔNG có terms thì giữ tất cả.
+    // Chấm điểm LIÊN QUAN. BRAND = token đặc trưng đầu tiên (KHÔNG phải từ chung) — khớp = +3.
+    // Token riêng khác +1.5; từ ngách-chung chỉ +0.3 (để video đúng SP nổi lên, video chung chìm).
+    const brand = terms.find((t) => !GENERIC_TERMS.has(t)) || ''
     const scoredAll = mapped.map((v) => {
       const desc = v.desc.toLowerCase()
-      let score = 0
-      terms.forEach((t, i) => { if (desc.includes(t)) score += i === 0 ? 3 : 1 })
-      return { v, score }
+      let score = 0, brandHit = false
+      for (const t of terms) {
+        if (!descHas(desc, t)) continue
+        if (t === brand) { score += 3; brandHit = true }
+        else score += GENERIC_TERMS.has(t) ? 0.3 : 1.5
+      }
+      return { v, score, brandHit }
     })
     let chosen: typeof scoredAll
     if (terms.length === 0) {
       chosen = scoredAll
     } else {
-      const hits = scoredAll.filter((s) => s.score > 0)
-      // Đủ video khớp token → giữ strict. Quá ít (<5) → BÙ bằng video còn lại (query đã sạch
-      // nên vẫn đúng ngách) để KHÔNG bị trống. Hits luôn xếp trên nhờ điểm cao hơn.
-      chosen = hits.length >= 5 ? hits : hits.concat(scoredAll.filter((s) => s.score === 0))
+      const brandHits = scoredAll.filter((s) => s.brandHit)
+      if (brand && brandHits.length >= 4) {
+        chosen = brandHits                      // đủ video đúng BRAND → chỉ giữ brand (zero drift)
+      } else {
+        const hits = scoredAll.filter((s) => s.score > 0)
+        // Quá ít → BÙ tối đa 12 video query (đã sạch) để không trống, nhưng không làm loãng.
+        const fill = hits.length >= 5 ? [] : scoredAll.filter((s) => s.score === 0).slice(0, 12)
+        chosen = hits.concat(fill)
+      }
     }
     // Liên quan nhất trước; cùng điểm thì video DÀI hơn (giàu cảnh/kịch bản) trước.
     chosen.sort((a, b) => b.score - a.score || b.v.durationSec - a.v.durationSec)
