@@ -62,6 +62,7 @@ export default function SpyAds() {
   const [q, setQ] = useState('')
   const [country, setCountry] = useState('MY')
   const [activeOnly, setActiveOnly] = useState(true)
+  const [ladiOnly, setLadiOnly] = useState(false)   // chỉ ad dẫn về web/ladipage (bỏ chat/sàn)
   const [ads, setAds] = useState<FbAd[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -234,6 +235,11 @@ CHỈ trả JSON.`
     } finally { setAdaptBusy(false) }
   }
 
+  // Lọc "chỉ ad có ladipage/sale page" (web, bỏ WhatsApp/Messenger/Shopee/Lazada/TikTok).
+  const shownAds = (ads || []).filter(
+    (a) => !(ladiOnly && platform === 'fb') || (!!a.linkUrl && linkKind(cleanLink(a.linkUrl)).web),
+  )
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#EEEEF2]">
       {/* Header + search */}
@@ -242,7 +248,7 @@ CHỈ trả JSON.`
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-100"><Megaphone className="h-4 w-4 text-rose-600" /></div>
           <div>
             <h1 className="text-base font-bold text-slate-800">Spy Ads — Quảng cáo đối thủ</h1>
-            <p className="text-[11px] text-slate-400">Video ads đang chạy trên Facebook Ad Library → tải về dựng lại cho FB ads</p>
+            <p className="text-[11px] text-slate-400">{platform === 'fb' ? 'Video ads đang chạy trên Facebook Ad Library' : 'Top video ads TikTok (Creative Center)'} → tải về dựng lại cho FB ads</p>
           </div>
           {credits != null && <span className="ml-auto text-xs text-slate-400">credit: {credits}</span>}
         </div>
@@ -266,9 +272,14 @@ CHỈ trả JSON.`
             <Search className="h-4 w-4" /> {loading ? 'Đang tìm…' : 'Tìm ad'}
           </button>
           {platform === 'fb' && (
-            <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
-              <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} /> Chỉ ad đang chạy
-            </label>
+            <>
+              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} /> Chỉ ad đang chạy
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                <input type="checkbox" checked={ladiOnly} onChange={(e) => setLadiOnly(e.target.checked)} /> 🔗 Chỉ ad có Ladipage/Sale page
+              </label>
+            </>
           )}
           {error && <span className="text-xs text-red-500">{error}</span>}
         </div>
@@ -293,11 +304,19 @@ CHỈ trả JSON.`
             <p className="text-xs">Ad <b>đang chạy + lâu + advertiser nhiều bản</b> = winner (đốt tiền lâu chứng tỏ có lời).</p>
           </div>
         )}
-        {loading && <div className="py-10 text-center text-sm text-slate-400">Đang quét Facebook Ad Library…</div>}
+        {loading && <div className="py-10 text-center text-sm text-slate-400">{platform === 'fb' ? 'Đang quét Facebook Ad Library…' : 'Đang quét TikTok Top Ads…'}</div>}
         {ads && ads.length > 0 && (
           <>
+            <div className="mb-2 text-xs font-semibold text-slate-500">
+              {shownAds.length} ad{ladiOnly && platform === 'fb' ? ' có Ladipage/Sale page' : ''}
+            </div>
+            {ladiOnly && platform === 'fb' && shownAds.length === 0 && (
+              <p className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
+                Lượt này không có ad nào dẫn về web/ladipage (đa số đi WhatsApp/Shopee). Bỏ tick lọc hoặc bấm "Tải thêm".
+              </p>
+            )}
             <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
-              {ads.map((a) => (
+              {shownAds.map((a) => (
                 <div key={a.id} className="flex flex-col overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm">
                   <button onClick={() => openAd(a)} className="relative flex aspect-[3/4] items-center justify-center bg-slate-900">
                     {a.cover ? <img src={a.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
