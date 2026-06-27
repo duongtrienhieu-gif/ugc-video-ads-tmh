@@ -14,6 +14,8 @@ import { directGeminiText, directGeminiVision } from '../../../utils/gemini'
 interface KwSet { zh: string[]; ms: string[]; en: string[] }
 interface Scene { group: string; emoji: string; idea: string; queries: { zh: string; ms: string; en: string } }
 interface Brief { productGuessVi: string; productKeywords: KwSet; scenes: Scene[] }
+interface Clip { id: string; videoUrl: string; cover: string; desc: string; author: string; likes: number; durationSec: number; shareUrl: string; platform: string }
+const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : String(n))
 
 const BRIEF_SCHEMA = {
   type: 'object',
@@ -74,6 +76,27 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [brief, setBrief] = useState<Brief | null>(null)
+  // Clip Douyin (TikHub) cho 1 từ khóa
+  const [clipQuery, setClipQuery] = useState<string | null>(null)
+  const [clips, setClips] = useState<Clip[] | null>(null)
+  const [clipsBusy, setClipsBusy] = useState(false)
+  const [clipsErr, setClipsErr] = useState<string | null>(null)
+
+  const findClips = async (kw: string) => {
+    setClipQuery(kw); setClips(null); setClipsErr(null); setClipsBusy(true)
+    try {
+      const d = await fetch(`/api/tikhub-search?q=${encodeURIComponent(kw)}&platform=douyin&sort=like`).then((r) => r.json())
+      if (d.error) { setClipsErr(d.error); setClipsBusy(false); return }
+      setClips(Array.isArray(d.clips) ? d.clips : [])
+      if (!d.clips?.length) setClipsErr(d.note || 'Không có clip — đổi từ khóa')
+    } catch (e) { setClipsErr((e as Error).message) } finally { setClipsBusy(false) }
+  }
+  const dlClip = (c: Clip, i: number) => {
+    const nm = `${(name || 'sp').replace(/[^\w]+/g, '-').slice(0, 24)}-douyin-${i + 1}.mp4`
+    const href = `/api/dl-video?url=${encodeURIComponent(c.videoUrl)}&name=${encodeURIComponent(nm)}`
+    const el = document.createElement('a'); el.href = href; el.download = nm
+    document.body.appendChild(el); el.click(); el.remove()
+  }
 
   const pickProduct = (id: string) => {
     setPickId(id)
@@ -122,6 +145,7 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
     <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-white px-2 py-1.5">
       <span className="text-[12px] font-semibold text-slate-700">{kw}</span>
       <button onClick={() => copy(kw)} className="rounded p-0.5 text-slate-400 hover:bg-slate-100" title="Copy"><Copy className="h-3 w-3" /></button>
+      <button onClick={() => void findClips(kw)} className="rounded bg-violet-600 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-violet-700" title="Lấy clip Douyin">▶ Clip</button>
       <span className="ml-auto flex items-center gap-1">
         {searchLinks(kw).map((l) => (
           <a key={l.label} href={l.url} target="_blank" rel="noopener noreferrer"
@@ -168,6 +192,41 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
 
         {/* Body */}
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {clipQuery !== null ? (
+            <div>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <button onClick={() => { setClipQuery(null); setClips(null); setClipsErr(null) }}
+                  className="rounded-lg border border-black/10 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">← Brief</button>
+                <span className="text-xs font-semibold text-slate-600">Clip Douyin: <b>{clipQuery}</b></span>
+                {clips ? <span className="text-[11px] text-slate-400">· {clips.length} clip</span> : null}
+              </div>
+              {clipsBusy && <div className="py-10 text-center text-sm text-slate-400">🤖 Đang lấy clip Douyin…</div>}
+              {clipsErr && !clipsBusy && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">{clipsErr}</p>}
+              {clips && clips.length > 0 && (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+                  {clips.map((c, i) => (
+                    <div key={c.id} className="flex flex-col overflow-hidden rounded-xl border border-black/10 bg-white">
+                      <a href={c.shareUrl} target="_blank" rel="noopener noreferrer" className="relative block aspect-[3/4] bg-slate-900">
+                        {c.cover ? <img src={c.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
+                        <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[10px] font-bold text-white">{c.durationSec}s</span>
+                      </a>
+                      <div className="flex flex-1 flex-col gap-1 p-2">
+                        <p className="line-clamp-2 text-[10px] text-slate-500">{c.desc}</p>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                          <span>❤️ {fmtK(c.likes)}</span>
+                          {c.author ? <span className="line-clamp-1">@{c.author}</span> : null}
+                        </div>
+                        <div className="mt-auto flex gap-1 pt-1">
+                          <a href={c.shareUrl} target="_blank" rel="noopener noreferrer" className="flex-1 rounded border border-black/10 py-1 text-center text-[10px] font-semibold text-slate-600 hover:bg-slate-50">▶ Mở</a>
+                          <button onClick={() => dlClip(c, i)} className="flex-1 rounded bg-violet-600 py-1 text-[10px] font-semibold text-white hover:bg-violet-700">⬇ Tải</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (<>
           {!brief && !busy && (
             <div className="flex h-56 flex-col items-center justify-center gap-2 text-center text-slate-400">
               <Clapperboard className="h-8 w-8" />
@@ -183,9 +242,9 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
                 <b>AI hiểu SP:</b> {brief.productGuessVi}
               </div>
 
-              {/* Stub thông báo nguồn tự động */}
-              <div className="mb-3 rounded-xl border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
-                ⏳ Kéo clip tự động (Douyin/Kuaishou/TikTok) sẽ bật khi có <b>TIKHUB_KEY</b>. Tạm thời mỗi từ khóa có nút <b>link search</b> để mở thủ công.
+              {/* Nguồn tự động: Douyin LIVE; Kuaishou/RED/TikTok mở thủ công */}
+              <div className="mb-3 rounded-xl border border-dashed border-violet-300 bg-violet-50 px-3 py-2 text-[11px] text-violet-700">
+                ▶ Bấm <b>Clip</b> ở mỗi từ khóa để lấy <b>video Douyin</b> (xem/tải). Kuaishou/RED/TikTok dùng nút <b>link search</b> để mở thủ công (đang thêm vào sau).
               </div>
 
               {tab === 'product' ? (
@@ -214,6 +273,7 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
                             <span className="w-7 shrink-0 text-[10px] font-bold text-slate-400">{tag}</span>
                             <span className="text-[12px] text-slate-700">{q}</span>
                             <button onClick={() => copy(q)} className="rounded p-0.5 text-slate-400 hover:bg-slate-100" title="Copy"><Copy className="h-3 w-3" /></button>
+                            <button onClick={() => void findClips(q)} className="rounded bg-violet-600 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-violet-700" title="Lấy clip Douyin">▶ Clip</button>
                             <span className="ml-auto flex items-center gap-1">
                               {searchLinks(q).map((l) => (
                                 <a key={l.label} href={l.url} target="_blank" rel="noopener noreferrer"
@@ -229,6 +289,7 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
               )}
             </>
           )}
+          </>)}
         </div>
       </div>
     </div>

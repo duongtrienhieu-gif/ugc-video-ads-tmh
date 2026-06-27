@@ -10,8 +10,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const rawName = typeof req.query.name === 'string' ? req.query.name : 'ad.mp4'
   const name = rawName.replace(/[^\w.\-]+/g, '-').slice(0, 80) || 'ad.mp4'
 
+  // Referer theo nguồn — Douyin/TikTok/CN CDN chặn hotlink nếu thiếu.
+  const host = url.toLowerCase()
+  const referer = /douyin|amemv|bytecdn|douyinpic|zjcdn|kuaishou|kwimg|xhscdn|xiaohongshu/.test(host)
+    ? 'https://www.douyin.com/'
+    : /tiktok|tiktokcdn|ttwstatic|muscdn/.test(host)
+      ? 'https://www.tiktok.com/'
+      : 'https://www.facebook.com/'
+
   try {
-    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://www.facebook.com/' } })
+    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', Referer: referer } })
     if (!r.ok) return res.status(502).json({ error: `Nguồn video lỗi ${r.status}` })
     const buf = Buffer.from(await r.arrayBuffer())
     res.setHeader('Content-Type', r.headers.get('content-type') || 'video/mp4')

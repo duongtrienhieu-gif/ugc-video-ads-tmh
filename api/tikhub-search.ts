@@ -1,0 +1,88 @@
+// ── Vercel serverless — TÌM CLIP nguồn (TikHub: Douyin keyword search) ──
+// Source Finder gọi: /api/tikhub-search?q=膝盖护具&platform=douyin&sort=like
+// Trả clip ngắn để cắt ghép. Key server-side TIKHUB_KEY (Bearer). 1 req ~$0.001.
+// Shape Douyin web search hay đổi wrapper → parser DEFENSIVE (deep-collect aweme).
+import type { VercelRequest, VercelResponse } from '@vercel/node'
+
+type AnyObj = Record<string, unknown>
+
+// Đào sâu JSON, gom mọi object trông như 1 video Douyin (có aweme_id + video).
+function collectAwemes(node: unknown, out: AnyObj[], seen: Set<unknown>, depth = 0) {
+  if (!node || typeof node !== 'object' || depth > 8 || seen.has(node)) return
+  seen.add(node)
+  if (Array.isArray(node)) { for (const x of node) collectAwemes(x, out, seen, depth + 1); return }
+  const o = node as AnyObj
+  if ((o.aweme_id || o.aweme_id) && (o.video || o.desc != null)) { out.push(o); return }
+  if (o.aweme_info && typeof o.aweme_info === 'object') { collectAwemes(o.aweme_info, out, seen, depth + 1); return }
+  for (const k in o) collectAwemes(o[k], out, seen, depth + 1)
+}
+
+const firstUrl = (x: unknown): string => {
+  const o = x as AnyObj | undefined
+  const list = o?.url_list as string[] | undefined
+  return Array.isArray(list) && list.length ? String(list[0]) : ''
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const key = process.env.TIKHUB_KEY
+  if (!key) return res.status(500).json({ error: 'Server thiếu TIKHUB_KEY (đặt trên Vercel)' })
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+  if (!q) return res.status(400).json({ error: 'Cần q (từ khóa)' })
+  const sort = req.query.sort === 'latest' ? '2' : req.query.sort === 'general' ? '0' : '1' // mặc định 1 = nhiều like
+  const debug = req.query.debug === '1'
+
+  // Douyin web — tìm video theo keyword.
+  const url = `https://api.tikhub.io/api/v1/douyin/web/fetch_video_search_result?keyword=${encodeURIComponent(q)}&offset=0&count=20&sort_type=${sort}&publish_time=0`
+
+  let body = ''
+  let ok = false
+  // TikHub video search có <5% lỗi → retry tối đa 3 lần.
+  for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+    try {
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${key}`, 'User-Agent': 'ugc-lab' } })
+      body = await r.text()
+      if (r.ok) { ok = true; break }
+      if (r.status === 401 || r.status === 403) return res.status(502).json({ error: `TikHub auth lỗi ${r.status} — kiểm tra TIKHUB_KEY/scope` })
+      if (r.status === 429) return res.status(502).json({ error: 'TikHub 429 — hết quota/balance' })
+    } catch { /* retry */ }
+  }
+  if (!ok) return res.status(502).json({ error: 'TikHub không phản hồi (đã thử 3 lần)', detail: body.slice(0, 200) })
+
+  let data: AnyObj
+  try { data = JSON.parse(body) as AnyObj } catch { return res.status(502).json({ error: 'TikHub trả về không phải JSON', detail: body.slice(0, 200) }) }
+
+  const awemes: AnyObj[] = []
+  collectAwemes(data, awemes, new Set())
+
+  const seenId = new Set<string>()
+  const clips = awemes.map((a) => {
+    const v = (a.video as AnyObj) || {}
+    const playUrl = firstUrl(v.play_addr) || firstUrl(v.play_addr_h264) || firstUrl(v.download_addr) || firstUrl(v.play_addr_265)
+    const cover = firstUrl(v.cover) || firstUrl(v.origin_cover) || firstUrl(v.dynamic_cover)
+    const author = (a.author as AnyObj) || {}
+    const stats = (a.statistics as AnyObj) || {}
+    const id = String(a.aweme_id ?? a.aweme_id ?? '')
+    return {
+      id,
+      videoUrl: playUrl,
+      cover,
+      desc: String(a.desc ?? '').slice(0, 160),
+      author: String(author.nickname ?? author.unique_id ?? ''),
+      likes: Number(stats.digg_count ?? 0) || 0,
+      durationSec: Math.round((Number(v.duration ?? 0) || 0) / 1000),
+      shareUrl: String(a.share_url ?? (id ? `https://www.douyin.com/video/${id}` : '')),
+      platform: 'douyin',
+    }
+  }).filter((c) => {
+    if (!c.id || !c.videoUrl || seenId.has(c.id)) return false
+    seenId.add(c.id); return true
+  }).sort((x, y) => y.likes - x.likes)
+
+  res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=900')
+  return res.status(200).json({
+    clips,
+    count: clips.length,
+    ...(debug ? { rawKeys: Object.keys(data), awemeCount: awemes.length, sample: awemes[0] ? Object.keys(awemes[0]) : [] } : {}),
+    note: clips.length ? undefined : 'no douyin clips (đổi từ khóa, hoặc xem debug=1 để soi shape)',
+  })
+}
