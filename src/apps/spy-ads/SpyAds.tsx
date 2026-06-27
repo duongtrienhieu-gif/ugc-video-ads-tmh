@@ -2,16 +2,27 @@
 // Khác "Video win" (organic): đây là ad MKT đối thủ đang chạy → tải về dựng lại cho FB ads.
 // Win signal: đang ACTIVE + chạy lâu + advertiser nhiều ad. AI dịch VO + bóc kịch bản cắt ghép.
 import { useState } from 'react'
-import { Megaphone, Search, Play, Download, ExternalLink, X, Sparkles } from 'lucide-react'
+import { Megaphone, Search, Play, Download, ExternalLink, X, Sparkles, Link2, FileText, PenLine } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { directGeminiVision } from '../../utils/gemini'
+import { useBankStore } from '../../stores/bankStore'
+import { useAppStore } from '../../stores/appStore'
+import { directGeminiVision, directGeminiText } from '../../utils/gemini'
 
 interface FbAd {
   id: string; page: string; text: string; videoUrl: string; cover: string
   linkUrl: string; country: string; isActive: boolean; daysRunning: number
   advertiserAds: number; libraryUrl: string
 }
-interface AdRead { transcript: string; structure: string; angle: string; howto: string }
+interface AdRead { transcript: string; structure: string }
+interface LadiRead { headline: string; offer: string; structure: string; cta: string; steal: string }
+interface AdaptScript { hook: string; script: string; shots: string; caption: string }
+
+// Từ khóa CHUNG (tín hiệu ad COD, mọi ngách) — bấm là quét rộng rồi lọc mắt.
+const COD_CHIPS = [
+  'percuma', 'free gift', 'beli', 'beli sekarang', 'cod', 'bayar bila terima', 'promosi',
+  'diskaun', 'tawaran hebat', 'jimat', 'harga runtuh', 'stok terhad', 'ready stock',
+  'terlaris', 'viral', 'beli 1 percuma 1', 'beli 2 percuma 1',
+]
 
 const COUNTRIES = [
   { c: 'MY', f: '🇲🇾' }, { c: 'ID', f: '🇮🇩' }, { c: 'TH', f: '🇹🇭' },
@@ -20,6 +31,9 @@ const COUNTRIES = [
 
 export default function SpyAds() {
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
+  const products = useBankStore((s) => s.products)
+  const sendToApp = useAppStore((s) => s.sendToApp)
+  const addToast = useAppStore((s) => s.addToast)
 
   const [platform, setPlatform] = useState<'fb' | 'tiktok'>('fb')
   const [q, setQ] = useState('')
@@ -37,18 +51,30 @@ export default function SpyAds() {
   const [readBusy, setReadBusy] = useState(false)
   const [readErr, setReadErr] = useState<string | null>(null)
   const [readResult, setReadResult] = useState<AdRead | null>(null)
+  // Đọc ladipage đối thủ
+  const [ladiBusy, setLadiBusy] = useState(false)
+  const [ladiErr, setLadiErr] = useState<string | null>(null)
+  const [ladiResult, setLadiResult] = useState<LadiRead | null>(null)
+  // Bê kịch bản về SP của mình
+  const [adaptProductId, setAdaptProductId] = useState('')
+  const [adaptName, setAdaptName] = useState('')
+  const [adaptBusy, setAdaptBusy] = useState(false)
+  const [adaptErr, setAdaptErr] = useState<string | null>(null)
+  const [adaptResult, setAdaptResult] = useState<AdaptScript | null>(null)
 
-  const buildUrl = (cur?: string) => {
+  const buildUrl = (query: string, cur?: string) => {
     const base = platform === 'fb' ? '/api/fb-ads' : '/api/tiktok-ads'
     const st = platform === 'fb' ? `&status=${activeOnly ? 'ACTIVE' : 'ALL'}` : ''
-    return `${base}?q=${encodeURIComponent(q.trim())}&country=${country}${st}${cur ? `&cursor=${encodeURIComponent(cur)}` : ''}`
+    return `${base}?q=${encodeURIComponent(query.trim())}&country=${country}${st}${cur ? `&cursor=${encodeURIComponent(cur)}` : ''}`
   }
 
-  const search = async () => {
-    if (!q.trim()) { setError('Nhập từ khóa / ngách'); return }
+  const search = async (term?: string) => {
+    const query = (term ?? q).trim()
+    if (!query) { setError('Nhập từ khóa / ngách'); return }
+    if (term != null) setQ(term)
     setLoading(true); setError(null); setAds(null); setCursor(null); setHasMore(false)
     try {
-      const d = await fetch(buildUrl()).then((r) => r.json())
+      const d = await fetch(buildUrl(query)).then((r) => r.json())
       if (d.error) { setError(d.error); setLoading(false); return }
       setAds(Array.isArray(d.ads) ? d.ads : [])
       setCursor(d.cursor != null ? String(d.cursor) : null)
@@ -62,7 +88,7 @@ export default function SpyAds() {
     if (!cursor || moreLoading) return
     setMoreLoading(true)
     try {
-      const d = await fetch(buildUrl(cursor)).then((r) => r.json())
+      const d = await fetch(buildUrl(q, cursor)).then((r) => r.json())
       const more: FbAd[] = Array.isArray(d.ads) ? d.ads : []
       setAds((prev) => {
         const seen = new Set((prev || []).map((a) => a.id))
@@ -74,8 +100,13 @@ export default function SpyAds() {
     } catch { /* bỏ qua */ } finally { setMoreLoading(false) }
   }
 
-  const openAd = (a: FbAd) => { setReadResult(null); setReadErr(null); setPlayAd(a) }
-  const closeAd = () => { setPlayAd(null); setReadResult(null); setReadErr(null); setReadBusy(false) }
+  const resetAd = () => {
+    setReadResult(null); setReadErr(null); setReadBusy(false)
+    setLadiResult(null); setLadiErr(null); setLadiBusy(false)
+    setAdaptResult(null); setAdaptErr(null); setAdaptBusy(false); setAdaptProductId(''); setAdaptName('')
+  }
+  const openAd = (a: FbAd) => { resetAd(); setPlayAd(a) }
+  const closeAd = () => { resetAd(); setPlayAd(null) }
 
   // AI đọc ad: server tải video → Gemini Files → dịch VO + bóc kịch bản cắt ghép (tiếng Việt).
   const readAd = async () => {
@@ -98,8 +129,8 @@ export default function SpyAds() {
         if (state === 'FAILED') throw new Error('Gemini xử lý video thất bại')
       }
       if (state !== 'ACTIVE') throw new Error('Gemini xử lý video quá lâu — thử lại')
-      const prompt = `Bạn xem 1 VIDEO QUẢNG CÁO Facebook của đối thủ (bán COD ở ${playAd.country}, tiếng Malay/English). Người đọc là marketer Việt muốn DỰNG LẠI ad tương tự cho FB. Trả JSON tiếng Việt:
-{"transcript":"toàn bộ lời voice + chữ trên màn hình, DỊCH sang tiếng Việt theo trình tự","structure":"cấu trúc dựng: hook → vấn đề → giải pháp/chứng minh → CTA, mỗi ý 1 dòng; ghi rõ kiểu cảnh/cắt ghép","angle":"góc bán & vì sao ad này chạy được lâu","howto":"cách tự dựng lại: cần quay/lấy source gì, voice nói gì, mỗi ý 1 dòng"}
+      const prompt = `Bạn xem 1 VIDEO QUẢNG CÁO Facebook của đối thủ (bán COD ở ${playAd.country}, tiếng Malay/English). Người đọc là marketer Việt. Trả JSON tiếng Việt:
+{"transcript":"toàn bộ lời voice + chữ trên màn hình, DỊCH sang tiếng Việt theo trình tự","structure":"cấu trúc dựng + cách cắt ghép: hook → vấn đề → giải pháp/chứng minh → CTA, mỗi ý 1 dòng, ghi rõ kiểu cảnh"}
 Caption ad: ${playAd.text || '(không có)'}
 CHỈ trả JSON.`
       const raw = await directGeminiVision({
@@ -108,8 +139,8 @@ CHỈ trả JSON.`
         responseMimeType: 'application/json',
         responseSchema: {
           type: 'object',
-          properties: { transcript: { type: 'string' }, structure: { type: 'string' }, angle: { type: 'string' }, howto: { type: 'string' } },
-          required: ['transcript', 'structure', 'angle', 'howto'],
+          properties: { transcript: { type: 'string' }, structure: { type: 'string' } },
+          required: ['transcript', 'structure'],
         },
         temperature: 0.4, maxOutputTokens: 8192,
       })
@@ -119,6 +150,63 @@ CHỈ trả JSON.`
     } catch (e) {
       setReadErr('Đọc ad lỗi: ' + ((e as Error).message || '').slice(0, 140))
     } finally { setReadBusy(false) }
+  }
+
+  // Đọc LADIPAGE đối thủ: lấy nội dung trang đích (jina) → AI tóm tắt cấu trúc/offer/CTA.
+  const readLadipage = async () => {
+    if (!playAd?.linkUrl) { setLadiErr('Ad này không có link ladipage'); return }
+    if (!geminiApiKey) { setLadiErr('Cần Gemini API key trong Cài đặt'); return }
+    setLadiBusy(true); setLadiErr(null); setLadiResult(null)
+    try {
+      const md = await fetch(`https://r.jina.ai/${playAd.linkUrl}`).then((r) => r.text())
+      if (!md || md.length < 50) throw new Error('Không đọc được trang đích')
+      const prompt = `Đây là nội dung trang đích (ladipage) của 1 ad COD đối thủ ở ${playAd.country}. Tóm tắt cho marketer Việt. Trả JSON tiếng Việt:
+{"headline":"tiêu đề/hook chính của trang","offer":"ưu đãi/giá/combo (vd mua 2 tặng 1, freeship COD)","structure":"các khối trang theo thứ tự, mỗi ý 1 dòng","cta":"cách kêu gọi đặt hàng (form/nút/WhatsApp)","steal":"điểm hay đáng học/áp dụng, mỗi ý 1 dòng"}
+NỘI DUNG TRANG:
+${md.slice(0, 12000)}
+CHỈ trả JSON.`
+      const raw = await directGeminiText({
+        apiKey: geminiApiKey, prompt, responseMimeType: 'application/json',
+        responseSchema: { type: 'object', properties: { headline: { type: 'string' }, offer: { type: 'string' }, structure: { type: 'string' }, cta: { type: 'string' }, steal: { type: 'string' } }, required: ['headline', 'offer', 'structure', 'cta', 'steal'] },
+        temperature: 0.4, maxOutputTokens: 4096,
+      })
+      let parsed: LadiRead
+      try { parsed = JSON.parse(raw) as LadiRead } catch { parsed = JSON.parse(raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()) as LadiRead }
+      setLadiResult(parsed)
+    } catch (e) {
+      setLadiErr('Đọc ladipage lỗi: ' + ((e as Error).message || '').slice(0, 120))
+    } finally { setLadiBusy(false) }
+  }
+
+  // Bê kịch bản ad winner về SP CỦA MÌNH (song ngữ MY//VN), giữ công thức.
+  const adaptScript = async () => {
+    if (!readResult) { setAdaptErr('Bấm "Đọc ad" trước để có kịch bản gốc'); return }
+    const prod = adaptProductId ? products.find((p) => p.id === adaptProductId) : null
+    const prodName = prod?.productName || adaptName.trim()
+    if (!prodName) { setAdaptErr('Chọn SP từ Kho hoặc gõ tên SP của mình'); return }
+    if (!geminiApiKey) { setAdaptErr('Cần Gemini API key trong Cài đặt'); return }
+    setAdaptBusy(true); setAdaptErr(null); setAdaptResult(null)
+    try {
+      const prodInfo = prod
+        ? `${prod.productName}. ${prod.productDescription || ''} USP: ${prod.usps || ''}. Lợi ích: ${prod.benefits || ''}. Ưu đãi: ${prod.offer || ''}`
+        : prodName
+      const prompt = `Bạn là copywriter ad COD bán ở Malaysia. Dưới đây là kịch bản 1 ad WINNER của đối thủ. VIẾT LẠI thành kịch bản ad MỚI cho SẢN PHẨM CỦA TÔI, GIỮ đúng công thức/cấu trúc winner nhưng nội dung của SP tôi. Voice tiếng MALAY (để quay/đọc), kèm dịch VN trong ngoặc sau mỗi câu.
+KỊCH BẢN ĐỐI THỦ (đã dịch VN): ${readResult.transcript}
+CẤU TRÚC: ${readResult.structure}
+SẢN PHẨM CỦA TÔI: ${prodInfo}
+Trả JSON: {"hook":"câu mở đầu (MY // VN)","script":"toàn bộ lời voice tiếng MALAY, mỗi câu 1 dòng, kèm (VN) sau mỗi câu","shots":"gợi ý cảnh quay theo từng đoạn, mỗi ý 1 dòng","caption":"caption đăng FB (tiếng Malay)"}
+CHỈ trả JSON.`
+      const raw = await directGeminiText({
+        apiKey: geminiApiKey, prompt, responseMimeType: 'application/json',
+        responseSchema: { type: 'object', properties: { hook: { type: 'string' }, script: { type: 'string' }, shots: { type: 'string' }, caption: { type: 'string' } }, required: ['hook', 'script', 'shots', 'caption'] },
+        temperature: 0.6, maxOutputTokens: 8192,
+      })
+      let parsed: AdaptScript
+      try { parsed = JSON.parse(raw) as AdaptScript } catch { parsed = JSON.parse(raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()) as AdaptScript }
+      setAdaptResult(parsed)
+    } catch (e) {
+      setAdaptErr('Viết kịch bản lỗi: ' + ((e as Error).message || '').slice(0, 120))
+    } finally { setAdaptBusy(false) }
   }
 
   return (
@@ -158,6 +246,16 @@ CHỈ trả JSON.`
             </label>
           )}
           {error && <span className="text-xs text-red-500">{error}</span>}
+        </div>
+        {/* Chip từ khóa COD chung — bấm là quét rộng */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] font-medium text-slate-400">Từ khóa COD:</span>
+          {COD_CHIPS.map((c) => (
+            <button key={c} onClick={() => void search(c)} disabled={loading}
+              className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50">
+              {c}
+            </button>
+          ))}
         </div>
       </header>
 
@@ -228,20 +326,98 @@ CHỈ trả JSON.`
                   {[
                     { icon: '💬', label: 'Voice / chữ (dịch VN)', text: readResult.transcript },
                     { icon: '🎬', label: 'Cấu trúc & cắt ghép', text: readResult.structure },
-                    { icon: '🎯', label: 'Góc bán & vì sao chạy lâu', text: readResult.angle },
-                    { icon: '🛠', label: 'Cách dựng lại', text: readResult.howto },
                   ].map((b) => (
                     <div key={b.label} className="rounded-xl border border-black/10 bg-slate-50 p-3">
                       <div className="text-xs font-bold text-slate-700">{b.icon} {b.label}</div>
                       <p className="mt-1 whitespace-pre-line text-[11px] leading-relaxed text-slate-600">{b.text}</p>
                     </div>
                   ))}
+
+                  {/* ✍️ Bê kịch bản về SP của mình */}
+                  <div className="rounded-xl border border-violet-200 bg-violet-50 p-3">
+                    <div className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-violet-700"><PenLine className="h-3.5 w-3.5" /> Bê kịch bản về SP của mình</div>
+                    <div className="flex flex-col gap-1.5">
+                      <select value={adaptProductId} onChange={(e) => { setAdaptProductId(e.target.value); if (e.target.value) setAdaptName('') }}
+                        className="rounded-lg border border-black/10 bg-white px-2 py-1 text-[11px]">
+                        <option value="">— Chọn SP từ Kho —</option>
+                        {products.map((p) => <option key={p.id} value={p.id}>{p.productName}</option>)}
+                      </select>
+                      {!adaptProductId && (
+                        <input value={adaptName} onChange={(e) => setAdaptName(e.target.value)} placeholder="…hoặc gõ tên SP của mình"
+                          className="rounded-lg border border-black/10 bg-white px-2 py-1 text-[11px]" />
+                      )}
+                      <button onClick={() => void adaptScript()} disabled={adaptBusy}
+                        className="rounded-lg bg-violet-600 py-1.5 text-[11px] font-semibold text-white hover:bg-violet-700 disabled:opacity-50">
+                        {adaptBusy ? 'AI đang viết…' : '✍️ Viết kịch bản cho SP này'}
+                      </button>
+                      {adaptErr && <p className="text-[11px] text-red-600">{adaptErr}</p>}
+                    </div>
+                    {adaptResult && (
+                      <div className="mt-2 flex flex-col gap-2">
+                        {[
+                          { label: '🪝 Hook', text: adaptResult.hook },
+                          { label: '🎙 Lời voice (MY // VN)', text: adaptResult.script },
+                          { label: '🎬 Cảnh quay', text: adaptResult.shots },
+                          { label: '📝 Caption FB', text: adaptResult.caption },
+                        ].map((b) => (
+                          <div key={b.label} className="rounded-lg bg-white p-2">
+                            <div className="text-[11px] font-bold text-slate-700">{b.label}</div>
+                            <p className="mt-0.5 whitespace-pre-line text-[11px] leading-relaxed text-slate-600">{b.text}</p>
+                          </div>
+                        ))}
+                        <div className="flex gap-2">
+                          <button onClick={() => { navigator.clipboard?.writeText(`${adaptResult.hook}\n\n${adaptResult.script}\n\n${adaptResult.caption}`); addToast('Đã copy kịch bản', 'success') }}
+                            className="flex-1 rounded-lg border border-violet-300 bg-white py-1.5 text-[11px] font-semibold text-violet-700 hover:bg-violet-50">📋 Copy</button>
+                          {adaptProductId && (
+                            <button onClick={() => { sendToApp({ targetApp: 'ads-content', targetField: 'productId', data: adaptProductId }); addToast('Đã mở Ads Content với SP này', 'success') }}
+                              className="flex-1 rounded-lg bg-violet-600 py-1.5 text-[11px] font-semibold text-white hover:bg-violet-700">→ Ads Content</button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
-              <div className="mt-3 flex gap-2">
+
+              {/* 📄 Đọc Ladipage đối thủ */}
+              {playAd.linkUrl && (
+                <div className="mt-3">
+                  {!ladiResult && (
+                    <button onClick={() => void readLadipage()} disabled={ladiBusy}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50">
+                      <FileText className="h-3.5 w-3.5" /> {ladiBusy ? 'Đang đọc trang…' : '📄 Đọc Ladipage đối thủ (AI)'}
+                    </button>
+                  )}
+                  {ladiErr && <p className="mt-1 text-[11px] text-red-600">{ladiErr}</p>}
+                  {ladiResult && (
+                    <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                      <div className="text-xs font-bold text-amber-700">📄 Ladipage đối thủ</div>
+                      {[
+                        { label: 'Headline', text: ladiResult.headline },
+                        { label: 'Ưu đãi', text: ladiResult.offer },
+                        { label: 'Cấu trúc trang', text: ladiResult.structure },
+                        { label: 'CTA', text: ladiResult.cta },
+                        { label: 'Điểm đáng học', text: ladiResult.steal },
+                      ].map((b) => (
+                        <div key={b.label}>
+                          <div className="text-[11px] font-bold text-slate-700">{b.label}</div>
+                          <p className="whitespace-pre-line text-[11px] text-slate-600">{b.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-3 flex flex-wrap gap-2">
                 <a href={playAd.videoUrl} target="_blank" rel="noopener noreferrer" className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100">
                   <Download className="h-3.5 w-3.5" /> Tải video
                 </a>
+                {playAd.linkUrl && (
+                  <a href={playAd.linkUrl} target="_blank" rel="noopener noreferrer" className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100">
+                    <Link2 className="h-3.5 w-3.5" /> Ladipage đối thủ
+                  </a>
+                )}
                 {playAd.libraryUrl && (
                   <a href={playAd.libraryUrl} target="_blank" rel="noopener noreferrer" className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-black/10 bg-slate-50 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">
                     <ExternalLink className="h-3.5 w-3.5" /> Ad Library
