@@ -51,6 +51,10 @@ export const MARKET_CURRENCY: Record<Market, string> = { MY: 'RM', ID: 'Rp', TH:
 // Theo tiền tệ từng nước (RM 0.01 / Rp vài trăm…). SP có giá > 0 nhưng < floor = mồi.
 export const MARKET_PRICE_FLOOR: Record<Market, number> = { MY: 1, ID: 1000, TH: 5, VN: 5000, PH: 5 }
 
+// Ngưỡng "bão hòa": SP đã bán quá nhiều = mã cũ đối thủ vít lâu rồi. Bật hideSaturated để
+// ẩn mấy mã này → nổi bật SP mới/đang lên (TREND). Mặc định tắt (xem hết).
+export const SATURATION_SOLD_CAP = 100000
+
 // ── Ngách-preset cho QUÉT LIVE: chọn 1 cái → tự điền từ khóa → quét ngay ──
 // Từ khóa kiểu universal/Malay-English (TikTok Shop search fuzzy, chạy được cả 5 nước).
 // Ngách-preset: ưu tiên hàng TIÊU DÙNG NHANH, dễ UPSALE (mua nhiều/combo), dễ win COD.
@@ -111,6 +115,7 @@ export interface ResearchFilters {
   hasCreatorOnly: boolean
   hideHighSku: boolean
   hideTeaser: boolean          // ẩn SP giá mồi (~0) — chỉ áp ở chế độ live
+  hideSaturated: boolean       // ẩn SP đã bán quá cao (mã cũ bão hòa) → nổi SP mới nổi
 }
 export const DEFAULT_FILTERS: ResearchFilters = {
   priceMaxMyr: 60,
@@ -120,6 +125,7 @@ export const DEFAULT_FILTERS: ResearchFilters = {
   hasCreatorOnly: false,
   hideHighSku: true,           // ẩn ngách nhiều SKU mặc định
   hideTeaser: true,            // ẩn SP giá mồi mặc định
+  hideSaturated: false,        // mặc định xem hết; bật để săn SP mới nổi
 }
 
 // ── Preset "chọn nhanh" ──

@@ -10,6 +10,8 @@ interface ScProduct {
   title?: string
   image?: { url_list?: string[] }
   sold_info?: { sold_count?: number }
+  product_price_info?: { sale_price_format?: string }
+  seo_url?: string | { canonical_url?: string }
 }
 interface ScResp { products?: ScProduct[]; credits_remaining?: number; error?: string; message?: string }
 
@@ -40,12 +42,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const products = Array.isArray(d.products) ? d.products : []
       const sold = products.map((p) => Number(p.sold_info?.sold_count ?? 0) || 0)
       const totalSold = sold.reduce((a, b) => a + b, 0)
-      let top: ScProduct | null = null
-      let topSold = -1
-      for (const p of products) {
-        const s = Number(p.sold_info?.sold_count ?? 0) || 0
-        if (s > topSold) { topSold = s; top = p }
-      }
+      // Top 4 SP theo số bán → board arbitrage (xem SP nào nổ ở nước nào).
+      const ranked = products
+        .map((p) => ({ p, s: Number(p.sold_info?.sold_count ?? 0) || 0 }))
+        .sort((a, b) => b.s - a.s)
+      const top = ranked[0]?.p ?? null
+      const topSold = ranked[0]?.s ?? 0
+      const topProducts = ranked.slice(0, 4).map(({ p, s }) => ({
+        title: p.title ?? '',
+        image: p.image?.url_list?.[0] ?? '',
+        sold: s,
+        price: p.product_price_info?.sale_price_format ?? '',
+        url: typeof p.seo_url === 'string' ? p.seo_url : (p.seo_url?.canonical_url ?? ''),
+      }))
       rows.push({
         market: region,
         count: products.length,
@@ -53,11 +62,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         topSold: top ? topSold : 0,
         topTitle: top?.title ?? '',
         topImage: top?.image?.url_list?.[0] ?? '',
+        topProducts,
       })
       if (!products.length) errors.push(`${region}: ${d.error || d.message || 'no products'}`)
     } catch (e) {
       errors.push(`${region}: ${(e as Error).message}`)
-      rows.push({ market: region, count: 0, totalSold: 0, topSold: 0, topTitle: '', topImage: '' })
+      rows.push({ market: region, count: 0, totalSold: 0, topSold: 0, topTitle: '', topImage: '', topProducts: [] })
     }
   }
 

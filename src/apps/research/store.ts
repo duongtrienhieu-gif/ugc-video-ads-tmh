@@ -4,7 +4,7 @@
 import { create } from 'zustand'
 import { supabase, requireUserId } from '../../lib/supabase'
 import type { Market, NicheKey, ResearchProduct, ScoredProduct, SkuRisk, Verdict, SignalResult } from './types'
-import { DEFAULT_FILTERS, type ResearchFilters, type PresetKey, PRESETS, VERDICT_THRESHOLDS, MARKET_CURRENCY, MARKET_PRICE_FLOOR } from './constants'
+import { DEFAULT_FILTERS, type ResearchFilters, type PresetKey, PRESETS, VERDICT_THRESHOLDS, MARKET_CURRENCY, MARKET_PRICE_FLOOR, SATURATION_SOLD_CAP } from './constants'
 import { SAMPLE_PRODUCTS } from './sampleData'
 import { scoreMany } from './services/scoring'
 import { classifyNiche, classifySkuRisk } from './services/niche'
@@ -31,9 +31,11 @@ export interface DbShop {
 type SortKey = 'score' | 'revenue' | 'growth' | 'commission' | 'sale'
 
 // Cross-market: 1 từ khóa quét 5 nước → tóm tắt mỗi nước
+export interface CrossTopProduct { title: string; image: string; sold: number; price: string; url: string }
 export interface CrossRow {
   market: Market; count: number; totalSold: number
   topSold: number; topTitle: string; topImage: string
+  topProducts?: CrossTopProduct[]
 }
 
 // ── LIVE: TikTok Shop (ScrapeCreators) → ResearchProduct ─────────────────────
@@ -448,6 +450,8 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
       const floor = MARKET_PRICE_FLOOR[market] ?? 0
       rows = rows.filter((p) => !(p.unitPrice > 0 && p.unitPrice < floor))
     }
+    // Ẩn SP đã bán quá cao (mã cũ bão hòa) → nổi SP mới/đang lên.
+    if (live && filters.hideSaturated) rows = rows.filter((p) => p.sale <= SATURATION_SOLD_CAP)
     // Các bộ lọc dưới đây thuộc data Kalodata (giá RM / hoa hồng / tăng trưởng / creator).
     // Với data LIVE TikTok Shop (giá local + không có các trường này) → BỎ QUA, nếu không sẽ lọc sạch SP nước ngoài.
     if (!live) {

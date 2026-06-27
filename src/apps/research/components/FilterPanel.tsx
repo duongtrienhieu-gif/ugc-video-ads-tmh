@@ -42,6 +42,7 @@ export default function FilterPanel() {
         </label>
         <Toggle on={filters.hideHighSku} onChange={(v) => setFilter('hideHighSku', v)} label="Ẩn SP nhiều biến thể" />
         <Toggle on={filters.hideTeaser} onChange={(v) => setFilter('hideTeaser', v)} label="Ẩn SP giá mồi (≈0)" />
+        <Toggle on={filters.hideSaturated} onChange={(v) => setFilter('hideSaturated', v)} label="🌱 Ẩn SP bão hòa (săn SP mới nổi)" />
         <p className="mt-1 rounded-lg bg-violet-50 px-2 py-1.5 text-[10px] text-violet-600">
           Đang xem data LIVE TikTok Shop — chấm điểm theo SỐ ĐÃ BÁN. "Tăng nhanh" cần quét lại sau vài ngày.
         </p>

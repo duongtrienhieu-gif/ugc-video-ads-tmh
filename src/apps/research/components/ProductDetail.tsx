@@ -14,6 +14,15 @@ import PricingCalculator from './PricingCalculator'
 
 type Tab = 'overview' | 'analysis' | 'video' | 'creator' | 'market' | 'pricing'
 
+// Công thức win tổng hợp từ nhiều video bán của 1 SP/ngách.
+interface WinFormula {
+  hooks: string[]
+  structure: string
+  angles: string[]
+  offer: string
+  tips: string
+}
+
 // Kết quả AI "đọc" 1 video bán hàng → tiếng Việt (cho seller VN bán ở MY).
 interface VideoRead {
   transcript: string   // lời thoại/chữ trên màn hình → dịch VN theo trình tự
@@ -153,6 +162,9 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const [readErr, setReadErr] = useState<string | null>(null)
   const [readResult, setReadResult] = useState<VideoRead | null>(null)
   const [vidSort, setVidSort] = useState<'relevant' | 'view' | 'long'>('relevant')   // sort video win
+  const [formula, setFormula] = useState<WinFormula | null>(null)
+  const [formulaBusy, setFormulaBusy] = useState(false)
+  const [formulaErr, setFormulaErr] = useState<string | null>(null)
   const v = VERDICT_META[product.verdict]
   const niche = NICHES.find((n) => n.key === product.nicheKey)
   const passCount = product.signals.filter((s) => s.status === 'pass').length
@@ -472,6 +484,43 @@ Nếu video không có lời thoại thì đọc chữ trên màn hình + hình 
     }
   }
 
+  // AI tổng hợp CÔNG THỨC WIN của ngách từ mô tả các video đang bán SP (text-only, rẻ).
+  const aiWinFormula = async () => {
+    if (!geminiApiKey) { setFormulaErr('Cần Gemini API key trong Cài đặt'); return }
+    if (!liveVideos || liveVideos.length === 0) { setFormulaErr('Chưa có video — chờ tải xong rồi thử'); return }
+    setFormulaBusy(true); setFormulaErr(null); setFormula(null)
+    try {
+      const descs = liveVideos.slice(0, 12)
+        .map((v, i) => `${i + 1}. (${v.durationSec}s · ${formatCount(v.views)} view) ${v.desc || '(không mô tả)'}`)
+        .join('\n')
+      const prompt = `Bạn là chuyên gia content TikTok bán hàng. Dưới đây là tiêu đề/mô tả các video đang bán sản phẩm "${product.title}" (ngách ${nicheText}) ở ${marketLabel}. Tổng hợp CÔNG THỨC WIN chung để mình làm content tương tự bán ở Malaysia. Trả JSON tiếng Việt:
+{"hooks":["3-5 mẫu câu hook mở đầu hay, cụ thể"],"structure":"cấu trúc video thắng: mở → thân (chứng minh) → CTA, mỗi ý 1 dòng","angles":["3-4 góc bán chính"],"offer":"kiểu ưu đãi/CTA hay dùng","tips":"lưu ý quay/dựng để giống winner, mỗi ý 1 dòng"}
+MÔ TẢ VIDEO:
+${descs}
+CHỈ trả JSON.`
+      const raw = await directGeminiText({
+        apiKey: geminiApiKey, prompt, responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'object',
+          properties: {
+            hooks: { type: 'array', items: { type: 'string' } },
+            structure: { type: 'string' },
+            angles: { type: 'array', items: { type: 'string' } },
+            offer: { type: 'string' },
+            tips: { type: 'string' },
+          },
+          required: ['hooks', 'structure', 'angles', 'offer', 'tips'],
+        },
+        temperature: 0.6, maxOutputTokens: 4096,
+      })
+      setFormula(JSON.parse(raw) as WinFormula)
+    } catch (e) {
+      setFormulaErr('Lỗi: ' + ((e as Error).message || '').slice(0, 100))
+    } finally {
+      setFormulaBusy(false)
+    }
+  }
+
   const compactCur = (n: number) => n >= 1000 ? `${cur} ${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : `${cur} ${n.toLocaleString('vi-VN')}`
   const metrics: { label: string; value: string }[] = isLive
     ? [
@@ -775,6 +824,39 @@ Nếu video không có lời thoại thì đọc chữ trên màn hình + hình 
                   <ExternalLink className="h-3 w-3" /> Video→doanh thu (Kalodata)
                 </a>
               </div>
+              {/* AI tổng hợp công thức win của ngách từ các video bên dưới */}
+              {liveVideos && liveVideos.length > 0 && !formula && (
+                <button
+                  onClick={() => void aiWinFormula()}
+                  disabled={formulaBusy}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
+                >
+                  <Sparkles className="h-4 w-4" /> {formulaBusy ? 'AI đang tổng hợp…' : '🧪 Công thức win của ngách (AI)'}
+                </button>
+              )}
+              {formulaErr && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{formulaErr}</p>}
+              {formula && (
+                <div className="flex flex-col gap-2 rounded-2xl border border-violet-200 bg-violet-50 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-violet-700"><Sparkles className="h-3.5 w-3.5" /> Công thức win (tổng hợp từ {Math.min(12, liveVideos?.length ?? 0)} video)</span>
+                    <button onClick={() => setFormula(null)} className="rounded-full p-0.5 text-violet-400 hover:bg-violet-100"><X className="h-3.5 w-3.5" /></button>
+                  </div>
+                  <div><div className="text-[11px] font-bold text-slate-700">🪝 Hook mở đầu</div>
+                    <ul className="mt-0.5 flex flex-col gap-0.5">{formula.hooks.map((h, i) => <li key={i} className="text-[11px] text-slate-600">• {h}</li>)}</ul></div>
+                  <div><div className="text-[11px] font-bold text-slate-700">🎬 Cấu trúc</div><p className="whitespace-pre-line text-[11px] text-slate-600">{formula.structure}</p></div>
+                  <div><div className="text-[11px] font-bold text-slate-700">🎯 Góc bán</div>
+                    <ul className="mt-0.5 flex flex-col gap-0.5">{formula.angles.map((a, i) => <li key={i} className="text-[11px] text-slate-600">• {a}</li>)}</ul></div>
+                  <div><div className="text-[11px] font-bold text-slate-700">🎁 Ưu đãi / CTA</div><p className="text-[11px] text-slate-600">{formula.offer}</p></div>
+                  <div><div className="text-[11px] font-bold text-slate-700">💡 Lưu ý quay/dựng</div><p className="whitespace-pre-line text-[11px] text-slate-600">{formula.tips}</p></div>
+                  <button
+                    onClick={() => void aiFillAndGo({ app: 'ads-content', label: 'Ads Content' })}
+                    disabled={aiBusy}
+                    className="mt-1 rounded-xl bg-violet-600 py-2 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+                  >
+                    AI điền + Viết content
+                  </button>
+                </div>
+              )}
               {liveVidLoading && (
                 <div className="rounded-xl border border-dashed border-black/10 p-6 text-center text-xs text-slate-400">Đang tìm video liên quan…</div>
               )}

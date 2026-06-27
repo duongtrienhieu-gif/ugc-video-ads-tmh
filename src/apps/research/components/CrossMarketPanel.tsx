@@ -59,7 +59,26 @@ export default function CrossMarketPanel({
                       {isTop && <Flame className="mr-0.5 inline h-3 w-3 text-orange-500" />}{formatCount(r.totalSold)} bán
                     </span>
                   </div>
-                  {r.topTitle && (
+                  {r.topProducts && r.topProducts.length > 0 ? (
+                    <div className="mt-1.5 grid grid-cols-2 gap-1.5 pl-2 sm:grid-cols-4">
+                      {r.topProducts.map((tp, i) => {
+                        const inner = (
+                          <>
+                            <div className="aspect-square w-full overflow-hidden rounded bg-slate-100">
+                              {tp.image && <img src={tp.image} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />}
+                            </div>
+                            <p className="mt-0.5 line-clamp-2 text-[10px] leading-tight text-slate-600">{tp.title}</p>
+                            <p className="text-[10px] font-bold text-slate-700">{formatCount(tp.sold)} bán{tp.price ? ` · ${tp.price}` : ''}</p>
+                          </>
+                        )
+                        return tp.url ? (
+                          <a key={i} href={tp.url} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-black/5 bg-white p-1 hover:border-violet-300">{inner}</a>
+                        ) : (
+                          <div key={i} className="rounded-lg border border-black/5 bg-white p-1">{inner}</div>
+                        )
+                      })}
+                    </div>
+                  ) : r.topTitle && (
                     <div className="mt-1 flex items-center gap-2 pl-28 text-[11px] text-slate-400">
                       {r.topImage && <img src={r.topImage} alt="" className="h-5 w-5 rounded object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />}
                       <span className="line-clamp-1">Top: {r.topTitle} ({formatCount(r.topSold)} bán) · {r.count} SP</span>
