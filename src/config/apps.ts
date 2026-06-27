@@ -12,7 +12,7 @@
 import {
   User, Mic, PenLine, Sparkles, Images,
   Megaphone, ShoppingBag, Rocket, MessageCircle, TrendingUp,
-  Palette, Package, History as HistoryIcon, LayoutGrid, Radar,
+  Palette, Package, History as HistoryIcon, LayoutGrid, Radar, Warehouse,
 } from 'lucide-react'
 
 export interface AppMeta {
@@ -62,6 +62,7 @@ export const APP_GROUPS: AppGroup[] = [
   {
     label: 'Thư viện',
     items: [
+      { id: 'inventory-board',   label: 'Kho & Nhập hàng', desc: 'Tồn · đề xuất nhập', icon: Warehouse, tint: 'amber' },
       { id: 'studio-brand-kit',  label: 'Brand Kit', desc: 'Bộ nhận diện',     icon: Palette,     tint: 'violet' },
       { id: 'products-shortcut', label: 'Sản phẩm',  desc: 'Kho sản phẩm',     icon: Package,     tint: 'emerald', action: 'products' },
       { id: 'finder',            label: 'Dự án',     desc: 'Project Finder',   icon: LayoutGrid,  tint: 'sky' },

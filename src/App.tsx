@@ -39,6 +39,7 @@ import Research from './apps/research/Research'
 import SpyAds from './apps/spy-ads/SpyAds'
 import ChatBot from './apps/chat-bot/ChatBot'
 import ImageStudio from './apps/image-studio/ImageStudio'
+import InventoryBoard from './apps/inventory-board/InventoryBoard'
 
 const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'home': Home,
@@ -65,6 +66,7 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'spy-ads': SpyAds,
   'chat-bot': ChatBot,
   'image-studio': ImageStudio,
+  'inventory-board': InventoryBoard,
 }
 
 /** VN label + cache keys used by the per-app ErrorBoundary fallback so the
@@ -92,6 +94,7 @@ const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> =
   'spy-ads':           { name: 'Spy Ads',          resetKeys: [] },
   'chat-bot':          { name: 'Chat Bot',         resetKeys: ['chat-bot-configs-v1'] },
   'image-studio':      { name: 'Xưởng Ảnh',        resetKeys: ['gift-studio-draft-v1', 'form-bg-studio-draft-v1', 'rebrand-studio-draft-v1', 'image-studio-mode-v1'] },
+  'inventory-board':   { name: 'Kho & Nhập hàng',  resetKeys: ['inv_board_sources'] },
 }
 
 export default function App() {
