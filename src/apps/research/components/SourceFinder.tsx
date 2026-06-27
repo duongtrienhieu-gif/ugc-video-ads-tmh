@@ -3,7 +3,7 @@
 // Scene Brief (nhóm cảnh B-roll + truy vấn theo nền tảng). Có ảnh SP → gửi Gemini vision ("quét ảnh").
 // Clip Douyin lấy thật qua TikHub (/api/tikhub-search); Kuaishou/RED/TikTok = link search thủ công.
 // Theme: dùng token app (bg-app-*, text-app-*, ui-accent-*) → tự theo dark/studio.
-import { useState } from 'react'
+import { useState, type ChangeEvent } from 'react'
 import { X, Sparkles, Copy, ExternalLink, Image as ImageIcon, Film, Clapperboard, Download } from 'lucide-react'
 import { useBankStore } from '../../../stores/bankStore'
 import { useAppStore } from '../../../stores/appStore'
@@ -91,6 +91,13 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
     const p = products.find((x) => x.id === id)
     if (p) { setName(p.productName || ''); setImageUrl(p.productImages?.[0] || ''); setBrief(null) }
   }
+  // Tải ảnh SP thủ công (cho SP ngoài app) → data URL dùng làm ảnh quét.
+  const onPickFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return
+    const rd = new FileReader()
+    rd.onload = () => { setImageUrl(String(rd.result || '')); setPickId(''); setBrief(null) }
+    rd.readAsDataURL(f)
+  }
   const copy = (t: string) => { navigator.clipboard?.writeText(t); addToast('Đã copy', 'success') }
   const safe = (s: string) => (s || 'sp').replace(/[^\w]+/g, '-').slice(0, 24)
 
@@ -153,7 +160,7 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-3" onClick={onClose}>
-      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-app-border bg-app-base" onClick={(e) => e.stopPropagation()}>
+      <div className="flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-app-border bg-app-base" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex shrink-0 items-center gap-3 border-b border-app-border bg-app-card px-4 py-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-dim"><Clapperboard className="h-4 w-4 text-accent" /></div>
@@ -166,13 +173,20 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
 
         {/* Chọn SP */}
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-app-border bg-app-card px-4 py-2.5">
-          {imageUrl ? <img src={imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover" /> : <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-app-card-elevated"><ImageIcon className="h-4 w-4 text-app-subtle" /></div>}
-          <select value={pickId} onChange={(e) => pickProduct(e.target.value)} className="rounded-lg border border-app-border bg-app-card px-2 py-1.5 text-xs text-app-text">
+          <label className="group relative h-12 w-12 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-app-border bg-app-card-elevated" title="Tải ảnh SP lên (cho SP ngoài app)">
+            {imageUrl ? <img src={imageUrl} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full w-full items-center justify-center"><ImageIcon className="h-4 w-4 text-app-subtle" /></span>}
+            <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-center text-[8px] font-semibold text-white opacity-0 group-hover:opacity-100">Đổi ảnh</span>
+            <input type="file" accept="image/*" className="hidden" onChange={onPickFile} />
+          </label>
+          <select value={pickId} onChange={(e) => pickProduct(e.target.value)} style={{ colorScheme: 'dark' }} className="rounded-lg border border-app-border bg-app-card px-2 py-1.5 text-xs text-app-text">
             <option value="">— Chọn SP từ Kho —</option>
             {products.map((p) => <option key={p.id} value={p.id}>{p.productName}</option>)}
           </select>
-          <input value={name} onChange={(e) => { setName(e.target.value); setPickId('') }} placeholder="…hoặc gõ tên SP"
+          <input value={name} onChange={(e) => { setName(e.target.value); setPickId('') }} placeholder="…hoặc gõ tên SP (ngoài app)"
             className="min-w-[180px] flex-1 rounded-lg border border-app-border bg-app-card px-3 py-1.5 text-sm text-app-text placeholder:text-app-subtle" />
+          <label className="flex cursor-pointer items-center gap-1 rounded-lg border border-app-border bg-app-card px-3 py-1.5 text-xs font-semibold text-app-muted hover:bg-app-card-elevated" title="Tải ảnh SP từ máy">
+            📁 Tải ảnh<input type="file" accept="image/*" className="hidden" onChange={onPickFile} />
+          </label>
           <button onClick={() => void genBrief()} disabled={busy}
             className="ui-accent-solid flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-semibold disabled:opacity-50">
             <Sparkles className="h-4 w-4" /> {busy ? 'AI đang nghĩ…' : (imageUrl ? '🔍 Quét ảnh + Scene Brief' : '🧠 Tạo Scene Brief')}
