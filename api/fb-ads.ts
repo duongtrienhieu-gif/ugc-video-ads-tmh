@@ -56,7 +56,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!key) return res.status(500).json({ error: 'Server thiếu SC_KEY' })
 
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
-  if (!q) return res.status(400).json({ error: 'Cần q (từ khóa / ngách)' })
+  const pageId = typeof req.query.pageId === 'string' ? req.query.pageId.trim() : ''  // chế độ "tất cả ad của 1 advertiser"
+  if (!q && !pageId) return res.status(400).json({ error: 'Cần q (từ khóa) hoặc pageId (advertiser)' })
   const cRaw = typeof req.query.country === 'string' ? req.query.country.toUpperCase() : 'MY'
   const country = VALID_COUNTRY.has(cRaw) ? cRaw : 'MY'
   const status = req.query.status === 'ALL' ? 'ALL' : 'ACTIVE'   // mặc định chỉ ad đang chạy = winner
@@ -64,7 +65,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const searchType = req.query.exact === '1' ? 'keyword_exact_phrase' : 'keyword_unordered'
 
   try {
-    const baseUrl = `https://api.scrapecreators.com/v1/facebook/adLibrary/search/ads?query=${encodeURIComponent(q)}&country=${country}&status=${status}&media_type=VIDEO&ad_type=all&search_type=${searchType}`
+    // 2 chế độ: pageId → company/ads (tất cả ad 1 advertiser) ; q → search/ads (theo từ khóa).
+    const baseUrl = pageId
+      ? `https://api.scrapecreators.com/v1/facebook/adLibrary/company/ads?pageId=${encodeURIComponent(pageId)}&country=${country}&status=${status}&media_type=VIDEO`
+      : `https://api.scrapecreators.com/v1/facebook/adLibrary/search/ads?query=${encodeURIComponent(q)}&country=${country}&status=${status}&media_type=VIDEO&ad_type=all&search_type=${searchType}`
     // Mỗi trang SC chỉ trả ~5 ad → GOM tới 5 trang/lần để trả ~24 ad, đỡ bấm "Tải thêm" nhiều.
     const allRaw: FbAd[] = []
     const seen = new Set<string>()
@@ -118,6 +122,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return {
           id: String(a.ad_archive_id ?? ''),
           page,
+          pageId: String(a.page_id ?? ''),
           text: (snap.body?.text ?? '').slice(0, 300),
           videoUrl,
           cover: vid.video_preview_image_url || (snap.images || [])[0]?.original_image_url || '',

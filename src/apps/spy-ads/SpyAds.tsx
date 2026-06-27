@@ -9,7 +9,7 @@ import { useAppStore } from '../../stores/appStore'
 import { directGeminiVision, directGeminiText } from '../../utils/gemini'
 
 interface FbAd {
-  id: string; page: string; text: string; videoUrl: string; cover: string
+  id: string; page: string; pageId?: string; text: string; videoUrl: string; cover: string
   linkUrl: string; country: string; isActive: boolean; daysRunning: number
   advertiserAds: number; libraryUrl: string; likes?: number; ctr?: string
   variations?: number; cta?: string; platforms?: string[]; format?: string
@@ -91,6 +91,12 @@ export default function SpyAds() {
   const [radarLoading, setRadarLoading] = useState(false)
   const [radarErr, setRadarErr] = useState<string | null>(null)
   const [spyingFor, setSpyingFor] = useState<string | null>(null) // tên SP đang spy ad (breadcrumb)
+  // Phase 2a — xem tất cả ad của 1 advertiser
+  const [viewPageId, setViewPageId] = useState<string | null>(null)
+  const [viewPageName, setViewPageName] = useState<string | null>(null)
+  // Phase 2b — nhận diện nền tảng trang đích
+  const [cms, setCms] = useState<string | null>(null)
+  const [cmsBusy, setCmsBusy] = useState(false)
   const [country, setCountry] = useState('MY')
   const [activeOnly, setActiveOnly] = useState(true)
   const [ladiOnly, setLadiOnly] = useState(false)   // chỉ ad dẫn về web/ladipage (bỏ chat/sàn)
@@ -126,17 +132,20 @@ export default function SpyAds() {
   const [adaptErr, setAdaptErr] = useState<string | null>(null)
   const [adaptResult, setAdaptResult] = useState<AdaptScript | null>(null)
 
-  const buildUrl = (query: string, cur?: string) => {
-    const base = platform === 'fb' ? '/api/fb-ads' : '/api/tiktok-ads'
+  const buildUrl = (query: string, cur?: string, pageId?: string) => {
     const st = platform === 'fb' ? `&status=${activeOnly ? 'ACTIVE' : 'ALL'}` : ''
+    const curP = cur ? `&cursor=${encodeURIComponent(cur)}` : ''
+    if (platform === 'fb' && pageId) return `/api/fb-ads?pageId=${encodeURIComponent(pageId)}&country=${country}${st}${curP}`
+    const base = platform === 'fb' ? '/api/fb-ads' : '/api/tiktok-ads'
     const ex = platform === 'fb' && exact ? '&exact=1' : ''
-    return `${base}?q=${encodeURIComponent(query.trim())}&country=${country}${st}${ex}${cur ? `&cursor=${encodeURIComponent(cur)}` : ''}`
+    return `${base}?q=${encodeURIComponent(query.trim())}&country=${country}${st}${ex}${curP}`
   }
 
   const search = async (term?: string) => {
     const query = (term ?? q).trim()
     if (!query) { setError('Nhập từ khóa / ngách'); return }
     if (term != null) setQ(term)
+    setViewPageId(null); setViewPageName(null)   // tìm từ khóa = thoát chế độ xem advertiser
     setLoading(true); setError(null); setAds(null); setCursor(null); setHasMore(false); setSelected(new Set())
     try {
       const d = await fetch(buildUrl(query)).then((r) => r.json())
@@ -153,7 +162,7 @@ export default function SpyAds() {
     if (!cursor || moreLoading) return
     setMoreLoading(true)
     try {
-      const d = await fetch(buildUrl(q, cursor)).then((r) => r.json())
+      const d = await fetch(buildUrl(q, cursor, viewPageId || undefined)).then((r) => r.json())
       const more: FbAd[] = Array.isArray(d.ads) ? d.ads : []
       setAds((prev) => {
         const seen = new Set((prev || []).map((a) => a.id))
@@ -188,10 +197,38 @@ export default function SpyAds() {
     void search(coreTerms(p.title))
   }
 
+  // Phase 2a — xem TẤT CẢ ad đang chạy của 1 advertiser (company/ads theo pageId).
+  const viewAdvertiser = async (pageId?: string, name?: string) => {
+    if (!pageId) { addToast('Ad này thiếu pageId — không xem được advertiser', 'error'); return }
+    setMode('ads'); setSpyingFor(null); setPlayAd(null)
+    setViewPageId(pageId); setViewPageName(name || '(advertiser)')
+    setLoading(true); setError(null); setAds(null); setCursor(null); setHasMore(false); setSelected(new Set())
+    try {
+      const d = await fetch(buildUrl('', undefined, pageId)).then((r) => r.json())
+      if (d.error) { setError(d.error); setLoading(false); return }
+      setAds(Array.isArray(d.ads) ? d.ads : [])
+      setCursor(d.cursor != null ? String(d.cursor) : null)
+      setHasMore(!!d.hasMore && d.cursor != null)
+      setCredits(d.credits ?? credits)
+      if (!d.ads?.length) setError('Advertiser này không có video ad đang chạy (đổi "Chỉ ad đang chạy" sang tất cả)')
+    } catch (e) { setError((e as Error).message) } finally { setLoading(false) }
+  }
+  const exitAdvertiser = () => { setViewPageId(null); setViewPageName(null); setAds(null); setError(null) }
+
+  // Phase 2b — nhận diện nền tảng trang đích (LadiPage/Shopify/Woo…).
+  const detectCms = async (url: string) => {
+    setCmsBusy(true); setCms(null)
+    try {
+      const d = await fetch(`/api/detect-cms?url=${encodeURIComponent(url)}`).then((r) => r.json())
+      setCms(d.cms || 'Khác')
+    } catch { setCms('Khác') } finally { setCmsBusy(false) }
+  }
+
   const resetAd = () => {
     setReadResult(null); setReadErr(null); setReadBusy(false)
     setLadiResult(null); setLadiErr(null); setLadiBusy(false)
     setAdaptResult(null); setAdaptErr(null); setAdaptBusy(false); setAdaptProductId(''); setAdaptName('')
+    setCms(null); setCmsBusy(false)
   }
   const openAd = (a: FbAd) => { resetAd(); setPlayAd(a) }
   const closeAd = () => { resetAd(); setPlayAd(null) }
@@ -416,6 +453,13 @@ CHỈ trả JSON.`
                   className="ml-auto rounded-md border border-rose-200 bg-white px-2 py-0.5 font-semibold hover:bg-rose-100">← Về Radar</button>
               </div>
             )}
+            {viewPageName && (
+              <div className="flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs text-indigo-700">
+                <span>📢 Tất cả ad của advertiser: <b>{viewPageName}</b></span>
+                <button onClick={exitAdvertiser}
+                  className="ml-auto rounded-md border border-indigo-200 bg-white px-2 py-0.5 font-semibold hover:bg-indigo-100">← Thoát</button>
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-2">
               <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
                 <button onClick={() => { setPlatform('fb'); setAds(null) }}
@@ -600,10 +644,18 @@ CHỈ trả JSON.`
                       {g.maxDays > 0 && <span className="text-[11px] font-medium text-slate-500">⏳ lâu nhất {g.maxDays}d</span>}
                       {g.totalLikes > 0 && <span className="text-[11px] font-medium text-slate-500">❤️ {fmtK(g.totalLikes)}</span>}
                       {g.active && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">● đang chạy</span>}
-                      <button onClick={() => selectMany(g.ads)}
-                        className="ml-auto rounded-md border border-rose-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-rose-600 hover:bg-rose-50">
-                        ✓ Chọn cả brand
-                      </button>
+                      <div className="ml-auto flex items-center gap-1.5">
+                        {platform === 'fb' && g.ads[0]?.pageId && (
+                          <button onClick={() => void viewAdvertiser(g.ads[0].pageId, g.page)}
+                            className="rounded-md border border-indigo-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-indigo-600 hover:bg-indigo-50">
+                            📢 Tất cả ad
+                          </button>
+                        )}
+                        <button onClick={() => selectMany(g.ads)}
+                          className="rounded-md border border-rose-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-rose-600 hover:bg-rose-50">
+                          ✓ Chọn cả brand
+                        </button>
+                      </div>
                     </div>
                     <div className="flex gap-2 overflow-x-auto pb-1">
                       {g.ads.map((a) => (
@@ -780,8 +832,17 @@ CHỈ trả JSON.`
                         <Link2 className="h-3 w-3" /> Link đích: {kind.emoji} {kind.label}
                       </div>
                       <a href={dest} target="_blank" rel="noopener noreferrer" className="block break-all text-[11px] text-blue-600 underline">{dest}</a>
-                      <button onClick={() => { navigator.clipboard?.writeText(dest); addToast('Đã copy link', 'success') }}
-                        className="mt-1 rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-amber-700 hover:bg-amber-100">📋 Copy link</button>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <button onClick={() => { navigator.clipboard?.writeText(dest); addToast('Đã copy link', 'success') }}
+                          className="rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-amber-700 hover:bg-amber-100">📋 Copy link</button>
+                        {kind.web && !cms && (
+                          <button onClick={() => void detectCms(dest)} disabled={cmsBusy}
+                            className="rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50">
+                            {cmsBusy ? 'Đang dò…' : '🔍 Nền tảng trang?'}
+                          </button>
+                        )}
+                        {cms && <span className="rounded-md bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-800">🧱 {cms}</span>}
+                      </div>
                       {!kind.web && <p className="mt-1 text-[10px] text-amber-700/80">Ad này chốt đơn qua {kind.label} — không có ladipage để bóc.</p>}
                     </div>
                     {kind.web && !ladiResult && (
@@ -813,6 +874,12 @@ CHỈ trả JSON.`
               })()}
 
               <div className="mt-3 flex flex-wrap gap-2">
+                {playAd.pageId && (
+                  <button onClick={() => void viewAdvertiser(playAd.pageId, playAd.page)}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">
+                    📢 Xem tất cả ad của advertiser này
+                  </button>
+                )}
                 <button onClick={() => downloadOne(playAd)} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100">
                   <Download className="h-3.5 w-3.5" /> Tải video
                 </button>
