@@ -69,6 +69,7 @@ export default function SpyAds() {
   const [activeOnly, setActiveOnly] = useState(true)
   const [ladiOnly, setLadiOnly] = useState(false)   // chỉ ad dẫn về web/ladipage (bỏ chat/sàn)
   const [groupView, setGroupView] = useState(false) // gom theo advertiser/SP thay vì lưới phẳng
+  const [selected, setSelected] = useState<Set<string>>(new Set()) // ad đã chọn để tải hàng loạt
   const [ads, setAds] = useState<FbAd[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -102,7 +103,7 @@ export default function SpyAds() {
     const query = (term ?? q).trim()
     if (!query) { setError('Nhập từ khóa / ngách'); return }
     if (term != null) setQ(term)
-    setLoading(true); setError(null); setAds(null); setCursor(null); setHasMore(false)
+    setLoading(true); setError(null); setAds(null); setCursor(null); setHasMore(false); setSelected(new Set())
     try {
       const d = await fetch(buildUrl(query)).then((r) => r.json())
       if (d.error) { setError(d.error); setLoading(false); return }
@@ -266,6 +267,23 @@ CHỈ trả JSON.`
     return arr.sort((x, y) => y.score - x.score)
   })()
 
+  // ── Chọn + tải hàng loạt ──
+  const toggleSel = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const selectMany = (list: FbAd[]) => setSelected((s) => { const n = new Set(s); list.forEach((a) => n.add(a.id)); return n })
+  const dlName = (a: FbAd, i: number) => `${(a.page || 'ad').replace(/[^\w]+/g, '-').slice(0, 30)}-${i + 1}-${a.id}.mp4`
+  const downloadOne = (a: FbAd, i = 0) => {
+    if (!a.videoUrl) return
+    const href = `/api/dl-video?url=${encodeURIComponent(a.videoUrl)}&name=${encodeURIComponent(dlName(a, i))}`
+    const el = document.createElement('a'); el.href = href; el.download = dlName(a, i)
+    document.body.appendChild(el); el.click(); el.remove()
+  }
+  const downloadSelected = async () => {
+    const list = (ads || []).filter((a) => selected.has(a.id) && a.videoUrl)
+    if (!list.length) return
+    addToast(`Đang tải ${list.length} video… (cho phép tải nhiều file nếu trình duyệt hỏi)`, 'success')
+    for (let i = 0; i < list.length; i++) { downloadOne(list[i], i); await new Promise((r) => setTimeout(r, 900)) }
+  }
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#EEEEF2]">
       {/* Header + search */}
@@ -338,11 +356,15 @@ CHỈ trả JSON.`
                 {shownAds.length} ad{ladiOnly && platform === 'fb' ? ' có Ladipage/Sale page' : ''}
                 {groupView && shownAds.length > 0 ? ` · ${groups.length} SP/advertiser` : ''}
               </div>
-              <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
-                <button onClick={() => setGroupView(false)}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${!groupView ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>▦ Lưới</button>
-                <button onClick={() => setGroupView(true)}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${groupView ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>📦 Gom theo SP</button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => selectMany(shownAds)}
+                  className="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50">✓ Chọn tất cả</button>
+                <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
+                  <button onClick={() => setGroupView(false)}
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${!groupView ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>▦ Lưới</button>
+                  <button onClick={() => setGroupView(true)}
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${groupView ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>📦 Gom theo SP</button>
+                </div>
               </div>
             </div>
             {ladiOnly && platform === 'fb' && shownAds.length === 0 && (
@@ -362,19 +384,28 @@ CHỈ trả JSON.`
                       {g.maxDays > 0 && <span className="text-[11px] font-medium text-slate-500">⏳ lâu nhất {g.maxDays}d</span>}
                       {g.totalLikes > 0 && <span className="text-[11px] font-medium text-slate-500">❤️ {fmtK(g.totalLikes)}</span>}
                       {g.active && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">● đang chạy</span>}
+                      <button onClick={() => selectMany(g.ads)}
+                        className="ml-auto rounded-md border border-rose-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-rose-600 hover:bg-rose-50">
+                        ✓ Chọn cả brand
+                      </button>
                     </div>
                     <div className="flex gap-2 overflow-x-auto pb-1">
                       {g.ads.map((a) => (
-                        <button key={a.id} onClick={() => openAd(a)}
-                          className="relative aspect-[3/4] w-[104px] shrink-0 overflow-hidden rounded-lg bg-slate-900">
-                          {a.cover ? <img src={a.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
-                          <Play className="absolute inset-0 m-auto h-6 w-6 text-white/90 drop-shadow" />
-                          {(a.daysRunning > 0 || a.likes) ? (
-                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1 py-0.5 text-[9px] font-semibold text-white">
-                              {a.daysRunning > 0 ? `⏳${a.daysRunning}d ` : ''}{a.likes ? `❤️${fmtK(a.likes)}` : ''}
-                            </div>
-                          ) : null}
-                        </button>
+                        <div key={a.id} className={`relative aspect-[3/4] w-[104px] shrink-0 overflow-hidden rounded-lg bg-slate-900 ${selected.has(a.id) ? 'ring-2 ring-rose-400' : ''}`}>
+                          <button onClick={(e) => { e.stopPropagation(); toggleSel(a.id) }} title="Chọn để tải"
+                            className={`absolute right-1 top-1 z-10 flex h-5 w-5 items-center justify-center rounded border text-[10px] font-bold ${selected.has(a.id) ? 'border-rose-500 bg-rose-500 text-white' : 'border-white/70 bg-black/40 text-white/80'}`}>
+                            {selected.has(a.id) ? '✓' : ''}
+                          </button>
+                          <button onClick={() => openAd(a)} className="block h-full w-full">
+                            {a.cover ? <img src={a.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
+                            <Play className="absolute inset-0 m-auto h-6 w-6 text-white/90 drop-shadow" />
+                            {(a.daysRunning > 0 || a.likes) ? (
+                              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1 py-0.5 text-[9px] font-semibold text-white">
+                                {a.daysRunning > 0 ? `⏳${a.daysRunning}d ` : ''}{a.likes ? `❤️${fmtK(a.likes)}` : ''}
+                              </div>
+                            ) : null}
+                          </button>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -383,7 +414,11 @@ CHỈ trả JSON.`
             ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
               {shownAds.map((a) => (
-                <div key={a.id} className="flex flex-col overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm">
+                <div key={a.id} className={`relative flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm ${selected.has(a.id) ? 'border-rose-400 ring-2 ring-rose-300' : 'border-black/10'}`}>
+                  <button onClick={(e) => { e.stopPropagation(); toggleSel(a.id) }} title="Chọn để tải hàng loạt"
+                    className={`absolute right-1.5 top-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold shadow ${selected.has(a.id) ? 'border-rose-500 bg-rose-500 text-white' : 'border-white/70 bg-black/40 text-white/80'}`}>
+                    {selected.has(a.id) ? '✓' : ''}
+                  </button>
                   <button onClick={() => openAd(a)} className="relative flex aspect-[3/4] items-center justify-center bg-slate-900">
                     {a.cover ? <img src={a.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
                     <Play className="absolute h-10 w-10 text-white/90 drop-shadow" />
@@ -413,6 +448,21 @@ CHỈ trả JSON.`
           </>
         )}
       </main>
+
+      {/* Thanh tải hàng loạt — hiện khi có ad được chọn */}
+      {selected.size > 0 && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-black/10 bg-white px-4 py-2.5 shadow-xl">
+            <span className="text-sm font-semibold text-slate-700">✓ Đã chọn {selected.size} video</span>
+            <button onClick={() => void downloadSelected()}
+              className="flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-rose-700">
+              <Download className="h-4 w-4" /> Tải {selected.size} video
+            </button>
+            <button onClick={() => setSelected(new Set())}
+              className="rounded-xl border border-black/10 px-3 py-1.5 text-sm font-semibold text-slate-500 hover:bg-slate-50">Bỏ chọn</button>
+          </div>
+        </div>
+      )}
 
       {/* Modal: xem ad + AI đọc kịch bản */}
       {playAd && (
@@ -542,9 +592,9 @@ CHỈ trả JSON.`
               })()}
 
               <div className="mt-3 flex flex-wrap gap-2">
-                <a href={playAd.videoUrl} target="_blank" rel="noopener noreferrer" className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100">
+                <button onClick={() => downloadOne(playAd)} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100">
                   <Download className="h-3.5 w-3.5" /> Tải video
-                </a>
+                </button>
                 {playAd.libraryUrl && (
                   <a href={playAd.libraryUrl} target="_blank" rel="noopener noreferrer" className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-black/10 bg-slate-50 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">
                     <ExternalLink className="h-3.5 w-3.5" /> Ad Library
