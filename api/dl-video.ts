@@ -12,11 +12,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Referer theo nguồn — Douyin/TikTok/CN CDN chặn hotlink nếu thiếu.
   const host = url.toLowerCase()
-  const referer = /douyin|amemv|bytecdn|douyinpic|zjcdn|kuaishou|kwimg|xhscdn|xiaohongshu/.test(host)
-    ? 'https://www.douyin.com/'
-    : /tiktok|tiktokcdn|ttwstatic|muscdn/.test(host)
-      ? 'https://www.tiktok.com/'
-      : 'https://www.facebook.com/'
+  const referer = /1688|alicdn|taobao|tmall|tbcdn|mmstat|cloud\.video/.test(host)
+    ? 'https://www.1688.com/'
+    : /douyin|amemv|bytecdn|douyinpic|zjcdn|kuaishou|kwimg|xhscdn|xiaohongshu/.test(host)
+      ? 'https://www.douyin.com/'
+      : /tiktok|tiktokcdn|ttwstatic|muscdn/.test(host)
+        ? 'https://www.tiktok.com/'
+        : 'https://www.facebook.com/'
 
   try {
     const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', Referer: referer } })

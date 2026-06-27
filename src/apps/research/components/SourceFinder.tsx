@@ -14,6 +14,8 @@ interface KwSet { zh: string[]; ms: string[]; en: string[] }
 interface Scene { group: string; emoji: string; idea: string; queries: { zh: string; ms: string; en: string } }
 interface Brief { productGuessVi: string; productKeywords: KwSet; scenes: Scene[] }
 interface Clip { id: string; videoUrl: string; cover: string; desc: string; author: string; likes: number; durationSec: number; shareUrl: string; platform: string }
+interface ImgProduct { itemId: string; title: string; titleVi: string; image: string; price: string; priceHigh: string; sold: string; score: string }
+interface Detail { videos: string[]; images: string[]; shop: string; title: string }
 const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : String(n))
 
 const BRIEF_SCHEMA = {
@@ -86,6 +88,30 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
   const [clips, setClips] = useState<Clip[] | null>(null)
   const [clipsBusy, setClipsBusy] = useState(false)
   const [clipsErr, setClipsErr] = useState<string | null>(null)
+  // Reverse-image 1688 (Tab 1)
+  const [imgProducts, setImgProducts] = useState<ImgProduct[] | null>(null)
+  const [imgBusy, setImgBusy] = useState(false)
+  const [imgErr, setImgErr] = useState<string | null>(null)
+  const [detailFor, setDetailFor] = useState<string | null>(null)
+  const [detail, setDetail] = useState<Detail | null>(null)
+  const [detailBusy, setDetailBusy] = useState(false)
+
+  const findByImage = async () => {
+    if (!imageUrl) { setImgErr('Cần ảnh SP (chọn từ Kho hoặc 📁 Tải ảnh) để khớp hình'); return }
+    setImgBusy(true); setImgErr(null); setImgProducts(null)
+    try {
+      const body = imageUrl.startsWith('data:') ? { base64: imageUrl } : { imageUrl }
+      const d = await fetch('/api/img-search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json())
+      if (d.error) { setImgErr(d.error + (d.detail ? ` — ${String(d.detail).slice(0, 120)}` : '')); setImgBusy(false); return }
+      setImgProducts(Array.isArray(d.products) ? d.products : [])
+      if (!d.products?.length) setImgErr(d.note || 'Không tìm thấy SP khớp ảnh — thử ảnh nền sạch hơn')
+    } catch (e) { setImgErr((e as Error).message) } finally { setImgBusy(false) }
+  }
+  const openDetail = async (itemId: string) => {
+    setDetailFor(itemId); setDetail(null); setDetailBusy(true)
+    try { const d = await fetch(`/api/item-detail?itemId=${encodeURIComponent(itemId)}`).then((r) => r.json()); setDetail(d as Detail) }
+    catch { /* */ } finally { setDetailBusy(false) }
+  }
 
   const pickProduct = (id: string) => {
     setPickId(id)
@@ -215,7 +241,48 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
 
         {/* Body */}
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {clipQuery !== null ? (
+          {detailFor !== null ? (
+            <div>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <button onClick={() => { setDetailFor(null); setDetail(null) }}
+                  className="rounded-lg border border-app-border bg-app-card px-2.5 py-1 text-xs font-semibold text-app-muted hover:bg-app-card-elevated">← Quay lại</button>
+                <span className="text-xs font-semibold text-app-text">Ảnh + Video gốc nhà bán (1688)</span>
+                {detail?.shop ? <span className="text-[11px] text-app-muted">· 🏪 {detail.shop}</span> : null}
+              </div>
+              {detailBusy && <div className="py-10 text-center text-sm text-app-muted">🤖 Đang lấy ảnh/video gốc…</div>}
+              {detail && (
+                <>
+                  {detail.videos?.length > 0 && (
+                    <div className="mb-4">
+                      <div className="mb-1 text-[11px] font-bold text-app-muted">🎬 Video gốc ({detail.videos.length})</div>
+                      <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-2">
+                        {detail.videos.map((v, i) => (
+                          <div key={i} className="flex flex-col gap-1 rounded-lg border border-app-border bg-app-card p-2">
+                            <video src={v} controls playsInline className="w-full rounded bg-black" />
+                            <button onClick={() => proxyDownload(v, `${safe(name)}-1688-${i + 1}.mp4`)} className="ui-accent-solid rounded py-1 text-[10px] font-semibold">⬇ Tải video</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {detail.images?.length > 0 && (
+                    <div>
+                      <div className="mb-1 text-[11px] font-bold text-app-muted">🖼 Ảnh gốc ({detail.images.length})</div>
+                      <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2">
+                        {detail.images.map((im, i) => (
+                          <div key={i} className="relative overflow-hidden rounded-lg border border-app-border bg-app-card">
+                            <img src={im} alt="" className="aspect-square w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+                            <button onClick={() => proxyDownload(im, `${safe(name)}-1688-${i + 1}.jpg`)} className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">⬇</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {!detail.videos?.length && !detail.images?.length && <p className="text-xs text-app-muted">Không lấy được media của SP này (thử SP khác hoặc xem trên 1688).</p>}
+                </>
+              )}
+            </div>
+          ) : clipQuery !== null ? (
             <div>
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <button onClick={() => { setClipQuery(null); setClips(null); setClipsErr(null) }}
@@ -268,14 +335,49 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
 
               {tab === 'product' ? (
                 <div className="flex flex-col gap-3">
-                  {([['🇨🇳 Tiếng Trung (Douyin/Kuaishou)', brief.productKeywords.zh], ['🇲🇾 Malay', brief.productKeywords.ms], ['🇬🇧 English', brief.productKeywords.en]] as [string, string[]][]).map(([label, kws]) => (
-                    <div key={label}>
-                      <div className="mb-1 text-[11px] font-bold text-app-muted">{label}</div>
-                      <div className="flex flex-col gap-1.5">
-                        {kws?.length ? kws.map((kw, i) => <KwRow key={i} kw={kw} />) : <span className="text-[11px] text-app-subtle">—</span>}
-                      </div>
+                  {/* Reverse-image: tìm ĐÚNG SP khớp hình trên 1688 */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button onClick={() => void findByImage()} disabled={imgBusy || !imageUrl}
+                      className="ui-accent-solid flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
+                      🔍 {imgBusy ? 'Đang khớp ảnh…' : 'Tìm SP khớp ảnh (1688)'}
+                    </button>
+                    {!imageUrl && <span className="text-[11px] text-app-subtle">Cần ảnh SP (chọn Kho / 📁 Tải ảnh) để khớp hình</span>}
+                    {imgErr && <span className="text-[11px] text-rose-400">{imgErr}</span>}
+                  </div>
+                  {imgProducts && imgProducts.length > 0 && (
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
+                      {imgProducts.map((p) => (
+                        <div key={p.itemId} className="flex flex-col overflow-hidden rounded-xl border border-app-border bg-app-card">
+                          <div className="relative aspect-square bg-black">
+                            {p.image ? <img src={p.image} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
+                            {p.sold ? <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1 text-[10px] font-bold text-white">🔥 {p.sold} bán/90d</span> : null}
+                          </div>
+                          <div className="flex flex-1 flex-col gap-1 p-2">
+                            <p className="line-clamp-2 text-[10px] text-app-muted">{p.titleVi || p.title}</p>
+                            <div className="text-[10px] text-app-subtle">{p.price ? `¥${p.price}` : ''}{p.priceHigh && p.priceHigh !== p.price ? `–${p.priceHigh}` : ''}{p.score ? ` · ⭐${p.score}` : ''}</div>
+                            <div className="mt-auto flex gap-1 pt-1">
+                              <button onClick={() => void findClips(p.title)} className="ui-accent-solid flex-1 rounded py-1 text-[10px] font-semibold">▶ Clip</button>
+                              <button onClick={() => void openDetail(p.itemId)} className="flex-1 rounded border border-app-border py-1 text-[10px] font-semibold text-app-muted hover:bg-app-card-elevated">🎬 Gốc</button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+                  {/* Fallback: từ khóa (gần đúng) */}
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-[11px] text-app-muted">Hoặc tìm theo từ khóa (gần đúng) ▾</summary>
+                    <div className="mt-2 flex flex-col gap-3">
+                      {([['🇨🇳 Tiếng Trung (Douyin/Kuaishou)', brief.productKeywords.zh], ['🇲🇾 Malay', brief.productKeywords.ms], ['🇬🇧 English', brief.productKeywords.en]] as [string, string[]][]).map(([label, kws]) => (
+                        <div key={label}>
+                          <div className="mb-1 text-[11px] font-bold text-app-muted">{label}</div>
+                          <div className="flex flex-col gap-1.5">
+                            {kws?.length ? kws.map((kw, i) => <KwRow key={i} kw={kw} />) : <span className="text-[11px] text-app-subtle">—</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
