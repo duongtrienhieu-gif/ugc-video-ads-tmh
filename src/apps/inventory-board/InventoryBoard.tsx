@@ -353,10 +353,6 @@ export default function InventoryBoard() {
         {status === 'live' && !restock.length && !invRows.length && !provinces.length && (
           <div style={{ ...panelStyle, textAlign: 'center', color: C.muted, fontSize: 14 }}>Chưa có dữ liệu hiển thị. Kiểm tra link nguồn ở ⚙ Cấu hình.</div>
         )}
-
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 16, textAlign: 'center' }}>
-          Data đọc sống từ Google Sheet · tỷ giá quy đổi 6.500đ/RM · tự làm mới mỗi 5 phút
-        </div>
       </div>
     </div>
   )

@@ -67,12 +67,14 @@ function parseCSV(text: string): string[][] {
   if (cur !== '' || row.length) { row.push(cur); rows.push(row) }
   return rows
 }
+// Excel serial (hệ 1900) → ISO. Tự tính, KHÔNG dùng XLSX.SSF (undefined trong
+// runtime serverless ESM). 25569 = số ngày 1899-12-30 → 1970-01-01.
 function serialToISO(v: unknown): string {
   const n = typeof v === 'number' ? v : parseFloat(String(v))
   if (!n || isNaN(n)) return ''
-  const d = XLSX.SSF.parse_date_code(n)
-  if (!d) return ''
-  return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`
+  const d = new Date(Math.round((n - 25569) * 86400000))
+  if (isNaN(d.getTime())) return ''
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
 }
 async function fetchXlsx(id: string, sheets: string[]): Promise<XLSX.WorkBook> {
   const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`, { cache: 'no-store' })
