@@ -11,8 +11,9 @@ import { directGeminiVision, directGeminiText } from '../../utils/gemini'
 interface FbAd {
   id: string; page: string; text: string; videoUrl: string; cover: string
   linkUrl: string; country: string; isActive: boolean; daysRunning: number
-  advertiserAds: number; libraryUrl: string
+  advertiserAds: number; libraryUrl: string; likes?: number; ctr?: string
 }
+const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : String(n))
 interface AdRead { transcript: string; structure: string }
 interface LadiRead { headline: string; offer: string; structure: string; cta: string; steal: string }
 interface AdaptScript { hook: string; script: string; shots: string; caption: string }
@@ -307,8 +308,10 @@ CHỈ trả JSON.`
                     <p className="line-clamp-1 text-xs font-semibold text-slate-700">{a.page || '(advertiser)'}</p>
                     <p className="line-clamp-2 text-[11px] text-slate-500">{a.text}</p>
                     <div className="mt-auto flex flex-wrap gap-x-2 gap-y-0.5 pt-1 text-[10px] font-medium text-slate-500">
-                      <span>⏳ {a.daysRunning}d</span>
-                      <span>📢 {a.advertiserAds} ad</span>
+                      {a.daysRunning > 0 && <span>⏳ {a.daysRunning}d</span>}
+                      {a.advertiserAds > 1 && <span>📢 {a.advertiserAds} ad</span>}
+                      {a.likes ? <span>❤️ {fmtK(a.likes)}</span> : null}
+                      {a.ctr ? <span>CTR {a.ctr}</span> : null}
                       <span>{COUNTRIES.find((c) => c.c === a.country)?.f ?? ''}{a.country}</span>
                     </div>
                   </div>
@@ -335,7 +338,13 @@ CHỈ trả JSON.`
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
               <p className="text-xs font-semibold text-slate-700">{playAd.page}</p>
-              <p className="mb-2 text-[11px] text-slate-400">⏳ chạy {playAd.daysRunning} ngày · 📢 {playAd.advertiserAds} ad · {playAd.country}</p>
+              <p className="mb-2 text-[11px] text-slate-400">
+                {playAd.daysRunning > 0 ? `⏳ chạy ${playAd.daysRunning} ngày · ` : ''}
+                {playAd.advertiserAds > 1 ? `📢 ${playAd.advertiserAds} ad · ` : ''}
+                {playAd.likes ? `❤️ ${fmtK(playAd.likes)} · ` : ''}
+                {playAd.ctr ? `CTR ${playAd.ctr} · ` : ''}
+                {playAd.country}
+              </p>
               {playAd.text && <p className="mb-3 whitespace-pre-line rounded-lg bg-slate-50 p-2 text-[11px] text-slate-600">{playAd.text}</p>}
 
               {!readResult && !readBusy && (
