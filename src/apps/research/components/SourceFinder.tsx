@@ -76,6 +76,7 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
   const [name, setName] = useState(initial?.name ?? '')
   const [imageUrl, setImageUrl] = useState(initial?.imageUrl ?? '')
   const [pickId, setPickId] = useState('')
+  const [pickOpen, setPickOpen] = useState(false)
   const [tab, setTab] = useState<'product' | 'scenes'>('product')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -179,10 +180,21 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
             <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-center text-[8px] font-semibold text-white opacity-0 group-hover:opacity-100">Đổi ảnh</span>
             <input type="file" accept="image/*" className="hidden" onChange={onPickFile} />
           </label>
-          <select value={pickId} onChange={(e) => pickProduct(e.target.value)} style={{ colorScheme: 'dark' }} className="rounded-lg border border-app-border bg-app-card px-2 py-1.5 text-xs text-app-text">
-            <option value="">— Chọn SP từ Kho —</option>
-            {products.map((p) => <option key={p.id} value={p.id}>{p.productName}</option>)}
-          </select>
+          <div className="relative">
+            <button onClick={() => setPickOpen((v) => !v)}
+              className="flex min-w-[220px] items-center gap-2 rounded-lg border border-app-border bg-app-card px-3 py-1.5 text-xs text-app-text">
+              <span className="truncate">{pickId ? (products.find((p) => p.id === pickId)?.productName || '') : '— Chọn SP từ Kho —'}</span>
+              <span className="ml-auto text-app-muted">▾</span>
+            </button>
+            {pickOpen && (
+              <div className="absolute z-20 mt-1 max-h-64 w-full min-w-[260px] overflow-y-auto rounded-lg border border-app-border bg-app-card shadow-xl">
+                <button onClick={() => { setPickId(''); setPickOpen(false) }} className="block w-full px-3 py-1.5 text-left text-xs text-app-muted hover:bg-app-card-elevated">— Chọn SP từ Kho —</button>
+                {products.map((p) => (
+                  <button key={p.id} onClick={() => { pickProduct(p.id); setPickOpen(false) }} className="block w-full truncate px-3 py-1.5 text-left text-xs text-app-text hover:bg-app-card-elevated">{p.productName}</button>
+                ))}
+              </div>
+            )}
+          </div>
           <input value={name} onChange={(e) => { setName(e.target.value); setPickId('') }} placeholder="…hoặc gõ tên SP (ngoài app)"
             className="min-w-[180px] flex-1 rounded-lg border border-app-border bg-app-card px-3 py-1.5 text-sm text-app-text placeholder:text-app-subtle" />
           <label className="flex cursor-pointer items-center gap-1 rounded-lg border border-app-border bg-app-card px-3 py-1.5 text-xs font-semibold text-app-muted hover:bg-app-card-elevated" title="Tải ảnh SP từ máy">
