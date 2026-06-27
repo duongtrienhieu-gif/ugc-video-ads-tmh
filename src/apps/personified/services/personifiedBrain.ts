@@ -149,6 +149,7 @@ Phân tích và xuất JSON:
 const SCRIPT_SCHEMA = {
   type: 'object',
   properties: {
+    worldEnv: { type: 'string' },
     characters: {
       type: 'array',
       items: {
@@ -191,7 +192,7 @@ const SCRIPT_SCHEMA = {
       },
     },
   },
-  required: ['characters', 'scenes'],
+  required: ['worldEnv', 'characters', 'scenes'],
 } as const
 
 interface RawScene {
@@ -274,6 +275,8 @@ application(sản phẩm thật tác động; KB4 = mỗi hoạt chất 1 cảnh
 - ĐÓNG GỌN 30% cuối: application+destruction nhịp NHANH (có thể gộp), result 1 cảnh (người sống lại — bookend), cta 1 câu cộc. KHÔNG kéo dài phần sản phẩm.
 - (Ngoại lệ: video ${sceneCount} cảnh mà ≤5 thì hero vào ~cảnh 3 — giữ đủ đất cho sản phẩm, đừng ép muộn.)
 
+🌍 worldEnv = 1 BIOME CỐ ĐỊNH (tiếng Anh, 1-2 câu) cho TOÀN video — như video mẫu LUÔN ở 1 thế giới (vd trong ruột). Suy ra từ ẨN DỤ + bộ phận cơ thể bị ảnh hưởng: vd khớp→"inside an inflamed knee joint: glistening cartilage surfaces, bone ends, swollen red synovial tissue, floating joint-fluid droplets, warm light, cavernous depth"; dạ dày→"inside a churning stomach cavern…"; da→"a vast skin-surface landscape with pores…". MỌI cảnh (action + videoPromptEn) PHẢI diễn ra TRONG worldEnv này — đừng nhảy ra cầu thang/phòng/đời thực; nếu cần đời thực thì lồng vào trong biome (vd khớp đang leo cầu thang nhìn từ BÊN TRONG khớp).
+
 LUẬT VIẾT (bắt buộc):
 1. THOẠI NATIVE, KHÔNG DỊCH MÁY: ${arch.narratorVi}. Dùng slang đời thường ${isVN ? 'tiếng Việt' : 'tiếng Mã + chêm sức sống bản địa'} (vd VN: "xả lũ axit", "đình công", "bay màu", "tao cút đây").
 2. Thoại NGẮN GỌN theo độ dài TỰ NHIÊN của cảnh (đừng kéo dài cho đầy clip): ${wordBudgetHint(market)} Mỗi cảnh chỉ render 4s/8s — viết quá số từ trên sẽ bị CẮT CHỮ khi ghép. Punchy, cộc.
@@ -296,7 +299,7 @@ XUẤT JSON: { characters:[...], scenes:[${sceneCount} cảnh đúng thứ tự]
   })
 
   const parsed = JSON.parse(stripFence(raw)) as {
-    characters?: PersonifiedScript['characters']; scenes?: RawScene[]
+    worldEnv?: string; characters?: PersonifiedScript['characters']; scenes?: RawScene[]
   }
 
   // Snap mỗi cảnh về 4 hoặc 8s theo độ dài thoại; hasProduct tính deterministic theo sceneType.
@@ -330,6 +333,7 @@ XUẤT JSON: { characters:[...], scenes:[${sceneCount} cảnh đúng thứ tự]
 
   return {
     insight,
+    worldEnv: (parsed.worldEnv ?? '').trim(),
     characters: parsed.characters ?? [],
     scenes,
     fullVoiceScriptPrimary,

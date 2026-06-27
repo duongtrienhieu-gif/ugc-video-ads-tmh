@@ -112,6 +112,10 @@ export interface ProductInsight {
 export interface PersonifiedScript {
   insight: ProductInsight
   characters: PersonifiedCharacter[]
+  /** Biome cố định (EN) cho TOÀN video — mọi keyframe diễn trong cùng thế giới này
+   *  (vd khớp viêm: sụn bóng, đầu xương, mô đỏ sưng). Nhồi vào prompt mọi cảnh → nhất
+   *  quán bối cảnh như video mẫu. Brain sinh từ metaphor/bộ phận cơ thể. */
+  worldEnv: string
   scenes: PersonifiedScene[]
   fullVoiceScriptPrimary: string // toàn bộ thoại liền mạch — ngôn ngữ đích
   fullVoiceScriptVi: string      // toàn bộ thoại liền mạch — VN (operator)

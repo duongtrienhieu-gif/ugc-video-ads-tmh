@@ -275,6 +275,7 @@ export default function Personified() {
         apiKey: kieKey, scene, character,
         characterRef: character ? charBank[character.name]?.refImage : undefined,
         productRefs: scene.hasProduct ? productRefs : [],
+        worldEnv: script.worldEnv,
       })
       setClips((p) => ({ ...p, [scene.idx]: { status: 'kf_ready', keyframeRef } }))
     } catch (e) {
@@ -529,6 +530,14 @@ export default function Personified() {
                 {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Tạo lại
               </button>
             </div>
+
+            {/* Biome cố định (worldEnv) — bối cảnh chung cho mọi keyframe; sửa được rồi render lại. */}
+            <label className="mb-3 block rounded-lg border border-emerald-200 bg-emerald-50/50 p-2">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">🌍 Bối cảnh chung (mọi cảnh diễn trong đây) — sửa được</span>
+              <textarea value={script.worldEnv ?? ''} onChange={(e) => setScript((prev) => (prev ? { ...prev, worldEnv: e.target.value } : prev))}
+                rows={2} placeholder="VD: inside an inflamed knee joint, glistening cartilage, swollen red tissue…"
+                className="mt-0.5 w-full resize-none rounded border border-emerald-200 bg-white p-2 text-xs text-gray-800 focus:border-emerald-400 focus:outline-none" />
+            </label>
 
             {/* C — tabs: bảng cảnh dày (mặc định) · đọc liền mạch · nhân vật. Hết scroll dài + bỏ cột voice trùng. */}
             <div className="mb-3 flex gap-1">

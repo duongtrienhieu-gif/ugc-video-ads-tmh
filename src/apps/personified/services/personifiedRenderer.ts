@@ -41,13 +41,23 @@ function buildCharacterSheetPrompt(character: PersonifiedCharacter, hasProductRe
  *  Giữ luật "preserve product" của repo (copy bao bì, cấm bịa). */
 function buildKeyframePrompt(
   scene: PersonifiedScene, character: PersonifiedCharacter | undefined,
-  opts: { hasCharRef: boolean; hasProductRef: boolean },
+  opts: { hasCharRef: boolean; hasProductRef: boolean; worldEnv?: string },
 ): string {
   const base = (character?.imagePromptEn ?? '').trim() || (scene.action ?? '').trim() || 'A 3D Pixar cartoon character'
   const mood = scene.emotion ? ` Expression / mood: ${scene.emotion}.` : ''
   const act = (scene.action ?? '').trim() ? ` Scene: ${scene.action.trim()}.` : ''
+  // A — BIOME CỐ ĐỊNH: nhồi vào MỌI cảnh → 9 cảnh chung 1 thế giới (như video mẫu).
+  const world = (opts.worldEnv ?? '').trim()
+    ? ` The whole scene takes place inside this consistent environment: ${opts.worldEnv!.trim()}.`
+    : ''
+  // B — HERO VFX: nhân vật hero (= sản phẩm) ở cảnh hành động (KHÔNG phải cta) được THÊM
+  // hiệu ứng anh hùng (hào quang/khiên/áo choàng) — chỉ là EFFECT, KHÔNG đổi bao bì.
+  const isHeroVfx = character?.role === 'hero' && scene.sceneType !== 'cta'
+  const heroVfx = isHeroVfx
+    ? ' Render it as an epic hero: surround the product with a glowing energy aura, a translucent light shield and a flowing cape, dynamic motion energy and sparks — these are ADDED visual effects only and must NOT change the product packaging, label, colour or shape.'
+    : ''
   const charLock = opts.hasCharRef
-    ? ' The MAIN CHARACTER is reference image #1 — keep the EXACT same face, body, colour, material and outfit; only change the pose and expression to match this scene. Do NOT redesign the character.'
+    ? ` The MAIN CHARACTER is reference image #1 — keep the EXACT same face, body, colour, material and packaging; change only the pose and expression to match this scene${isHeroVfx ? ' (you MAY add the heroic effects described below around it)' : ', and do NOT redesign the character'}.`
     : ''
   const productIdx = opts.hasCharRef ? '#2' : '#1'
   const product = opts.hasProductRef
@@ -55,7 +65,7 @@ function buildKeyframePrompt(
     : ''
   // Khi đã khóa nhân vật bằng ảnh ref thì không cần tả lại base (tránh prompt "đè" lên ảnh).
   const desc = opts.hasCharRef ? '' : `${base} `
-  return `${desc}${charLock}${mood}${act}${product} ${CINEMATIC_STYLE}`
+  return `${desc}${charLock}${mood}${act}${world}${product}${heroVfx} ${CINEMATIC_STYLE}`
 }
 
 export interface RenderSceneParams {
@@ -65,6 +75,8 @@ export interface RenderSceneParams {
   character?: PersonifiedCharacter
   /** Ảnh chân dung nhân vật từ Character Bank (P2b) — khóa diện mạo xuyên cảnh (i2i ref #1). */
   characterRef?: string
+  /** Biome cố định của video (PersonifiedScript.worldEnv) — nhồi vào keyframe để nhất quán bối cảnh. */
+  worldEnv?: string
   /** Ảnh sản phẩm thật (asset ref hoặc URL) — chỉ dùng khi scene.hasProduct. */
   productRefs?: string[]
   tier: RenderTier
@@ -114,7 +126,7 @@ export async function renderCharacterRef(
 /** Bước 1 — chỉ render KEYFRAME (ảnh tĩnh) → { keyframeRef }. Rẻ, để duyệt trước i2v.
  *  Nếu có characterRef (Character Bank) → ref #1 khóa diện mạo nhân vật; SP thật → ref #2. */
 export async function renderKeyframe(
-  p: Pick<RenderSceneParams, 'apiKey' | 'scene' | 'character' | 'characterRef' | 'productRefs' | 'signal'>,
+  p: Pick<RenderSceneParams, 'apiKey' | 'scene' | 'character' | 'characterRef' | 'productRefs' | 'worldEnv' | 'signal'>,
 ): Promise<{ keyframeRef: string }> {
   if (!p.apiKey) throw new Error('Thiếu KIE API key (Cài đặt)')
   if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
@@ -134,6 +146,7 @@ export async function renderKeyframe(
   const kfPrompt = buildKeyframePrompt(p.scene, p.character, {
     hasCharRef: !!charUrl,
     hasProductRef: useProduct,
+    worldEnv: p.worldEnv,
   })
   const remoteUrl = await generateGpt4oImageFast({
     apiKey: p.apiKey, prompt: kfPrompt, filesUrl, size: '2:3',
@@ -281,6 +294,7 @@ if (typeof window !== 'undefined') {
     try {
       const res = await renderPersonifiedScene({
         apiKey, scene, character, tier: cache.tier ?? 'seedance480',
+        worldEnv: script.worldEnv,
         onStage: (s, info) => console.log('[RENDER_TEST]', s, info),
       })
       const url = await getUrl(res.clipRef)
