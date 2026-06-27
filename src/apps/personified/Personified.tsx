@@ -17,6 +17,7 @@ import {
 } from './constants'
 import { analyzeInsight, generateScript } from './services/personifiedBrain'
 import { renderKeyframe, renderClipFromKeyframe, renderCharacterRef, renderSceneLipsync } from './services/personifiedRenderer'   // P2a/P2b/P2c (cũng đăng ký dev helper __testRenderScene)
+import { assemblePersonifiedVideo } from './services/personifiedAssembler'   // P2d
 import { useAssetUrl } from '../../hooks/useAssetUrl'
 
 // P2a — trạng thái render 1 cảnh (persist cùng kịch bản).
@@ -62,6 +63,7 @@ interface PersistedState {
   tier: RenderTier
   clips?: Record<number, SceneRender>
   charBank?: Record<string, CharRef>
+  finalVideoRef?: string
 }
 
 export default function Personified() {
@@ -94,6 +96,8 @@ export default function Personified() {
   // P2b — Character Bank (keyed theo character.name).
   const [charBank, setCharBank] = useState<Record<string, CharRef>>({})
   const [bankRunning, setBankRunning] = useState(false)
+  // P2d — video cuối (ghép + upscale 720p).
+  const [finalVideo, setFinalVideo] = useState<{ status: 'idle' | 'running' | 'done' | 'failed'; videoRef?: string; stage?: string; error?: string }>({ status: 'idle' })
 
   const product = useMemo(() => products.find((p) => p.id === productId), [products, productId])
   // P2a — ảnh sản phẩm để khóa fidelity (cảnh hasProduct).
@@ -113,6 +117,8 @@ export default function Personified() {
     if (!script) return 0
     return script.scenes.filter((s) => clips[s.idx]?.clipRef && (s.dialoguePrimary ?? '').trim() && clips[s.idx]?.lipStatus !== 'done').length
   }, [script, clips])
+  // P2d — số cảnh đã có clip (để ghép). Bằng tổng cảnh = đủ; ít hơn = ghép phần đã render.
+  const clipCount = useMemo(() => script ? script.scenes.filter((s) => clips[s.idx]?.clipRef).length : 0, [script, clips])
 
   const noKey = !geminiKey
   const isVN = market === 'VN'
@@ -162,6 +168,7 @@ export default function Personified() {
             }
             setCharBank(fixedBank)
           }
+          if (s.finalVideoRef) setFinalVideo({ status: 'done', videoRef: s.finalVideoRef })
         }
       }
     } catch { /* ignore corrupt cache */ }
@@ -176,10 +183,10 @@ export default function Personified() {
     // pre-restore empty state) — never overwrite a good cache with nothing.
     if (!productId && !insight && !script && !problemHint) return
     try {
-      const s: PersistedState = { v: 1, productId, market, problemHint, insight, config, script, variant, tier, clips, charBank }
+      const s: PersistedState = { v: 1, productId, market, problemHint, insight, config, script, variant, tier, clips, charBank, finalVideoRef: finalVideo.videoRef }
       localStorage.setItem(CACHE_KEY, JSON.stringify(s))
     } catch { /* quota / serialization — non-fatal */ }
-  }, [productId, market, problemHint, insight, config, script, variant, tier, clips, charBank])
+  }, [productId, market, problemHint, insight, config, script, variant, tier, clips, charBank, finalVideo.videoRef])
 
   async function handleAnalyze() {
     if (!product || analyzing) return
@@ -206,7 +213,7 @@ export default function Personified() {
     setError(''); setGenerating(true)
     try {
       const sc = await generateScript(product, market, config, insight, geminiKey, nextVariant)
-      setScript(sc); setVariant(nextVariant); setClips({}); setCharBank({})   // kịch bản mới → bỏ clip + bank cũ (nhân vật đổi)
+      setScript(sc); setVariant(nextVariant); setClips({}); setCharBank({}); setFinalVideo({ status: 'idle' })   // kịch bản mới → bỏ clip + bank + video cũ
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Tạo kịch bản lỗi')
     } finally {
@@ -355,6 +362,29 @@ export default function Personified() {
         if (c?.clipRef && (s.dialoguePrimary ?? '').trim() && c.lipStatus !== 'done') await handleLipsyncScene(s)
       }
     } finally { setRenderingAll(false) }
+  }
+
+  // P2d — GHÉP video cuối: nối clip mọi cảnh (lipsync nếu có, không thì i2v câm) + upscale 720p.
+  async function handleAssemble() {
+    if (!script || finalVideo.status === 'running') return
+    const list = script.scenes
+      .filter((s) => clips[s.idx]?.clipRef)
+      .map((s) => ({
+        videoRef: (clips[s.idx]?.lipsyncRef ?? clips[s.idx]!.clipRef!),
+        durationSec: s.clipDuration,
+        hasAudio: !!clips[s.idx]?.lipsyncRef,
+      }))
+    if (!list.length) { setError('Chưa cảnh nào có clip — render clip trước khi ghép'); return }
+    setFinalVideo({ status: 'running', stage: 'Bắt đầu…' })
+    try {
+      const res = await assemblePersonifiedVideo({
+        clips: list, resolution: '720p',
+        onStage: (m) => setFinalVideo((p) => ({ ...p, status: 'running', stage: m })),
+      })
+      setFinalVideo({ status: 'done', videoRef: res.videoRef })
+    } catch (e) {
+      setFinalVideo({ status: 'failed', error: e instanceof Error ? e.message : String(e) })
+    }
   }
 
   // P2a — i2v TẤT CẢ cảnh đã duyệt keyframe (status kf_ready). Cảnh chưa có keyframe → bỏ qua.
@@ -532,6 +562,12 @@ export default function Personified() {
                 title={!elevenKey || !falKey ? 'Cần ElevenLabs (TTS) + fal.ai (lipsync) key trong Cài đặt' : lipReadyCount > 0 ? `Nhép mồm ${lipReadyCount} cảnh (TTS + LatentSync)` : 'Render clip i2v trước'}>
                 {renderingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang chạy…</> : <>🎤 Nhép mồm tất cả{lipReadyCount > 0 && ` (${lipReadyCount})`}</>}
               </button>
+              {/* P2d — ghép video cuối (nối clip + upscale 720p) */}
+              <button onClick={handleAssemble} disabled={finalVideo.status === 'running' || clipCount === 0}
+                className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 font-bold text-white transition-colors hover:bg-emerald-700 disabled:opacity-40"
+                title={clipCount > 0 ? `Ghép ${clipCount} cảnh đã render + upscale 720p` : 'Render clip trước khi ghép'}>
+                {finalVideo.status === 'running' ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang ghép…</> : <>🎬 Ghép video{clipCount > 0 && ` (${clipCount})`}</>}
+              </button>
               <button onClick={() => handleGenerate(variant + 1)} disabled={generating}
                 className="flex items-center gap-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 font-semibold text-gray-700 transition-colors hover:bg-black/5 disabled:opacity-40">
                 {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Tạo lại
@@ -545,6 +581,24 @@ export default function Personified() {
                 rows={2} placeholder="VD: inside an inflamed knee joint, glistening cartilage, swollen red tissue…"
                 className="mt-0.5 w-full resize-none rounded border border-emerald-200 bg-white p-2 text-xs text-gray-800 focus:border-emerald-400 focus:outline-none" />
             </label>
+
+            {/* P2d — video cuối: trạng thái ghép + preview + tải về */}
+            {finalVideo.status !== 'idle' && (
+              <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
+                {finalVideo.status === 'running' && (
+                  <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Đang ghép video… {finalVideo.stage && <span className="font-normal text-emerald-600">{finalVideo.stage}</span>}
+                  </div>
+                )}
+                {finalVideo.status === 'failed' && <div className="text-xs text-rose-600">⚠ Ghép lỗi: {finalVideo.error?.slice(0, 160)}</div>}
+                {finalVideo.status === 'done' && finalVideo.videoRef && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-bold text-emerald-700">✅ Video hoàn chỉnh (720p)</div>
+                    <FinalVideoPreview videoRef={finalVideo.videoRef} />
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* C — tabs: bảng cảnh dày (mặc định) · đọc liền mạch · nhân vật. Hết scroll dài + bỏ cột voice trùng. */}
             <div className="mb-3 flex gap-1">
@@ -787,6 +841,19 @@ function KeyframePreview({ keyframeRef }: { keyframeRef: string }) {
   const url = useAssetUrl(keyframeRef)
   if (!url) return <span className="text-[10px] text-gray-400">đang tải keyframe…</span>
   return <img src={url} alt="keyframe" className="mt-1 w-full max-w-[220px] rounded-lg border border-violet-200" />
+}
+
+// P2d — video cuối (ghép xong): preview lớn + nút tải về.
+function FinalVideoPreview({ videoRef }: { videoRef: string }) {
+  const url = useAssetUrl(videoRef)
+  if (!url) return <span className="text-[11px] text-gray-400">đang tải video…</span>
+  return (
+    <div className="space-y-2">
+      <video src={url} controls playsInline className="w-full max-w-[280px] rounded-lg border border-black/10" />
+      <a href={url} download="personified-video.mp4"
+        className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-emerald-700">⬇️ Tải video</a>
+    </div>
+  )
 }
 
 // P2a — clip đã render (lấy URL từ assetStore). Hook gọi ở đầu component → an toàn.
