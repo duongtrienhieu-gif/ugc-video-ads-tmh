@@ -190,18 +190,19 @@ function nextDouyin(data: AnyObj, cursor: string): NextCursor {
 
 // ── TIKTOK (thị trường MY/global) — web search video, offset-based, GET ──
 // Cùng nhà ByteDance với Douyin nên dùng chung mapAwemes. Endpoint web fetch_search_video
-// trả {data:[…aweme…], cursor, has_more}; có fallback bỏ bớt param nếu 4xx (không-auth).
+// trả {data:[…aweme…], cursor, has_more}.
+// QUAN TRỌNG: param tên là "keywords" (số nhiều), không phải "keyword" như Douyin/RED.
 const mapTiktok = (data: AnyObj): Clip[] => mapAwemes(data, 'tiktok')
 async function pageTiktok(key: string, q: string, sort: string, cursor: string): Promise<PageResult> {
   const offset = Number(cursor) || 0
-  // sort_type web TikTok: 0=liên quan, 1=nhiều like nhất, 2=mới nhất (đoán an toàn — sai vẫn ra liên quan).
+  // sort_type web TikTok: 0=liên quan, 1=nhiều like nhất, 2=mới nhất
   const sortType = sort === 'latest' ? '2' : sort === 'general' ? '0' : '1'
   const base = 'https://api.tikhub.io/api/v1/tiktok/web/fetch_search_video'
-  const url = `${base}?keyword=${encodeURIComponent(q)}&offset=${offset}&count=20&sort_type=${sortType}&publish_time=0`
+  const url = `${base}?keywords=${encodeURIComponent(q)}&offset=${offset}&count=20&sort_type=${sortType}&publish_time=0`
   const r = await tikGet(key, url)
   if (r.ok || r.status === 402 || r.status === 429 || r.status === 401 || r.status === 403) return r
-  // Fallback tối giản (chỉ keyword + offset) phòng param sort/publish_time gây 4xx.
-  return tikGet(key, `${base}?keyword=${encodeURIComponent(q)}&offset=${offset}&count=20`)
+  // Fallback tối giản nếu sort/publish_time gây 4xx
+  return tikGet(key, `${base}?keywords=${encodeURIComponent(q)}&offset=${offset}&count=20`)
 }
 function nextTiktok(data: AnyObj, cursor: string): NextCursor {
   const cur = Number(cursor) || 0
