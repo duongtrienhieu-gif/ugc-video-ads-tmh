@@ -9,6 +9,7 @@ import { useBankStore } from '../../../stores/bankStore'
 import { useAppStore } from '../../../stores/appStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { directGeminiText, directGeminiVision } from '../../../utils/gemini'
+import { isAssetRef, getAsBase64 } from '../../../utils/assetStore'
 
 interface KwSet { zh: string[]; ms: string[]; en: string[] }
 interface Scene { group: string; emoji: string; idea: string; queries: { zh: string; ms: string; en: string } }
@@ -139,10 +140,19 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
     catch { /* */ } finally { setDetailBusy(false) }
   }
 
-  const pickProduct = (id: string) => {
+  const pickProduct = async (id: string) => {
     setPickId(id)
     const p = products.find((x) => x.id === id)
-    if (p) { setName(p.productName || ''); setImageUrl(p.productImages?.[0] || ''); setBrief(null) }
+    if (!p) return
+    setName(p.productName || ''); setBrief(null); setImgProducts(null)
+    const raw = p.productImages?.[0] || ''
+    // Ảnh Kho lưu dạng asset-ref (IndexedDB/Supabase) → resolve sang data URL để dùng đồng nhất.
+    if (isAssetRef(raw)) {
+      const a = await getAsBase64(raw)
+      setImageUrl(a ? `data:${a.mimeType};base64,${a.base64}` : '')
+    } else {
+      setImageUrl(raw)
+    }
   }
   // Tải ảnh SP thủ công (cho SP ngoài app) → data URL dùng làm ảnh quét.
   const onPickFile = (e: ChangeEvent<HTMLInputElement>) => {
@@ -242,7 +252,7 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
               <div className="absolute z-20 mt-1 max-h-64 w-full min-w-[260px] overflow-y-auto rounded-lg border border-app-border bg-app-card shadow-xl">
                 <button onClick={() => { setPickId(''); setPickOpen(false) }} className="block w-full px-3 py-1.5 text-left text-xs text-app-muted hover:bg-app-card-elevated">— Chọn SP từ Kho —</button>
                 {products.map((p) => (
-                  <button key={p.id} onClick={() => { pickProduct(p.id); setPickOpen(false) }} className="block w-full truncate px-3 py-1.5 text-left text-xs text-app-text hover:bg-app-card-elevated">{p.productName}</button>
+                  <button key={p.id} onClick={() => { void pickProduct(p.id); setPickOpen(false) }} className="block w-full truncate px-3 py-1.5 text-left text-xs text-app-text hover:bg-app-card-elevated">{p.productName}</button>
                 ))}
               </div>
             )}
