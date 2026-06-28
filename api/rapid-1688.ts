@@ -147,25 +147,16 @@ async function handleProbe(res: VercelResponse, key: string) {
 // ── PROBE2 TẠM: format ĐÚNG (POST json base64=dataURI) ở các cỡ payload tăng dần ──
 // Tìm ngưỡng body-size lật 200→400. 1 ảnh thật (~600px) để xác nhận ảnh thường ra token thật.
 // Có delay 1.3s/call né rate-limit/giây của gói PRO.
-async function handleProbe2(res: VercelResponse, key: string) {
+async function handleProbe2(req: VercelRequest, res: VercelResponse, key: string) {
   const U = `https://${HOST}/1688/upload-image`
   const jsonHdr = { ...rapidHeaders(key), 'Content-Type': 'application/json' }
-  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-  const callUpload = async (b64: string) => {
-    const r = await fetch(U, { method: 'POST', headers: jsonHdr, body: JSON.stringify({ base64: `data:image/jpeg;base64,${b64}` }) })
-    return { status: r.status, body: (await r.text()).slice(0, 120) }
-  }
-  const out: { label: string; bodyKB: number; status: number; body: string }[] = []
-  // blob base64 cỡ tăng dần (không phải ảnh thật) — dò ngưỡng size:
-  //   còn nhỏ → 500 "图片编码异常" (qua được size, chỉ lỗi giải mã); vượt ngưỡng → 400 "bad request".
-  let first = true
-  for (const kb of [80, 160, 240, 360]) {
-    if (!first) await sleep(1000)
-    first = false
-    try { const r = await callUpload('A'.repeat(kb * 1024)); out.push({ label: `blob ${kb}KB`, bodyKB: kb, ...r }) }
-    catch (e) { out.push({ label: `blob ${kb}KB`, bodyKB: kb, status: -1, body: (e as Error).message }) }
-  }
-  return res.status(200).json({ probe: 'upload-image-size', results: out })
+  const kb = Math.min(2000, Math.max(1, Number(req.query.kb) || 160))
+  // 1 blob base64 cỡ kb (không phải ảnh thật) — dò ngưỡng size, 1 lần gọi tức thì:
+  //   500 "图片编码异常" = còn DƯỚI ngưỡng (qua size, chỉ lỗi giải mã);  400 "bad request" = VƯỢT ngưỡng.
+  const t0 = Date.now()
+  const r = await fetch(U, { method: 'POST', headers: jsonHdr, body: JSON.stringify({ base64: `data:image/jpeg;base64,${'A'.repeat(kb * 1024)}` }) })
+  const body = (await r.text()).slice(0, 140)
+  return res.status(200).json({ probe: 'upload-image-size', bodyKB: kb, status: r.status, ms: Date.now() - t0, body })
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -175,7 +166,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const debug = req.query.debug === '1'
   try {
     if (action === 'probe') return await handleProbe(res, key)
-    if (action === 'probe2') return await handleProbe2(res, key)
+    if (action === 'probe2') return await handleProbe2(req, res, key)
     if (action === 'detail') return await handleDetail(req, res, key, debug)
     return await handleSearch(req, res, key, debug)
   } catch (e) {
