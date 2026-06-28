@@ -41,6 +41,14 @@ const FILL_META: Record<ShotFill, { label: string; hint: string; cls: string }> 
 
 const fmtSec = (n: number) => `~${n}s`
 
+// Native <select> popups render with the OS default (white) background, which
+// makes our light option text invisible on the dark theme. Force readable
+// colors on every <option> via theme tokens (works on both dark & studio).
+const OPT_STYLE: React.CSSProperties = {
+  backgroundColor: 'var(--color-card)',
+  color: 'var(--color-text-primary)',
+}
+
 function genId(): string {
   try {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return `shot_${crypto.randomUUID().slice(0, 8)}`
@@ -274,7 +282,7 @@ function ShotCard(p: ShotCardProps) {
           title="Khối trong mạch bán hàng"
         >
           {BLOCK_ORDER.map((b) => (
-            <option key={b} value={b}>{BLOCK_META[b].label}</option>
+            <option key={b} value={b} style={OPT_STYLE}>{BLOCK_META[b].label}</option>
           ))}
         </select>
 
@@ -290,8 +298,8 @@ function ShotCard(p: ShotCardProps) {
             className={`rounded-full px-2 py-0.5 text-[10px] font-bold outline-none ${fillMeta.cls}`}
             title={fillMeta.hint}
           >
-            <option value="source-broad">Source rộng</option>
-            <option value="source-product">Source SP</option>
+            <option value="source-broad" style={OPT_STYLE}>Source rộng</option>
+            <option value="source-product" style={OPT_STYLE}>Source SP</option>
           </select>
         )}
 
