@@ -95,7 +95,7 @@ const SUPA_KEY = process.env.VITE_SUPABASE_ANON_KEY || ''
 async function cacheRead(): Promise<Record<string, unknown> | null> {
   if (!SUPA_URL || !SUPA_KEY) return null
   try {
-    const r = await tfetch(`${SUPA_URL}/rest/v1/board_cache?id=eq.main&select=payload`, 8000, { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } })
+    const r = await tfetch(`${SUPA_URL}/rest/v1/board_cache?id=eq.main&select=payload`, 6000, { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } })
     if (!r.ok) return null
     const rows = (await r.json()) as { payload?: Record<string, unknown> }[]
     return rows?.[0]?.payload ?? null
@@ -104,7 +104,7 @@ async function cacheRead(): Promise<Record<string, unknown> | null> {
 async function cacheWrite(payload: Record<string, unknown>): Promise<void> {
   if (!SUPA_URL || !SUPA_KEY) return
   try {
-    await tfetch(`${SUPA_URL}/rest/v1/board_cache`, 8000, {
+    await tfetch(`${SUPA_URL}/rest/v1/board_cache`, 6000, {
       method: 'POST',
       headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
       body: JSON.stringify([{ id: 'main', payload, updated_at: new Date().toISOString() }]),
@@ -112,40 +112,29 @@ async function cacheWrite(payload: Record<string, unknown>): Promise<void> {
   } catch { /* cache lỗi không được phá response chính */ }
 }
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
-// Chạy các tác vụ với GIỚI HẠN SONG SONG (mặc định 2). Google throttle khi 1 IP bắn
-// nhiều /export cùng lúc → 6 file song song = treo → abort. 2-một-đợt thì ổn định.
-async function pool<T>(tasks: (() => Promise<T>)[], limit = 2): Promise<PromiseSettledResult<T>[]> {
-  const results = new Array(tasks.length) as PromiseSettledResult<T>[]
-  let next = 0
-  async function worker() {
-    while (next < tasks.length) {
-      const i = next++
-      try { results[i] = { status: 'fulfilled', value: await tasks[i]() } }
-      catch (reason) { results[i] = { status: 'rejected', reason } as PromiseRejectedResult }
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker))
-  return results
-}
+// BUDGET THỜI GIAN: function có maxDuration 60s. Mỗi file tối đa 2 lần × 12s + 0.5s
+// = ~24.5s. Chạy SONG SONG (Promise.allSettled) → tổng ≈ file chậm nhất ≈ 24.5s < 60s
+// → LUÔN kịp trả JSON, KHÔNG bao giờ bị Vercel kill (→ hết lỗi "Unexpected token A").
+// Thiếu nguồn nào thì lớp CACHE (server + máy) bù — không cần ép Google cho đủ trong 1 lần.
 async function fetchXlsx(id: string, sheets: string[]): Promise<XLSX.WorkBook> {
   let last: Error | null = null
-  for (let i = 0; i < 3; i++) { // 3 lần, giãn cách tăng dần — Google throttle hay trả HTML/timeout
+  for (let i = 0; i < 2; i++) {
     try {
-      const res = await tfetch(`https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`, 25000)
+      const res = await tfetch(`https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`, 12000)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return XLSX.read(Buffer.from(await res.arrayBuffer()), { type: 'buffer', sheets })
-    } catch (e) { last = e as Error; if (i < 2) await sleep(700 * (i + 1)) }
+    } catch (e) { last = e as Error; if (i < 1) await sleep(500) }
   }
   throw last ?? new Error('fetchXlsx failed')
 }
 async function fetchCsv(id: string, sheet: string): Promise<string[][]> {
   let last: Error | null = null
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 2; i++) {
     try {
-      const res = await tfetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}`, 25000)
+      const res = await tfetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}`, 12000)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return parseCSV(await res.text())
-    } catch (e) { last = e as Error; if (i < 2) await sleep(700 * (i + 1)) }
+    } catch (e) { last = e as Error; if (i < 1) await sleep(500) }
   }
   throw last ?? new Error('fetchCsv failed')
 }
@@ -349,19 +338,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const errors: string[] = []
-  // Tải GIỚI HẠN 2-một-đợt (không phải 6 cùng lúc) để né Google throttle; mỗi nguồn
-  // độc lập, lỗi 1 nguồn không phá cả khối. QLHB (hoàn) + TỔNG đứng đầu để chạy trước.
-  const [tongR, qlhbR, khoR, saleR, nhapR, notonR] = await pool([
-    () => fetchXlsx(id('tong'), ['SẢN PHẨM_TH']),
-    () => fetchXlsx(id('qlhb'), ['Tỉ lệ sản phẩm', 'Tỉ lệ tỉnh']),
-    () => fetchXlsx(id('kho'), ['RP_KHO_SL']),
-    () => fetchCsv(id('sale'), 'Report_Product'),
-    () => fetchXlsx(id('nhaphang'), ['BÁO GIÁ VÀ THANH TOÁN']),
-    () => fetchCsv(id('noton'), 'Tồn kho dự kiến'),
-  ], 2) as [
-    PromiseSettledResult<XLSX.WorkBook>, PromiseSettledResult<XLSX.WorkBook>, PromiseSettledResult<XLSX.WorkBook>,
-    PromiseSettledResult<string[][]>, PromiseSettledResult<XLSX.WorkBook>, PromiseSettledResult<string[][]>,
-  ]
+  // Tải SONG SONG, timeout ngắn → tổng ≈ file chậm nhất (~24.5s) < 60s → luôn trả JSON.
+  // Thiếu nguồn nào (Google chặn) thì cache server/máy bù. Mỗi nguồn độc lập, lỗi 1 cái
+  // không phá cả khối (Promise.allSettled).
+  const [tongR, qlhbR, khoR, saleR, nhapR, notonR] = await Promise.allSettled([
+    fetchXlsx(id('tong'), ['SẢN PHẨM_TH']),
+    fetchXlsx(id('qlhb'), ['Tỉ lệ sản phẩm', 'Tỉ lệ tỉnh']),
+    fetchXlsx(id('kho'), ['RP_KHO_SL']),
+    fetchCsv(id('sale'), 'Report_Product'),
+    fetchXlsx(id('nhaphang'), ['BÁO GIÁ VÀ THANH TOÁN']),
+    fetchCsv(id('noton'), 'Tồn kho dự kiến'),
+  ])
 
   const qlhbWb = qlhbR.status === 'fulfilled' ? qlhbR.value : null
   if (qlhbR.status === 'rejected') errors.push('QLHB: ' + (qlhbR.reason?.message || 'lỗi tải'))
