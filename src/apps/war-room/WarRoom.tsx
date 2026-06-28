@@ -68,6 +68,11 @@ export default function WarRoom() {
   if (!loaded) return <Shell><div style={{ ...panelStyle, textAlign: 'center', color: C.muted }}>● Đang tải Tác Chiến...</div></Shell>
   if (error && !members.length) return <Shell><div style={{ ...panelStyle, color: C.red }}>⚠ {error}. Đã chạy SQL tạo bảng team_members / targets / tasks trong Supabase chưa?</div></Shell>
 
+  // Nhân viên (không phải CEO) CHỈ được tab "Bảng của tôi" — không xem target/KPI/việc của đứa khác.
+  const ALL_TABS = [['me', '🎯 Bảng của tôi'], ['target', '📊 Target'], ['viec', '✅ Việc'], ['test', '🧪 Test SP'], ['nhansu', '👥 Nhân sự']] as const
+  const visibleTabs = isCEO ? ALL_TABS : ALL_TABS.filter(([k]) => k === 'me')
+  const effTab = isCEO ? tab : 'me' // ép nội dung về 'me' cho nhân viên dù state có lệch
+
   return (
     <Shell>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
@@ -79,22 +84,22 @@ export default function WarRoom() {
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-        {([['me', '🎯 Bảng của tôi'], ['target', '📊 Target'], ['viec', '✅ Việc'], ['test', '🧪 Test SP'], ['nhansu', '👥 Nhân sự']] as const).map(([k, l]) => (
-          <button key={k} onClick={() => setTab(k)} style={{ background: tab === k ? C.gold : 'transparent', color: tab === k ? '#0a0a0a' : C.muted2, border: `1px solid ${tab === k ? C.gold : C.line}`, borderRadius: 10, padding: '9px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{l}</button>
+        {visibleTabs.map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)} style={{ background: effTab === k ? C.gold : 'transparent', color: effTab === k ? '#0a0a0a' : C.muted2, border: `1px solid ${effTab === k ? C.gold : C.line}`, borderRadius: 10, padding: '9px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{l}</button>
         ))}
       </div>
 
-      {tab !== 'me' && (
+      {isCEO && effTab !== 'me' && (
         <div style={{ ...panelStyle, padding: '10px 14px', fontSize: 12.5, color: C.muted2, lineHeight: 1.7 }}>
           <b style={{ color: C.gold }}>Cách dùng — 3 bước:</b> ① <b>👥 Nhân sự</b>: thêm người (email Gmail họ đăng nhập) → bấm <b>🪄 Tự gán mã SP</b> (app tự biết marketer nào ôm mã nào từ data). ② <b>📊 Target</b>: gõ chỉ tiêu tháng cho từng người → cột THỰC TẾ <b>tự lên số</b> + đèn. ③ <b>✅ Việc</b>: app <b>tự gợi ý việc</b> từ số thật (cắt mã lỗ / giảm hoàn / đẩy mã ngon) gán sẵn đúng người → bấm Nhận; hoặc tự giao việc tay.
         </div>
       )}
 
-      {tab === 'me' && <MyBoard {...{ members, targets, tasks, stats, isCEO, myMember, userEmail, updateTask, reloadStats, stale }} />}
-      {tab === 'nhansu' && <NhanSu {...{ members, isCEO, mktSp, addMember, updateMember, deleteMember }} />}
-      {tab === 'target' && <TargetTab {...{ members, targets, stats, isCEO, setTarget, reloadStats }} />}
-      {tab === 'viec' && <ViecTab {...{ members, tasks, profit, spOwner, userEmail, addTask, updateTask, deleteTask }} />}
-      {tab === 'test' && <TestPipeline isCEO={isCEO} userEmail={userEmail} />}
+      {effTab === 'me' && <MyBoard {...{ members, targets, tasks, stats, isCEO, myMember, userEmail, updateTask, reloadStats, stale }} />}
+      {isCEO && effTab === 'nhansu' && <NhanSu {...{ members, isCEO, mktSp, addMember, updateMember, deleteMember }} />}
+      {isCEO && effTab === 'target' && <TargetTab {...{ members, targets, stats, isCEO, setTarget, reloadStats }} />}
+      {isCEO && effTab === 'viec' && <ViecTab {...{ members, tasks, profit, spOwner, userEmail, addTask, updateTask, deleteTask }} />}
+      {isCEO && effTab === 'test' && <TestPipeline isCEO={isCEO} userEmail={userEmail} />}
     </Shell>
   )
 }
