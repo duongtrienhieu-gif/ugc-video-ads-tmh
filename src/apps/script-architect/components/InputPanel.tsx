@@ -9,7 +9,7 @@ import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAppStore } from '../../../stores/appStore'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 import BankPicker from '../../../components/BankPicker'
-import { SCRIPT_PRESETS, TONE_OPTIONS, getPresetById } from '../services/presets'
+import { SCRIPT_PRESETS, TONE_OPTIONS } from '../services/presets'
 import { PresetTooltip } from './PresetTooltip'
 
 interface InputPanelProps {
@@ -49,7 +49,7 @@ export default function InputPanel({
   lengthSec, onLengthSecChange: setLengthSec,
   hookStrength, onHookStrengthChange: setHookStrength,
   toneModifiers, onToneModifiersChange: setToneModifiers,
-  educationalMode, onEducationalModeChange: setEducationalMode,
+  educationalMode,
 }: InputPanelProps) {
   const [productPickerOpen, setProductPickerOpen] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -59,12 +59,6 @@ export default function InputPanel({
   const openApp = useAppStore((s) => s.openApp)
   const sendToApp = useAppStore((s) => s.sendToApp)
   const productCount = useBankStore((s) => s.products.length)
-
-  const preset = getPresetById(presetId)
-  const isEducationalPreset = preset?.category === 'educational'
-  // Educational presets force-enable the mode in the prompt builder, so the
-  // toggle is just informational when one is selected.
-  const effectiveEducational = educationalMode || isEducationalPreset
 
   const toggleTone = (id: ToneModifier) => {
     setToneModifiers(toneModifiers.includes(id) ? toneModifiers.filter((x) => x !== id) : [...toneModifiers, id])
@@ -196,32 +190,8 @@ export default function InputPanel({
           </div>
         </Section>
 
-        {/* Educational mode toggle */}
-        <Section step={5} title="Chế độ giải thích">
-          <label className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors ${
-            effectiveEducational ? 'border-emerald-300 bg-emerald-50' : 'border-black/10 bg-white hover:bg-black/[0.02]'
-          }`}>
-            <input
-              type="checkbox"
-              checked={effectiveEducational}
-              disabled={isEducationalPreset}
-              onChange={(e) => setEducationalMode(e.target.checked)}
-              className="mt-0.5 accent-emerald-600"
-            />
-            <div className="flex-1">
-              <p className="text-xs font-semibold text-gray-900">
-                Giải thích cơ chế sản phẩm
-                {isEducationalPreset && <span className="ml-1 text-[10px] font-normal text-emerald-700">(bật tự động cho preset Educational)</span>}
-              </p>
-              <p className="mt-0.5 text-[10px] text-gray-500">
-                AI sẽ giải thích vì sao vấn đề xảy ra, cơ chế ingredient, vì sao sản phẩm khác biệt — dành cho health / skincare / supplement / wellness.
-              </p>
-            </div>
-          </label>
-        </Section>
-
         {/* Advanced — tone modifiers */}
-        <Section step={6} title="Tone (nâng cao)">
+        <Section step={5} title="Tone (nâng cao)">
           <button
             onClick={() => setShowAdvanced((v) => !v)}
             style={{ color: 'var(--color-accent)' }}
