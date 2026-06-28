@@ -79,6 +79,29 @@ function deepImageUrl(node: unknown, depth = 0): string {
   return ''
 }
 const durSec = (raw: unknown): number => { const n = Number(raw) || 0; return n > 1000 ? Math.round(n / 1000) : Math.round(n) }
+// gom MỌI url ảnh trong 1 node (để chọn cover trình duyệt render được)
+function allImageUrls(node: unknown, out: string[], seen: Set<unknown>, depth = 0) {
+  if (!node || typeof node !== 'object' || depth > 8 || seen.has(node) || out.length >= 50) return
+  seen.add(node)
+  if (Array.isArray(node)) { for (const x of node) allImageUrls(x, out, seen, depth + 1); return }
+  const o = node as AnyObj
+  for (const k in o) {
+    const v = o[k]
+    if (typeof v === 'string' && /^https?:/i.test(v) && /\.(jpe?g|png|webp|kvif|heic|heif|avif|gif)(\?|$)/i.test(v)) out.push(v)
+    else if (v && typeof v === 'object') allImageUrls(v, out, seen, depth + 1)
+  }
+}
+// Kuaishou trả cover .kvif/.heif (trình duyệt KHÔNG render) lẫn .jpg (yximgs/bs2/ost). Phải lấy
+// đúng cái jpg/png/webp; bỏ icon UI (se-cdn/udata/pkg) và avatar (uhead/head/avatar).
+function pickRenderableCover(node: unknown): string {
+  const urls: string[] = []
+  allImageUrls(node, urls, new Set())
+  const junk = (u: string) => /se-cdn|udata\/pkg|search_blue|caption_|collect_|merchant_|uhead|\/head|avatar/i.test(u)
+  const good = urls.filter((u) => /\.(jpe?g|png|webp)(\?|$)/i.test(u) && !junk(u))
+  if (good.length) return good[0]
+  const any = urls.filter((u) => !junk(u))
+  return any[0] || ''
+}
 // DEBUG ONLY: gom các string URL ảnh (kèm tên field) để soi field cover thật của Kuaishou/XHS.
 function sampleImgFields(node: unknown, out: string[], seen: Set<unknown>, depth = 0) {
   if (!node || typeof node !== 'object' || depth > 9 || seen.has(node) || out.length >= 30) return
@@ -223,7 +246,7 @@ function mapKuaishou(data: AnyObj): Clip[] {
     const user = (o.user as AnyObj) || {}
     const id = String(o.photo_id ?? o.photoId ?? '')
     const videoUrl = asUrl(o.main_mv_urls) || asUrl(o.mainMvUrls) || asUrl(o.playUrl) || asUrl(o.photoUrl) || deepVideoUrl(o)
-    const cover = asUrl(o.cover_thumbnail_urls) || asUrl(o.coverThumbnailUrls) || asUrl(o.cover_thumbnail_url) || asUrl(o.thumbnailUrl) || asUrl(o.coverUrls) || asUrl(o.cover) || deepImageUrl(o)
+    const cover = pickRenderableCover(o)
     return {
       id, videoUrl, cover,
       desc: String(o.caption ?? o.desc ?? '').slice(0, 160),
@@ -305,7 +328,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     cursor: String(cursor),
     hasMore,
     platform,
-    ...(debug ? { pages, topKeys: firstData ? Object.keys(firstData) : [], imgFields: (() => { const s: string[] = []; if (firstData) sampleImgFields(firstData, s, new Set()); return s })() } : {}),
+    ...(debug ? { pages, topKeys: firstData ? Object.keys(firstData) : [], imgFields: (() => { const s: string[] = []; if (firstData) sampleImgFields(firstData, s, new Set()); return s })(), dataSample: firstData ? JSON.stringify((firstData as AnyObj).data ?? firstData).slice(0, 3500) : '' } : {}),
     note: out.length ? undefined : `Không có clip ${platform} — đổi từ khóa${maxSec ? ' hoặc bỏ lọc <60s' : ''}`,
   })
 }
