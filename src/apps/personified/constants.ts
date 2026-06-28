@@ -202,9 +202,11 @@ export const RENDER_TIER_LABEL: Record<RenderTier, string> = {
 const I2V_CR_PER_SEC: Record<RenderTier, number> = { seedance480: 1.75, seedance720: 3.5, grok480: 1.6 }
 const KEYFRAME_CR = 6                         // 1 ảnh keyframe / ảnh nhân vật gpt-4o-image ≈ 6cr
 
-/** Mỗi cảnh chỉ 4s hoặc 8s (bỏ 12s). Thoại ngắn → 4s, còn lại 8s. */
+/** Mỗi cảnh chỉ 4s hoặc 8s (bỏ 12s). 4s CHỈ cho thoại RẤT ngắn (đệm 1.2s cho lead-in/out
+ *  + nhịp ngắt biểu cảm của eleven_v3 mà ước-lượng-theo-từ không bắt được), còn lại 8s.
+ *  Có lưới an toàn (giọng = đồng hồ chuẩn, ghép cắt/kéo theo) nên lệch 8s không gây thừa. */
 export function pickClipDuration(speechSec: number): ClipDuration {
-  return Math.max(1, speechSec) + 0.6 <= 4 ? 4 : 8
+  return Math.max(1, speechSec) + 1.2 <= 4 ? 4 : 8
 }
 
 /** hasProduct được tính DETERMINISTIC theo sceneType (KHÔNG để AI đoán) — chỉ cảnh

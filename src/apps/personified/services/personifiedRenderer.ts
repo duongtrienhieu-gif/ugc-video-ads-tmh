@@ -42,7 +42,7 @@ async function buildKaraokeFrames(
   return frames
 }
 import type { PersonifiedScene, PersonifiedCharacter, VoiceProfile } from '../types'
-import { type RenderTier, CINEMATIC_STYLE, CHARACTER_SHEET_STYLE } from '../constants'
+import { type RenderTier, CINEMATIC_STYLE, CHARACTER_SHEET_STYLE, EXPRESSIVE_SPEED } from '../constants'
 
 function tierToModel(tier: RenderTier): string {
   return tier === 'grok480' ? 'grok-imagine/image-to-video' : 'bytedance/seedance-1.5-pro'
@@ -349,16 +349,22 @@ export async function synthSceneVoice(
   const text = (p.scene.dialoguePrimary ?? '').trim()
   if (!text) throw new Error('Cảnh không có thoại — không cần lồng giọng')
   const voiceId = (p.voiceId ?? '').trim() || pickVoiceId(p.character?.voice)
+  // Đọc ở 1.2x (EXPRESSIVE_SPEED) cho KHỚP ước lượng giây (playbackWps đã tính 1.2x) —
+  // nếu để 1.0x thì giọng dài hơn ~20% → tràn clip, cắt chữ. ElevenLabs trả timestamp
+  // theo đúng tốc độ này nên caption karaoke vẫn chuẩn.
   const { buffer, alignment } = await textToSpeechWithTimestamps({
-    apiKey: p.elevenKey, voiceId, text, modelId: 'eleven_v3', speed: p.speed ?? 1.0,
+    apiKey: p.elevenKey, voiceId, text, modelId: 'eleven_v3', speed: p.speed ?? EXPRESSIVE_SPEED,
   })
   const audioBytes = new Uint8Array(buffer.byteLength)
   audioBytes.set(new Uint8Array(buffer))
   const audioRef = await saveAsset(new Blob([audioBytes], { type: 'audio/mpeg' }), 'audio/mpeg')
   const ends = alignment?.characterEndTimesSeconds
   const ttsLen = ends && ends.length ? ends[ends.length - 1] : p.scene.clipDuration
-  const voiceSec = Math.min(ttsLen || p.scene.clipDuration, p.scene.clipDuration)
-  const frames = await buildKaraokeFrames(text, alignment, p.scene.clipDuration)
+  // GIỌNG = ĐỒNG HỒ CHUẨN của cảnh: lấy ĐỘ DÀI THẬT (KHÔNG kẹp về clipDuration nữa) →
+  // bước ghép sẽ cắt clip 8s thừa về đúng đây (hết im) hoặc kéo clip 4s ngắn cho đủ giọng
+  // (không cắt chữ). Caption cũng phủ trọn câu theo độ dài thật.
+  const voiceSec = Math.max(0.5, ttsLen || p.scene.clipDuration)
+  const frames = await buildKaraokeFrames(text, alignment, voiceSec)
   return { audioRef, audioBytes, voiceSec, frames }
 }
 
@@ -370,6 +376,9 @@ export async function muxSceneVoiceover(
   const clipUrl = isAssetRef(p.clipRef) ? await getUrl(p.clipRef) : p.clipRef
   if (!clipUrl) throw new Error('Không lấy được URL clip i2v')
   const { audioBytes, frames } = p.voice
+  // ĐỘ DÀI CẢNH = GIỌNG THẬT. Clip i2v ngắn hơn → kéo (freeze frame cuối) cho đủ giọng;
+  // dài hơn → cắt về đúng đây. → voiced clip luôn = voiceSec, đủ caption + tiếng cả câu.
+  const voiceSec = Math.max(0.5, p.voice.voiceSec || p.scene.clipDuration)
   const ffmpeg = await getFFmpeg()
   const W = 720, H = 1280
   const vIn = 'vo_in.mp4', aIn = 'vo_in.mp3', out = 'vo_out.mp4'
@@ -382,10 +391,11 @@ export async function muxSceneVoiceover(
     capFiles.push(f)
   }
   // Base 9:16: nền = bản BLUR phóng to (fill khung), foreground = clip fit NGUYÊN (không cắt rìa).
+  // tpad giữ frame cuối → kéo base tới đủ voiceSec (nếu clip ngắn hơn giọng).
   const parts: string[] = [
     `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},boxblur=24:4,setsar=1[bg]`,
     `[0:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,setsar=1[fg]`,
-    `[bg][fg]overlay=(W-w)/2:(H-h)/2[base]`,
+    `[bg][fg]overlay=(W-w)/2:(H-h)/2,tpad=stop_mode=clone:stop_duration=${voiceSec.toFixed(3)}[base]`,
   ]
   const inputs: string[] = ['-i', vIn, '-i', aIn]
   let last = 'base'
@@ -397,13 +407,15 @@ export async function muxSceneVoiceover(
     last = next
   }
   const mapV = capFiles.length ? 'vout' : 'base'
+  // -t voiceSec: chốt cứng độ dài = giọng (KHÔNG -shortest — tránh cắt theo clip ngắn).
+  // apad: nếu mp3 hụt vài ms thì đệm im cho đủ, rồi -t cắt khít.
   await ffmpeg.exec([
     ...inputs,
     '-filter_complex', parts.join(';'),
     '-map', `[${mapV}]`, '-map', '1:a:0',
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac', '-ar', '44100', '-ac', '2',
-    '-shortest', '-movflags', '+faststart', '-y', out,
+    '-af', 'apad', '-c:a', 'aac', '-ar', '44100', '-ac', '2',
+    '-t', voiceSec.toFixed(3), '-movflags', '+faststart', '-y', out,
   ])
   for (const f of capFiles) await ffmpeg.deleteFile(f).catch(() => {})
   const data = await ffmpeg.readFile(out)
@@ -430,7 +442,7 @@ export async function addSceneVoiceover(p: VoiceoverSceneParams): Promise<Voiceo
 
 /** Nghe thử 1 giọng — TTS 1 câu mẫu (eleven_v3) → object URL để phát. Caller tự revoke. */
 export async function synthVoiceSample(elevenKey: string, voiceId: string, text: string): Promise<string> {
-  const buf = await textToSpeech({ apiKey: elevenKey, voiceId, text, modelId: 'eleven_v3' })
+  const buf = await textToSpeech({ apiKey: elevenKey, voiceId, text, modelId: 'eleven_v3', speed: EXPRESSIVE_SPEED })
   const bytes = new Uint8Array(buf.byteLength)
   bytes.set(new Uint8Array(buf))
   return URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' }))

@@ -993,7 +993,11 @@ export default function Personified() {
                         )
                       })()}
                       <span className="w-28 shrink-0 truncate text-[11px] font-semibold text-gray-600">{SCENE_TYPE_LABEL[s.sceneType]}{s.hasProduct && ' 📦'}</span>
-                      <span className="w-9 shrink-0 text-[11px] font-bold text-amber-700">{s.clipDuration}s</span>
+                      {/* Đã lồng giọng → hiện ĐỘ DÀI THẬT (giọng) vì ghép cắt/kéo về đây; chưa thì hiện độ dài render */}
+                      <span className="w-9 shrink-0 text-[11px] font-bold text-amber-700"
+                        title={clips[s.idx]?.voiceSec ? `Render ${s.clipDuration}s · ghép còn ${clips[s.idx]!.voiceSec!.toFixed(1)}s theo giọng` : `Render ${s.clipDuration}s`}>
+                        {clips[s.idx]?.voiceSec ? `${clips[s.idx]!.voiceSec!.toFixed(1)}s` : `${s.clipDuration}s`}
+                      </span>
                       <span className="w-20 shrink-0 truncate text-[11px] text-gray-400">{s.speaker}</span>
                       <span className="flex-1 truncate text-xs text-gray-900">"{s.dialoguePrimary}"</span>
                       <span className="w-6 shrink-0 text-center text-[11px]" title={`${clips[s.idx]?.status ?? ''}${clips[s.idx]?.lipStatus ? ' · lip:' + clips[s.idx]?.lipStatus : ''}`}>
