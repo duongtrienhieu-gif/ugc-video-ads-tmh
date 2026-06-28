@@ -8,10 +8,39 @@ import {
   generateGpt4oImageFast, generateVideoJob, pollVideoJobUntilDone, type Resolution,
 } from '../../../utils/kieai'
 import { fetchFile } from '@ffmpeg/util'
-import { textToSpeech } from '../../../utils/elevenlabs'
+import { textToSpeech, textToSpeechWithTimestamps } from '../../../utils/elevenlabs'
 import { getFFmpeg } from '../../video-builder/v3/services/ffmpegLoader'
+import { buildCaptionChunks } from '../../video-builder/v3/services/captionChunker'
+import type { VoiceAlignment } from '../../video-builder/v3/types'
 import { renderCaptionPng } from './personifiedCaption'
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
+
+/** 1 frame caption karaoke đã render (PNG) + cửa sổ hiện (giây, gốc clip). */
+interface CapFrame { png: Uint8Array; startSec: number; endSec: number }
+
+/** Build các frame karaoke từ alignment giọng: mỗi TỪ 1 frame (cụm chữ, tô vàng từ đó),
+ *  hiện trong [word.start, word.end]. Không alignment → 1 frame tĩnh cả câu suốt clip. */
+async function buildKaraokeFrames(
+  text: string, alignment: { characters: string[]; characterStartTimesSeconds: number[]; characterEndTimesSeconds: number[] } | null,
+  clipDur: number,
+): Promise<CapFrame[]> {
+  if (!alignment || !alignment.characters?.length) {
+    const png = await renderCaptionPng(text.split(/\s+/).filter(Boolean), -1)
+    return [{ png, startSec: 0, endSec: Math.max(0.5, clipDur) }]
+  }
+  const va: VoiceAlignment = { text: alignment.characters.join(''), charStartSecs: alignment.characterStartTimesSeconds }
+  const realDur = alignment.characterEndTimesSeconds[alignment.characterEndTimesSeconds.length - 1] || clipDur
+  const chunks = buildCaptionChunks(va, text, realDur)
+  const frames: CapFrame[] = []
+  for (const ch of chunks) {
+    const wordTexts = ch.words.map((w) => w.text)
+    for (let i = 0; i < ch.words.length; i++) {
+      const w = ch.words[i]
+      frames.push({ png: await renderCaptionPng(wordTexts, i), startSec: w.startSec, endSec: w.endSec })
+    }
+  }
+  return frames
+}
 import type { PersonifiedScene, PersonifiedCharacter, VoiceProfile } from '../types'
 import { type RenderTier, CINEMATIC_STYLE, CHARACTER_SHEET_STYLE } from '../constants'
 
@@ -317,41 +346,60 @@ export async function addSceneVoiceover(p: VoiceoverSceneParams): Promise<Voiceo
   if (!text) throw new Error('Cảnh không có thoại — không cần lồng giọng')
   if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
 
-  // ── 1. TTS (ElevenLabs multilingual — đọc đúng ngôn ngữ đích) ──────────────
-  const buf = await textToSpeech({
-    apiKey: p.elevenKey,
-    voiceId: (p.voiceId ?? '').trim() || pickVoiceId(p.character?.voice),
-    text,
-    modelId: 'eleven_v3',   // ngữ điệu giàu hơn; textToSpeech tự fallback v2 nếu v3 chưa hỗ trợ
-    speed: p.speed ?? 1.0,
+  // ── 1. TTS KÈM TIMESTAMP (eleven_v3) → giọng + alignment cho karaoke ───────
+  const voiceId = (p.voiceId ?? '').trim() || pickVoiceId(p.character?.voice)
+  const { buffer, alignment } = await textToSpeechWithTimestamps({
+    apiKey: p.elevenKey, voiceId, text, modelId: 'eleven_v3', speed: p.speed ?? 1.0,
   })
-  const audioBytes = new Uint8Array(buf.byteLength)
-  audioBytes.set(new Uint8Array(buf))
+  const audioBytes = new Uint8Array(buffer.byteLength)
+  audioBytes.set(new Uint8Array(buffer))
   const audioRef = await saveAsset(new Blob([audioBytes], { type: 'audio/mpeg' }), 'audio/mpeg')
   p.onStage?.('tts', { audioRef })
   if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
 
-  // ── 2. Ghép voiceover + BURN caption thoại vào clip (ffmpeg.wasm — 0 credit) ──
+  // ── 2. Frame caption KARAOKE (mỗi từ 1 PNG, theo timing giọng) ────────────
+  const frames = await buildKaraokeFrames(text, alignment, p.scene.clipDuration)
+
+  // ── 3. Ghép: pad-fit 9:16 nền BLUR (KHÔNG cắt) + giọng + overlay karaoke ──
   const clipUrl = isAssetRef(p.clipRef) ? await getUrl(p.clipRef) : p.clipRef
   if (!clipUrl) throw new Error('Không lấy được URL clip i2v')
   p.onStage?.('mux', { audioRef })
-  const capPng = await renderCaptionPng(text)   // caption thoại vàng + viền đen (lower-third)
   const ffmpeg = await getFFmpeg()
-  const vIn = 'vo_in.mp4', aIn = 'vo_in.mp3', cIn = 'vo_cap.png', out = 'vo_out.mp4'
+  const W = 720, H = 1280
+  const vIn = 'vo_in.mp4', aIn = 'vo_in.mp3', out = 'vo_out.mp4'
   await ffmpeg.writeFile(vIn, await fetchFile(clipUrl))
   await ffmpeg.writeFile(aIn, audioBytes)
-  await ffmpeg.writeFile(cIn, capPng)
-  // scale2ref: caption PNG co về đúng kích thước clip → overlay full-frame; thay audio = giọng.
-  // Overlay buộc re-encode video (không copy được). -shortest cắt theo clip (đã sized theo thoại).
+  const capFiles: string[] = []
+  for (let i = 0; i < frames.length; i++) {
+    const f = `vo_c${i}.png`
+    await ffmpeg.writeFile(f, frames[i].png)
+    capFiles.push(f)
+  }
+  // Base 9:16: nền = bản BLUR phóng to (fill khung), foreground = clip fit NGUYÊN (không cắt rìa).
+  const parts: string[] = [
+    `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},boxblur=24:4,setsar=1[bg]`,
+    `[0:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,setsar=1[fg]`,
+    `[bg][fg]overlay=(W-w)/2:(H-h)/2[base]`,
+  ]
+  const inputs: string[] = ['-i', vIn, '-i', aIn]
+  let last = 'base'
+  for (let i = 0; i < capFiles.length; i++) {
+    inputs.push('-i', capFiles[i])
+    const inIdx = i + 2                 // 0=clip, 1=audio, caption từ input #2
+    const next = i === capFiles.length - 1 ? 'vout' : `o${i}`
+    parts.push(`[${last}][${inIdx}:v]overlay=0:0:enable='between(t,${frames[i].startSec.toFixed(2)},${frames[i].endSec.toFixed(2)})'[${next}]`)
+    last = next
+  }
+  const mapV = capFiles.length ? 'vout' : 'base'
   await ffmpeg.exec([
-    '-i', vIn, '-i', aIn, '-i', cIn,
-    '-filter_complex', '[2:v][0:v]scale2ref=iw:ih[cap][vid];[vid][cap]overlay=0:0[v]',
-    '-map', '[v]', '-map', '1:a:0',
+    ...inputs,
+    '-filter_complex', parts.join(';'),
+    '-map', `[${mapV}]`, '-map', '1:a:0',
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-ar', '44100', '-ac', '2',
     '-shortest', '-movflags', '+faststart', '-y', out,
   ])
-  await ffmpeg.deleteFile(cIn).catch(() => {})
+  for (const f of capFiles) await ffmpeg.deleteFile(f).catch(() => {})
   const data = await ffmpeg.readFile(out)
   const src = typeof data === 'string' ? new TextEncoder().encode(data) : data
   const outBytes = new Uint8Array(src.byteLength)   // copy khỏi SharedArrayBuffer (wasm)

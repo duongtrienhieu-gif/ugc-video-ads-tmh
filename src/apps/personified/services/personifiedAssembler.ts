@@ -57,8 +57,9 @@ export async function assemblePersonifiedVideo(
 
   const crf = params.resolution === '1080p' ? '19' : '20'
   const preset = 'veryfast'
-  // Scale phủ kín khung rồi crop về đúng 9:16 (upscale 480→720 ở đây).
-  const vf = `scale=${evenW}:${evenH}:force_original_aspect_ratio=increase,crop=${evenW}:${evenH},setsar=1`
+  // PAD-FIT 9:16 nền BLUR (KHÔNG crop → không cắt rìa/caption). Clip 2:3 (cảnh câm) fit
+  // nguyên vào giữa, nền là bản blur phóng to. Clip đã 9:16 (cảnh có giọng) → fit khít.
+  const vf = `split=2[a][b];[a]scale=${evenW}:${evenH}:force_original_aspect_ratio=increase,crop=${evenW}:${evenH},boxblur=24:4[bg];[b]scale=${evenW}:${evenH}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1`
 
   const normFiles: string[] = []
   const failedIdx: number[] = []
