@@ -15,6 +15,7 @@
 import JSZip from 'jszip'
 import type { ShotPlan, ShotBlock } from '../types'
 import type { Product } from '../../../stores/types'
+import { trimVideo } from './trimClip'
 
 const proxyUrl = (url: string) => `/api/dl-video?url=${encodeURIComponent(url)}`
 
@@ -23,6 +24,13 @@ export interface ExportProgress {
   total: number
   label: string
 }
+
+// Hướng B — cắt thật bằng ffmpeg.wasm khi export.
+//   'none'     : Hướng A cũ — clip ship full, chỉ ghi mốc cắt vào tên + cutlist.
+//   'fast'     : cắt -c copy (nhanh, lệch ~1-2s theo keyframe).
+//   'accurate' : re-encode đúng frame (chậm hơn, output ngắn nên vẫn nhanh).
+// Chỉ cắt những clip ĐÃ chấm điểm cắt (inSec); clip chưa chấm vẫn ship full.
+export type ExportCutMode = 'none' | 'fast' | 'accurate'
 
 const BLOCK_VI: Record<ShotBlock, string> = {
   'van-de': 'Vấn đề',
@@ -65,6 +73,8 @@ interface FetchJob {
   /** Path inside the zip, e.g. clips/01a_loi-ich-sp__xhs__cut_12.0-17.0s.mp4 */
   path: string
   label: string
+  /** Hướng B — nếu set, cắt thật khúc này sau khi tải (chỉ clip đã chấm điểm). */
+  trim?: { inSec: number; durSec: number }
 }
 
 /**
@@ -75,6 +85,7 @@ export async function exportCapcutBundle(
   plan: ShotPlan,
   product: Product | null,
   onProgress?: (p: ExportProgress) => void,
+  cutMode: ExportCutMode = 'none',
 ): Promise<void> {
   const zip = new JSZip()
 
@@ -123,9 +134,16 @@ export async function exportCapcutBundle(
       const hasCut = c.inSec != null
       const inS = c.inSec ?? 0
       const outS = c.outSec ?? (hasCut ? inS + dur : dur)
-      const cutTag = hasCut ? `__cut_${inS.toFixed(1)}-${outS.toFixed(1)}s` : ''
+      // Hướng B: cắt thật những clip ĐÃ chấm điểm cắt; còn lại giữ full như cũ.
+      const willCut = cutMode !== 'none' && hasCut
+      const cutTag = hasCut ? `__${willCut ? 'dacat' : 'cut'}_${inS.toFixed(1)}-${outS.toFixed(1)}s` : ''
       const fn = `${order}${letter(ci)}_${shot.block}__${c.platform}${cutTag}.mp4`
-      jobs.push({ url: c.videoUrl, path: `clips/${fn}`, label: `Cảnh ${idx + 1} · clip ${ci + 1}` })
+      jobs.push({
+        url: c.videoUrl,
+        path: `clips/${fn}`,
+        label: `Cảnh ${idx + 1} · clip ${ci + 1}`,
+        trim: willCut ? { inSec: inS, durSec: Math.max(0.5, outS - inS) } : undefined,
+      })
       cutRows.push([
         `${order}${letter(ci)}`,
         `${BLOCK_VI[shot.block]}${c.role === 'backup' ? ' (dự phòng)' : ''}`,
@@ -150,7 +168,18 @@ export async function exportCapcutBundle(
     try {
       const res = await fetch(proxyUrl(job.url))
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      zip.file(job.path, await res.blob())
+      let blob = await res.blob()
+      // Hướng B — cắt thật khúc đã chấm điểm. Lỗi codec → giữ clip gốc + ghi chú.
+      if (job.trim && cutMode !== 'none') {
+        onProgress?.({ done, total, label: `Đang cắt ${job.label}…` })
+        const r = await trimVideo(blob, job.trim.inSec, job.trim.durSec, cutMode)
+        if (r.blob) blob = r.blob
+        else zip.file(
+          `${job.path}.CATLOI.txt`,
+          `Cắt tự động thất bại (${r.error ?? '?'}).\nFile kèm là CLIP GỐC ĐẦY ĐỦ — bạn tự cắt khúc ${job.trim.inSec.toFixed(1)}s → ${(job.trim.inSec + job.trim.durSec).toFixed(1)}s trong CapCut.`,
+        )
+      }
+      zip.file(job.path, blob)
     } catch (e) {
       zip.file(`${job.path}.LOI.txt`, `Tải clip thất bại: ${e instanceof Error ? e.message : String(e)}\nURL gốc: ${job.url}\n\nClip nguồn có thể đã hết hạn — mở lại app, tìm/chọn clip mới rồi export lại.`)
     }
@@ -162,7 +191,7 @@ export async function exportCapcutBundle(
   zip.file('subtitles_my.srt', srtMy.join('\n'))
   zip.file('subtitles_vi.srt', srtVi.join('\n'))
   zip.file('cutlist.csv', '﻿' + cutRows.join('\n')) // BOM → Excel reads UTF-8
-  zip.file('HUONG_DAN.txt', buildReadme(plan, product))
+  zip.file('HUONG_DAN.txt', buildReadme(plan, product, cutMode))
 
   onProgress?.({ done, total, label: 'Đang nén ZIP…' })
   const blob = await zip.generateAsync({ type: 'blob' })
@@ -178,10 +207,12 @@ export async function exportCapcutBundle(
   onProgress?.({ done, total, label: 'Xong! Đã tải ZIP về máy.' })
 }
 
-function buildReadme(plan: ShotPlan, product: Product | null): string {
+function buildReadme(plan: ShotPlan, product: Product | null, cutMode: ExportCutMode): string {
+  const cut = cutMode !== 'none'
   return [
     `BỘ DỰNG CAPCUT — ${product?.productName ?? 'Kịch bản UGC'}`,
     `Số cảnh: ${plan.shots.length} · Tổng thời lượng thoại: ~${Math.round(plan.totalDurationSec)}s · Ngôn ngữ chính: ${plan.language === 'my' ? 'MY' : 'VN'}`,
+    cut ? `Chế độ cắt: ĐÃ CẮT SẴN bằng máy (${cutMode === 'fast' ? 'nhanh — gần đúng' : 'chuẩn — đúng frame'})` : `Chế độ cắt: KHÔNG (clip full, cắt tay trong CapCut)`,
     ``,
     `── TRONG GÓI CÓ GÌ ──`,
     `• clips/      : các clip nguồn + video CTA, đặt tên theo thứ tự (01, 02, 03…).`,
@@ -192,9 +223,15 @@ function buildReadme(plan: ShotPlan, product: Product | null): string {
     `── CÁCH DỰNG TRONG CAPCUT ──`,
     `1. Tạo project mới (dọc 9:16).`,
     `2. Kéo cả thư mục clips/ vào — CapCut tự xếp theo số 01 → 02 → 03…`,
-    `3. CLIP NGUỒN LÀ FILE ĐẦY ĐỦ (có thể dài 40-50s). Mở cutlist.csv xem cột "Cắt từ → Cắt đến":`,
-    `   đó là khúc ~4-5s bạn đã chọn trong app. Cắt đúng khúc đó (đã chừa sẵn vài giây để bạn nhích).`,
-    `   Tên file cũng ghi sẵn mốc, ví dụ: 04a_loi-ich-sp__xhs__cut_12.0-17.0s.mp4`,
+    cut
+      ? `3. CLIP CÓ TÊN "dacat_X-Ys" ĐÃ ĐƯỢC CẮT SẴN đúng khúc ~4-5s — kéo vào dùng luôn, khỏi cắt.`
+      : `3. CLIP NGUỒN LÀ FILE ĐẦY ĐỦ (có thể dài 40-50s). Mở cutlist.csv xem cột "Cắt từ → Cắt đến":`,
+    cut
+      ? `   Clip CHƯA chấm điểm cắt (tên "cut_" hoặc không có mốc) vẫn là file FULL — tự cắt theo cutlist.`
+      : `   đó là khúc ~4-5s bạn đã chọn trong app. Cắt đúng khúc đó (đã chừa sẵn vài giây để bạn nhích).`,
+    cut
+      ? `   Nếu thấy file kèm ".CATLOI.txt": clip đó cắt máy lỗi → file là bản GỐC, tự cắt theo ghi chú.`
+      : `   Tên file cũng ghi sẵn mốc, ví dụ: 04a_loi-ich-sp__xhs__cut_12.0-17.0s.mp4`,
     `4. Cảnh nào có 01b/01c là clip DỰ PHÒNG cho cùng ý hình — chọn cái ưng, xóa cái thừa.`,
     `5. Dòng nào ghi "CẦN THAY" ở cutlist là clip pick tạm — nên tìm clip tốt hơn thay vào.`,
     `6. Import subtitles_my.srt (hoặc _vi) làm phụ đề. Chỉnh lại cho khớp khi đã cắt xong hình.`,

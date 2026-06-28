@@ -4,8 +4,9 @@ import type { Shot, ShotPlan, ShotBlock, ShotFill, ScriptLanguage, SourceClip, S
 import type { Product } from '../../../stores/types'
 import { estimateDuration, DEFAULT_FILL_BY_BLOCK } from '../services/splitIntoShots'
 import { renderCtaImage, renderCtaVideo, CTA_IMAGE_CREDITS, CTA_VIDEO_CREDITS } from '../services/renderCtaShot'
-import { exportCapcutBundle, type ExportProgress } from '../services/exportBundle'
-import { viToZhTerms, hasHan, productImageDataUrl, searchProduct1688, fetch1688Media, type Media1688 } from '../services/sourceFinding'
+import { exportCapcutBundle, type ExportProgress, type ExportCutMode } from '../services/exportBundle'
+import { viToZhTerms, hasHan, productImageDataUrl, searchProduct1688 } from '../services/sourceFinding'
+import { warmUpFFmpeg } from '../../video-builder/v3/services/ffmpegLoader'
 import { useSettingsStore } from '../../../stores/settingsStore'
 
 // ── Co-pilot scene-split table (Phase B / B2) ────────────────────────────
@@ -52,9 +53,10 @@ const fmtSec = (n: number) => `~${n}s`
 
 // ── Source clip plumbing (mirrors Research → SourceFinder) ───────────────
 type Platform = 'douyin' | 'xhs' | 'kuaishou'
-// Search priority (operator-rated): RED 📕 best, Kuaishou ⚡ good, Douyin 🎵 worst → last.
-// We query ALL three at once and merge results in this order.
-const PLAT_PRIORITY: Platform[] = ['xhs', 'kuaishou', 'douyin']
+// No global priority merge anymore. Each shot picks ONE platform tab at a time
+// (RED / Kuaishou / Douyin) and searches just that one — so the operator judges
+// each platform's quality. Switching tabs keeps the previous platform's cached
+// results (lanes are keyed by platform), so no reload.
 const PLATS: { id: Platform; label: string; emoji: string }[] = [
   { id: 'xhs', label: 'RED', emoji: '📕' },
   { id: 'kuaishou', label: 'Kuaishou', emoji: '⚡' },
@@ -118,12 +120,27 @@ export default function ShotPlanPanel({
   plan, productName, product, isBuilding, onChange, onRebuild, onLanguageChange, onBack,
 }: ShotPlanPanelProps) {
   // Source-clip controls (panel-wide): length filter + the full-screen preview
-  // popup. Platform is no longer a single choice — every search hits all three
-  // platforms and merges by priority (RED › Kuaishou › Douyin).
+  // popup. Platform is chosen per-shot (a tab in each ShotSourcePicker), not here.
   const [onlyShort, setOnlyShort] = useState(true)
   const [preview, setPreview] = useState<PreviewState | null>(null)
   const previewVideoRef = useRef<HTMLVideoElement>(null)
   const [exporting, setExporting] = useState<ExportProgress | null>(null)
+
+  // Hướng B — cắt thật khi export (ffmpeg.wasm trong trình duyệt). Mặc định tắt.
+  // Nặng trên điện thoại nên cảnh báo khi màn hình nhỏ (vẫn cho chạy nếu muốn).
+  const [cutEnabled, setCutEnabled] = useState(false)
+  const [cutMode, setCutMode] = useState<'fast' | 'accurate'>('accurate')
+  const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768
+  const effectiveCut: ExportCutMode = cutEnabled ? cutMode : 'none'
+  // How many picked clips actually have an in-point → would get pre-cut.
+  const cutableCount = plan.shots.reduce(
+    (n, s) => n + (s.fill === 'ai-render' ? 0 : (s.clips ?? []).filter((c) => c.inSec != null).length),
+    0,
+  )
+  const enableCut = (on: boolean) => {
+    setCutEnabled(on)
+    if (on) warmUpFFmpeg() // fetch ~30MB wasm in background while operator tweaks
+  }
 
   // Gemini key (panel-wide) — needed for the VN→ZH keyword translation.
   const geminiKey = useSettingsStore((s) => s.geminiApiKey)
@@ -168,7 +185,7 @@ export default function ShotPlanPanel({
     if (exporting) return
     setExporting({ done: 0, total: 0, label: 'Chuẩn bị…' })
     try {
-      await exportCapcutBundle(plan, product, setExporting)
+      await exportCapcutBundle(plan, product, setExporting, effectiveCut)
       setTimeout(() => setExporting(null), 1800)
     } catch (e) {
       setExporting({ done: 0, total: 0, label: `Lỗi export: ${e instanceof Error ? e.message : String(e)}` })
@@ -361,15 +378,45 @@ export default function ShotPlanPanel({
           <span className="hidden sm:inline">· dòng <b>{primaryFlag}</b> = chính, <b>{glossFlag}</b> = phụ · từ khóa source = <b className="text-app-muted">tiếng Trung 🇨🇳</b></span>
         </div>
 
-        {/* Source-clip controls — searches all 3 platforms, priority order */}
+        {/* Source-clip controls — platform is chosen per shot (tab in each card) */}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-bold text-app-subtle">Nguồn clip:</span>
-          <span className="rounded-lg border border-app-border bg-app-card-elevated px-2 py-0.5 text-[11px] font-bold text-app-muted" title="Mỗi lần tìm sẽ quét cả 3 nền và gộp theo thứ tự ưu tiên này">
-            🔍 cả 3 nền · 📕 RED › ⚡ Kuaishou › 🎵 Douyin
+          <span className="rounded-lg border border-app-border bg-app-card-elevated px-2 py-0.5 text-[11px] font-bold text-app-muted" title="Mỗi cảnh có 3 tab nền — tự chọn nền & tự tìm để so chất lượng. Đổi tab không mất kết quả nền cũ.">
+            🔁 mỗi cảnh tự chọn nền · 📕 RED · ⚡ Kuaishou · 🎵 Douyin
           </span>
           <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-app-muted" title="Chỉ lấy clip ngắn, hợp cắt ghép">
             <input type="checkbox" checked={onlyShort} onChange={(e) => setOnlyShort(e.target.checked)} /> ⏱ Chỉ clip &lt;60s
           </label>
+        </div>
+
+        {/* Export option — Hướng B: cắt thật khúc đã chấm điểm bằng ffmpeg */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-bold text-app-subtle">Khi export:</span>
+          <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-app-muted" title="Cắt sẵn các clip ĐÃ chấm điểm cắt ngay trong trình duyệt (ffmpeg). Clip chưa chấm vẫn giữ full.">
+            <input type="checkbox" checked={cutEnabled} onChange={(e) => enableCut(e.target.checked)} />
+            <Scissors className="h-3 w-3" /> Cắt sẵn khúc đã chọn
+            {cutableCount > 0 && <span className="opacity-60">· {cutableCount} clip</span>}
+          </label>
+          {cutEnabled && (
+            <div className="flex items-center gap-0.5 rounded-lg border border-app-border bg-app-card-elevated p-0.5">
+              {([['fast', 'Nhanh'], ['accurate', 'Chuẩn']] as const).map(([m, lbl]) => (
+                <button
+                  key={m}
+                  onClick={() => setCutMode(m)}
+                  className={`rounded px-2 py-0.5 text-[10px] font-bold ${cutMode === m ? 'ui-accent-soft' : 'text-app-muted hover:bg-app-card'}`}
+                  title={m === 'fast' ? 'Cắt -c copy: rất nhanh nhưng điểm bắt đầu có thể lệch ~1-2s' : 'Re-encode: đúng từng frame, chậm hơn chút (clip ngắn nên vẫn nhanh)'}
+                >
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          )}
+          {cutEnabled && cutableCount === 0 && (
+            <span className="text-[10px] text-amber-500">Chưa cảnh nào chấm điểm cắt — bấm ▶ clip đã chọn rồi “Đặt điểm bắt đầu”.</span>
+          )}
+          {cutEnabled && !isDesktop && (
+            <span className="text-[10px] text-amber-500">⚠ Trên điện thoại có thể chậm/lỗi bộ nhớ — nên cắt trên máy tính.</span>
+          )}
         </div>
 
         {/* Product lock — every "Source SP" shot searches by this locked 1688 title */}
@@ -866,13 +913,15 @@ function KeywordEditor({ terms, geminiKey, onSetTerms }: KeywordEditorProps) {
 }
 
 // ── Per-shot source picker (B3) ──────────────────────────────────────────
-// Searches /api/tikhub-search across all 3 Chinese platforms (RED › Kuaishou ›
-// Douyin) for EACH of the shot's terms separately, then merges round-robin so
-// every term (e.g. each ingredient) is represented. For source-product shots the
-// single "term" is the locked 1688 product title, and the seller's own 1688
-// videos/images are offered too (the most exact footage of THE product).
-// Falls back to visualIdea only if a term list is empty. Shows a results strip with
-// play / pick / download; once an operator picks a clip it's pinned on the shot.
+// Each shot has a 3-platform TAB selector (RED / Kuaishou / Douyin). The operator
+// picks ONE platform and searches just it via /api/tikhub-search — searching each
+// of the shot's terms separately and merging round-robin so every term (e.g. each
+// ingredient) is represented. Switching tabs does NOT refetch: each platform's
+// results are cached in `lanes` (keyed by platform) and pagination/shown state is
+// per-platform, so the previous platform's results stay put. For source-product
+// shots the single "term" is the locked 1688 product title. Falls back to
+// visualIdea only if a term list is empty. Results strip = play / pick / download;
+// a picked clip is pinned on the shot.
 
 interface TikhubResponse {
   clips: SourceClip[]
@@ -902,14 +951,11 @@ interface ShotSourcePickerProps {
 // results onto a different keyword. '::' can't appear in a ZH/VN search term.
 const laneKey = (term: string, plat: Platform) => `${plat}::${term}`
 
-// Build the merged result pool: round-robin across terms (so every term — e.g.
-// each ingredient — is represented), priority platform order within each term,
-// deduped by clipKey. This is what fixes a multi-ingredient beat collapsing to
-// the dominant term's clips.
-function buildPool(terms: string[], lanes: Record<string, SourceClip[]>): SourceClip[] {
-  const perTerm: SourceClip[][] = terms.map((term) =>
-    PLAT_PRIORITY.flatMap((plat) => lanes[laneKey(term, plat)] ?? []),
-  )
+// Build the result pool for ONE platform: round-robin across terms (so every
+// term — e.g. each ingredient — is represented), deduped by clipKey. Per-platform
+// now (no cross-platform merge) so each tab shows only its own platform's clips.
+function buildPool(terms: string[], lanes: Record<string, SourceClip[]>, plat: Platform): SourceClip[] {
+  const perTerm: SourceClip[][] = terms.map((term) => lanes[laneKey(term, plat)] ?? [])
   const pool: SourceClip[] = []
   const seen = new Set<string>()
   let depth = 0
@@ -940,59 +986,62 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
     ? (p.productZh ? [p.productZh.name] : [])
     : (shot.zhTerms.length ? shot.zhTerms : (shot.visualIdea.trim() ? [shot.visualIdea.trim()] : []))
 
-  // Per-lane fetched clips + pagination. Pool (merged, deduped) is derived.
+  // Per-lane fetched clips + pagination (lane = term × platform). The visible
+  // pool is derived PER selected platform tab. shown/searched are per-platform so
+  // switching tabs keeps each platform's reveal state (no reload).
+  const [plat, setPlat] = useState<Platform>('xhs') // default RED
   const [lanes, setLanes] = useState<Record<string, SourceClip[]>>({})
   const [cursor, setCursor] = useState<Record<string, string | undefined>>({})
   const [hasMore, setHasMore] = useState<Record<string, boolean>>({})
-  const [shown, setShown] = useState(0)
+  const [shownByPlat, setShownByPlat] = useState<Record<string, number>>({})
+  const [searched, setSearched] = useState<Record<string, boolean>>({})
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [open, setOpen] = useState(false)
 
-  // 1688 seller media (product shots only) — the most exact footage of THE product.
-  const [media, setMedia] = useState<Media1688 | null>(null)
-  const [mediaBusy, setMediaBusy] = useState(false)
-  const [mediaErr, setMediaErr] = useState<string | null>(null)
-
-  const pool = buildPool(terms, lanes)
+  const shown = shownByPlat[plat] ?? 0
+  const pool = buildPool(terms, lanes, plat)
   const poolLen = pool.length
   const visible = pool.slice(0, shown)
-  // Only the CURRENT terms' lanes count — a removed term's stale lane must not
-  // keep the "load more" button alive.
-  const anyHasMore = terms.some((term) => PLAT_PRIORITY.some((plat) => hasMore[laneKey(term, plat)]))
+  const platOpen = !!searched[plat]
+  // Only the CURRENT terms' lanes (for THIS platform) count — a removed term's
+  // stale lane must not keep the "load more" button alive.
+  const anyHasMore = terms.some((term) => hasMore[laneKey(term, plat)])
 
-  const fetchLane = async (term: string, plat: Platform, cur: string | undefined): Promise<TikhubResponse> => {
+  const fetchLane = async (term: string, pl: Platform, cur: string | undefined): Promise<TikhubResponse> => {
     const curParam = cur ? `&cursor=${encodeURIComponent(cur)}` : ''
-    const url = `/api/tikhub-search?q=${encodeURIComponent(term)}&platform=${plat}&sort=like&maxSec=${p.onlyShort ? 60 : 0}${curParam}`
+    const url = `/api/tikhub-search?q=${encodeURIComponent(term)}&platform=${pl}&sort=like&maxSec=${p.onlyShort ? 60 : 0}${curParam}`
     const res = await fetch(url)
     return (await res.json()) as TikhubResponse
   }
 
-  // Fetch the next page from every lane (term × platform) in parallel until the
-  // merged pool holds `target` clips or all lanes are dry, then reveal up to it.
+  // Fetch the next page for EACH term of the SELECTED platform in parallel until
+  // that platform's pool holds `target` clips or its lanes are dry, then reveal.
+  // reset=true re-searches only THIS platform (other platforms' caches persist).
   const ensureAndShow = async (reset: boolean) => {
     if (terms.length === 0) {
       setErr(isProduct ? 'Chưa khóa SP — bấm "Khóa SP từ ảnh (1688)" ở thanh trên.' : 'Chưa có từ khóa tiếng Trung để tìm.')
       return
     }
-    setBusy(true); setErr(null); setOpen(true)
+    setBusy(true); setErr(null)
+    setSearched((s) => ({ ...s, [plat]: true }))
     try {
-      const keys: { term: string; plat: Platform; key: string }[] = []
-      terms.forEach((term) => PLAT_PRIORITY.forEach((plat) => keys.push({ term, plat, key: laneKey(term, plat) })))
-      let nLanes: Record<string, SourceClip[]> = reset ? {} : { ...lanes }
-      const nCursor: Record<string, string | undefined> = reset ? {} : { ...cursor }
-      const nHasMore: Record<string, boolean> = reset ? {} : { ...hasMore }
+      const keys = terms.map((term) => ({ term, key: laneKey(term, plat) }))
+      let nLanes: Record<string, SourceClip[]> = { ...lanes }
+      const nCursor: Record<string, string | undefined> = { ...cursor }
+      const nHasMore: Record<string, boolean> = { ...hasMore }
       keys.forEach(({ key }) => {
-        if (!nLanes[key]) nLanes[key] = []
-        if (nHasMore[key] === undefined) nHasMore[key] = true
+        // reset clears only this platform's lanes; other platforms untouched.
+        if (reset || !nLanes[key]) nLanes[key] = []
+        if (reset) { nCursor[key] = undefined; nHasMore[key] = true }
+        else if (nHasMore[key] === undefined) nHasMore[key] = true
       })
-      const target = reset ? SOURCE_PAGE : shown + SOURCE_PAGE
+      const target = (reset ? 0 : shown) + SOURCE_PAGE
       let sawError: string | null = null
       let guard = 0
-      while (buildPool(terms, nLanes).length < target && keys.some(({ key }) => nHasMore[key]) && guard < 6) {
+      while (buildPool(terms, nLanes, plat).length < target && keys.some(({ key }) => nHasMore[key]) && guard < 6) {
         guard++
         const rounds = await Promise.all(
-          keys.map(async ({ term, plat, key }) => {
+          keys.map(async ({ term, key }) => {
             if (!nHasMore[key]) return null
             try {
               return { key, data: await fetchLane(term, plat, nCursor[key]) }
@@ -1013,8 +1062,8 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
         }
       }
       setLanes(nLanes); setCursor(nCursor); setHasMore(nHasMore)
-      const newPool = buildPool(terms, nLanes)
-      setShown(Math.min(target, newPool.length))
+      const newPool = buildPool(terms, nLanes, plat)
+      setShownByPlat((s) => ({ ...s, [plat]: Math.min(target, newPool.length) }))
       if (newPool.length === 0 && sawError) setErr(sawError)
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -1024,36 +1073,16 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
   }
 
   const search = () => void ensureAndShow(true)
-  // Reveal +10 from the pool if hidden clips remain; otherwise fetch more first.
+  // Reveal +10 from this platform's pool if hidden clips remain; else fetch more.
   const loadMore = () => {
-    if (shown < poolLen) setShown(Math.min(shown + SOURCE_PAGE, poolLen))
+    if (shown < poolLen) setShownByPlat((s) => ({ ...s, [plat]: Math.min(shown + SOURCE_PAGE, poolLen) }))
     else void ensureAndShow(false)
   }
 
-  // Load the seller's original 1688 media for the locked product (product shots).
-  const loadMedia = async () => {
-    if (!p.productZh) return
-    setMediaBusy(true); setMediaErr(null)
-    try {
-      const m = await fetch1688Media(p.productZh.itemId)
-      setMedia(m)
-      if (!m.videos.length && !m.images.length) setMediaErr('Không lấy được ảnh/video gốc của SP này.')
-    } catch (e) {
-      setMediaErr(e instanceof Error ? e.message : String(e))
-    } finally { setMediaBusy(false) }
-  }
-  // A seller video → a SourceClip the operator can pin like any other clip.
-  const mediaClip = (videoUrl: string, i: number): SourceClip => ({
-    id: `1688_${i}`,
-    videoUrl,
-    cover: '',
-    desc: `Video gốc nhà bán · ${p.productZh?.name ?? ''}`.trim(),
-    author: '1688',
-    likes: 0,
-    durationSec: 0,
-    shareUrl: '',
-    platform: '1688',
-  })
+  // Switch platform tab — pure view change, no refetch (cache stays in lanes).
+  const switchPlat = (next: Platform) => { if (next !== plat) { setPlat(next); setErr(null) } }
+  // Clip count already cached per platform tab (for the badge).
+  const platCount = (pl: Platform) => buildPool(terms, lanes, pl).length
 
   const dlName = (shot.zhTerms[0] || shot.visualIdea)
   const picked = shot.clips ?? []
@@ -1146,84 +1175,53 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
         </button>
       ) : (
         <>
-          {/* Search trigger — each term searched separately, merged by priority. */}
+          {/* Platform tabs — pick ONE platform & search just it. Switching tabs
+              keeps each platform's cached results (no reload). */}
+          <div className="flex flex-wrap items-center gap-1">
+            {PLATS.map((pl) => {
+              const n = platCount(pl.id)
+              const active = pl.id === plat
+              return (
+                <button
+                  key={pl.id}
+                  onClick={() => switchPlat(pl.id)}
+                  className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold ${active ? 'ui-accent-soft' : 'border border-app-border bg-app-card text-app-muted hover:bg-app-card-elevated'}`}
+                  title={`Tìm trên ${pl.label}`}
+                >
+                  {pl.emoji} {pl.label}
+                  {n > 0 && <span className="opacity-60">· {n}</span>}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Search trigger — searches the SELECTED platform only. */}
           <div className="flex items-center gap-1.5">
             <button
               onClick={search}
               disabled={busy || terms.length === 0}
               className="ui-accent-soft flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold disabled:opacity-40"
-              title={terms.length ? `Tìm cả 3 nền (RED › Kuaishou › Douyin): ${terms.join(' · ')}` : 'Chưa có từ khóa'}
+              title={terms.length ? `Tìm trên ${platLabel(plat)}: ${terms.join(' · ')}` : 'Chưa có từ khóa'}
             >
-              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : picked.length ? <RefreshCw className="h-3 w-3" /> : <Search className="h-3 w-3" />}
-              {picked.length ? 'Tìm thêm clip' : 'Tìm clip'}
+              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : platOpen ? <RefreshCw className="h-3 w-3" /> : <Search className="h-3 w-3" />}
+              {platOpen ? `Tìm lại trên ${platLabel(plat)}` : `Tìm clip trên ${platLabel(plat)}`}
             </button>
             {terms.length > 0 && (
               <span className="line-clamp-1 text-[10px] text-app-subtle">
-                🇨🇳 {terms.join(' · ')} · {terms.length > 1 ? `${terms.length} từ khóa · ` : ''}cả 3 nền
+                🇨🇳 {terms.join(' · ')}{terms.length > 1 ? ` · ${terms.length} từ khóa` : ''}
               </span>
             )}
           </div>
-
-          {/* Seller's own 1688 media — the most exact footage of THE product. */}
-          {isProduct && p.productZh && (
-            <div className="flex flex-col gap-1.5">
-              <button
-                onClick={() => void loadMedia()}
-                disabled={mediaBusy}
-                className="flex items-center gap-1.5 self-start rounded-lg border border-app-border bg-app-card px-2.5 py-1 text-[11px] font-bold text-app-muted hover:bg-app-card-elevated disabled:opacity-40"
-                title="Lấy video/ảnh gốc của nhà bán trên 1688"
-              >
-                {mediaBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
-                🎬 Video gốc nhà bán 1688
-              </button>
-              {mediaErr && <p className="text-[10px] text-rose-500">{mediaErr}</p>}
-              {media && media.videos.length > 0 && (
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {media.videos.map((v, i) => {
-                    const c = mediaClip(v, i)
-                    const isPicked = pickedKeys.has(clipKey(c))
-                    return (
-                      <div key={`1688v_${i}`} className="w-28 shrink-0">
-                        <button
-                          onClick={() => p.onPlay({ clip: c })}
-                          className="relative block aspect-[9/16] w-full overflow-hidden rounded-lg bg-black/40"
-                          title="Xem trước"
-                        >
-                          <span className="absolute inset-0 flex items-center justify-center"><Play className="h-5 w-5 text-white drop-shadow" /></span>
-                          <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] font-bold text-white">1688</span>
-                        </button>
-                        <div className="mt-1 flex items-center gap-1">
-                          <button
-                            onClick={() => (isPicked ? p.onRemoveClip(clipKey(c)) : p.onAddClip(c))}
-                            className={`flex flex-1 items-center justify-center gap-0.5 rounded px-1.5 py-1 text-[10px] font-bold ${isPicked ? 'bg-emerald-500/15 text-emerald-500' : 'ui-accent-soft'}`}
-                          >
-                            {isPicked ? '✓ Đã thêm' : <><Plus className="h-2.5 w-2.5" /> Thêm</>}
-                          </button>
-                          <button
-                            onClick={() => proxyDownload(v, `${safeName(dlName)}-1688-${i}.mp4`)}
-                            className="rounded p-1 text-app-muted hover:bg-app-card-elevated"
-                            title="Tải"
-                          >
-                            <ArrowDownToLine className="h-3 w-3" />
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
         </>
       )}
 
       {err && <p className="text-[10px] text-rose-500">{err}</p>}
 
-      {/* Results strip */}
-      {open && !busy && !err && poolLen === 0 && (
-        <p className="text-[10px] text-app-subtle">Không tìm thấy clip. Thử đổi từ khóa.</p>
+      {/* Results strip (for the selected platform) */}
+      {platOpen && !busy && !err && poolLen === 0 && (
+        <p className="text-[10px] text-app-subtle">Không tìm thấy clip trên {platLabel(plat)}. Thử nền khác hoặc đổi từ khóa.</p>
       )}
-      {open && visible.length > 0 && (
+      {platOpen && visible.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1">
           {visible.map((c) => {
             const isPicked = pickedKeys.has(clipKey(c))
@@ -1266,7 +1264,7 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
       )}
 
       {/* Load more — reveals +10 each press (fetches next pages when pool runs out) */}
-      {open && visible.length > 0 && (shown < poolLen || anyHasMore) && (
+      {platOpen && visible.length > 0 && (shown < poolLen || anyHasMore) && (
         <button
           onClick={loadMore}
           disabled={busy}
