@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { ArrowLeft, RotateCcw, Loader2, Scissors, ArrowDownToLine, Trash2, ChevronUp, ChevronDown, Clapperboard, Film, Sparkles, Search, Play, RefreshCw, X, ImageIcon, Video, AlertTriangle, Plus, Star, Crosshair, Package, Lock, Languages, SlidersHorizontal } from 'lucide-react'
 import type { Shot, ShotPlan, ShotBlock, ShotFill, ScriptLanguage, SourceClip, ShotClip, CtaRender, ProductLock1688 } from '../types'
 import type { Product } from '../../../stores/types'
@@ -1073,9 +1073,40 @@ function buildPool(terms: string[], lanes: Record<string, SourceClip[]>, plat: P
   return pool
 }
 
+// ── Persist per-shot search state (F5 / chuyển tab / remount KHÔNG mất kết quả) ──
+// Mỗi cảnh có 1 entry keyed theo shot.id. Lưu cả lanes (clip TikHub đã tốn tiền) +
+// msTerms (1 lần gọi Gemini) + cursor/hasMore/shown/searched/plat → mở lại y nguyên,
+// không gọi lại API. Quá quota → bỏ lanes của các cảnh KHÁC trước, giữ cảnh hiện tại.
+const PICKER_SAVE_KEY = 'shot-source-picker-v1'
+interface PickerSaved {
+  plat: Platform
+  msTerms: string[]
+  lanes: Record<string, SourceClip[]>
+  cursor: Record<string, string | undefined>
+  hasMore: Record<string, boolean>
+  shownByPlat: Record<string, number>
+  searched: Record<string, boolean>
+}
+function readAllPicker(): Record<string, PickerSaved> {
+  try { return (JSON.parse(localStorage.getItem(PICKER_SAVE_KEY) || '{}') as Record<string, PickerSaved>) || {} } catch { return {} }
+}
+function readPicker(shotId: string): PickerSaved | undefined { return readAllPicker()[shotId] }
+function writePicker(shotId: string, data: PickerSaved) {
+  const all = readAllPicker()
+  all[shotId] = data
+  try { localStorage.setItem(PICKER_SAVE_KEY, JSON.stringify(all)); return } catch { /* quá quota → thử bản gọn */ }
+  try {
+    const slim: Record<string, PickerSaved> = {}
+    for (const [k, v] of Object.entries(all)) slim[k] = k === shotId ? v : { ...v, lanes: {} }
+    localStorage.setItem(PICKER_SAVE_KEY, JSON.stringify(slim)); return
+  } catch { /* vẫn quá → chỉ giữ cảnh hiện tại, bỏ lanes */ }
+  try { localStorage.setItem(PICKER_SAVE_KEY, JSON.stringify({ [shotId]: { ...data, lanes: {} } })) } catch { /* */ }
+}
+
 function ShotSourcePicker(p: ShotSourcePickerProps) {
   const { shot } = p
   const isProduct = shot.fill === 'source-product'
+  const saved = useRef(readPicker(shot.id)).current   // đọc 1 lần lúc mount để khôi phục
 
   // The Chinese search terms for this shot (Douyin/RED/Kuaishou). Product shots
   // search by the locked 1688 title (one term); other shots search each zhTerm
@@ -1084,12 +1115,12 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
     ? (p.productZh ? [p.productZh.name] : [])
     : (shot.zhTerms.length ? shot.zhTerms : (shot.visualIdea.trim() ? [shot.visualIdea.trim()] : []))
 
-  const [plat, setPlat] = useState<Platform>('xhs') // default RED
+  const [plat, setPlat] = useState<Platform>(saved?.plat ?? 'xhs') // default RED (hoặc khôi phục)
 
   // TikTok tab searches in EN/Malay, NOT Chinese — auto-generated from the shot's
   // meaning (zhTerms, else the VN line / locked product). Kept in local state
   // (regenerated per mount, like lanes) so no Shot-type/migration change.
-  const [msTerms, setMsTerms] = useState<string[]>([])
+  const [msTerms, setMsTerms] = useState<string[]>(saved?.msTerms ?? [])
   const [msBusy, setMsBusy] = useState(false)
   const [msErr, setMsErr] = useState<string | null>(null)
   // What to feed the MS translator: prefer the distilled zhTerms; for product
@@ -1121,13 +1152,18 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
   // Per-lane fetched clips + pagination (lane = term × platform). The visible
   // pool is derived PER selected platform tab. shown/searched are per-platform so
   // switching tabs keeps each platform's reveal state (no reload).
-  const [lanes, setLanes] = useState<Record<string, SourceClip[]>>({})
-  const [cursor, setCursor] = useState<Record<string, string | undefined>>({})
-  const [hasMore, setHasMore] = useState<Record<string, boolean>>({})
-  const [shownByPlat, setShownByPlat] = useState<Record<string, number>>({})
-  const [searched, setSearched] = useState<Record<string, boolean>>({})
+  const [lanes, setLanes] = useState<Record<string, SourceClip[]>>(saved?.lanes ?? {})
+  const [cursor, setCursor] = useState<Record<string, string | undefined>>(saved?.cursor ?? {})
+  const [hasMore, setHasMore] = useState<Record<string, boolean>>(saved?.hasMore ?? {})
+  const [shownByPlat, setShownByPlat] = useState<Record<string, number>>(saved?.shownByPlat ?? {})
+  const [searched, setSearched] = useState<Record<string, boolean>>(saved?.searched ?? {})
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+
+  // Lưu lại mỗi khi state tìm kiếm đổi → F5 / chuyển tab / mở lại cảnh đều còn nguyên kết quả (không gọi lại API).
+  useEffect(() => {
+    writePicker(shot.id, { plat, msTerms, lanes, cursor, hasMore, shownByPlat, searched })
+  }, [shot.id, plat, msTerms, lanes, cursor, hasMore, shownByPlat, searched])
 
   const shown = shownByPlat[plat] ?? 0
   const pool = buildPool(terms, lanes, plat)
