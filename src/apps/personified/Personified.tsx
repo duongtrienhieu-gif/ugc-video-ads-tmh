@@ -369,9 +369,10 @@ export default function Personified() {
   }
 
   // P2b — render CHARACTER SHEET 1 nhân vật → Character Bank (khóa diện mạo xuyên cảnh).
-  async function handleRenderCharacterRef(character: PersonifiedCharacter) {
-    if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
-    if (charBank[character.name]?.status === 'rendering') return
+  //   Trả về refImage (để caller dùng NGAY, tránh stale state khi chạy chuỗi bank→keyframe).
+  async function handleRenderCharacterRef(character: PersonifiedCharacter): Promise<string | undefined> {
+    if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return undefined }
+    if (charBank[character.name]?.status === 'rendering') return charBank[character.name]?.refImage
     setCharBank((p) => ({ ...p, [character.name]: { status: 'rendering' } }))
     try {
       // Hero = SP nhân cách hóa → khóa bao bì thật bằng ảnh sản phẩm (chống drift màu/nhãn).
@@ -381,8 +382,10 @@ export default function Personified() {
         productRefs: isProductHero ? productRefs : [],
       })
       setCharBank((p) => ({ ...p, [character.name]: { status: 'done', refImage } }))
+      return refImage
     } catch (e) {
       setCharBank((p) => ({ ...p, [character.name]: { status: 'failed', error: e instanceof Error ? e.message : String(e) } }))
+      return undefined
     }
   }
 
@@ -401,16 +404,18 @@ export default function Personified() {
 
   // P2a — BƯỚC 1: render keyframe (ảnh tĩnh, rẻ) để DUYỆT trước i2v. → status 'kf_ready'.
   //   Nếu nhân vật đã có ảnh trong Character Bank → truyền làm ref khóa diện mạo (P2b).
-  async function handleRenderKeyframe(scene: PersonifiedScene) {
+  async function handleRenderKeyframe(scene: PersonifiedScene, bankOverride?: Record<string, string>) {
     if (!script) return
     if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
     if (clips[scene.idx]?.status === 'kf' || clips[scene.idx]?.status === 'clip') return
     const character = script.characters.find((c) => c.name === scene.speaker || c.role === scene.speaker) ?? script.characters[0]
+    // Ưu tiên ref bank vừa render (bankOverride) → tránh stale state trong chuỗi bank→keyframe.
+    const charRef = character ? (bankOverride?.[character.name] ?? charBank[character.name]?.refImage) : undefined
     setClips((p) => ({ ...p, [scene.idx]: { status: 'kf' } }))
     try {
       const { keyframeRef } = await renderKeyframe({
         apiKey: kieKey, scene, character,
-        characterRef: character ? charBank[character.name]?.refImage : undefined,
+        characterRef: charRef,
         productRefs: scene.hasProduct ? productRefs : [],
         worldEnv: script.worldEnv,
       })
@@ -482,17 +487,29 @@ export default function Personified() {
     }
   }
 
-  // P2a — STORYBOARD: render keyframe TẤT CẢ cảnh (rẻ) để soi cả phim trước khi đốt i2v.
-  //   Bỏ qua cảnh đã có keyframe (kf_ready/clip/done).
+  // P2a — STORYBOARD: RÀNG BUỘC — render Character Bank (khóa nhân vật) XONG TRƯỚC, rồi mới
+  //   keyframe (dùng ảnh bank → nhất quán, không sinh nhân vật tự do). Bỏ qua cảnh đã có KF.
   async function handleRenderAllKeyframes() {
-    if (!script || renderingAll) return
+    if (!script || renderingAll || bankRunning) return
     if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
     setRenderingAll(true)
     try {
+      // BƯỚC 1: đảm bảo MỌI nhân vật có ảnh bank (render cái thiếu) → gom map ref TƯƠI.
+      const bankMap: Record<string, string> = {}
+      for (const [n, b] of Object.entries(charBank)) if (b.refImage) bankMap[n] = b.refImage
+      setBankRunning(true)
+      try {
+        for (const c of script.characters) {
+          if (bankMap[c.name]) continue
+          const ref = await handleRenderCharacterRef(c)
+          if (ref) bankMap[c.name] = ref
+        }
+      } finally { setBankRunning(false) }
+      // BƯỚC 2: keyframe storyboard — truyền bankMap để chắc chắn dùng ảnh bank vừa render.
       for (const s of script.scenes) {
         const st = clips[s.idx]?.status
         if (st === 'kf_ready' || st === 'clip' || st === 'done') continue
-        await handleRenderKeyframe(s)
+        await handleRenderKeyframe(s, bankMap)
       }
     } finally { setRenderingAll(false) }
   }
@@ -757,10 +774,10 @@ export default function Personified() {
               </label>
               {credit && <span className="rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700" title="Credit KIE: ảnh nhân vật (bank) + keyframe + i2v. Giọng do ElevenLabs (ví riêng) + ghép ffmpeg (0 credit).">KIE {formatCreditEstimate(credit)} · giọng riêng</span>}
               {/* P2a — STORYBOARD GATE: keyframe tất cả (rẻ, để duyệt) → soi xong → clip tất cả (i2v, đắt) */}
-              <button onClick={handleRenderAllKeyframes} disabled={renderingAll || !kieKey}
+              <button onClick={handleRenderAllKeyframes} disabled={renderingAll || bankRunning || !kieKey}
                 className="ml-auto flex items-center gap-1 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 font-bold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-40"
-                title={kieKey ? 'Tạo keyframe (ảnh tĩnh, rẻ) cho mọi cảnh để duyệt visual trước khi i2v' : 'Thiếu KIE key trong Cài đặt'}>
-                {renderingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang chạy…</> : <>🖼️ Keyframe tất cả</>}
+                title={kieKey ? 'Tự render Character Bank (khóa nhân vật) TRƯỚC, rồi keyframe mọi cảnh dùng ảnh bank đó (nhất quán)' : 'Thiếu KIE key trong Cài đặt'}>
+                {renderingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang chạy…</> : <>🎭→🖼️ Bank + Keyframe tất cả</>}
               </button>
               <button onClick={handleRenderAllClips} disabled={renderingAll || !kieKey || kfReadyCount === 0}
                 className="flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 font-bold text-white transition-colors hover:bg-violet-700 disabled:opacity-40"
