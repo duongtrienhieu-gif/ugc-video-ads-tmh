@@ -132,9 +132,9 @@ export default function PriceCalc({ products, priceVnd, inv, velocity }: { produ
     }
   }, [combos, tyGia, giaVonSp, chotPct, hoanPct, shipPct, vanHanhPct, lnTargetPct, cpaLead, soDon])
 
-  const pnlRows: { label: string; val: string; c?: string; bold?: boolean }[] = [
+  const pnlRows: { label: string; val: string; c?: string; bold?: boolean; hi?: boolean }[] = [
     { label: 'Doanh số chốt đơn', val: '100%' },
-    { label: '− Quảng cáo (%CPQC)', val: fmtPct(r.adsPct), c: r.adsPct > r.cpqcTarget ? C.amber : C.muted2 },
+    { label: '🎯 Quảng cáo (%CPQC)', val: fmtPct(r.adsPct), c: r.adsPct > r.cpqcTarget ? C.red : C.green, hi: true },
     { label: '− Giá vốn (đã trừ hoàn về)', val: fmtPct(r.vonPct), c: C.muted2 },
     { label: '− Vận chuyển', val: fmtPct(shipPct), c: C.muted2 },
     { label: '− Vận hành', val: fmtPct(vanHanhPct), c: C.muted2 },
@@ -236,12 +236,15 @@ export default function PriceCalc({ products, priceVnd, inv, velocity }: { produ
       {/* ③ BẢNG LỢI NHUẬN */}
       <div style={{ ...panelStyle, marginBottom: 0 }}>
         <div style={eyebrowStyle}>③ ⭐ BẢNG LỢI NHUẬN DỰ KIẾN (% trên doanh số chốt)</div>
-        {pnlRows.map((row, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderTop: i ? `1px solid ${C.line2}` : 'none', fontSize: row.bold ? 15 : 13.5 }}>
-            <span style={{ color: row.bold ? C.text : C.muted2, fontWeight: row.bold ? 600 : 400 }}>{row.label}</span>
-            <span style={{ color: row.c ?? C.text, fontWeight: row.bold ? 700 : 500 }}>{row.val}</span>
-          </div>
-        ))}
+        {pnlRows.map((row, i) => {
+          const big = row.bold || row.hi
+          return (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: row.hi ? '10px 12px' : '7px 0', margin: row.hi ? '5px 0' : 0, borderTop: i && !row.hi ? `1px solid ${C.line2}` : 'none', borderRadius: row.hi ? 10 : 0, border: row.hi ? '1px solid #4a4015' : undefined, background: row.hi ? 'rgba(245,196,81,0.09)' : 'transparent', fontSize: big ? 15 : 13.5 }}>
+              <span style={{ color: row.bold ? C.text : row.hi ? C.gold : C.muted2, fontWeight: big ? 600 : 400, fontSize: row.hi ? 14 : undefined }}>{row.label}</span>
+              <span style={{ color: row.c ?? C.text, fontWeight: big ? 700 : 500, fontSize: row.hi ? 19 : undefined, letterSpacing: row.hi ? -0.3 : undefined }}>{row.val}</span>
+            </div>
+          )
+        })}
       </div>
 
       {/* ④ THAM CHIẾU — care ads · order:1 → đứng sau ⑤ trên desktop (swap ④↔⑤), mobile giữ thứ tự gốc */}
