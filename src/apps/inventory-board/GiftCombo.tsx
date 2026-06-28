@@ -104,7 +104,7 @@ export default function GiftCombo({ products, giftLink }: { products: Prod[]; gi
     <div>
       <div style={{ ...panelStyle, padding: '12px 16px' }}>
         <div style={eyebrowStyle}>🎁 GHÉP QUÀ & COMBO · tự đề xuất theo nhân viên</div>
-        <div style={{ fontSize: 12, color: C.muted, marginTop: 5 }}>Lấy hàng tồn chết CÙNG NGÁCH làm quà chéo → thoát kho + upsell. Vốn quà = 8.000đ/đv · tỷ giá 5.800. Đổi quà / sửa Mốc tuỳ ý — số tự tính lại.</div>
+        <div style={{ fontSize: 12, color: C.muted, marginTop: 5 }}>Lấy hàng tồn chết CÙNG NGÁCH làm quà chéo → thoát kho + upsell. Vốn quà theo BẬC giá vốn của quà (0-20k→10k · 21-30k→12k · 31-40k→15k · 41-50k→20k) · tỷ giá 5.800. Đổi quà / sửa Mốc tuỳ ý — số tự tính lại.</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
           {['Tất cả', ...markets].map((m) => (
             <button key={m} onClick={() => setMkt(m)} style={{ background: mkt === m ? C.gold : 'transparent', color: mkt === m ? '#0a0a0a' : C.muted2, border: `1px solid ${mkt === m ? C.gold : C.line}`, borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{m === 'Tất cả' ? m : '👤 ' + m}</button>
@@ -160,7 +160,7 @@ export default function GiftCombo({ products, giftLink }: { products: Prod[]; gi
                   <span style={{ fontSize: 11, color: C.gold, fontWeight: 700, letterSpacing: 0.3, whiteSpace: 'nowrap' }}>🎯 MỤC TIÊU ADS (đạt lãi 10%)</span>
                   <span style={{ fontSize: 13, color: C.muted2, whiteSpace: 'nowrap' }}>%CPQC ≤ <b style={{ color: p.cpaTarget > 0 ? C.green : C.red, fontSize: 19 }}>{fmtPct(Math.max(0, p.cpqcTarget))}</b></span>
                   <span style={{ fontSize: 13, color: C.muted2, whiteSpace: 'nowrap' }}>CPA ≤ <b style={{ color: p.cpaTarget > 0 ? C.green : C.red, fontSize: 19 }}>{p.cpaTarget > 0 ? fmtMoney(p.cpaTarget) + '/lead' : 'không khả thi'}</b></span>
-                  <span style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', marginLeft: 'auto' }}>đang chạy CPQC {fmtPct(p.ads)} · chốt {fmtPct(p.chot)}</span>
+                  <span style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', marginLeft: 'auto' }}>CPA = %CPQC × AOV × chốt {fmtPct(p.chot)} · đang chạy CPQC {fmtPct(p.ads)}</span>
                 </div>
 
                 <button onClick={() => setOpen((o) => ({ ...o, [k]: !isOpen }))} style={{ marginTop: 10, background: 'transparent', color: C.gold, border: `1px solid ${C.line}`, borderRadius: 8, padding: '6px 12px', fontSize: 12.5, cursor: 'pointer' }}>
@@ -199,7 +199,7 @@ export default function GiftCombo({ products, giftLink }: { products: Prod[]; gi
                       </tbody>
                     </table>
                     <div style={{ fontSize: 11, color: Math.abs(sumP - 1) < 0.001 ? C.muted : C.red, marginTop: 6 }}>
-                      Tổng %đơn = {(sumP * 100).toFixed(0)}%{Math.abs(sumP - 1) >= 0.001 ? ' (nên = 100%)' : ''} · MUA = số SP chính trả tiền · TẶNG CHÍNH = tặng thêm SP chính · QUÀ CHÉO = số quà (8k/đv). Quà đủ {fmtInt(p.soDonMaxQua)} đơn · hàng chính đủ {fmtInt(p.soDonMaxChinh)} đơn.
+                      Tổng %đơn = {(sumP * 100).toFixed(0)}%{Math.abs(sumP - 1) >= 0.001 ? ' (nên = 100%)' : ''} · MUA = số SP chính trả tiền · TẶNG CHÍNH = tặng thêm SP chính · QUÀ CHÉO = số quà (vốn theo bậc giá vốn quà). Quà đủ {fmtInt(p.soDonMaxQua)} đơn · hàng chính đủ {fmtInt(p.soDonMaxChinh)} đơn.
                     </div>
                   </div>
                 )}

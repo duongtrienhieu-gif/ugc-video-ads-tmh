@@ -1,9 +1,18 @@
 // ── ENGINE: tự đề xuất kế hoạch QUÀ + COMBO cho từng SP ──────────────────────
 // Lấy hàng tồn chết CÙNG NGÁCH làm quà chéo → thoát kho + upsell + đẩy lãi.
-// Vốn quà = 8k/đv flat (luật user); vốn SP chính = thật; tỷ giá 5800.
+// Vốn quà = theo BẬC giá vốn của chính nó (user chốt); vốn SP chính = thật; tỷ giá 5800.
 // Trả `tone` (không hex) để UI map màu. Tier mặc định = thang Mốc như sheet 5.
-export const RATE = 5800, SHIP = 0.09, VH = 0.08, LN_TARGET = 0.10, GIFT_COST = 8000
+export const RATE = 5800, SHIP = 0.09, VH = 0.08, LN_TARGET = 0.10
 const GIFT_ROLES = new Set(['CỨU', 'QUÀ', 'NGỦ']) // hàng cần thoát (không lấy SCALE làm quà)
+// Vốn quà tính theo giá vốn/sp của quà: 0-20k→10k · 21-30k→12k · 31-40k→15k · 41-50k→20k · >50k→25k
+export function giftCostOf(vonSp: number): number {
+  const k = vonSp / 1000
+  if (k <= 20) return 10000
+  if (k <= 30) return 12000
+  if (k <= 40) return 15000
+  if (k <= 50) return 20000
+  return 25000
+}
 
 export interface GiftMaster { name: string; vaiTro: string; ngach: string; ton: number; vonSp: number }
 export interface GiftCat { ngach: string; maChinh: string; quaCheo: string; vonQua: number; tonQua: number; marketer: string }
@@ -19,13 +28,13 @@ export const DEFAULT_TIERS: Tier[] = [
 ]
 export const cloneTiers = () => DEFAULT_TIERS.map((t) => ({ ...t }))
 
-export interface GiftOption { name: string; ton: number; vonKet: number; stuck: boolean; sameNiche: boolean; ngach: string }
+export interface GiftOption { name: string; ton: number; vonKet: number; vonSp: number; stuck: boolean; sameNiche: boolean; ngach: string }
 // quà ứng viên = TẤT CẢ hàng còn tồn; ưu tiên CÙNG NGÁCH + hàng cần thoát (vốn kẹt cao) lên đầu
 export function giftOptions(ngach: string, master: GiftMaster[], excludeUpper: string): GiftOption[] {
   const rank = (o: { sameNiche: boolean; stuck: boolean }) => (o.sameNiche ? 0 : 2) + (o.stuck ? 0 : 1)
   return master
     .filter((m) => m.name.trim().toUpperCase() !== excludeUpper && m.ton > 0)
-    .map((m) => ({ name: m.name, ton: m.ton, vonKet: m.ton * m.vonSp, stuck: GIFT_ROLES.has(m.vaiTro.toUpperCase()), sameNiche: m.ngach === ngach, ngach: m.ngach }))
+    .map((m) => ({ name: m.name, ton: m.ton, vonKet: m.ton * m.vonSp, vonSp: m.vonSp, stuck: GIFT_ROLES.has(m.vaiTro.toUpperCase()), sameNiche: m.ngach === ngach, ngach: m.ngach }))
     .sort((a, b) => rank(a) - rank(b) || b.vonKet - a.vonKet)
 }
 
@@ -52,18 +61,19 @@ function den(laiPct: number, hoan: number, ads: number, target: number): { t: st
 export function computePlan(cat: GiftCat, master: GiftMaster[], live: Live | undefined, tiers: Tier[], giftName?: string): Plan {
   const upper = cat.maChinh.trim().toUpperCase()
   const mainM = master.find((m) => m.name.trim().toUpperCase() === upper)
-  const hoan = live?.hoanPct ?? 0.35
-  const ads = live?.adsPct ?? 0.30
+  const hoan = live?.hoanPct && live.hoanPct > 0 ? live.hoanPct : 0.35 // hoàn=0 (QLHB chưa tải) → 0.35 thay vì phình target
+  const ads = live?.adsPct && live.adsPct > 0 ? live.adsPct : 0.30
   const chot = live?.chotPct && live.chotPct > 0 ? live.chotPct : 0.7 // tỉ lệ chốt — để suy CPA/lead
   const vonChinh = mainM?.vonSp || live?.vonReal || 0
   const mainTon = mainM?.ton ?? 0
   const options = giftOptions(cat.ngach, master, upper)
   const gift = (giftName ? options.find((o) => o.name === giftName) : null) || options[0] || null
+  const giftCost = gift ? giftCostOf(gift.vonSp) : 10000 // vốn quà theo bậc giá vốn của quà
 
   const tc: TierCalc[] = tiers.map((t) => {
     const aov = t.giaRM * RATE
     const spChinh = t.mua + t.tangChinh
-    const vonGiao = vonChinh * spChinh + GIFT_COST * t.quaCheo
+    const vonGiao = vonChinh * spChinh + giftCost * t.quaCheo
     const adsDon = ads * aov
     const vonNet = vonGiao * (1 - hoan)
     const laiDon = aov - adsDon - vonNet - SHIP * aov - VH * aov - hoan * aov
