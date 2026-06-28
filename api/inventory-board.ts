@@ -79,11 +79,37 @@ function serialToISO(v: unknown): string {
 }
 // fetch có TIMEOUT — 1 request Google treo KHÔNG được giết cả function (→ Vercel
 // trả HTML "An error occurred" thay JSON → vỡ board). Quá hạn thì abort → soft error.
-async function tfetch(url: string, ms = 25000): Promise<Response> {
+async function tfetch(url: string, ms = 25000, init?: RequestInit): Promise<Response> {
   const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), ms)
-  try { return await fetch(url, { cache: 'no-store', signal: ctrl.signal }) }
+  try { return await fetch(url, { cache: 'no-store', signal: ctrl.signal, ...init }) }
   finally { clearTimeout(t) }
+}
+
+// ── Cache phía SERVER (Supabase) — số tốt gần nhất dùng chung MỌI máy/nhân viên ──
+// Lần load đẹp → ghi vào board_cache(id='main'); lần Google chặn → trả luôn bản đã ghi
+// → endpoint LUÔN trả số đủ (sau lần seed đầu), không phụ thuộc Google nhanh hay chậm.
+// Dùng anon key sẵn có (Vercel cấp mọi env cho serverless, kể cả tiền tố VITE_).
+const SUPA_URL = process.env.VITE_SUPABASE_URL || ''
+const SUPA_KEY = process.env.VITE_SUPABASE_ANON_KEY || ''
+async function cacheRead(): Promise<Record<string, unknown> | null> {
+  if (!SUPA_URL || !SUPA_KEY) return null
+  try {
+    const r = await tfetch(`${SUPA_URL}/rest/v1/board_cache?id=eq.main&select=payload`, 8000, { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } })
+    if (!r.ok) return null
+    const rows = (await r.json()) as { payload?: Record<string, unknown> }[]
+    return rows?.[0]?.payload ?? null
+  } catch { return null }
+}
+async function cacheWrite(payload: Record<string, unknown>): Promise<void> {
+  if (!SUPA_URL || !SUPA_KEY) return
+  try {
+    await tfetch(`${SUPA_URL}/rest/v1/board_cache`, 8000, {
+      method: 'POST',
+      headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify([{ id: 'main', payload, updated_at: new Date().toISOString() }]),
+    })
+  } catch { /* cache lỗi không được phá response chính */ }
 }
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 // Chạy các tác vụ với GIỚI HẠN SONG SONG (mặc định 2). Google throttle khi 1 IP bắn
@@ -385,5 +411,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (e) { errors.push('Dòng tiền: ' + (e as Error).message) }
 
   res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=120')
-  return res.status(200).json({ ok: products.length > 0 || inv.length > 0, products, inv, velocity, saleStats, incoming, priceVnd, backorder, provinces, cashflow, errors })
+
+  const result = { ok: products.length > 0 || inv.length > 0, products, inv, velocity, saleStats, incoming, priceVnd, backorder, provinces, cashflow, errors }
+  const isGood = products.length > 0 && inv.length > 0 && !!cashflow // TỔNG+KHO+QLHB đủ
+  if (isGood) {
+    await cacheWrite(result as unknown as Record<string, unknown>) // lưu số tốt cho lần sau / máy khác
+    return res.status(200).json({ ...result, cached: false })
+  }
+  // Load này thiếu (Google chặn 1 phần) → trả NGAY số tốt đã cache trên server nếu có
+  const cached = await cacheRead()
+  if (cached && Array.isArray((cached as { products?: unknown[] }).products) && (cached as { products: unknown[] }).products.length > 0) {
+    return res.status(200).json({ ...cached, cached: true, errors }) // giữ errors để client biết lần này có chặn
+  }
+  return res.status(200).json({ ...result, cached: false })
 }

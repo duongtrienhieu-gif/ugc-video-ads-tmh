@@ -30,6 +30,14 @@ const TYPE_LABEL: Record<string, string> = { cat: 'Cắt/sửa', hoan: 'Hoàn', 
 const STATUS_NEXT: Record<string, string> = { todo: 'doing', doing: 'done', done: 'todo' }
 const STATUS_LABEL: Record<string, string> = { todo: 'Cần làm', doing: 'Đang làm', done: 'Xong' }
 const statusColor = (s: string) => (s === 'done' ? C.green : s === 'doing' ? C.amber : C.muted2)
+// So tiến độ thực với "nhịp đáng lẽ" (đã đi bao nhiêu % tháng) → chậm/vượt
+function paceBadge(actDt: number, targetDt: number | undefined, monthProgress: number): { txt: string; tone: string } | null {
+  if (targetDt == null || targetDt <= 0) return null
+  const delta = actDt / targetDt - monthProgress
+  if (delta < -0.03) return { txt: `chậm ${Math.round(-delta * 100)}% so với nhịp`, tone: C.red }
+  if (delta > 0.03) return { txt: `vượt ${Math.round(delta * 100)}% nhịp`, tone: C.green }
+  return { txt: 'đúng nhịp', tone: C.amber }
+}
 
 export default function WarRoom() {
   const { members, targets, tasks, loaded, error, load, addMember, updateMember, deleteMember, setTarget, addTask, updateTask, deleteTask } = useWarStore()
@@ -128,6 +136,9 @@ function MyBoard({ members, targets, tasks, stats, isCEO, myMember, userEmail, u
   const now = new Date()
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
   const daysLeft = Math.max(1, daysInMonth - now.getDate() + 1) // gồm hôm nay
+  const monthProgress = now.getDate() / daysInMonth // đã đi bao nhiêu % tháng
+  const tgtOf = (mid: string, k: string) => targets.find((t) => t.member_id === mid && t.period === 'month' && t.metric === k)?.value
+  const headPace = paceBadge(act.dt, tDt, monthProgress)
   const remainingDt = tDt != null ? Math.max(0, tDt - act.dt) : null
   const dtPerDay = remainingDt != null ? remainingDt / daysLeft : null
   const cpqcFrac = tCpqc != null ? tCpqc / 100 : act.cpqc // ưu tiên trần CPQC CEO đặt
@@ -171,10 +182,37 @@ function MyBoard({ members, targets, tasks, stats, isCEO, myMember, userEmail, u
 
   return (
     <>
+      {/* TOÀN ĐỘI — boss thấy mọi nhân viên 1 chỗ, bấm để mở chi tiết */}
+      {isCEO && members.length > 0 && (
+        <div style={panelStyle}>
+          <div style={eyebrowStyle}>👥 TOÀN ĐỘI · {members.length} người — bấm 1 người để mở buồng lái chi tiết bên dưới</div>
+          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Số tháng tới giờ so với target tháng · nhịp = đã đi {Math.round(monthProgress * 100)}% tháng.</div>
+          {members.map((m) => {
+            const a = aggregate(m.sp_codes ?? [], stats)
+            const td = tgtOf(m.id, 'dt')
+            const pb = paceBadge(a.dt, td, monthProgress)
+            const sel = m.id === view.id
+            return (
+              <div key={m.id} onClick={() => setViewId(m.id)} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 8px', borderTop: `1px solid ${C.line2}`, flexWrap: 'wrap', cursor: 'pointer', background: sel ? 'rgba(245,196,81,0.07)' : 'transparent', borderRadius: 8 }}>
+                <span style={{ fontWeight: 600, minWidth: 92, color: sel ? C.gold : C.text }}>{sel ? '👁 ' : ''}{m.name}</span>
+                <span style={{ fontSize: 11.5, color: C.muted2, minWidth: 56 }}>{roleLabel(m.role)}</span>
+                <span style={{ fontSize: 12.5, minWidth: 140 }}>DT <b>{a.dt > 0 ? fmtMoney(a.dt) : '—'}</b>{td ? <span style={{ color: C.muted }}> / {fmtMoney(td)}</span> : ''}</span>
+                <span style={{ fontSize: 12, color: C.muted2, minWidth: 86 }}>CPQC {a.dt > 0 ? fmtPct(a.cpqc * 100) : '—'}</span>
+                <span style={{ fontSize: 12, color: a.hoan > 0.45 ? C.red : C.muted2, minWidth: 78 }}>Hoàn {a.hoan > 0 ? fmtPct(a.hoan * 100) : '—'}</span>
+                {pb ? <span style={{ marginLeft: 'auto', fontSize: 11.5, color: pb.tone, fontWeight: 600 }}>{pb.tone === C.red ? '⚠ ' : pb.tone === C.green ? '✓ ' : '● '}{pb.txt}</span> : <span style={{ marginLeft: 'auto', fontSize: 11, color: C.muted }}>chưa đặt target</span>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {/* Chọn người (CEO) + tiêu đề */}
       <div style={{ ...panelStyle, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 180 }}>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>Chào {view.name} 👋</div>
+          <div style={{ fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            Chào {view.name} 👋
+            {headPace && <span style={{ fontSize: 11.5, fontWeight: 600, color: headPace.tone, border: `1px solid ${headPace.tone}`, borderRadius: 20, padding: '2px 10px' }}>{headPace.tone === C.red ? '⚠ ' : headPace.tone === C.green ? '✓ ' : '● '}{headPace.txt}</span>}
+          </div>
           <div style={{ fontSize: 12, color: C.muted }}>{roleLabel(view.role)} · còn <b style={{ color: C.amber }}>{daysLeft} ngày</b> trong tháng · phụ trách {(view.sp_codes ?? []).length} mã SP</div>
         </div>
         {isCEO && (
