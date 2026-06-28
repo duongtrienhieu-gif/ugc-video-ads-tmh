@@ -133,6 +133,25 @@ function pickSceneVisuals(
   return { main: speaker, extra: undefined }
 }
 
+// #1 — Nhân vật NÓI (để chọn GIỌNG) từ scene.speaker. Match MỀM (chuẩn hóa + chứa-nhau) thay vì
+// bằng-đúng-tuyệt-đối; nếu vẫn không ra → dùng nhân vật CHÍNH trong khung (KHÔNG phải characters[0]
+// = hay là người dẫn → trước đây mọi mismatch đều bị gán nhầm giọng người dẫn).
+function resolveSpeakerChar(
+  scene: PersonifiedScene, characters: PersonifiedCharacter[], productName?: string,
+): PersonifiedCharacter | undefined {
+  const sp = (scene.speaker ?? '').trim()
+  if (sp) {
+    const exact = characters.find((c) => c.name === sp || c.role === sp)
+    if (exact) return exact
+    const n = norm(sp)
+    if (n) {
+      const partial = characters.find((c) => { const cn = norm(c.name); return !!cn && (cn.includes(n) || n.includes(cn)) })
+      if (partial) return partial
+    }
+  }
+  return pickSceneVisuals(scene, characters, productName).main ?? characters[0]
+}
+
 /** 1 giọng ElevenLabs có hợp ngôn ngữ thị trường đích không (đọc nhãn/tên/mô tả). */
 function voiceMatchesMarket(v: ElevenLabsVoice, market: TargetMarket): boolean {
   const lang = (v.labels?.language ?? '').toLowerCase()
@@ -696,7 +715,7 @@ export default function Personified() {
     if (!cur?.keyframeRef) { setError('Cảnh này chưa có keyframe — tạo keyframe trước'); return }
     if (cur.status === 'clip') return
     const hasDialogue = !!(scene.dialoguePrimary ?? '').trim()
-    const character = script.characters.find((c) => c.name === scene.speaker || c.role === scene.speaker) ?? script.characters[0]
+    const character = resolveSpeakerChar(scene, script.characters, product?.productName)
     const doVoice = hasDialogue && !!elevenKey
     setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], status: 'clip', lipStatus: doVoice ? 'tts' : p[scene.idx]?.lipStatus, error: undefined } }))
     // Chạy SONG SONG: i2v + giọng.
@@ -762,7 +781,7 @@ export default function Personified() {
     if (!(scene.dialoguePrimary ?? '').trim()) { setError('Cảnh không có thoại — không cần lồng giọng'); return }
     if (!elevenKey) { setError('Thiếu ElevenLabs API key (giọng) trong Cài đặt'); return }
     if (cur.lipStatus === 'tts' || cur.lipStatus === 'mux') return
-    const character = script?.characters.find((c) => c.name === scene.speaker || c.role === scene.speaker) ?? script?.characters[0]
+    const character = script ? resolveSpeakerChar(scene, script.characters, product?.productName) : undefined
     setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: 'tts', lipError: undefined } }))
     try {
       const { audioRef, voicedRef, voiceSec } = await addSceneVoiceover({
@@ -1131,12 +1150,19 @@ export default function Personified() {
                         title={clips[s.idx]?.voiceSec ? `Render ${s.clipDuration}s · ghép còn ${clips[s.idx]!.voiceSec!.toFixed(1)}s theo giọng` : `Render ${s.clipDuration}s`}>
                         {clips[s.idx]?.voiceSec ? `${clips[s.idx]!.voiceSec!.toFixed(1)}s` : `${s.clipDuration}s`}
                       </span>
-                      {/* #2 — hiện NHÂN VẬT TRONG KHUNG (main + phụ) chứ không phải người nói → thấy rõ
-                          hero xuất hiện ở cảnh sản phẩm. Tooltip ghi cả giọng (speaker). */}
+                      {/* #2 — dòng trên = NHÂN VẬT TRONG KHUNG (khóa diện mạo); dòng dưới 🎙️ = NGƯỜI NÓI
+                          (chọn giọng). Hiện 🎙️ khi người nói KHÁC nhân vật chính trong khung → khỏi nhầm. */}
                       {(() => {
                         const v = pickSceneVisuals(s, script.characters, product?.productName)
                         const names = [v.main?.name, v.extra?.name].filter(Boolean).join(' + ')
-                        return <span className="w-20 shrink-0 truncate text-[11px] text-gray-400" title={`Trong khung: ${names || '—'} · 🎙️ Giọng: ${s.speaker}`}>{names || s.speaker}</span>
+                        const spk = resolveSpeakerChar(s, script.characters, product?.productName)
+                        const showSpk = spk && spk.name !== v.main?.name
+                        return (
+                          <span className="w-20 shrink-0 truncate text-[11px] text-gray-400" title={`Trong khung: ${names || '—'} · 🎙️ Giọng: ${spk?.name ?? s.speaker}`}>
+                            {names || s.speaker}
+                            {showSpk && <span className="block truncate text-[9px] text-fuchsia-500">🎙️ {spk!.name}</span>}
+                          </span>
+                        )
                       })()}
                       <span className="flex-1 truncate text-xs text-gray-900">"{s.dialoguePrimary}"</span>
                       <span className="w-6 shrink-0 text-center text-[11px]" title={`${clips[s.idx]?.status ?? ''}${clips[s.idx]?.lipStatus ? ' · lip:' + clips[s.idx]?.lipStatus : ''}`}>
@@ -1161,6 +1187,19 @@ export default function Personified() {
                               rows={2} className="mt-0.5 w-full resize-none rounded border border-gray-200 bg-white p-2 text-xs italic text-gray-600 focus:border-violet-400 focus:outline-none" />
                           </label>
                         )}
+                        {/* #3 — NGƯỜI NÓI (chọn GIỌNG cảnh này) — sửa được. Đổi → lồng giọng lại cảnh đó. */}
+                        <label className="block">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-fuchsia-600">🎙️ Người nói (giọng) — sửa được</span>
+                          <select
+                            value={resolveSpeakerChar(s, script.characters, product?.productName)?.name ?? ''}
+                            onChange={(e) => updateScene(s.idx, { speaker: e.target.value })}
+                            className="mt-0.5 w-full rounded border border-fuchsia-200 bg-white px-2 py-1 text-[11px] text-gray-800 focus:border-fuchsia-400 focus:outline-none">
+                            {script.characters.map((c) => <option key={c.name} value={c.name}>{c.name} · {c.role}</option>)}
+                          </select>
+                          {clips[s.idx]?.lipStatus === 'done' && (
+                            <span className="mt-0.5 block text-[10px] text-amber-600">⚠ Đổi người nói rồi thì bấm "🎙️ Lồng giọng lại" cảnh này (0 credit) để đổi giọng.</span>
+                          )}
+                        </label>
                         {s.action && <div className="text-gray-600"><span className="font-semibold">Hành động:</span> {s.action}</div>}
                         {/* Bối cảnh riêng cảnh (đời thực/nội tại) — sửa được; render keyframe dùng bản này */}
                         <label className="block">
