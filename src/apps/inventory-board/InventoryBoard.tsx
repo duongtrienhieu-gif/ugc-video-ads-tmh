@@ -132,8 +132,8 @@ export default function InventoryBoard() {
   const [lastUpdate, setLastUpdate] = useState('')
   const [boardStale, setBoardStale] = useState(false) // đang hiện số cache (load mới bị chặn)
 
-  // "Tốt" = TỔNG + KHO + QLHB(dòng tiền) đều về → đủ hoàn/tỉnh/dòng tiền
-  function isGoodBoard(j: BoardData) { return (j.products?.length ?? 0) > 0 && (j.inv?.length ?? 0) > 0 && !!j.cashflow }
+  // "Tốt" = TỔNG + KHO về (5 file nhẹ). QLHB (hoàn/tỉnh/dòng tiền) tải riêng /api/qlhb.
+  function isGoodBoard(j: BoardData) { return (j.products?.length ?? 0) > 0 && (j.inv?.length ?? 0) > 0 }
   function readGood(): { data: BoardData; at: string } | null {
     try { const c = localStorage.getItem(GOOD_KEY); if (c) { const p = JSON.parse(c); if (p?.data?.products?.length) return p } } catch { /* ignore */ }
     return null
@@ -142,28 +142,37 @@ export default function InventoryBoard() {
 
   async function load(s: Record<string, string>) {
     setStatus('loading'); setErrMsg('')
+    // Gọi SONG SONG: board (5 file nhẹ, nhanh) + qlhb (file nặng, function riêng 60s).
+    type QlhbResp = { hoanMap?: Record<string, number>; provinces?: BoardData['provinces']; cashflow?: BoardData['cashflow'] }
+    const [boardRes, qlhbRes] = await Promise.allSettled([
+      fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ links: s }), cache: 'no-store' }).then((r) => r.json() as Promise<BoardData>),
+      fetch('/api/qlhb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link: s.qlhb || '' }), cache: 'no-store' }).then((r) => r.json() as Promise<QlhbResp>),
+    ])
+    const q = qlhbRes.status === 'fulfilled' ? qlhbRes.value : null
+    // Gộp hoàn (đè per-SP) + tỉnh + dòng tiền từ /api/qlhb vào dữ liệu board.
+    const merge = (d: BoardData): BoardData => {
+      if (!q) return d
+      if (q.hoanMap) for (const p of d.products ?? []) { const h = q.hoanMap[p.name.trim().toUpperCase()]; if (h != null) p.pctHoan = h }
+      if (Array.isArray(q.provinces)) d.provinces = q.provinces
+      if (q.cashflow) d.cashflow = q.cashflow
+      return d
+    }
     try {
-      const r = await fetch('/api/inventory-board', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ links: s }), cache: 'no-store',
-      })
-      const j: BoardData = await r.json()
+      if (boardRes.status !== 'fulfilled') throw new Error('Không tải được dữ liệu kho')
+      const j = merge(boardRes.value)
       if (isGoodBoard(j)) {
-        // load đẹp → dùng + lưu làm "số tốt gần nhất"
         const at = nowHM()
         setData(j); setBoardStale(false); setStatus('live'); setLastUpdate(at)
         try { localStorage.setItem(GOOD_KEY, JSON.stringify({ data: j, at })) } catch { /* quota */ }
         return
       }
-      // load thiếu (Google chặn 1 phần) → ưu tiên hiện số tốt đã cache cho ĐỦ
       const cached = readGood()
-      if (cached) { setData(cached.data); setBoardStale(true); setStatus('live'); setLastUpdate(cached.at); return }
-      // chưa từng có cache → hiện những gì lấy được, còn không thì báo lỗi
+      if (cached) { setData(merge(cached.data)); setBoardStale(true); setStatus('live'); setLastUpdate(cached.at); return }
       if ((j.products?.length ?? 0) > 0 || (j.inv?.length ?? 0) > 0) { setData(j); setBoardStale(false); setStatus('live'); setLastUpdate(nowHM()) }
       else throw new Error(j.errors?.join(' · ') || 'Không tải được dữ liệu')
     } catch (e) {
       const cached = readGood()
-      if (cached) { setData(cached.data); setBoardStale(true); setStatus('live'); setLastUpdate(cached.at); return }
+      if (cached) { setData(merge(cached.data)); setBoardStale(true); setStatus('live'); setLastUpdate(cached.at); return }
       setErrMsg(e instanceof Error ? e.message : 'Lỗi tải dữ liệu')
       setStatus('error')
     }

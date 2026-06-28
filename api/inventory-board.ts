@@ -252,38 +252,7 @@ function parseBackorder(R: string[][]) {
   return items
 }
 
-// QLHB "Tỉ lệ tỉnh" → bom hàng theo tỉnh
-function parseProvinces(wb: XLSX.WorkBook) {
-  const ws = wb.Sheets['Tỉ lệ tỉnh']
-  if (!ws) throw new Error('Không thấy sheet Tỉ lệ tỉnh')
-  const g = (col: string, r: number) => num(ws[`${col}${r}`]?.v)
-  const acc: Record<string, { pend: number; ret: number; rted: number; tong: number }> = {}
-  for (let r = 5; r <= 1100; r++) {
-    const p = String(ws[`B${r}`]?.v ?? '').trim()
-    if (!p || p === 'Province') continue
-    const o = acc[p] || (acc[p] = { pend: 0, ret: 0, rted: 0, tong: 0 })
-    o.pend += g('G', r); o.ret += g('I', r); o.rted += g('K', r); o.tong += g('Q', r)
-  }
-  return Object.entries(acc)
-    .map(([ten, o]) => { const resolved = o.tong - o.pend; return { ten, doanhSoRM: o.tong, hoanRate: resolved > 0 ? (o.ret + o.rted) / resolved : 0 } })
-    .filter((p) => p.doanhSoRM > 2000)
-    .sort((a, b) => b.hoanRate - a.hoanRate)
-}
-
-// QLHB "Tỉ lệ sản phẩm" → tiền theo trạng thái đơn (COD đang kẹt / đã thu)
-function parseCashflow(wb: XLSX.WorkBook) {
-  const ws = wb.Sheets['Tỉ lệ sản phẩm']
-  if (!ws) throw new Error('Không thấy sheet Tỉ lệ sản phẩm')
-  const g = (col: string, r: number) => num(ws[`${col}${r}`]?.v)
-  let pendingDS = 0, returnDS = 0, returnedDS = 0, deliveryDS = 0, paidDS = 0, blanks = 0
-  for (let r = 5; r <= 1100; r++) {
-    const name = String(ws[`B${r}`]?.v ?? '').trim()
-    if (!name) { if (++blanks > 8) break; continue }
-    blanks = 0
-    pendingDS += g('H', r); returnDS += g('J', r); returnedDS += g('L', r); deliveryDS += g('N', r); paidDS += g('P', r)
-  }
-  return { pendingDS, returnDS, returnedDS, deliveryDS, paidDS }
-}
+// (parseProvinces + parseCashflow ĐÃ chuyển sang /api/qlhb.ts — QLHB tách function riêng)
 
 // File KẾ HOẠCH QUÀ — sheet "3. THỰC TRẠNG TỒN": SP → vai trò + ngách + tồn + vốn
 interface GiftMaster { name: string; vaiTro: string; ngach: string; ton: number; vonSp: number }
@@ -333,25 +302,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const errors: string[] = []
-  // Tải SONG SONG, timeout ngắn → tổng ≈ file chậm nhất (~24.5s) < 60s → luôn trả JSON.
-  // Thiếu nguồn nào (Google chặn) thì cache server/máy bù. Mỗi nguồn độc lập, lỗi 1 cái
-  // không phá cả khối (Promise.allSettled).
-  const [tongR, qlhbR, khoR, saleR, nhapR, notonR] = await Promise.allSettled([
+  // QLHB (file nặng) ĐÃ TÁCH sang /api/qlhb riêng → ở đây chỉ tải 5 nguồn NHẸ song song
+  // → nhanh, không bị QLHB kéo chậm. Hoàn/tỉnh/dòng tiền do frontend gọi /api/qlhb gộp vào.
+  const [tongR, khoR, saleR, nhapR, notonR] = await Promise.allSettled([
     fetchXlsx(id('tong'), ['SẢN PHẨM_TH']),
-    fetchXlsx(id('qlhb'), ['Tỉ lệ sản phẩm', 'Tỉ lệ tỉnh']),
     fetchXlsx(id('kho'), ['RP_KHO_SL']),
     fetchCsv(id('sale'), 'Report_Product'),
     fetchXlsx(id('nhaphang'), ['BÁO GIÁ VÀ THANH TOÁN']),
     fetchCsv(id('noton'), 'Tồn kho dự kiến'),
   ])
 
-  const qlhbWb = qlhbR.status === 'fulfilled' ? qlhbR.value : null
-  if (qlhbR.status === 'rejected') errors.push('QLHB: ' + (qlhbR.reason?.message || 'lỗi tải'))
-
   let products: Product[] = []
   try {
     if (tongR.status !== 'fulfilled') throw new Error(tongR.reason?.message || 'lỗi tải file TỔNG')
-    products = parseProducts(tongR.value, qlhbWb)
+    products = parseProducts(tongR.value, null) // hoàn override lấy từ /api/qlhb ở frontend
   } catch (e) { errors.push('Sản phẩm: ' + (e as Error).message) }
 
   let inv: InvItem[] = []
@@ -380,22 +344,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     backorder = parseBackorder(notonR.value)
   } catch (e) { errors.push('Nợ hàng: ' + (e as Error).message) }
 
-  let provinces: { ten: string; doanhSoRM: number; hoanRate: number }[] = []
-  try {
-    if (!qlhbWb) throw new Error('lỗi tải file QLHB')
-    provinces = parseProvinces(qlhbWb)
-  } catch (e) { errors.push('Tỉnh: ' + (e as Error).message) }
-
-  let cashflow: { pendingDS: number; returnDS: number; returnedDS: number; deliveryDS: number; paidDS: number } | null = null
-  try {
-    if (!qlhbWb) throw new Error('lỗi tải file QLHB')
-    cashflow = parseCashflow(qlhbWb)
-  } catch (e) { errors.push('Dòng tiền: ' + (e as Error).message) }
+  // provinces + cashflow giờ do /api/qlhb trả (frontend gọi riêng) — ở đây để rỗng.
+  const provinces: { ten: string; doanhSoRM: number; hoanRate: number }[] = []
+  const cashflow: { pendingDS: number; returnDS: number; returnedDS: number; deliveryDS: number; paidDS: number } | null = null
 
   res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=120')
 
   const result = { ok: products.length > 0 || inv.length > 0, products, inv, velocity, saleStats, incoming, priceVnd, backorder, provinces, cashflow, errors }
-  const isGood = products.length > 0 && inv.length > 0 && !!cashflow // TỔNG+KHO+QLHB đủ
+  const isGood = products.length > 0 && inv.length > 0 // QLHB tách riêng nên không tính cashflow vào "đủ"
   if (isGood) {
     await cacheWrite(result as unknown as Record<string, unknown>) // lưu số tốt cho lần sau / máy khác
     return res.status(200).json({ ...result, cached: false })

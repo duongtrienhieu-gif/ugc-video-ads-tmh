@@ -23,11 +23,16 @@ function isGood(stats: Record<string, SpStat>, profit: SpProfit[]): boolean {
 // Tải 1 lần số kho → map theo TÊN SP (UPPER): doanh thu · lãi · %CPQC · %hoàn · AOV · chốt + bảng đèn
 export async function fetchSpStats(): Promise<SpStatsResult> {
   let products: Prod[] = [], inv: InvItem[] = [], velocity: Record<string, number> = {}, priceVnd: Record<string, number> = {}
-  try {
-    const r = await fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ links: {} }), cache: 'no-store' })
-    const j = (await r.json()) as BoardResp
-    products = j.products ?? []; inv = j.inv ?? []; velocity = j.velocity ?? {}; priceVnd = j.priceVnd ?? {}
-  } catch { /* mạng lỗi → rơi xuống cache bên dưới */ }
+  let hoanMap: Record<string, number> = {}
+  // Gọi SONG SONG: /api/inventory-board (5 file nhẹ) + /api/qlhb (file nặng, function riêng).
+  const [boardR, qlhbR] = await Promise.allSettled([
+    fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ links: {} }), cache: 'no-store' }).then((r) => r.json() as Promise<BoardResp>),
+    fetch('/api/qlhb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}), cache: 'no-store' }).then((r) => r.json() as Promise<{ hoanMap?: Record<string, number> }>),
+  ])
+  if (boardR.status === 'fulfilled') { const j = boardR.value; products = j.products ?? []; inv = j.inv ?? []; velocity = j.velocity ?? {}; priceVnd = j.priceVnd ?? {} }
+  if (qlhbR.status === 'fulfilled') hoanMap = qlhbR.value.hoanMap ?? {}
+  // Đè %hoàn từ QLHB vào products TRƯỚC khi tính lãi (computeProfit dùng pctHoan).
+  for (const p of products) { const h = hoanMap[p.name.trim().toUpperCase()]; if (h != null) p.pctHoan = h }
 
   const rows = computeProfit(products, inv, velocity, priceVnd)
   const laiPctByName: Record<string, number> = {}
