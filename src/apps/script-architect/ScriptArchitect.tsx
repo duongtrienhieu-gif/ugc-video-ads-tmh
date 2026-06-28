@@ -13,6 +13,7 @@ import SegmentTabs from '../../components/shell/SegmentTabs'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
 import { generateUGCScript } from './services/generateScript'
+import { getPresetById } from './services/presets'
 
 // Session-persistence snapshot — survives F5
 interface ScriptSnapshot {
@@ -68,7 +69,8 @@ export default function ScriptArchitect() {
         const p = getProductById(data.selectedProductId)
         if (p) setSelectedProduct(p)
       }
-      if (data.presetId)            setPresetId(data.presetId)
+      // Guard against stale sessions pointing at a preset removed in the COD rebuild.
+      if (data.presetId && getPresetById(data.presetId)) setPresetId(data.presetId)
       if (data.lengthSec)           setLengthSec(data.lengthSec)
       if (data.hookStrength)        setHookStrength(data.hookStrength)
       if (Array.isArray(data.toneModifiers)) setToneModifiers(data.toneModifiers)
