@@ -72,7 +72,10 @@ async function handleSearch(req: VercelRequest, res: VercelResponse, key: string
   if (!b64) return res.status(400).json({ error: 'Không đọc được ảnh' })
   if (srcType && !/image\//i.test(srcType)) return res.status(502).json({ error: `Ảnh tải về không phải ảnh (content-type: ${srcType}) — link ảnh bị chặn`, b64head: b64.slice(0, 24) })
 
-  const up = await fetch(`https://${HOST}/1688/upload-image`, { method: 'POST', headers: { ...rapidHeaders(key), 'Content-Type': 'application/json' }, body: JSON.stringify({ base64: b64 }) })
+  // 1688 upload CẦN dạng data-URI (base64 thuần → "图片64编码异常"). Đã verify.
+  const mime = srcType && /image\//i.test(srcType) ? srcType : 'image/jpeg'
+  const payload = `data:${mime};base64,${b64}`
+  const up = await fetch(`https://${HOST}/1688/upload-image`, { method: 'POST', headers: { ...rapidHeaders(key), 'Content-Type': 'application/json' }, body: JSON.stringify({ base64: payload }) })
   const upText = await up.text()
   let upd: AnyObj = {}
   try { upd = JSON.parse(upText) as AnyObj } catch { /* */ }
