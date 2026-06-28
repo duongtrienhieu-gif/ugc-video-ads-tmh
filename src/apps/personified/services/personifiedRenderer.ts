@@ -169,6 +169,21 @@ const GORE_SCRUB: Array<[RegExp, string]> = [
   [/\brot(ten|ting)?\b/gi, 'dusty'], [/\bdecay(ing|ed)?\b/gi, 'dusty'],
   [/\bcorrod(e|ed|ing)\b/gi, 'worn'],
   [/\bskeletons?\b/gi, ''], [/\bskulls?\b/gi, ''],
+  // ĐAU ĐỚN / KHỔ SỞ → biểu cảm hoạt hình ngộ nghĩnh (GIỮ kịch tính, bỏ "pain/agony" model chặn).
+  [/\bcontorted in (pain|agony)\b/gi, 'with a comically dizzy cross-eyed face'],
+  [/\b(writhing |twisted )?in (great |intense )?(pain|agony)\b/gi, 'looking comically dazed'],
+  [/\bpainful(ly)?\b/gi, 'comically dramatic'], [/\bpain\b/gi, 'dizziness'], [/\bagony\b/gi, 'comic dismay'],
+  [/\bsuffering\b/gi, 'flailing comically'], [/\bwrith(e|ing)\b/gi, 'wobbling'],
+  [/\bscream(ing|ed|s)?\b/gi, 'yelping comically'],
+  [/\btortur(e|ed|ing)\b/gi, 'teasing'], [/\bdistorted\b/gi, 'wobbly'], [/\boverwhelmed\b/gi, 'outmatched'],
+  // NGHIỀN/NỔ/TAN → biến mất kiểu hoạt hình (puff bụi/đốm sáng/confetti) — y nguyên SỰ KIỆN, mất bạo lực.
+  [/\bcrush(ed|ing|es)?\b/gi, 'comically squashed'],
+  [/\bdisintegrat(e|es|ing|ed|ion)\b/gi, 'harmlessly puffing apart'],
+  [/\bshatter(ed|ing|s)?\b/gi, 'popping apart'],
+  [/\bexplod(e|es|ing|ed)\b/gi, 'bursting into confetti'], [/\bexplosions?\b/gi, 'confetti bursts'],
+  [/\bviolent(ly)?\b/gi, 'energetically'],
+  // ĐAU ĐỚN tiếng Việt (nếu lọt vào field hình) → biểu cảm hài.
+  [/\bđau đớn\b/gi, 'xây xẩm hài hước'], [/\bquằn quại\b/gi, 'lảo đảo'], [/\bgào thét\b/gi, 'kêu oai oái'],
   [/\bnứt (vỡ|nẻ)\b/gi, 'rạn kiểu hoạt hình'],
   [/\bmục nát\b/gi, 'cũ kỹ'], [/\bsắt vụn\b/gi, 'đồ chơi cũ'], [/\bmáu\b/gi, 'màu'],
 ]
