@@ -5,7 +5,7 @@ import type { Product } from '../../../stores/types'
 import { estimateDuration, DEFAULT_FILL_BY_BLOCK } from '../services/splitIntoShots'
 import { renderCtaImage, renderCtaVideo, CTA_IMAGE_CREDITS, CTA_VIDEO_CREDITS } from '../services/renderCtaShot'
 import { exportCapcutBundle, type ExportProgress, type ExportCutMode } from '../services/exportBundle'
-import { viToZhTerms, hasHan, productImageDataUrl, searchProduct1688 } from '../services/sourceFinding'
+import { viToZhTerms, hasHan, productImageDataUrl, searchProduct1688, toMsTerms } from '../services/sourceFinding'
 import { warmUpFFmpeg } from '../../video-builder/v3/services/ffmpegLoader'
 import { useSettingsStore } from '../../../stores/settingsStore'
 
@@ -52,15 +52,18 @@ const FILL_META: Record<ShotFill, { label: string; hint: string; cls: string }> 
 const fmtSec = (n: number) => `~${n}s`
 
 // ── Source clip plumbing (mirrors Research → SourceFinder) ───────────────
-type Platform = 'douyin' | 'xhs' | 'kuaishou'
+type Platform = 'douyin' | 'xhs' | 'kuaishou' | 'tiktok'
 // No global priority merge anymore. Each shot picks ONE platform tab at a time
-// (RED / Kuaishou / Douyin) and searches just that one — so the operator judges
-// each platform's quality. Switching tabs keeps the previous platform's cached
-// results (lanes are keyed by platform), so no reload.
+// (RED / Kuaishou / Douyin / TikTok) and searches just that one — so the operator
+// judges each platform's quality. Switching tabs keeps the previous platform's
+// cached results (lanes are keyed by platform), so no reload. TikTok is the only
+// non-Chinese tab: it searches in EN/Malay (auto-generated), not in 中文.
+const TIKTOK: Platform = 'tiktok'
 const PLATS: { id: Platform; label: string; emoji: string }[] = [
   { id: 'xhs', label: 'RED', emoji: '📕' },
   { id: 'kuaishou', label: 'Kuaishou', emoji: '⚡' },
   { id: 'douyin', label: 'Douyin', emoji: '🎵' },
+  { id: 'tiktok', label: 'TikTok', emoji: '🎶' },
 ]
 const platLabel = (p: string) => PLATS.find((x) => x.id === p)?.label ?? p
 // How many clips each "Tải thêm" press reveals.
@@ -375,14 +378,14 @@ export default function ShotPlanPanel({
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-app-subtle">
           <span><b className="text-app-muted">{plan.shots.length}</b> cảnh</span>
           <span>· tổng <b className="text-app-muted">{fmtSec(plan.totalDurationSec)}</b></span>
-          <span className="hidden sm:inline">· dòng <b>{primaryFlag}</b> = chính, <b>{glossFlag}</b> = phụ · từ khóa source = <b className="text-app-muted">tiếng Trung 🇨🇳</b></span>
+          <span className="hidden sm:inline">· dòng <b>{primaryFlag}</b> = chính, <b>{glossFlag}</b> = phụ · từ khóa source = <b className="text-app-muted">tiếng Trung 🇨🇳</b> <span className="opacity-70">(TikTok: EN/Malay)</span></span>
         </div>
 
         {/* Source-clip controls — platform is chosen per shot (tab in each card) */}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-bold text-app-subtle">Nguồn clip:</span>
-          <span className="rounded-lg border border-app-border bg-app-card-elevated px-2 py-0.5 text-[11px] font-bold text-app-muted" title="Mỗi cảnh có 3 tab nền — tự chọn nền & tự tìm để so chất lượng. Đổi tab không mất kết quả nền cũ.">
-            🔁 mỗi cảnh tự chọn nền · 📕 RED · ⚡ Kuaishou · 🎵 Douyin
+          <span className="rounded-lg border border-app-border bg-app-card-elevated px-2 py-0.5 text-[11px] font-bold text-app-muted" title="Mỗi cảnh có 4 tab nền — tự chọn nền & tự tìm để so chất lượng. Đổi tab không mất kết quả nền cũ. TikTok tìm bằng từ khóa EN/Malay (tự tạo), 3 nền kia tìm tiếng Trung.">
+            🔁 mỗi cảnh tự chọn nền · 📕 RED · ⚡ Kuaishou · 🎵 Douyin · 🎶 TikTok
           </span>
           <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-app-muted" title="Chỉ lấy clip ngắn, hợp cắt ghép">
             <input type="checkbox" checked={onlyShort} onChange={(e) => setOnlyShort(e.target.checked)} /> ⏱ Chỉ clip &lt;60s
@@ -825,6 +828,7 @@ function ShotCard(p: ShotCardProps) {
             onSetMainClip={p.onSetMainClip}
             onToggleNeedsReplace={p.onToggleNeedsReplace}
             onRequestLock={p.onRequestLock}
+            geminiKey={p.geminiKey}
           />
         )}
       </div>
@@ -944,6 +948,8 @@ interface ShotSourcePickerProps {
   onSetMainClip: (key: string) => void
   onToggleNeedsReplace: (key: string) => void
   onRequestLock: () => void
+  /** Needed to auto-translate source keywords → EN/Malay for the TikTok tab. */
+  geminiKey: string
 }
 
 // Lane = one (term, platform) search stream. Keyed by the term TEXT (not its
@@ -979,17 +985,50 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
   const { shot } = p
   const isProduct = shot.fill === 'source-product'
 
-  // The search terms for this shot. Product shots search by the locked 1688 title
-  // (one term); other shots search each zhTerm separately. Fall back to visualIdea
-  // only when a non-product shot has no terms at all.
-  const terms: string[] = isProduct
+  // The Chinese search terms for this shot (Douyin/RED/Kuaishou). Product shots
+  // search by the locked 1688 title (one term); other shots search each zhTerm
+  // separately. Fall back to visualIdea only when a non-product shot has no terms.
+  const zhTermsForShot: string[] = isProduct
     ? (p.productZh ? [p.productZh.name] : [])
     : (shot.zhTerms.length ? shot.zhTerms : (shot.visualIdea.trim() ? [shot.visualIdea.trim()] : []))
+
+  const [plat, setPlat] = useState<Platform>('xhs') // default RED
+
+  // TikTok tab searches in EN/Malay, NOT Chinese — auto-generated from the shot's
+  // meaning (zhTerms, else the VN line / locked product). Kept in local state
+  // (regenerated per mount, like lanes) so no Shot-type/migration change.
+  const [msTerms, setMsTerms] = useState<string[]>([])
+  const [msBusy, setMsBusy] = useState(false)
+  const [msErr, setMsErr] = useState<string | null>(null)
+  // What to feed the MS translator: prefer the distilled zhTerms; for product
+  // shots use the readable name; else the VN line / visual idea.
+  const msSource: string[] = isProduct
+    ? (p.productZh ? [p.productZh.nameVi || p.productZh.name] : [])
+    : (shot.zhTerms.length ? shot.zhTerms : (shot.vi.trim() ? [shot.vi.trim()] : (shot.visualIdea.trim() ? [shot.visualIdea.trim()] : [])))
+
+  const genMsTerms = async () => {
+    if (msBusy) return
+    if (!msSource.length) { setMsErr('Chưa có từ khóa nguồn để tạo từ khóa TikTok.'); return }
+    if (!p.geminiKey) { setMsErr('Cần Gemini API key trong Cài đặt để tạo từ khóa EN/Malay.'); return }
+    setMsBusy(true); setMsErr(null)
+    try {
+      const t = await toMsTerms(msSource, p.geminiKey)
+      if (t.length) setMsTerms(t)
+      else setMsErr('Không tạo được từ khóa — thử lại.')
+    } catch (e) {
+      setMsErr(e instanceof Error ? e.message : String(e))
+    } finally { setMsBusy(false) }
+  }
+
+  // Lanes are platform-keyed, so the term list that drives them MUST switch with
+  // the tab: TikTok uses the EN/Malay terms, every other tab the Chinese terms.
+  // termsFor(pl) lets per-tab counts use the right term set (not the active tab's).
+  const termsFor = (pl: Platform): string[] => (pl === TIKTOK ? msTerms : zhTermsForShot)
+  const terms: string[] = termsFor(plat)
 
   // Per-lane fetched clips + pagination (lane = term × platform). The visible
   // pool is derived PER selected platform tab. shown/searched are per-platform so
   // switching tabs keeps each platform's reveal state (no reload).
-  const [plat, setPlat] = useState<Platform>('xhs') // default RED
   const [lanes, setLanes] = useState<Record<string, SourceClip[]>>({})
   const [cursor, setCursor] = useState<Record<string, string | undefined>>({})
   const [hasMore, setHasMore] = useState<Record<string, boolean>>({})
@@ -1080,9 +1119,15 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
   }
 
   // Switch platform tab — pure view change, no refetch (cache stays in lanes).
-  const switchPlat = (next: Platform) => { if (next !== plat) { setPlat(next); setErr(null) } }
-  // Clip count already cached per platform tab (for the badge).
-  const platCount = (pl: Platform) => buildPool(terms, lanes, pl).length
+  // First time onto TikTok, auto-generate its EN/Malay keywords (let AI create).
+  const switchPlat = (next: Platform) => {
+    if (next === plat) return
+    setPlat(next); setErr(null)
+    if (next === TIKTOK && msTerms.length === 0 && !msBusy) void genMsTerms()
+  }
+  // Clip count already cached per platform tab (for the badge) — uses each tab's
+  // own term set so the TikTok badge (EN/Malay lanes) counts correctly.
+  const platCount = (pl: Platform) => buildPool(termsFor(pl), lanes, pl).length
 
   const dlName = (shot.zhTerms[0] || shot.visualIdea)
   const picked = shot.clips ?? []
@@ -1199,19 +1244,33 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
           <div className="flex items-center gap-1.5">
             <button
               onClick={search}
-              disabled={busy || terms.length === 0}
+              disabled={busy || msBusy || terms.length === 0}
               className="ui-accent-soft flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold disabled:opacity-40"
               title={terms.length ? `Tìm trên ${platLabel(plat)}: ${terms.join(' · ')}` : 'Chưa có từ khóa'}
             >
               {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : platOpen ? <RefreshCw className="h-3 w-3" /> : <Search className="h-3 w-3" />}
               {platOpen ? `Tìm lại trên ${platLabel(plat)}` : `Tìm clip trên ${platLabel(plat)}`}
             </button>
-            {terms.length > 0 && (
+            {plat === TIKTOK ? (
+              msBusy ? (
+                <span className="flex items-center gap-1 text-[10px] text-app-subtle"><Loader2 className="h-3 w-3 animate-spin" /> Đang tạo từ khóa EN/Malay…</span>
+              ) : terms.length > 0 ? (
+                <span className="flex min-w-0 items-center gap-1 text-[10px] text-app-subtle">
+                  <span className="line-clamp-1">🇲🇾/EN {terms.join(' · ')}</span>
+                  <button onClick={() => void genMsTerms()} className="shrink-0 rounded p-0.5 text-app-muted hover:bg-app-card-elevated" title="Tạo lại từ khóa TikTok"><RefreshCw className="h-2.5 w-2.5" /></button>
+                </span>
+              ) : (
+                <button onClick={() => void genMsTerms()} className="flex items-center gap-1 rounded text-[10px] font-bold" style={{ color: 'var(--color-accent)' }}>
+                  <Languages className="h-3 w-3" /> Tạo từ khóa EN/Malay
+                </button>
+              )
+            ) : terms.length > 0 && (
               <span className="line-clamp-1 text-[10px] text-app-subtle">
                 🇨🇳 {terms.join(' · ')}{terms.length > 1 ? ` · ${terms.length} từ khóa` : ''}
               </span>
             )}
           </div>
+          {plat === TIKTOK && msErr && <p className="text-[10px] text-rose-500">{msErr}</p>}
         </>
       )}
 

@@ -76,6 +76,55 @@ export async function viToZhTerms(viText: string, apiKey: string): Promise<strin
   return out
 }
 
+// ── Source terms → SHORT EN/Malay terms (cho tab TikTok) ─────────────────────
+// TikTok thị trường MY/global tìm bằng tiếng Anh/Malay — KHÔNG dùng từ khóa tiếng
+// Trung như Douyin/RED/Kuaishou. Nhận đầu vào là bộ từ khóa nguồn (thường là zhTerms
+// tiếng Trung, hoặc dòng tiếng Việt) → suy luận ra 1-3 từ khóa ngắn EN/Malay.
+const TO_MS_SYSTEM = `You convert footage SEARCH KEYWORDS into SHORT English-or-Malay (Bahasa Malaysia) keywords for searching TikTok (audience = Malaysia / global).
+RULES:
+- Output 1-3 SHORT keywords (1-3 words each). NEVER a whole sentence.
+- Input may be Chinese, Vietnamese or English — REASON about the underlying symptom / situation / object a real person in Malaysia would type on TikTok to find that footage. Do NOT translate literally.
+- Prefer common English search words; use Malay when it is the more natural search term. Mixing is fine — pick what surfaces the most footage.
+- Examples of the THINKING (apply to any niche):
+    ["耳朵痒","耳朵痛"] → ["itchy ear","ear pain"]
+    ["膝盖痛","走路困难"] → ["knee pain","sakit lutut"]
+    ["肚子胀气","消化不良"] → ["bloating","perut buncit"]
+    ["牙结石"] → ["tartar teeth"]
+    ["维生素E"] → ["vitamin E"]
+- NO Chinese characters in the output. No brand names.
+Return JSON: {"terms": ["…","…"]}.`
+
+/** Bộ từ khóa nguồn (Hoa/Việt) → 1-3 từ khóa ngắn EN/Malay cho TikTok. */
+export async function toMsTerms(sourceTerms: string[], apiKey: string): Promise<string[]> {
+  const src = sourceTerms.map((t) => (t || '').trim()).filter(Boolean)
+  if (!src.length) return []
+  const raw = await directGeminiText({
+    apiKey,
+    prompt: `Footage search keywords: ${src.map((t) => `"${t}"`).join(', ')}`,
+    systemInstruction: TO_MS_SYSTEM,
+    responseMimeType: 'application/json',
+    responseSchema: VI_TO_ZH_SCHEMA,
+    thinkingBudget: 0,
+    maxOutputTokens: 256,
+    temperature: 0.5,
+  })
+  let parsed: { terms?: unknown }
+  try { parsed = JSON.parse(raw) as { terms?: unknown } }
+  catch {
+    const m = raw.match(/\{[\s\S]*\}/)
+    if (!m) return []
+    parsed = JSON.parse(m[0]) as { terms?: unknown }
+  }
+  const arr = Array.isArray(parsed.terms) ? parsed.terms : []
+  const out: string[] = []
+  for (const it of arr) {
+    const t = typeof it === 'string' ? it.trim() : ''
+    if (t && !hasHan(t) && !out.includes(t)) out.push(t)
+    if (out.length >= 3) break
+  }
+  return out
+}
+
 // ── Product image → data URL ─────────────────────────────────────────────────
 /** Resolve a product's first image to a usable src: asset refs become a data URL
  *  via the asset store; plain URLs pass through. Empty string if none. */

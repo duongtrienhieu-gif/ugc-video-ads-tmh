@@ -1,12 +1,14 @@
 // ── Vercel serverless — TÌM CLIP nguồn đa nền tảng (TikHub) ──
-// /api/tikhub-search?q=膝盖护具&platform=douyin|xhs|kuaishou&sort=like&maxSec=60&cursor=0
+// /api/tikhub-search?q=膝盖护具&platform=douyin|xhs|kuaishou|tiktok&sort=like&maxSec=60&cursor=0
 // LOOP nhiều trang để gom đủ ~12 clip (lọc thời lượng nếu maxSec). Key TIKHUB_KEY (Bearer).
 // Douyin = bản chạy ổn cũ (POST). RED(小红书)/Kuaishou(快手) = thêm mới (GET), mapper deep-scan
 // phòng thủ vì shape response TikHub không công bố — có ?debug=1 để soi khi cần chỉnh field.
+// TikTok (thị trường MY/global) = cùng nhà ByteDance với Douyin → tái dùng mapper aweme; từ
+// khóa phải là EN/Malay (client tự dịch), KHÔNG dùng tiếng Trung như 3 nền kia.
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 type AnyObj = Record<string, unknown>
-type Platform = 'douyin' | 'xhs' | 'kuaishou'
+type Platform = 'douyin' | 'xhs' | 'kuaishou' | 'tiktok'
 const TARGET = 12        // số clip muốn trả mỗi lần
 const MAX_PAGES = 6      // trần số trang gọi TikHub mỗi request (1 trang = 1 credit)
 
@@ -132,27 +134,34 @@ function collectAwemes(node: unknown, out: AnyObj[], seen: Set<unknown>, depth =
   if (o.aweme_info && typeof o.aweme_info === 'object') { collectAwemes(o.aweme_info, out, seen, depth + 1); return }
   for (const k in o) collectAwemes(o[k], out, seen, depth + 1)
 }
-function mapDouyin(data: AnyObj): Clip[] {
+// Douyin & TikTok cùng shape aweme (ByteDance) → 1 mapper dùng chung, chỉ khác
+// platform tag + share URL fallback.
+function mapAwemes(data: AnyObj, platform: 'douyin' | 'tiktok'): Clip[] {
   const awemes: AnyObj[] = []
   collectAwemes(data, awemes, new Set())
   return awemes.map((a) => {
     const v = (a.video as AnyObj) || {}
-    const vurl = asUrl(v.play_addr) || asUrl(v.play_addr_h264) || asUrl(v.download_addr) || asUrl(v.play_addr_265)
+    const vurl = asUrl(v.play_addr) || asUrl(v.play_addr_h264) || asUrl(v.download_addr) || asUrl(v.play_addr_265) || deepVideoUrl(v)
     const author = (a.author as AnyObj) || {}
     const stats = (a.statistics as AnyObj) || {}
     const id = String(a.aweme_id ?? '')
+    const uid = String(author.unique_id ?? author.uid ?? '')
+    const share = String(a.share_url ?? '')
     return {
       id, videoUrl: vurl,
-      cover: asUrl(v.cover) || asUrl(v.origin_cover) || asUrl(v.dynamic_cover),
+      cover: asUrl(v.cover) || asUrl(v.origin_cover) || asUrl(v.dynamic_cover) || deepImageUrl(v),
       desc: String(a.desc ?? '').slice(0, 160),
       author: String(author.nickname ?? author.unique_id ?? ''),
       likes: Number(stats.digg_count ?? 0) || 0,
       durationSec: durSec(v.duration),
-      shareUrl: String(a.share_url ?? (id ? `https://www.douyin.com/video/${id}` : '')),
-      platform: 'douyin',
+      shareUrl: share || (id
+        ? (platform === 'tiktok' ? `https://www.tiktok.com/${uid ? `@${uid}` : '@i'}/video/${id}` : `https://www.douyin.com/video/${id}`)
+        : ''),
+      platform,
     }
   }).filter((c) => c.id && c.videoUrl)
 }
+const mapDouyin = (data: AnyObj): Clip[] => mapAwemes(data, 'douyin')
 async function pageDouyin(key: string, q: string, sort: string, cursor: string): Promise<PageResult> {
   const cur = Number(cursor) || 0
   const payload = JSON.stringify({ keyword: q, cursor: cur, sort_type: sort, publish_time: '0', filter_duration: '0', content_type: '1' })
@@ -173,6 +182,31 @@ function nextDouyin(data: AnyObj, cursor: string): NextCursor {
   const next = deepVal(data, /^cursor$/i)
   const hm = deepVal(data, /has_more|hasmore/i)
   if (next == null || String(next) === cursor) return { cursor: null, hasMore: false }
+  return { cursor: String(next), hasMore: truthy(hm) }
+}
+
+// ── TIKTOK (thị trường MY/global) — web search video, offset-based, GET ──
+// Cùng nhà ByteDance với Douyin nên dùng chung mapAwemes. Endpoint web fetch_search_video
+// trả {data:[…aweme…], cursor, has_more}; có fallback bỏ bớt param nếu 4xx (không-auth).
+const mapTiktok = (data: AnyObj): Clip[] => mapAwemes(data, 'tiktok')
+async function pageTiktok(key: string, q: string, sort: string, cursor: string): Promise<PageResult> {
+  const offset = Number(cursor) || 0
+  // sort_type web TikTok: 0=liên quan, 1=nhiều like nhất, 2=mới nhất (đoán an toàn — sai vẫn ra liên quan).
+  const sortType = sort === 'latest' ? '2' : sort === 'general' ? '0' : '1'
+  const base = 'https://api.tikhub.io/api/v1/tiktok/web/fetch_search_video'
+  const url = `${base}?keyword=${encodeURIComponent(q)}&offset=${offset}&count=20&sort_type=${sortType}&publish_time=0`
+  const r = await tikGet(key, url)
+  if (r.ok || r.status === 402 || r.status === 429 || r.status === 401 || r.status === 403) return r
+  // Fallback tối giản (chỉ keyword + offset) phòng param sort/publish_time gây 4xx.
+  return tikGet(key, `${base}?keyword=${encodeURIComponent(q)}&offset=${offset}&count=20`)
+}
+function nextTiktok(data: AnyObj, cursor: string): NextCursor {
+  const cur = Number(cursor) || 0
+  const next = deepVal(data, /^cursor$/i)
+  const hm = deepVal(data, /has_more|hasmore/i)
+  // TikTok web trả cursor (offset kế). Thiếu cursor → tự cộng offset 20 nếu has_more.
+  if (next == null) return { cursor: String(cur + 20), hasMore: truthy(hm) }
+  if (String(next) === cursor) return { cursor: null, hasMore: false }
   return { cursor: String(next), hasMore: truthy(hm) }
 }
 
@@ -274,6 +308,7 @@ const PLATFORMS: Record<Platform, { page: (k: string, q: string, s: string, c: s
   douyin: { page: pageDouyin, map: mapDouyin, next: nextDouyin, start: '0' },
   xhs: { page: pageXhs, map: mapXhs, next: nextXhs, start: '1' },
   kuaishou: { page: pageKuaishou, map: mapKuaishou, next: nextKuaishou, start: '' },
+  tiktok: { page: pageTiktok, map: mapTiktok, next: nextTiktok, start: '0' },
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -281,7 +316,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!key) return res.status(500).json({ error: 'Server thiếu TIKHUB_KEY (đặt trên Vercel)' })
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
   if (!q) return res.status(400).json({ error: 'Cần q (từ khóa)' })
-  const platform: Platform = req.query.platform === 'xhs' ? 'xhs' : req.query.platform === 'kuaishou' ? 'kuaishou' : 'douyin'
+  const platform: Platform = req.query.platform === 'xhs' ? 'xhs' : req.query.platform === 'kuaishou' ? 'kuaishou' : req.query.platform === 'tiktok' ? 'tiktok' : 'douyin'
   const sort = req.query.sort === 'latest' ? '2' : req.query.sort === 'general' ? '0' : '1'   // mã douyin; xhs/kuaishou tự map từ tên
   const sortName = req.query.sort === 'latest' ? 'latest' : req.query.sort === 'general' ? 'general' : 'like'
   const maxSec = typeof req.query.maxSec === 'string' ? Number(req.query.maxSec) || 0 : 0
