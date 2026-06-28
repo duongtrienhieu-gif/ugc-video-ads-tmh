@@ -340,9 +340,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           dbg.noteVideo = JSON.stringify(n0.video ?? {}).slice(0, 2500)
           dbg.deepVid = deepVideoUrl(n0)
         }
-        const vids: string[] = []
-        collectBy(firstData, (o) => typeof (o as AnyObj).url === 'string' && /\.(mp4|m3u8)/i.test(String((o as AnyObj).url)), vids, new Set())
-        dbg.anyMp4 = JSON.stringify(vids).slice(0, 400)
+        const vids: AnyObj[] = []
+        collectBy(firstData, (o) => typeof o.url === 'string' && /\.(mp4|m3u8)/i.test(String(o.url)), vids, new Set())
+        dbg.anyMp4 = JSON.stringify(vids.map((o) => String(o.url)).slice(0, 3)).slice(0, 400)
       }
       return dbg
     })() : {}),
