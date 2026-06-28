@@ -144,6 +144,35 @@ async function handleProbe(res: VercelResponse, key: string) {
   return res.status(200).json({ probe: 'upload-image', host: HOST, results: out })
 }
 
+// ── PROBE2 TẠM: format ĐÚNG (POST json base64=dataURI) ở các cỡ payload tăng dần ──
+// Tìm ngưỡng body-size lật 200→400. 1 ảnh thật (~600px) để xác nhận ảnh thường ra token thật.
+// Có delay 1.3s/call né rate-limit/giây của gói PRO.
+async function handleProbe2(res: VercelResponse, key: string) {
+  const U = `https://${HOST}/1688/upload-image`
+  const jsonHdr = { ...rapidHeaders(key), 'Content-Type': 'application/json' }
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+  const callUpload = async (b64: string) => {
+    const r = await fetch(U, { method: 'POST', headers: jsonHdr, body: JSON.stringify({ base64: `data:image/jpeg;base64,${b64}` }) })
+    return { status: r.status, body: (await r.text()).slice(0, 120) }
+  }
+  const out: { label: string; bodyKB: number; status: number; body: string }[] = []
+  // 1) ảnh JPEG thật ~600px (xác nhận ảnh thường → token thật, không phải "0")
+  try {
+    const ir = await fetch('https://picsum.photos/seed/probe1688/600/600.jpg')
+    const realB64 = Buffer.from(await ir.arrayBuffer()).toString('base64')
+    const r = await callUpload(realB64)
+    out.push({ label: 'ảnh thật ~600px', bodyKB: Math.round(realB64.length / 1024), ...r })
+  } catch (e) { out.push({ label: 'ảnh thật ~600px', bodyKB: 0, status: -1, body: (e as Error).message }) }
+  // 2) blob base64 cỡ tăng dần (không phải ảnh thật) — chỉ để dò ngưỡng size:
+  //    còn nhỏ → 500 "图片编码异常" (qua được size, lỗi giải mã); vượt ngưỡng → 400 "bad request".
+  for (const kb of [120, 280, 500]) {
+    await sleep(1300)
+    const r = await callUpload('A'.repeat(kb * 1024))
+    out.push({ label: `blob ${kb}KB`, bodyKB: kb, ...r })
+  }
+  return res.status(200).json({ probe: 'upload-image-size', results: out })
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const key = process.env.RAPIDAPI_KEY
   if (!key) return res.status(500).json({ error: 'Server thiếu RAPIDAPI_KEY (đặt trên Vercel)' })
@@ -151,6 +180,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const debug = req.query.debug === '1'
   try {
     if (action === 'probe') return await handleProbe(res, key)
+    if (action === 'probe2') return await handleProbe2(res, key)
     if (action === 'detail') return await handleDetail(req, res, key, debug)
     return await handleSearch(req, res, key, debug)
   } catch (e) {
