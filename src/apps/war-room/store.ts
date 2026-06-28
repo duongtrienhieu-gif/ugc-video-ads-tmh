@@ -2,7 +2,11 @@
 import { create } from 'zustand'
 import { supabase } from '../../lib/supabase'
 
+// email có thể chứa 2 mail (1 slot = 2 người chung team, vd "HÀ + PHY") → ngăn bằng phẩy/;
 export interface Member { id: string; email: string; name: string; role: string; sp_codes: string[] }
+export function memberEmails(m: { email: string }): string[] {
+  return (m.email || '').split(/[,;]/).map((s) => s.trim().toLowerCase()).filter(Boolean)
+}
 export interface Target { id: string; member_id: string; period: string; metric: string; value: number }
 export interface Task {
   id: string; assignee_id: string | null; title: string; detail: string | null

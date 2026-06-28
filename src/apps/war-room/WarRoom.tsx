@@ -1,7 +1,7 @@
 // ── 🎯 TÁC CHIẾN — giao việc · target ngày/tuần/tháng · việc tự sinh ──────────
 // CEO đặt target; nhân viên tự quản việc; hệ thống gợi ý việc từ số thật.
 import { useEffect, useMemo, useState } from 'react'
-import { useWarStore, type Member } from './store'
+import { useWarStore, memberEmails, type Member } from './store'
 import { useAuthStore } from '../../stores/authStore'
 import { fetchSpStats, fetchMarketerSp, aggregate, type SpStat, type SpProfit } from './actuals'
 import TestPipeline from './TestPipeline'
@@ -56,7 +56,7 @@ export default function WarRoom() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const myMember = members.find((m) => m.email.trim().toLowerCase() === userEmail.trim().toLowerCase())
+  const myMember = members.find((m) => memberEmails(m).includes(userEmail.trim().toLowerCase()))
   const hasCeo = members.some((m) => m.role === 'ceo')
   const isCEO = myMember?.role === 'ceo' || !hasCeo // bootstrap: chưa có CEO thì ai cũng set được
   const spOwner = useMemo(() => {
@@ -285,12 +285,31 @@ function spForMember(name: string, map: Record<string, string[]>): string[] {
   for (const [mk, codes] of Object.entries(map)) if (tokens.includes(mk)) return codes
   return []
 }
+// 2 ô mail cho 1 slot (vd HÀ + PHY chung team) — gộp lại bằng phẩy khi lưu
+function EmailPair({ value, disabled, onSave }: { value: string; disabled: boolean; onSave: (v: string) => void }) {
+  const split = (v: string) => { const p = (v || '').split(/[,;]/).map((s) => s.trim()); return [p[0] ?? '', p[1] ?? ''] }
+  const [a, setA] = useState(split(value)[0]); const [b, setB] = useState(split(value)[1])
+  useEffect(() => { const [x, y] = split(value); setA(x); setB(y) }, [value])
+  const commit = () => onSave([a, b].map((s) => s.trim().toLowerCase()).filter(Boolean).join(','))
+  const box: React.CSSProperties = { ...inp, fontSize: 12, minWidth: 150, flex: 1 }
+  return (
+    <>
+      <input value={a} disabled={disabled} onChange={(e) => setA(e.target.value)} onBlur={commit} placeholder="mail người 1" style={box} />
+      <input value={b} disabled={disabled} onChange={(e) => setB(e.target.value)} onBlur={commit} placeholder="mail người 2 (nếu chung team)" style={box} />
+    </>
+  )
+}
 function NhanSu({ members, isCEO, mktSp, addMember, updateMember, deleteMember }: {
   members: Member[]; isCEO: boolean; mktSp: Record<string, string[]>
   addMember: (m: Omit<Member, 'id'>) => Promise<void>; updateMember: (id: string, p: Partial<Member>) => Promise<void>; deleteMember: (id: string) => Promise<void>
 }) {
-  const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [role, setRole] = useState('marketer'); const [sp, setSp] = useState('')
-  const add = () => { if (!name.trim() || !email.trim()) return; void addMember({ name: name.trim(), email: email.trim().toLowerCase(), role, sp_codes: sp.split(',').map((s) => s.trim()).filter(Boolean) }); setName(''); setEmail(''); setSp('') }
+  const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [email2, setEmail2] = useState(''); const [role, setRole] = useState('marketer'); const [sp, setSp] = useState('')
+  const add = () => {
+    const mail = [email, email2].map((s) => s.trim().toLowerCase()).filter(Boolean).join(',')
+    if (!name.trim() || !mail) return
+    void addMember({ name: name.trim(), email: mail, role, sp_codes: sp.split(',').map((s) => s.trim()).filter(Boolean) })
+    setName(''); setEmail(''); setEmail2(''); setSp('')
+  }
   const autoAssign = async () => { for (const m of members.filter((x) => x.role === 'marketer')) { const codes = spForMember(m.name, mktSp); if (codes.length) await updateMember(m.id, { sp_codes: codes }) } }
   return (
     <div style={panelStyle}>
@@ -298,12 +317,12 @@ function NhanSu({ members, isCEO, mktSp, addMember, updateMember, deleteMember }
         <div style={eyebrowStyle}>👥 NHÂN SỰ · {members.length} người</div>
         {isCEO && Object.keys(mktSp).length > 0 && <button onClick={() => void autoAssign()} style={{ background: 'rgba(245,196,81,0.1)', color: C.gold, border: '1px solid #4a4015', borderRadius: 8, padding: '7px 13px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>🪄 Tự gán mã SP từ data</button>}
       </div>
-      <div style={{ fontSize: 12, color: C.muted, margin: '4px 0 12px' }}>Email = Gmail nhân viên dùng đăng nhập app. Mã SP marketer phụ trách → bấm 🪄 ở trên để app tự điền từ file Ghép quà (khỏi gõ tay), hoặc gõ tay vào ô bên dưới.</div>
+      <div style={{ fontSize: 12, color: C.muted, margin: '4px 0 12px' }}>Mỗi người 1 dòng. <b style={{ color: C.muted2 }}>1 slot chung team 2 người</b> (vd HÀ + PHY) thì điền <b style={{ color: C.muted2 }}>cả 2 ô mail</b> — ai đăng nhập bằng mail nào cũng vào đúng bảng này. Mã SP → bấm 🪄 để app tự điền từ file Ghép quà, hoặc gõ tay.</div>
       {members.map((m) => (
         <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 0', borderTop: `1px solid ${C.line2}`, flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 600, minWidth: 90 }}>{m.name}</span>
-          <span style={{ fontSize: 12, color: C.muted2, minWidth: 150 }}>{m.email}</span>
           <span style={{ color: C.gold, border: `1px solid ${C.gold}`, borderRadius: 20, padding: '1px 9px', fontSize: 11 }}>{roleLabel(m.role)}</span>
+          <EmailPair value={m.email} disabled={!isCEO} onSave={(v) => void updateMember(m.id, { email: v })} />
           <input defaultValue={(m.sp_codes ?? []).join(', ')} placeholder="mã SP phụ trách (phẩy)" onBlur={(e) => void updateMember(m.id, { sp_codes: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
             disabled={!isCEO} style={{ ...inp, flex: 1, minWidth: 180, fontSize: 12 }} />
           {isCEO && <button onClick={() => void deleteMember(m.id)} style={{ background: 'transparent', color: C.red, border: `1px solid ${C.line}`, borderRadius: 7, padding: '5px 9px', fontSize: 12, cursor: 'pointer' }}>Xoá</button>}
@@ -311,8 +330,9 @@ function NhanSu({ members, isCEO, mktSp, addMember, updateMember, deleteMember }
       ))}
       {isCEO && (
         <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tên (KHÁNH...)" style={{ ...inp, width: 130 }} />
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@gmail.com" style={{ ...inp, width: 190 }} />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tên (KHÁNH / HÀ + PHY...)" style={{ ...inp, width: 150 }} />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="mail người 1" style={{ ...inp, width: 175 }} />
+          <input value={email2} onChange={(e) => setEmail2(e.target.value)} placeholder="mail người 2 (nếu chung team)" style={{ ...inp, width: 200 }} />
           <select value={role} onChange={(e) => setRole(e.target.value)} style={{ ...inp }}>{ROLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
           <input value={sp} onChange={(e) => setSp(e.target.value)} placeholder="mã SP (phẩy)" style={{ ...inp, flex: 1, minWidth: 160 }} />
           <button onClick={add} style={{ background: C.gold, color: '#1a1405', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ Thêm</button>

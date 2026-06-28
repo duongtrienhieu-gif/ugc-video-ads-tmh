@@ -15,7 +15,7 @@ import { useVideoTranslateStore } from './stores/videoTranslateStore'
 import { useBrandKitStore } from './stores/brandKitStore'
 import { useTikTokShopListingsStore } from './apps/tiktok-shop/listingsStore'
 import { useChatBotStore } from './apps/chat-bot/store'
-import { useWarStore } from './apps/war-room/store'
+import { useWarStore, memberEmails } from './apps/war-room/store'
 import AuthScreen from './components/AuthScreen'
 import RestoreSessionModal from './components/RestoreSessionModal'
 import { useSettingsStore } from './stores/settingsStore'
@@ -183,7 +183,7 @@ export default function App() {
   useEffect(() => {
     if (autoRouted.current || !user || !warLoaded) return
     autoRouted.current = true
-    const me = warMembers.find((m) => m.email.trim().toLowerCase() === (user.email ?? '').trim().toLowerCase())
+    const me = warMembers.find((m) => memberEmails(m).includes((user.email ?? '').trim().toLowerCase()))
     if (me && me.role !== 'ceo' && useAppStore.getState().activeApp === 'home') openApp('war-room')
   }, [user, warLoaded, warMembers, openApp])
 
