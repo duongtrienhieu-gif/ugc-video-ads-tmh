@@ -54,6 +54,19 @@ const DEFAULT_CONFIG: PersonifiedConfig = {
   falseSolution: true, ctaStyle: 'villain_flees',
 }
 
+/** Chạy danh sách task với GIỚI HẠN số chạy cùng lúc (pool). Bước mạng (KIE/ElevenLabs)
+ *  song song thật; bước ffmpeg tự xếp hàng qua execLock của ffmpegLoader → an toàn. */
+async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promise<unknown>): Promise<void> {
+  let next = 0
+  const run = async (): Promise<void> => {
+    const i = next++
+    if (i >= items.length) return
+    try { await worker(items[i]) } catch { /* worker tự set trạng thái lỗi */ }
+    await run()
+  }
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, () => run()))
+}
+
 /** 1 giọng ElevenLabs có hợp ngôn ngữ thị trường đích không (đọc nhãn/tên/mô tả). */
 function voiceMatchesMarket(v: ElevenLabsVoice, market: TargetMarket): boolean {
   const lang = (v.labels?.language ?? '').toLowerCase()
@@ -389,16 +402,14 @@ export default function Personified() {
     }
   }
 
-  // P2b — render bank cho TẤT CẢ nhân vật chưa có (tuần tự). Làm trước khi render cảnh.
+  // P2b — render bank cho TẤT CẢ nhân vật chưa có (pool 3 song song). Làm trước khi render cảnh.
   async function handleRenderAllChars() {
     if (!script || bankRunning) return
     if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
     setBankRunning(true)
     try {
-      for (const c of script.characters) {
-        if (charBank[c.name]?.status === 'done') continue
-        await handleRenderCharacterRef(c)
-      }
+      const missing = script.characters.filter((c) => charBank[c.name]?.status !== 'done')
+      await runPool(missing, 3, (c) => handleRenderCharacterRef(c))
     } finally { setBankRunning(false) }
   }
 
@@ -494,23 +505,20 @@ export default function Personified() {
     if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
     setRenderingAll(true)
     try {
-      // BƯỚC 1: đảm bảo MỌI nhân vật có ảnh bank (render cái thiếu) → gom map ref TƯƠI.
+      // BƯỚC 1: đảm bảo MỌI nhân vật có ảnh bank (pool 3) → gom map ref TƯƠI.
       const bankMap: Record<string, string> = {}
       for (const [n, b] of Object.entries(charBank)) if (b.refImage) bankMap[n] = b.refImage
       setBankRunning(true)
       try {
-        for (const c of script.characters) {
-          if (bankMap[c.name]) continue
-          const ref = await handleRenderCharacterRef(c)
-          if (ref) bankMap[c.name] = ref
-        }
+        const missing = script.characters.filter((c) => !bankMap[c.name])
+        await runPool(missing, 3, async (c) => { const ref = await handleRenderCharacterRef(c); if (ref) bankMap[c.name] = ref })
       } finally { setBankRunning(false) }
-      // BƯỚC 2: keyframe storyboard — truyền bankMap để chắc chắn dùng ảnh bank vừa render.
-      for (const s of script.scenes) {
+      // BƯỚC 2: keyframe storyboard (pool 3) — truyền bankMap để chắc chắn dùng ảnh bank vừa render.
+      const todo = script.scenes.filter((s) => {
         const st = clips[s.idx]?.status
-        if (st === 'kf_ready' || st === 'clip' || st === 'done') continue
-        await handleRenderKeyframe(s, bankMap)
-      }
+        return !(st === 'kf_ready' || st === 'clip' || st === 'done')
+      })
+      await runPool(todo, 3, (s) => handleRenderKeyframe(s, bankMap))
     } finally { setRenderingAll(false) }
   }
 
@@ -541,10 +549,11 @@ export default function Personified() {
     if (!elevenKey) { setError('Thiếu ElevenLabs API key (giọng) trong Cài đặt'); return }
     setRenderingAll(true)
     try {
-      for (const s of script.scenes) {
+      const todo = script.scenes.filter((s) => {
         const c = clips[s.idx]
-        if (c?.clipRef && (s.dialoguePrimary ?? '').trim() && c.lipStatus !== 'done') await handleVoiceoverScene(s)
-      }
+        return c?.clipRef && (s.dialoguePrimary ?? '').trim() && c.lipStatus !== 'done'
+      })
+      await runPool(todo, 3, (s) => handleVoiceoverScene(s))
     } finally { setRenderingAll(false) }
   }
 
@@ -604,10 +613,8 @@ export default function Personified() {
     if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
     setRenderingAll(true)
     try {
-      for (const s of script.scenes) {
-        const st = clips[s.idx]?.status
-        if (st === 'kf_ready') await handleRenderClipVoice(s)
-      }
+      const todo = script.scenes.filter((s) => clips[s.idx]?.status === 'kf_ready')
+      await runPool(todo, 3, (s) => handleRenderClipVoice(s))
     } finally { setRenderingAll(false) }
   }
 
