@@ -10,15 +10,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const rawName = typeof req.query.name === 'string' ? req.query.name : 'ad.mp4'
   const name = rawName.replace(/[^\w.\-]+/g, '-').slice(0, 80) || 'ad.mp4'
 
-  // Referer theo nguồn — Douyin/TikTok/CN CDN chặn hotlink nếu thiếu.
+  // Referer theo nguồn — Douyin/TikTok/CN CDN chặn hotlink nếu thiếu (ĐÚNG domain từng nền tảng).
   const host = url.toLowerCase()
   const referer = /1688|alicdn|taobao|tmall|tbcdn|mmstat|cloud\.video/.test(host)
     ? 'https://www.1688.com/'
-    : /douyin|amemv|bytecdn|douyinpic|zjcdn|kuaishou|kwimg|xhscdn|xiaohongshu/.test(host)
-      ? 'https://www.douyin.com/'
-      : /tiktok|tiktokcdn|ttwstatic|muscdn/.test(host)
-        ? 'https://www.tiktok.com/'
-        : 'https://www.facebook.com/'
+    : /kuaishou|kwimg|kwaicdn|yximgs|gifshow/.test(host)
+      ? 'https://www.kuaishou.com/'
+      : /xhscdn|xiaohongshu|sns-video|sns-img/.test(host)
+        ? 'https://www.xiaohongshu.com/'
+        : /douyin|amemv|bytecdn|douyinpic|zjcdn|iesdouyin/.test(host)
+          ? 'https://www.douyin.com/'
+          : /tiktok|tiktokcdn|ttwstatic|muscdn/.test(host)
+            ? 'https://www.tiktok.com/'
+            : 'https://www.facebook.com/'
 
   // inline=1 → phát trong app (<video src>), passthrough Range để tua. else → tải về.
   const inline = req.query.inline === '1'

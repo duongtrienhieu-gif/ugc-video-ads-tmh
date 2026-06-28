@@ -21,6 +21,16 @@ interface PlayVid { url: string; download: string; share: string }
 const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : String(n))
 const proxyInline = (url: string) => `/api/dl-video?url=${encodeURIComponent(url)}&inline=1`
 
+// Nền tảng nguồn clip (1 key TikHub dùng chung). Douyin = mặc định cũ; thêm RED + Kuaishou.
+type Platform = 'douyin' | 'xhs' | 'kuaishou'
+const PLATS: { id: Platform; label: string; emoji: string }[] = [
+  { id: 'douyin', label: 'Douyin', emoji: '🎵' },
+  { id: 'xhs', label: 'RED', emoji: '📕' },
+  { id: 'kuaishou', label: 'Kuaishou', emoji: '⚡' },
+]
+const platLabel = (p: Platform) => PLATS.find((x) => x.id === p)?.label ?? 'Douyin'
+const platSlug = (p: Platform) => (p === 'xhs' ? 'red' : p)
+
 const BRIEF_SCHEMA = {
   type: 'object',
   properties: {
@@ -95,7 +105,7 @@ const proxyDownload = (url: string, name: string) => {
 
 // ── Lưu state để F5 không mất (localStorage) ──
 const SAVE_KEY = 'source-finder-state-v1'
-interface Saved { name?: string; imageUrl?: string; pickId?: string; tab?: 'product' | 'scenes'; brief?: Brief | null; imgProducts?: ImgProduct[] | null; clipFor?: ClipFor | null; clips?: Clip[] | null; clipsCursor?: string | null; clipsHasMore?: boolean; onlyShort?: boolean }
+interface Saved { name?: string; imageUrl?: string; pickId?: string; tab?: 'product' | 'scenes'; brief?: Brief | null; imgProducts?: ImgProduct[] | null; clipFor?: ClipFor | null; clips?: Clip[] | null; clipsCursor?: string | null; clipsHasMore?: boolean; onlyShort?: boolean; platform?: Platform }
 function readSaved(): Saved | null { try { return JSON.parse(localStorage.getItem(SAVE_KEY) || 'null') as Saved | null } catch { return null } }
 function clearSaved() { try { localStorage.removeItem(SAVE_KEY) } catch { /* */ } }
 
@@ -130,6 +140,7 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
   const [clipsHasMore, setClipsHasMore] = useState(saved?.clipsHasMore ?? false)
   const [moreBusy, setMoreBusy] = useState(false)
   const [onlyShort, setOnlyShort] = useState(saved?.onlyShort ?? true)   // chỉ clip <60s (hợp cắt B-roll)
+  const [platform, setPlatform] = useState<Platform>(saved?.platform ?? 'douyin')   // nguồn clip
   // Popup phát video + popup ảnh/video gốc 1688
   const [playVid, setPlayVid] = useState<PlayVid | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -138,20 +149,21 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
 
   // Lưu state để F5 không mất (bỏ qua nếu quá quota localStorage → bỏ ảnh data URL nặng).
   useEffect(() => {
-    const snap: Saved = { name, imageUrl, pickId, tab, brief, imgProducts, clipFor, clips, clipsCursor, clipsHasMore, onlyShort }
+    const snap: Saved = { name, imageUrl, pickId, tab, brief, imgProducts, clipFor, clips, clipsCursor, clipsHasMore, onlyShort, platform }
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(snap)) }
     catch { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ ...snap, imageUrl: imageUrl.startsWith('data:') ? '' : imageUrl })) } catch { /* */ } }
-  }, [name, imageUrl, pickId, tab, brief, imgProducts, clipFor, clips, clipsCursor, clipsHasMore, onlyShort])
+  }, [name, imageUrl, pickId, tab, brief, imgProducts, clipFor, clips, clipsCursor, clipsHasMore, onlyShort, platform])
 
   const close = () => { clearSaved(); onClose() }
   const copy = (t: string) => { navigator.clipboard?.writeText(t); addToast('Đã copy', 'success') }
   const safe = (s: string) => (s || 'sp').replace(/[^\w]+/g, '-').slice(0, 24)
 
-  const findClips = async (query: string, kind: 'product' | 'scene', key: string, shortOverride?: boolean) => {
+  const findClips = async (query: string, kind: 'product' | 'scene', key: string, shortOverride?: boolean, platOverride?: Platform) => {
     const short = shortOverride ?? onlyShort
+    const plat = platOverride ?? platform
     setClipFor({ kind, key, query }); setClips(null); setClipsErr(null); setClipsBusy(true); setClipsCursor(null); setClipsHasMore(false)
     try {
-      const d = await fetch(`/api/tikhub-search?q=${encodeURIComponent(query)}&sort=like&maxSec=${short ? 60 : 0}`).then((r) => r.json())
+      const d = await fetch(`/api/tikhub-search?q=${encodeURIComponent(query)}&platform=${plat}&sort=like&maxSec=${short ? 60 : 0}`).then((r) => r.json())
       if (d.error) { setClipsErr(d.error + (d.detail ? ` — ${String(d.detail).slice(0, 160)}` : '')); setClipsBusy(false); return }
       setClips(Array.isArray(d.clips) ? d.clips : [])
       setClipsCursor(d.cursor ?? null); setClipsHasMore(!!d.hasMore)
@@ -162,7 +174,7 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
     if (!clipFor || !clipsCursor || moreBusy) return
     setMoreBusy(true)
     try {
-      const d = await fetch(`/api/tikhub-search?q=${encodeURIComponent(clipFor.query)}&sort=like&maxSec=${onlyShort ? 60 : 0}&cursor=${encodeURIComponent(clipsCursor)}`).then((r) => r.json())
+      const d = await fetch(`/api/tikhub-search?q=${encodeURIComponent(clipFor.query)}&platform=${platform}&sort=like&maxSec=${onlyShort ? 60 : 0}&cursor=${encodeURIComponent(clipsCursor)}`).then((r) => r.json())
       const more: Clip[] = Array.isArray(d.clips) ? d.clips : []
       setClips((prev) => { const seen = new Set((prev || []).map((c) => c.id)); return [...(prev || []), ...more.filter((c) => !seen.has(c.id))] })
       setClipsCursor(d.cursor ?? null); setClipsHasMore(!!d.hasMore)
@@ -247,14 +259,14 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không lung linh điện ảnh. CHỈ 
   // ── Lưới clip + nút play/tải + tải thêm (dùng cho cả Tab1 & Tab2) ──
   const clipGrid = () => (
     <div className="mt-2">
-      {clipsBusy && <div className="py-8 text-center text-sm text-app-muted">🤖 Đang lấy clip Douyin…</div>}
+      {clipsBusy && <div className="py-8 text-center text-sm text-app-muted">🤖 Đang lấy clip {platLabel(platform)}…</div>}
       {clipsErr && !clipsBusy && <p className="rounded-lg border border-app-border bg-app-card px-3 py-2 text-xs text-app-muted">{clipsErr}</p>}
       {clips && clips.length > 0 && (
         <>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
             {clips.map((c, i) => (
               <div key={c.id} className="flex flex-col overflow-hidden rounded-xl border border-app-border bg-app-card">
-                <button onClick={() => setPlayVid({ url: c.videoUrl, download: `${safe(name)}-douyin-${i + 1}.mp4`, share: c.shareUrl })}
+                <button onClick={() => setPlayVid({ url: c.videoUrl, download: `${safe(name)}-${platSlug(platform)}-${i + 1}.mp4`, share: c.shareUrl })}
                   className="group relative block aspect-[3/4] bg-black" title="Phát video">
                   {c.cover ? <img src={c.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
                   <span className="absolute inset-0 flex items-center justify-center"><Play className="h-9 w-9 text-white/90 drop-shadow group-hover:scale-110" /></span>
@@ -267,9 +279,9 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không lung linh điện ảnh. CHỈ 
                     {c.author ? <span className="line-clamp-1">@{c.author}</span> : null}
                   </div>
                   <div className="mt-auto flex gap-1 pt-1">
-                    <button onClick={() => proxyDownload(c.videoUrl, `${safe(name)}-douyin-${i + 1}.mp4`)} className="ui-accent-solid flex-1 rounded py-1 text-[10px] font-semibold">⬇ Video</button>
-                    {c.cover && <button onClick={() => proxyDownload(c.cover, `${safe(name)}-douyin-${i + 1}.jpg`)} className="rounded border border-app-border px-1.5 py-1 text-[10px] font-semibold text-app-muted hover:bg-app-card-elevated" title="Tải ảnh cover"><Download className="h-3 w-3" /></button>}
-                    <a href={c.shareUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-app-border px-1.5 py-1 text-[10px] font-semibold text-app-muted hover:bg-app-card-elevated" title="Mở trên Douyin"><ExternalLink className="h-3 w-3" /></a>
+                    <button onClick={() => proxyDownload(c.videoUrl, `${safe(name)}-${platSlug(platform)}-${i + 1}.mp4`)} className="ui-accent-solid flex-1 rounded py-1 text-[10px] font-semibold">⬇ Video</button>
+                    {c.cover && <button onClick={() => proxyDownload(c.cover, `${safe(name)}-${platSlug(platform)}-${i + 1}.jpg`)} className="rounded border border-app-border px-1.5 py-1 text-[10px] font-semibold text-app-muted hover:bg-app-card-elevated" title="Tải ảnh cover"><Download className="h-3 w-3" /></button>}
+                    <a href={c.shareUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-app-border px-1.5 py-1 text-[10px] font-semibold text-app-muted hover:bg-app-card-elevated" title={`Mở trên ${platLabel(platform)}`}><ExternalLink className="h-3 w-3" /></a>
                   </div>
                 </div>
               </div>
@@ -294,7 +306,7 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không lung linh điện ảnh. CHỈ 
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-dim"><Clapperboard className="h-4 w-4 text-accent" /></div>
           <div className="min-w-0">
             <h2 className="text-sm font-bold text-app-text">Tìm Source — nguyên liệu video cho SP</h2>
-            <p className="truncate text-[11px] text-app-muted">Clip có sản phẩm + cảnh B-roll liên quan (Douyin) — xem & tải trực tiếp để cắt ghép</p>
+            <p className="truncate text-[11px] text-app-muted">Clip có sản phẩm + cảnh B-roll liên quan (Douyin · RED · Kuaishou) — xem & tải trực tiếp để cắt ghép</p>
           </div>
           <button onClick={close} className="ml-auto rounded-full p-1 text-app-muted hover:bg-app-card-elevated"><X className="h-5 w-5" /></button>
         </div>
@@ -332,10 +344,17 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không lung linh điện ảnh. CHỈ 
         </div>
 
         {/* Tabs */}
-        <div className="flex shrink-0 items-center gap-2 border-b border-app-border bg-app-card px-4 py-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-app-border bg-app-card px-4 py-2">
           <button onClick={() => setTab('product')} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'product' ? 'ui-accent-soft' : 'text-app-muted'}`}><Film className="h-3.5 w-3.5" /> Clip có SP</button>
           <button onClick={() => setTab('scenes')} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'scenes' ? 'ui-accent-soft' : 'text-app-muted'}`}><Clapperboard className="h-3.5 w-3.5" /> Cảnh B-roll liên quan</button>
-          <label className="ml-auto flex items-center gap-1.5 text-[11px] font-medium text-app-muted" title="Chỉ lấy clip ngắn để cắt B-roll">
+          {/* Nguồn clip — đổi nền tảng, tự tìm lại nếu đang có clip */}
+          <div className="ml-auto flex items-center gap-1 rounded-lg border border-app-border bg-app-card-elevated p-0.5" title="Nguồn lấy clip">
+            {PLATS.map((p) => (
+              <button key={p.id} onClick={() => { setPlatform(p.id); if (clipFor) void findClips(clipFor.query, clipFor.kind, clipFor.key, undefined, p.id) }}
+                className={`rounded px-2 py-1 text-[11px] font-semibold ${platform === p.id ? 'ui-accent-soft' : 'text-app-muted hover:bg-app-card'}`}>{p.emoji} {p.label}</button>
+            ))}
+          </div>
+          <label className="flex items-center gap-1.5 text-[11px] font-medium text-app-muted" title="Chỉ lấy clip ngắn để cắt B-roll">
             <input type="checkbox" checked={onlyShort} onChange={(e) => { setOnlyShort(e.target.checked); if (clipFor) void findClips(clipFor.query, clipFor.kind, clipFor.key, e.target.checked) }} /> ⏱ Chỉ clip &lt;60s
           </label>
         </div>
@@ -391,7 +410,7 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không lung linh điện ảnh. CHỈ 
                   {/* Clip của SP đang chọn */}
                   {clipFor?.kind === 'product' && (
                     <div>
-                      <div className="mb-1 text-[11px] font-bold text-app-muted">🎬 Clip Douyin: {clipFor.query}{clips ? ` · ${clips.length}` : ''}</div>
+                      <div className="mb-1 text-[11px] font-bold text-app-muted">🎬 Clip {platLabel(platform)}: {clipFor.query}{clips ? ` · ${clips.length}` : ''}</div>
                       {clipGrid()}
                     </div>
                   )}
