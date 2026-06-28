@@ -117,7 +117,10 @@ export default function TopNav({ activeApp, onNavigate }: TopNavProps) {
 
   return (
     <>
-      <header className="relative z-40 shrink-0 border-b border-app-border bg-app-surface">
+      {/* pt-[env(safe-area-inset-top)] — đẩy header xuống dưới notch/Dynamic
+          Island khi chạy PWA standalone trên iPhone (viewport-fit=cover làm
+          nội dung tràn lên dưới status bar). bg-app-surface lấp luôn vùng đó. */}
+      <header className="relative z-40 shrink-0 border-b border-app-border bg-app-surface pt-[env(safe-area-inset-top)]">
         <div className="flex h-12 items-center justify-between gap-2 px-3 sm:h-14 sm:px-4 lg:px-6" ref={navRef}>
           {/* ── Left: logo + desktop nav ───────────────────────────── */}
           <div className="flex min-w-0 items-center gap-3 lg:gap-7">
