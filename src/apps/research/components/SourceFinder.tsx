@@ -1,10 +1,9 @@
 // SourceFinder — "Tìm Source" overlay cho Research.
-// Pick SP (Kho) hoặc handoff từ ProductDetail → Gemini sinh: từ khóa tìm CHÍNH SP (zh/ms/en) +
-// Scene Brief (nhóm cảnh B-roll + truy vấn theo nền tảng). Có ảnh SP → gửi Gemini vision ("quét ảnh").
-// Clip Douyin lấy thật qua TikHub (/api/tikhub-search); Kuaishou/RED/TikTok = link search thủ công.
-// Theme: dùng token app (bg-app-*, text-app-*, ui-accent-*) → tự theo dark/studio.
+// Tab 1 "Clip có SP": ảnh SP → reverse-image 1688 (khớp hình) → SP khớp → clip Douyin theo tên thật + ảnh/video gốc.
+// Tab 2 "Cảnh B-roll": Scene Brief (Gemini) → mỗi cảnh "Lấy clip" → clip Douyin riêng cho cảnh đó (inline).
+// Xem video: popup phát tại chỗ (qua proxy inline). Tải thêm: phân trang cursor. Theme token app (dark/studio).
 import { useState, type ChangeEvent } from 'react'
-import { X, Sparkles, Copy, ExternalLink, Image as ImageIcon, Film, Clapperboard, Download } from 'lucide-react'
+import { X, Sparkles, Copy, ExternalLink, Image as ImageIcon, Film, Clapperboard, Download, Play } from 'lucide-react'
 import { useBankStore } from '../../../stores/bankStore'
 import { useAppStore } from '../../../stores/appStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
@@ -17,7 +16,10 @@ interface Brief { productGuessVi: string; productKeywords: KwSet; scenes: Scene[
 interface Clip { id: string; videoUrl: string; cover: string; desc: string; author: string; likes: number; durationSec: number; shareUrl: string; platform: string }
 interface ImgProduct { itemId: string; title: string; titleVi: string; image: string; price: string; priceHigh: string; sold: string; score: string }
 interface Detail { videos: string[]; images: string[]; shop: string; title: string }
+interface ClipFor { kind: 'product' | 'scene'; key: string; query: string }
+interface PlayVid { url: string; download: string; share: string }
 const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : String(n))
+const proxyInline = (url: string) => `/api/dl-video?url=${encodeURIComponent(url)}&inline=1`
 
 const BRIEF_SCHEMA = {
   type: 'object',
@@ -46,7 +48,6 @@ const BRIEF_SCHEMA = {
 const searchLinks = (kw: string) => {
   const q = encodeURIComponent(kw)
   return [
-    { label: 'Douyin', url: `https://www.douyin.com/search/${q}` },
     { label: 'Kuaishou', url: `https://www.kuaishou.com/search/video?searchKey=${q}` },
     { label: 'RED', url: `https://www.xiaohongshu.com/search_result?keyword=${q}` },
     { label: 'TikTok', url: `https://www.tiktok.com/search?q=${q}` },
@@ -105,24 +106,52 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [brief, setBrief] = useState<Brief | null>(null)
-  // Clip Douyin (TikHub) cho 1 từ khóa
-  const [clipQuery, setClipQuery] = useState<string | null>(null)
-  const [clips, setClips] = useState<Clip[] | null>(null)
-  const [clipsBusy, setClipsBusy] = useState(false)
-  const [clipsErr, setClipsErr] = useState<string | null>(null)
   // Reverse-image 1688 (Tab 1)
   const [imgProducts, setImgProducts] = useState<ImgProduct[] | null>(null)
   const [imgBusy, setImgBusy] = useState(false)
   const [imgErr, setImgErr] = useState<string | null>(null)
-  const [detailFor, setDetailFor] = useState<string | null>(null)
+  // Clip Douyin (gắn ngữ cảnh: product/scene) — render inline đúng chỗ
+  const [clipFor, setClipFor] = useState<ClipFor | null>(null)
+  const [clips, setClips] = useState<Clip[] | null>(null)
+  const [clipsBusy, setClipsBusy] = useState(false)
+  const [clipsErr, setClipsErr] = useState<string | null>(null)
+  const [clipsCursor, setClipsCursor] = useState<string | null>(null)
+  const [clipsHasMore, setClipsHasMore] = useState(false)
+  const [moreBusy, setMoreBusy] = useState(false)
+  // Popup phát video + popup ảnh/video gốc 1688
+  const [playVid, setPlayVid] = useState<PlayVid | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
   const [detail, setDetail] = useState<Detail | null>(null)
   const [detailBusy, setDetailBusy] = useState(false)
+
+  const copy = (t: string) => { navigator.clipboard?.writeText(t); addToast('Đã copy', 'success') }
+  const safe = (s: string) => (s || 'sp').replace(/[^\w]+/g, '-').slice(0, 24)
+
+  const findClips = async (query: string, kind: 'product' | 'scene', key: string) => {
+    setClipFor({ kind, key, query }); setClips(null); setClipsErr(null); setClipsBusy(true); setClipsCursor(null); setClipsHasMore(false)
+    try {
+      const d = await fetch(`/api/tikhub-search?q=${encodeURIComponent(query)}&sort=like`).then((r) => r.json())
+      if (d.error) { setClipsErr(d.error + (d.detail ? ` — ${String(d.detail).slice(0, 160)}` : '')); setClipsBusy(false); return }
+      setClips(Array.isArray(d.clips) ? d.clips : [])
+      setClipsCursor(d.cursor ?? null); setClipsHasMore(!!d.hasMore)
+      if (!d.clips?.length) setClipsErr(d.note || 'Không có clip — đổi từ khóa')
+    } catch (e) { setClipsErr((e as Error).message) } finally { setClipsBusy(false) }
+  }
+  const loadMoreClips = async () => {
+    if (!clipFor || !clipsCursor || moreBusy) return
+    setMoreBusy(true)
+    try {
+      const d = await fetch(`/api/tikhub-search?q=${encodeURIComponent(clipFor.query)}&sort=like&cursor=${encodeURIComponent(clipsCursor)}`).then((r) => r.json())
+      const more: Clip[] = Array.isArray(d.clips) ? d.clips : []
+      setClips((prev) => { const seen = new Set((prev || []).map((c) => c.id)); return [...(prev || []), ...more.filter((c) => !seen.has(c.id))] })
+      setClipsCursor(d.cursor ?? null); setClipsHasMore(!!d.hasMore)
+    } catch { /* */ } finally { setMoreBusy(false) }
+  }
 
   const findByImage = async () => {
     if (!imageUrl) { setImgErr('Cần ảnh SP (chọn từ Kho hoặc 📁 Tải ảnh) để khớp hình'); return }
     setImgBusy(true); setImgErr(null); setImgProducts(null)
     try {
-      // Resize client-side → JPEG nhỏ; nếu ảnh cross-origin chặn canvas → để server tự fetch.
       let body: { base64?: string; imageUrl?: string }
       try { body = { base64: await toResizedBase64(imageUrl) } }
       catch { body = imageUrl.startsWith('data:') ? { base64: imageUrl } : { imageUrl } }
@@ -131,11 +160,11 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
       const list: ImgProduct[] = Array.isArray(d.products) ? d.products : []
       setImgProducts(list)
       if (!list.length) setImgErr(d.note || 'Không tìm thấy SP khớp ảnh — thử ảnh nền sạch hơn')
-      else void findClips(list[0].title)   // upload → ra VIDEO luôn (clip của SP khớp #1)
+      else void findClips(list[0].title, 'product', list[0].itemId)   // khớp ảnh → ra VIDEO luôn
     } catch (e) { setImgErr((e as Error).message) } finally { setImgBusy(false) }
   }
   const openDetail = async (itemId: string) => {
-    setDetailFor(itemId); setDetail(null); setDetailBusy(true)
+    setDetailOpen(true); setDetail(null); setDetailBusy(true)
     try { const d = await fetch(`/api/rapid-1688?action=detail&itemId=${encodeURIComponent(itemId)}`).then((r) => r.json()); setDetail(d as Detail) }
     catch { /* */ } finally { setDetailBusy(false) }
   }
@@ -144,40 +173,22 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
     setPickId(id)
     const p = products.find((x) => x.id === id)
     if (!p) return
-    setName(p.productName || ''); setBrief(null); setImgProducts(null)
+    setName(p.productName || ''); setBrief(null); setImgProducts(null); setClipFor(null)
     const raw = p.productImages?.[0] || ''
-    // Ảnh Kho lưu dạng asset-ref (IndexedDB/Supabase) → resolve sang data URL để dùng đồng nhất.
-    if (isAssetRef(raw)) {
-      const a = await getAsBase64(raw)
-      setImageUrl(a ? `data:${a.mimeType};base64,${a.base64}` : '')
-    } else {
-      setImageUrl(raw)
-    }
+    if (isAssetRef(raw)) { const a = await getAsBase64(raw); setImageUrl(a ? `data:${a.mimeType};base64,${a.base64}` : '') }
+    else setImageUrl(raw)
   }
-  // Tải ảnh SP thủ công (cho SP ngoài app) → data URL dùng làm ảnh quét.
   const onPickFile = (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]; if (!f) return
     const rd = new FileReader()
-    rd.onload = () => { setImageUrl(String(rd.result || '')); setPickId(''); setBrief(null) }
+    rd.onload = () => { setImageUrl(String(rd.result || '')); setPickId(''); setBrief(null); setImgProducts(null); setClipFor(null) }
     rd.readAsDataURL(f)
-  }
-  const copy = (t: string) => { navigator.clipboard?.writeText(t); addToast('Đã copy', 'success') }
-  const safe = (s: string) => (s || 'sp').replace(/[^\w]+/g, '-').slice(0, 24)
-
-  const findClips = async (kw: string) => {
-    setClipQuery(kw); setClips(null); setClipsErr(null); setClipsBusy(true)
-    try {
-      const d = await fetch(`/api/tikhub-search?q=${encodeURIComponent(kw)}&platform=douyin&sort=like`).then((r) => r.json())
-      if (d.error) { setClipsErr(d.error + (d.detail ? ` — ${String(d.detail).slice(0, 160)}` : '')); setClipsBusy(false); return }
-      setClips(Array.isArray(d.clips) ? d.clips : [])
-      if (!d.clips?.length) setClipsErr(d.note || 'Không có clip — đổi từ khóa')
-    } catch (e) { setClipsErr((e as Error).message) } finally { setClipsBusy(false) }
   }
 
   const genBrief = async () => {
     if (!name.trim() && !imageUrl) { setErr('Chọn SP từ Kho, gõ tên, hoặc tải ảnh lên'); return }
     if (!geminiApiKey) { setErr('Cần Gemini API key trong Cài đặt'); return }
-    setBusy(true); setErr(null); setBrief(null)
+    setBusy(true); setErr(null); setBrief(null); setClipFor(null)
     try {
       const label = name.trim() || '(không cho tên — TỰ NHẬN DIỆN sản phẩm từ ảnh)'
       const prompt = `Bạn là đạo diễn B-roll cho quảng cáo COD bán ở Malaysia. Sản phẩm: "${label}".${imageUrl ? ' (Có ảnh sản phẩm kèm theo — NHÌN ẢNH để nhận diện đúng sản phẩm; nếu không có tên thì dựa hoàn toàn vào ảnh.)' : ''}
@@ -190,15 +201,9 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
       let raw: string
       const inline = imageUrl ? await urlToInline(imageUrl) : null
       if (inline) {
-        raw = await directGeminiVision({
-          apiKey: geminiApiKey,
-          parts: [{ inlineData: inline }, { text: prompt }],
-          responseMimeType: 'application/json', responseSchema: BRIEF_SCHEMA, temperature: 0.6, maxOutputTokens: 4096,
-        })
+        raw = await directGeminiVision({ apiKey: geminiApiKey, parts: [{ inlineData: inline }, { text: prompt }], responseMimeType: 'application/json', responseSchema: BRIEF_SCHEMA, temperature: 0.6, maxOutputTokens: 4096 })
       } else {
-        raw = await directGeminiText({
-          apiKey: geminiApiKey, prompt, responseMimeType: 'application/json', responseSchema: BRIEF_SCHEMA, temperature: 0.6, maxOutputTokens: 4096,
-        })
+        raw = await directGeminiText({ apiKey: geminiApiKey, prompt, responseMimeType: 'application/json', responseSchema: BRIEF_SCHEMA, temperature: 0.6, maxOutputTokens: 4096 })
       }
       let parsed: Brief
       try { parsed = JSON.parse(raw) as Brief } catch { parsed = JSON.parse(raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()) as Brief }
@@ -208,17 +213,45 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
     } finally { setBusy(false) }
   }
 
-  const KwRow = ({ kw }: { kw: string }) => (
-    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-app-border bg-app-card px-2 py-1.5">
-      <span className="text-[12px] font-semibold text-app-text">{kw}</span>
-      <button onClick={() => copy(kw)} className="rounded p-0.5 text-app-muted hover:bg-app-card-elevated" title="Copy"><Copy className="h-3 w-3" /></button>
-      <button onClick={() => void findClips(kw)} className="ui-accent-solid rounded px-2 py-0.5 text-[10px] font-bold" title="Lấy clip Douyin">▶ Clip</button>
-      <span className="ml-auto flex items-center gap-1">
-        {searchLinks(kw).map((l) => (
-          <a key={l.label} href={l.url} target="_blank" rel="noopener noreferrer"
-            className="rounded border border-app-border px-1.5 py-0.5 text-[10px] font-medium text-app-muted hover:bg-app-card-elevated">{l.label}</a>
-        ))}
-      </span>
+  // ── Lưới clip + nút play/tải + tải thêm (dùng cho cả Tab1 & Tab2) ──
+  const clipGrid = () => (
+    <div className="mt-2">
+      {clipsBusy && <div className="py-8 text-center text-sm text-app-muted">🤖 Đang lấy clip Douyin…</div>}
+      {clipsErr && !clipsBusy && <p className="rounded-lg border border-app-border bg-app-card px-3 py-2 text-xs text-app-muted">{clipsErr}</p>}
+      {clips && clips.length > 0 && (
+        <>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+            {clips.map((c, i) => (
+              <div key={c.id} className="flex flex-col overflow-hidden rounded-xl border border-app-border bg-app-card">
+                <button onClick={() => setPlayVid({ url: c.videoUrl, download: `${safe(name)}-douyin-${i + 1}.mp4`, share: c.shareUrl })}
+                  className="group relative block aspect-[3/4] bg-black" title="Phát video">
+                  {c.cover ? <img src={c.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
+                  <span className="absolute inset-0 flex items-center justify-center"><Play className="h-9 w-9 text-white/90 drop-shadow group-hover:scale-110" /></span>
+                  <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[10px] font-bold text-white">{c.durationSec}s</span>
+                </button>
+                <div className="flex flex-1 flex-col gap-1 p-2">
+                  <p className="line-clamp-2 text-[10px] text-app-muted">{c.desc}</p>
+                  <div className="flex items-center gap-2 text-[10px] text-app-subtle">
+                    <span>❤️ {fmtK(c.likes)}</span>
+                    {c.author ? <span className="line-clamp-1">@{c.author}</span> : null}
+                  </div>
+                  <div className="mt-auto flex gap-1 pt-1">
+                    <button onClick={() => proxyDownload(c.videoUrl, `${safe(name)}-douyin-${i + 1}.mp4`)} className="ui-accent-solid flex-1 rounded py-1 text-[10px] font-semibold">⬇ Video</button>
+                    {c.cover && <button onClick={() => proxyDownload(c.cover, `${safe(name)}-douyin-${i + 1}.jpg`)} className="rounded border border-app-border px-1.5 py-1 text-[10px] font-semibold text-app-muted hover:bg-app-card-elevated" title="Tải ảnh cover"><Download className="h-3 w-3" /></button>}
+                    <a href={c.shareUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-app-border px-1.5 py-1 text-[10px] font-semibold text-app-muted hover:bg-app-card-elevated" title="Mở trên Douyin"><ExternalLink className="h-3 w-3" /></a>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {clipsHasMore && (
+            <button onClick={() => void loadMoreClips()} disabled={moreBusy}
+              className="mt-3 w-full rounded-xl border border-app-border bg-app-card py-2 text-xs font-semibold text-app-muted hover:bg-app-card-elevated disabled:opacity-50">
+              {moreBusy ? 'Đang tải…' : '↻ Tải thêm video'}
+            </button>
+          )}
+        </>
+      )}
     </div>
   )
 
@@ -230,21 +263,20 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-dim"><Clapperboard className="h-4 w-4 text-accent" /></div>
           <div className="min-w-0">
             <h2 className="text-sm font-bold text-app-text">Tìm Source — nguyên liệu video cho SP</h2>
-            <p className="truncate text-[11px] text-app-muted">Clip có sản phẩm + cảnh B-roll liên quan (Douyin/Kuaishou/TikTok) để cắt ghép</p>
+            <p className="truncate text-[11px] text-app-muted">Clip có sản phẩm + cảnh B-roll liên quan (Douyin) — xem & tải trực tiếp để cắt ghép</p>
           </div>
           <button onClick={onClose} className="ml-auto rounded-full p-1 text-app-muted hover:bg-app-card-elevated"><X className="h-5 w-5" /></button>
         </div>
 
         {/* Chọn SP */}
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-app-border bg-app-card px-4 py-2.5">
-          <label className="group relative h-12 w-12 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-app-border bg-app-card-elevated" title="Tải ảnh SP lên (cho SP ngoài app)">
+          <label className="group relative h-12 w-12 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-app-border bg-app-card-elevated" title="Tải ảnh SP lên">
             {imageUrl ? <img src={imageUrl} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full w-full items-center justify-center"><ImageIcon className="h-4 w-4 text-app-subtle" /></span>}
             <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-center text-[8px] font-semibold text-white opacity-0 group-hover:opacity-100">Đổi ảnh</span>
             <input type="file" accept="image/*" className="hidden" onChange={onPickFile} />
           </label>
           <div className="relative">
-            <button onClick={() => setPickOpen((v) => !v)}
-              className="flex min-w-[220px] items-center gap-2 rounded-lg border border-app-border bg-app-card px-3 py-1.5 text-xs text-app-text">
+            <button onClick={() => setPickOpen((v) => !v)} className="flex min-w-[220px] items-center gap-2 rounded-lg border border-app-border bg-app-card px-3 py-1.5 text-xs text-app-text">
               <span className="truncate">{pickId ? (products.find((p) => p.id === pickId)?.productName || '') : '— Chọn SP từ Kho —'}</span>
               <span className="ml-auto text-app-muted">▾</span>
             </button>
@@ -262,8 +294,7 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
           <label className="flex cursor-pointer items-center gap-1 rounded-lg border border-app-border bg-app-card px-3 py-1.5 text-xs font-semibold text-app-muted hover:bg-app-card-elevated" title="Tải ảnh SP từ máy">
             📁 Tải ảnh<input type="file" accept="image/*" className="hidden" onChange={onPickFile} />
           </label>
-          <button onClick={() => void genBrief()} disabled={busy}
-            className="ui-accent-solid flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-semibold disabled:opacity-50">
+          <button onClick={() => void genBrief()} disabled={busy} className="ui-accent-solid flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-semibold disabled:opacity-50">
             <Sparkles className="h-4 w-4" /> {busy ? 'AI đang nghĩ…' : (imageUrl ? '🔍 Quét ảnh + Scene Brief' : '🧠 Tạo Scene Brief')}
           </button>
           {err && <span className="w-full text-[11px] text-rose-400">{err}</span>}
@@ -277,14 +308,136 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
 
         {/* Body */}
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {detailFor !== null ? (
-            <div>
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <button onClick={() => { setDetailFor(null); setDetail(null) }}
-                  className="rounded-lg border border-app-border bg-app-card px-2.5 py-1 text-xs font-semibold text-app-muted hover:bg-app-card-elevated">← Quay lại</button>
-                <span className="text-xs font-semibold text-app-text">Ảnh + Video gốc nhà bán (1688)</span>
-                {detail?.shop ? <span className="text-[11px] text-app-muted">· 🏪 {detail.shop}</span> : null}
-              </div>
+          {!brief && !busy && (
+            <div className="flex h-56 flex-col items-center justify-center gap-2 text-center text-app-muted">
+              <Clapperboard className="h-8 w-8" />
+              <p className="text-sm">Chọn SP rồi bấm <b>Tạo Scene Brief</b>.</p>
+              <p className="text-xs">AI ra từ khóa tìm clip có SP + các nhóm cảnh B-roll liên quan.</p>
+            </div>
+          )}
+          {busy && <div className="py-12 text-center text-sm text-app-muted">🤖 AI đang phân tích sản phẩm & dựng Scene Brief…</div>}
+
+          {brief && (
+            <>
+              <div className="mb-3 rounded-xl border border-app-border bg-accent-dim px-3 py-2 text-[12px] text-app-text"><b>AI hiểu SP:</b> {brief.productGuessVi}</div>
+
+              {/* ── TAB 1: Clip có SP ── */}
+              {tab === 'product' && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button onClick={() => void findByImage()} disabled={imgBusy || !imageUrl} className="ui-accent-solid flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
+                      🔍 {imgBusy ? 'Đang khớp ảnh…' : 'Tìm SP khớp ảnh (1688)'}
+                    </button>
+                    {!imageUrl && <span className="text-[11px] text-app-subtle">Cần ảnh SP (chọn Kho / 📁 Tải ảnh) để khớp hình</span>}
+                    {imgErr && <span className="text-[11px] text-rose-400">{imgErr}</span>}
+                  </div>
+
+                  {/* SP khớp ảnh — bấm để xem clip / mở ảnh-video gốc */}
+                  {imgProducts && imgProducts.length > 0 && (
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {imgProducts.map((p) => (
+                        <div key={p.itemId} className={`flex w-[150px] shrink-0 flex-col overflow-hidden rounded-xl border bg-app-card ${clipFor?.kind === 'product' && clipFor.key === p.itemId ? 'border-app-border-strong ring-1 ring-accent' : 'border-app-border'}`}>
+                          <button onClick={() => void findClips(p.title, 'product', p.itemId)} className="relative block aspect-square bg-black" title="Xem clip SP này">
+                            {p.image ? <img src={p.image} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
+                            {p.sold ? <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1 text-[10px] font-bold text-white">🔥 {p.sold}/90d</span> : null}
+                          </button>
+                          <div className="flex flex-1 flex-col gap-1 p-1.5">
+                            <p className="line-clamp-2 text-[10px] text-app-muted">{p.titleVi || p.title}</p>
+                            <div className="text-[10px] text-app-subtle">{p.price ? `¥${p.price}` : ''}{p.score ? ` ⭐${p.score}` : ''}</div>
+                            <div className="mt-auto flex gap-1 pt-0.5">
+                              <button onClick={() => void findClips(p.title, 'product', p.itemId)} className="ui-accent-solid flex-1 rounded py-0.5 text-[10px] font-semibold">▶ Clip</button>
+                              <button onClick={() => void openDetail(p.itemId)} className="rounded border border-app-border px-1.5 py-0.5 text-[10px] font-semibold text-app-muted hover:bg-app-card-elevated" title="Ảnh/video gốc nhà bán">🎬</button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Clip của SP đang chọn */}
+                  {clipFor?.kind === 'product' && (
+                    <div>
+                      <div className="mb-1 text-[11px] font-bold text-app-muted">🎬 Clip Douyin: {clipFor.query}{clips ? ` · ${clips.length}` : ''}</div>
+                      {clipGrid()}
+                    </div>
+                  )}
+
+                  {/* Fallback từ khóa */}
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-[11px] text-app-muted">Hoặc tìm theo từ khóa (gần đúng) ▾</summary>
+                    <div className="mt-2 flex flex-col gap-3">
+                      {([['🇨🇳 Trung', brief.productKeywords.zh], ['🇲🇾 Malay', brief.productKeywords.ms], ['🇬🇧 English', brief.productKeywords.en]] as [string, string[]][]).map(([label, kws]) => (
+                        <div key={label}>
+                          <div className="mb-1 text-[11px] font-bold text-app-muted">{label}</div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {kws?.length ? kws.map((kw, i) => (
+                              <button key={i} onClick={() => void findClips(kw, 'product', `kw-${kw}`)} className="rounded-full border border-app-border bg-app-card px-2.5 py-1 text-[11px] font-semibold text-app-text hover:bg-app-card-elevated">▶ {kw}</button>
+                            )) : <span className="text-[11px] text-app-subtle">—</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                </div>
+              )}
+
+              {/* ── TAB 2: Cảnh B-roll ── */}
+              {tab === 'scenes' && (
+                <div className="flex flex-col gap-3">
+                  {brief.scenes.map((s, i) => {
+                    const key = `scene-${i}`
+                    const open = clipFor?.kind === 'scene' && clipFor.key === key
+                    return (
+                      <div key={i} className="rounded-xl border border-app-border bg-app-card p-3">
+                        <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                          <span className="text-base">{s.emoji}</span>
+                          <span className="ui-accent-soft rounded-full px-2 py-0.5 text-[10px] font-bold">{s.group}</span>
+                          <span className="text-[12px] text-app-muted">{s.idea}</span>
+                          <button onClick={() => void findClips(s.queries.zh || s.queries.en || s.idea, 'scene', key)}
+                            className="ui-accent-solid ml-auto rounded px-2.5 py-1 text-[10px] font-bold" title="Lấy clip cảnh này">▶ Lấy clip</button>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-app-subtle">
+                          <span>Từ khóa: <b className="text-app-text">{s.queries.zh}</b></span>
+                          <button onClick={() => copy(s.queries.zh)} className="rounded p-0.5 hover:bg-app-card-elevated"><Copy className="h-3 w-3" /></button>
+                          {searchLinks(s.queries.zh).map((l) => (
+                            <a key={l.label} href={l.url} target="_blank" rel="noopener noreferrer" className="rounded border border-app-border px-1.5 py-0.5 hover:bg-app-card-elevated">{l.label}</a>
+                          ))}
+                        </div>
+                        {open && clipGrid()}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Popup PHÁT VIDEO (cả clip Douyin lẫn video gốc 1688) ── */}
+      {playVid && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-3" onClick={() => setPlayVid(null)}>
+          <div className="flex max-h-[92vh] w-full max-w-md flex-col gap-2" onClick={(e) => e.stopPropagation()}>
+            <video src={proxyInline(playVid.url)} controls autoPlay playsInline className="max-h-[78vh] w-full rounded-xl bg-black" />
+            <div className="flex gap-2">
+              <button onClick={() => proxyDownload(playVid.url, playVid.download)} className="ui-accent-solid flex-1 rounded-lg py-2 text-sm font-semibold">⬇ Tải video</button>
+              {playVid.share && <a href={playVid.share} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-white/30 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10">↗ Mở gốc</a>}
+              <button onClick={() => setPlayVid(null)} className="rounded-lg border border-white/30 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10">Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Popup ẢNH + VIDEO GỐC 1688 ── */}
+      {detailOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-3" onClick={() => { setDetailOpen(false); setDetail(null) }}>
+          <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-app-border bg-app-base" onClick={(e) => e.stopPropagation()}>
+            <div className="flex shrink-0 items-center gap-2 border-b border-app-border bg-app-card px-4 py-2.5">
+              <span className="text-sm font-bold text-app-text">Ảnh + Video gốc nhà bán (1688)</span>
+              {detail?.shop ? <span className="text-[11px] text-app-muted">· 🏪 {detail.shop}</span> : null}
+              <button onClick={() => { setDetailOpen(false); setDetail(null) }} className="ml-auto rounded-full p-1 text-app-muted hover:bg-app-card-elevated"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
               {detailBusy && <div className="py-10 text-center text-sm text-app-muted">🤖 Đang lấy ảnh/video gốc…</div>}
               {detail && (
                 <>
@@ -294,7 +447,7 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
                       <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-2">
                         {detail.videos.map((v, i) => (
                           <div key={i} className="flex flex-col gap-1 rounded-lg border border-app-border bg-app-card p-2">
-                            <video src={v} controls playsInline className="w-full rounded bg-black" />
+                            <button onClick={() => setPlayVid({ url: v, download: `${safe(name)}-1688-${i + 1}.mp4`, share: '' })} className="relative flex aspect-video items-center justify-center rounded bg-black"><Play className="h-8 w-8 text-white/90" /></button>
                             <button onClick={() => proxyDownload(v, `${safe(name)}-1688-${i + 1}.mp4`)} className="ui-accent-solid rounded py-1 text-[10px] font-semibold">⬇ Tải video</button>
                           </div>
                         ))}
@@ -307,162 +460,20 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
                       <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2">
                         {detail.images.map((im, i) => (
                           <div key={i} className="relative overflow-hidden rounded-lg border border-app-border bg-app-card">
-                            <img src={im} alt="" className="aspect-square w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+                            <img src={`https://images.weserv.nl/?url=${encodeURIComponent(im.replace(/^https?:\/\//, ''))}&w=300`} alt="" className="aspect-square w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
                             <button onClick={() => proxyDownload(im, `${safe(name)}-1688-${i + 1}.jpg`)} className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">⬇</button>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
-                  {!detail.videos?.length && !detail.images?.length && <p className="text-xs text-app-muted">Không lấy được media của SP này (thử SP khác hoặc xem trên 1688).</p>}
+                  {!detail.videos?.length && !detail.images?.length && <p className="text-xs text-app-muted">Không lấy được media của SP này (thử SP khác).</p>}
                 </>
               )}
             </div>
-          ) : clipQuery !== null ? (
-            <div>
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <button onClick={() => { setClipQuery(null); setClips(null); setClipsErr(null) }}
-                  className="rounded-lg border border-app-border bg-app-card px-2.5 py-1 text-xs font-semibold text-app-muted hover:bg-app-card-elevated">← Brief</button>
-                <span className="text-xs font-semibold text-app-text">Clip Douyin: <b>{clipQuery}</b></span>
-                {clips ? <span className="text-[11px] text-app-muted">· {clips.length} clip</span> : null}
-              </div>
-              {/* SP khớp ảnh: đổi SP nhanh hoặc xem ảnh/video gốc */}
-              {imgProducts && imgProducts.length > 0 && (
-                <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
-                  {imgProducts.map((p) => (
-                    <div key={p.itemId} className={`flex shrink-0 items-center gap-1.5 rounded-lg border p-1 pr-2 ${clipQuery === p.title ? 'border-app-border-strong bg-app-card-elevated' : 'border-app-border bg-app-card'}`}>
-                      <button onClick={() => void findClips(p.title)} className="flex items-center gap-1.5" title="Xem clip SP này">
-                        <img src={p.image} alt="" className="h-9 w-9 rounded object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden' }} />
-                        <span className="text-[10px] text-app-muted">{p.sold ? `🔥${p.sold}` : ''}</span>
-                      </button>
-                      <button onClick={() => void openDetail(p.itemId)} className="rounded border border-app-border px-1 text-[10px] text-app-muted hover:bg-app-card" title="Ảnh/video gốc">🎬</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {clipsBusy && <div className="py-10 text-center text-sm text-app-muted">🤖 Đang lấy clip Douyin…</div>}
-              {clipsErr && !clipsBusy && <p className="rounded-lg border border-app-border bg-app-card px-3 py-2 text-xs text-app-muted">{clipsErr}</p>}
-              {clips && clips.length > 0 && (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
-                  {clips.map((c, i) => (
-                    <div key={c.id} className="flex flex-col overflow-hidden rounded-xl border border-app-border bg-app-card">
-                      <a href={c.shareUrl} target="_blank" rel="noopener noreferrer" className="relative block aspect-[3/4] bg-black">
-                        {c.cover ? <img src={c.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
-                        <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[10px] font-bold text-white">{c.durationSec}s</span>
-                      </a>
-                      <div className="flex flex-1 flex-col gap-1 p-2">
-                        <p className="line-clamp-2 text-[10px] text-app-muted">{c.desc}</p>
-                        <div className="flex items-center gap-2 text-[10px] text-app-subtle">
-                          <span>❤️ {fmtK(c.likes)}</span>
-                          {c.author ? <span className="line-clamp-1">@{c.author}</span> : null}
-                        </div>
-                        <div className="mt-auto flex gap-1 pt-1">
-                          <button onClick={() => proxyDownload(c.videoUrl, `${safe(name)}-douyin-${i + 1}.mp4`)} className="ui-accent-solid flex-1 rounded py-1 text-[10px] font-semibold">⬇ Video</button>
-                          {c.cover && <button onClick={() => proxyDownload(c.cover, `${safe(name)}-douyin-${i + 1}.jpg`)} className="rounded border border-app-border py-1 px-1.5 text-[10px] font-semibold text-app-muted hover:bg-app-card-elevated" title="Tải ảnh cover"><Download className="h-3 w-3" /></button>}
-                          <a href={c.shareUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-app-border px-1.5 py-1 text-[10px] font-semibold text-app-muted hover:bg-app-card-elevated" title="Mở trên Douyin"><ExternalLink className="h-3 w-3" /></a>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (<>
-          {!brief && !busy && (
-            <div className="flex h-56 flex-col items-center justify-center gap-2 text-center text-app-muted">
-              <Clapperboard className="h-8 w-8" />
-              <p className="text-sm">Chọn SP rồi bấm <b>Tạo Scene Brief</b>.</p>
-              <p className="text-xs">AI sẽ ra từ khóa tìm clip có SP + các nhóm cảnh B-roll liên quan.</p>
-            </div>
-          )}
-          {busy && <div className="py-12 text-center text-sm text-app-muted">🤖 AI đang phân tích sản phẩm & dựng Scene Brief…</div>}
-
-          {brief && (
-            <>
-              <div className="mb-3 rounded-xl border border-app-border bg-accent-dim px-3 py-2 text-[12px] text-app-text">
-                <b>AI hiểu SP:</b> {brief.productGuessVi}
-              </div>
-
-              {tab === 'product' ? (
-                <div className="flex flex-col gap-3">
-                  {/* Reverse-image: tìm ĐÚNG SP khớp hình trên 1688 */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button onClick={() => void findByImage()} disabled={imgBusy || !imageUrl}
-                      className="ui-accent-solid flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
-                      🔍 {imgBusy ? 'Đang khớp ảnh…' : 'Tìm SP khớp ảnh (1688)'}
-                    </button>
-                    {!imageUrl && <span className="text-[11px] text-app-subtle">Cần ảnh SP (chọn Kho / 📁 Tải ảnh) để khớp hình</span>}
-                    {imgErr && <span className="text-[11px] text-rose-400">{imgErr}</span>}
-                  </div>
-                  {imgProducts && imgProducts.length > 0 && (
-                    <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
-                      {imgProducts.map((p) => (
-                        <div key={p.itemId} className="flex flex-col overflow-hidden rounded-xl border border-app-border bg-app-card">
-                          <div className="relative aspect-square bg-black">
-                            {p.image ? <img src={p.image} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
-                            {p.sold ? <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1 text-[10px] font-bold text-white">🔥 {p.sold} bán/90d</span> : null}
-                          </div>
-                          <div className="flex flex-1 flex-col gap-1 p-2">
-                            <p className="line-clamp-2 text-[10px] text-app-muted">{p.titleVi || p.title}</p>
-                            <div className="text-[10px] text-app-subtle">{p.price ? `¥${p.price}` : ''}{p.priceHigh && p.priceHigh !== p.price ? `–${p.priceHigh}` : ''}{p.score ? ` · ⭐${p.score}` : ''}</div>
-                            <div className="mt-auto flex gap-1 pt-1">
-                              <button onClick={() => void findClips(p.title)} className="ui-accent-solid flex-1 rounded py-1 text-[10px] font-semibold">▶ Clip</button>
-                              <button onClick={() => void openDetail(p.itemId)} className="flex-1 rounded border border-app-border py-1 text-[10px] font-semibold text-app-muted hover:bg-app-card-elevated">🎬 Gốc</button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {/* Fallback: từ khóa (gần đúng) */}
-                  <details className="mt-1">
-                    <summary className="cursor-pointer text-[11px] text-app-muted">Hoặc tìm theo từ khóa (gần đúng) ▾</summary>
-                    <div className="mt-2 flex flex-col gap-3">
-                      {([['🇨🇳 Tiếng Trung (Douyin/Kuaishou)', brief.productKeywords.zh], ['🇲🇾 Malay', brief.productKeywords.ms], ['🇬🇧 English', brief.productKeywords.en]] as [string, string[]][]).map(([label, kws]) => (
-                        <div key={label}>
-                          <div className="mb-1 text-[11px] font-bold text-app-muted">{label}</div>
-                          <div className="flex flex-col gap-1.5">
-                            {kws?.length ? kws.map((kw, i) => <KwRow key={i} kw={kw} />) : <span className="text-[11px] text-app-subtle">—</span>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {brief.scenes.map((s, i) => (
-                    <div key={i} className="rounded-xl border border-app-border bg-app-card p-3">
-                      <div className="mb-1.5 flex items-center gap-2">
-                        <span className="text-base">{s.emoji}</span>
-                        <span className="ui-accent-soft rounded-full px-2 py-0.5 text-[10px] font-bold">{s.group}</span>
-                        <span className="text-[12px] text-app-muted">{s.idea}</span>
-                      </div>
-                      <div className="flex flex-col gap-1.5 rounded-lg bg-app-card-elevated p-1.5">
-                        {([['中', s.queries.zh], ['MY', s.queries.ms], ['EN', s.queries.en]] as [string, string][]).map(([tag, q]) => q ? (
-                          <div key={tag} className="flex flex-wrap items-center gap-1.5">
-                            <span className="w-7 shrink-0 text-[10px] font-bold text-app-subtle">{tag}</span>
-                            <span className="text-[12px] text-app-text">{q}</span>
-                            <button onClick={() => copy(q)} className="rounded p-0.5 text-app-muted hover:bg-app-card" title="Copy"><Copy className="h-3 w-3" /></button>
-                            <button onClick={() => void findClips(q)} className="ui-accent-solid rounded px-2 py-0.5 text-[10px] font-bold" title="Lấy clip Douyin">▶ Clip</button>
-                            <span className="ml-auto flex items-center gap-1">
-                              {searchLinks(q).map((l) => (
-                                <a key={l.label} href={l.url} target="_blank" rel="noopener noreferrer"
-                                  className="flex items-center gap-0.5 rounded border border-app-border px-1.5 py-0.5 text-[10px] font-medium text-app-muted hover:bg-app-card">{l.label}<ExternalLink className="h-2.5 w-2.5" /></a>
-                              ))}
-                            </span>
-                          </div>
-                        ) : null)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-          </>)}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

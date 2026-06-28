@@ -23,17 +23,27 @@ const firstUrl = (x: unknown): string => {
   return Array.isArray(list) && list.length ? String(list[0]) : ''
 }
 
+// Tìm value đầu tiên có KEY khớp regex (cho cursor / has_more phân trang).
+function deepVal(node: unknown, re: RegExp, depth = 0): unknown {
+  if (!node || typeof node !== 'object' || depth > 6) return undefined
+  const o = node as AnyObj
+  for (const k in o) { const v = o[k]; if (re.test(k) && (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean')) return v }
+  for (const k in o) { const v = o[k]; if (v && typeof v === 'object') { const f = deepVal(v, re, depth + 1); if (f !== undefined) return f } }
+  return undefined
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const key = process.env.TIKHUB_KEY
   if (!key) return res.status(500).json({ error: 'Server thiếu TIKHUB_KEY (đặt trên Vercel)' })
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
   if (!q) return res.status(400).json({ error: 'Cần q (từ khóa)' })
   const sort = req.query.sort === 'latest' ? '2' : req.query.sort === 'general' ? '0' : '1' // mặc định 1 = nhiều like
+  const cursor = typeof req.query.cursor === 'string' ? Number(req.query.cursor) || 0 : 0
   const debug = req.query.debug === '1'
 
   // Douyin search video — POST + JSON body (xác minh từ OpenAPI spec).
-  // sort_type: 0 tổng hợp / 1 nhiều like / 2 mới nhất. content_type 1 = chỉ video.
-  const payload = JSON.stringify({ keyword: q, cursor: 0, sort_type: sort, publish_time: '0', filter_duration: '0', content_type: '1' })
+  // sort_type: 0 tổng hợp / 1 nhiều like / 2 mới nhất. content_type 1 = chỉ video. cursor = phân trang.
+  const payload = JSON.stringify({ keyword: q, cursor, sort_type: sort, publish_time: '0', filter_duration: '0', content_type: '1' })
   const candidates = [
     'https://api.tikhub.io/api/v1/douyin/search/fetch_video_search_v1',
     'https://api.tikhub.io/api/v1/douyin/search/fetch_video_search_v2',
@@ -87,11 +97,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     seenId.add(c.id); return true
   }).sort((x, y) => y.likes - x.likes)
 
+  const nextCursor = deepVal(data, /^cursor$/i)
+  const hasMoreVal = deepVal(data, /has_more|hasmore/i)
+  const hasMore = (hasMoreVal === true || hasMoreVal === 1 || hasMoreVal === '1' || hasMoreVal === 'true') && nextCursor != null
+
   res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=900')
   return res.status(200).json({
     clips,
     count: clips.length,
-    ...(debug ? { usedUrl, rawKeys: Object.keys(data), awemeCount: awemes.length, sample: awemes[0] ? Object.keys(awemes[0]) : [], videoKeys: awemes[0]?.video ? Object.keys(awemes[0].video as object) : [] } : {}),
+    cursor: nextCursor != null ? String(nextCursor) : null,
+    hasMore,
+    ...(debug ? { usedUrl, nextCursor, hasMoreVal, rawKeys: Object.keys(data), awemeCount: awemes.length, sample: awemes[0] ? Object.keys(awemes[0]) : [], videoKeys: awemes[0]?.video ? Object.keys(awemes[0].video as object) : [] } : {}),
     note: clips.length ? undefined : 'no douyin clips (đổi từ khóa, hoặc xem debug=1 để soi shape)',
   })
 }
