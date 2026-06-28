@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import PriceCalc from './PriceCalc'
 import ProfitTruth from './ProfitTruth'
+import { computeProfit } from './profitCalc'
 
 const TY_GIA = 6500
 const PACK_FACTOR = (name: string) => (name.trim().toUpperCase() === 'KNEE PAD' ? 2 : 1)
@@ -55,6 +56,7 @@ interface BoardData {
   priceVnd: Record<string, number>
   backorder: BackorderItem[]
   provinces: Province[]
+  cashflow: { pendingDS: number; returnDS: number; returnedDS: number; deliveryDS: number; paidDS: number } | null
   errors: string[]
 }
 
@@ -170,11 +172,15 @@ export default function InventoryBoard() {
   const incoming = data?.incoming ?? []
   const priceVnd = data?.priceVnd ?? {}
   const provinces = data?.provinces ?? []
+  const cashflow = data?.cashflow ?? null
   const backorder = useMemo(() => {
     const m: Record<string, { donNo: number; spNo: number }> = {}
     ;(data?.backorder ?? []).forEach((x) => { m[x.ma] = { donNo: x.donNo, spNo: x.spNo } })
     return m
   }, [data])
+
+  // lãi thật từng SP (lõi dùng chung) — cho feed việc gấp + buồng lái vốn
+  const profitRows = useMemo(() => computeProfit(products, inv, velocity, priceVnd), [products, inv, velocity, priceVnd])
 
   // ── TỒN KHO: cảnh báo sắp hết / ế (port từ dashboard invRows) ──────────────
   const invRows = useMemo(() => {
@@ -230,6 +236,39 @@ export default function InventoryBoard() {
       .sort((a, b) => { const u = (x: string) => (x === 'NHẬP GẤP' || x.startsWith('⚠') ? 0 : 1); return u(a.act) - u(b.act) || a.cover - b.cover })
   }, [products, inv, velocity, incoming, priceVnd, backorder])
 
+  // ⚡ VIỆC CẦN LÀM GẤP — nối kho × ads × lãi, 1 việc gắt nhất / mã, xếp theo độ cháy túi
+  const feed = useMemo(() => {
+    const rMap = new Map(restock.map((r) => [r.name.trim().toUpperCase(), r]))
+    type A = { tone: 'red' | 'amber'; title: string; reason: string; score: number }
+    const acts: A[] = []
+    for (const p of profitRows) {
+      const r = rMap.get(p.name.trim().toUpperCase())
+      const urgent = !!r && (r.act === 'NHẬP GẤP' || r.act.startsWith('⚠'))
+      const ngay = r && r.cover < 0 ? 0 : r ? Math.round(r.cover) : 0
+      const mag = Math.abs(p.laiNgay)
+      if (urgent && p.adsPct > 0.2) acts.push({ tone: 'red', title: `${p.name} — đốt ads mà sắp đứt`, reason: `đang chạy ads ${fmtPct(p.adsPct)} mà chỉ còn ~${ngay} ngày hàng → nhập gấp hoặc ghìm ads`, score: 120 + mag / 1e4 })
+      else if (p.laiPct < 0 && p.adsPct > 0.3) acts.push({ tone: 'red', title: `${p.name} — lỗ kép đang đốt ads`, reason: `lỗ ${fmtMoney(p.laiDon)}/đơn mà vẫn đốt ads ${fmtPct(p.adsPct)} → cắt hoặc sửa giá/combo gấp`, score: 100 + mag / 1e4 })
+      else if (r && r.spNo > 0) acts.push({ tone: 'amber', title: `${p.name} — nợ hàng chưa gửi`, reason: `nợ ${Math.round(r.spNo).toLocaleString('vi-VN')} cái → đặt bù gấp`, score: 70 })
+      else if (p.hoanPct > 0.45) acts.push({ tone: 'amber', title: `${p.name} — hoàn ${fmtPct(p.hoanPct)}`, reason: `khách bom nặng → chặn COD tỉnh bom / ép cọc`, score: 60 + mag / 1e4 })
+      else if (urgent) acts.push({ tone: 'amber', title: `${p.name} — sắp đứt hàng`, reason: `còn ~${ngay} ngày → nhập bù`, score: 50 })
+    }
+    return acts.sort((a, b) => b.score - a.score).slice(0, 6)
+  }, [restock, profitRows])
+
+  // 💰 BUỒNG LÁI VỐN — vốn cần nhập vs tiền COD kẹt vs vốn đọng hàng ế
+  const cockpit = useMemo(() => {
+    const vonNhap = restock.reduce((s, r) => s + r.von, 0)
+    const eDong = invRows.filter((r) => r.st.t === 'Ế/đọng').reduce((s, r) => s + r.value, 0)
+    let tienKet = 0, duKienThu = 0
+    if (cashflow) {
+      tienKet = (cashflow.pendingDS + cashflow.deliveryDS + cashflow.returnDS) * TY_GIA
+      const choThu = (cashflow.pendingDS + cashflow.deliveryDS) * TY_GIA
+      const sr = cashflow.paidDS + cashflow.returnedDS > 0 ? cashflow.paidDS / (cashflow.paidDS + cashflow.returnedDS) : 0
+      duKienThu = choThu * sr
+    }
+    return { vonNhap, eDong, tienKet, duKienThu }
+  }, [restock, invRows, cashflow])
+
   // ── cột bảng (port từ dashboard) ───────────────────────────────────────────
   const restockCols: Col<(typeof restock)[number]>[] = [
     { label: 'SẢN PHẨM', node: (r) => r.name },
@@ -279,7 +318,7 @@ export default function InventoryBoard() {
 
         {/* tab switcher */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-          {([['kho', '📦 Kho & Nhập hàng'], ['profit', '🔥 Lãi thật/SP'], ['calc', '🧮 Máy tính giá']] as const).map(([k, lbl]) => (
+          {([['kho', '📦 Kho & Nhập hàng'], ['calc', '🧮 Máy tính giá'], ['profit', '🔥 Lãi thật/SP']] as const).map(([k, lbl]) => (
             <button key={k} onClick={() => setTab(k)} style={{ background: tab === k ? C.gold : 'transparent', color: tab === k ? '#0a0a0a' : C.muted2, border: `1px solid ${tab === k ? C.gold : C.line}`, borderRadius: 10, padding: '9px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{lbl}</button>
           ))}
         </div>
@@ -329,6 +368,41 @@ export default function InventoryBoard() {
 
         {status === 'loading' && !data && (
           <div style={{ ...panelStyle, textAlign: 'center', color: C.muted, fontSize: 14 }}>● Đang tải dữ liệu kho từ Google Sheet...</div>
+        )}
+
+        {/* ⚡ VIỆC CẦN LÀM GẤP */}
+        {feed.length > 0 && (
+          <div style={panelStyle}>
+            <div style={eyebrowStyle}>⚡ VIỆC CẦN LÀM GẤP · {feed.length}</div>
+            <div style={{ fontSize: 12, color: C.muted, margin: '6px 0 4px' }}>Nối kho × ads × lãi — xếp theo độ cháy túi.</div>
+            {feed.map((a, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '9px 0', borderTop: i ? `1px solid ${C.line2}` : 'none' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', marginTop: 6, flexShrink: 0, background: a.tone === 'red' ? C.red : C.amber }} />
+                <div><div style={{ fontSize: 13.5, fontWeight: 500, color: C.text }}>{a.title}</div><div style={{ fontSize: 12.5, color: C.muted2 }}>{a.reason}</div></div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 💰 BUỒNG LÁI VỐN */}
+        {(cockpit.vonNhap > 0 || cockpit.eDong > 0 || cashflow) && (
+          <div style={panelStyle}>
+            <div style={eyebrowStyle}>💰 BUỒNG LÁI VỐN</div>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit,minmax(180px,1fr))', gap: 10, margin: '10px 0 0' }}>
+              {[
+                { l: 'Vốn CẦN nhập', v: fmtMoney(cockpit.vonNhap), c: C.gold, sub: 'để không đứt hàng' },
+                { l: 'Tiền COD đang KẸT', v: cashflow ? fmtMoney(cockpit.tienKet) : '—', c: C.amber, sub: cashflow ? `dự kiến thu ~${fmtMoney(cockpit.duKienThu)}` : 'chưa đọc được QLHB' },
+                { l: 'Vốn ĐỌNG ở hàng ế', v: fmtMoney(cockpit.eDong), c: C.muted2, sub: 'thanh lý để lấy vốn' },
+              ].map((k) => (
+                <div key={k.l} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '12px 14px', minWidth: 0 }}>
+                  <div style={{ fontSize: 10, letterSpacing: 1, color: C.muted, marginBottom: 5 }}>{k.l}</div>
+                  <div style={{ fontSize: 18, fontWeight: 600, color: k.c, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{k.v}</div>
+                  <div style={{ fontSize: 10, color: C.muted, marginTop: 3 }}>{k.sub}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>Cần nhập <b style={{ color: C.muted2 }}>{fmtMoney(cockpit.vonNhap)}</b>{cashflow ? <> · đang kẹt <b style={{ color: C.muted2 }}>{fmtMoney(cockpit.tienKet)}</b> ngoài đường</> : null} · đọng <b style={{ color: C.muted2 }}>{fmtMoney(cockpit.eDong)}</b> ở hàng ế. Mẹo: thanh lý hàng ế để có vốn nhập thay vì bơm thêm tiền.</div>
+          </div>
         )}
 
         {/* ĐỀ XUẤT NHẬP HÀNG */}

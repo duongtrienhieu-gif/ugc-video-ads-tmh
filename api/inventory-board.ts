@@ -218,6 +218,21 @@ function parseProvinces(wb: XLSX.WorkBook) {
     .sort((a, b) => b.hoanRate - a.hoanRate)
 }
 
+// QLHB "Tỉ lệ sản phẩm" → tiền theo trạng thái đơn (COD đang kẹt / đã thu)
+function parseCashflow(wb: XLSX.WorkBook) {
+  const ws = wb.Sheets['Tỉ lệ sản phẩm']
+  if (!ws) throw new Error('Không thấy sheet Tỉ lệ sản phẩm')
+  const g = (col: string, r: number) => num(ws[`${col}${r}`]?.v)
+  let pendingDS = 0, returnDS = 0, returnedDS = 0, deliveryDS = 0, paidDS = 0, blanks = 0
+  for (let r = 5; r <= 1100; r++) {
+    const name = String(ws[`B${r}`]?.v ?? '').trim()
+    if (!name) { if (++blanks > 8) break; continue }
+    blanks = 0
+    pendingDS += g('H', r); returnDS += g('J', r); returnedDS += g('L', r); deliveryDS += g('N', r); paidDS += g('P', r)
+  }
+  return { pendingDS, returnDS, returnedDS, deliveryDS, paidDS }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed' })
   const bodyLinks = (req.body && typeof req.body === 'object' ? (req.body as { links?: Record<string, string> }).links : undefined) || {}
@@ -274,6 +289,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     provinces = parseProvinces(qlhbWb)
   } catch (e) { errors.push('Tỉnh: ' + (e as Error).message) }
 
+  let cashflow: { pendingDS: number; returnDS: number; returnedDS: number; deliveryDS: number; paidDS: number } | null = null
+  try {
+    if (!qlhbWb) throw new Error('lỗi tải file QLHB')
+    cashflow = parseCashflow(qlhbWb)
+  } catch (e) { errors.push('Dòng tiền: ' + (e as Error).message) }
+
   res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=120')
-  return res.status(200).json({ ok: products.length > 0 || inv.length > 0, products, inv, velocity, incoming, priceVnd, backorder, provinces, errors })
+  return res.status(200).json({ ok: products.length > 0 || inv.length > 0, products, inv, velocity, incoming, priceVnd, backorder, provinces, cashflow, errors })
 }
