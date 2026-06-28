@@ -190,7 +190,7 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
     setImgBusy(true); setImgErr(null); setImgProducts(null)
     try {
       let body: { base64?: string; imageUrl?: string }
-      try { body = { base64: await toResizedBase64(imageUrl) } }
+      try { body = { base64: await toResizedBase64(imageUrl, 800, 0.72) } }   // nhỏ gọn → 1688 không trả 400 "ảnh quá lớn"
       catch { body = imageUrl.startsWith('data:') ? { base64: imageUrl } : { imageUrl } }
       const d = await fetch('/api/rapid-1688?action=search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json())
       if (d.error) { setImgErr(d.error + (d.detail ? ` — ${String(d.detail).slice(0, 120)}` : '')); setImgBusy(false); return }
@@ -268,7 +268,7 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không lung linh điện ảnh. CHỈ 
               <div key={c.id} className="flex flex-col overflow-hidden rounded-xl border border-app-border bg-app-card">
                 <button onClick={() => setPlayVid({ url: c.videoUrl, download: `${safe(name)}-${platSlug(platform)}-${i + 1}.mp4`, share: c.shareUrl })}
                   className="group relative block aspect-[3/4] bg-black" title="Phát video">
-                  {c.cover ? <img src={c.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
+                  {c.cover ? <img src={platform === 'douyin' ? c.cover : proxyInline(c.cover)} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
                   <span className="absolute inset-0 flex items-center justify-center"><Play className="h-9 w-9 text-white/90 drop-shadow group-hover:scale-110" /></span>
                   <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[10px] font-bold text-white">{c.durationSec}s</span>
                 </button>

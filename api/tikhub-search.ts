@@ -61,6 +61,23 @@ function deepVideoUrl(node: unknown, depth = 0): string {
   for (const k in o) { const v = o[k]; if (v && typeof v === 'object') { const f = deepVideoUrl(v, depth + 1); if (f) return f } }
   return ''
 }
+// deep tìm 1 url ảnh (cover/thumbnail .jpg/.webp) — cứu cover cho XHS/Kuaishou khi field tên lạ
+function deepImageUrl(node: unknown, depth = 0): string {
+  if (!node || typeof node !== 'object' || depth > 7) return ''
+  const o = node as AnyObj
+  for (const k in o) {
+    const v = o[k]
+    if (typeof v === 'string' && /^https?:/i.test(v)) {
+      if (/cover|thumb|poster|image/i.test(k) && /\.(jpe?g|png|webp)/i.test(v)) return v
+    }
+  }
+  for (const k in o) {
+    const v = o[k]
+    if (typeof v === 'string' && /^https?:/i.test(v) && /\.(jpe?g|png|webp)(\?|$)/i.test(v)) return v
+  }
+  for (const k in o) { const v = o[k]; if (v && typeof v === 'object') { const f = deepImageUrl(v, depth + 1); if (f) return f } }
+  return ''
+}
 const durSec = (raw: unknown): number => { const n = Number(raw) || 0; return n > 1000 ? Math.round(n / 1000) : Math.round(n) }
 // gom node theo điều kiện (không đệ quy vào node đã khớp → tránh trùng lồng nhau)
 function collectBy(node: unknown, pred: (o: AnyObj) => boolean, out: AnyObj[], seen: Set<unknown>, depth = 0) {
@@ -150,7 +167,7 @@ function mapXhs(data: AnyObj): Clip[] {
     const interact = (nc.interact_info as AnyObj) || {}
     const id = String(w.id ?? w.note_id ?? nc.note_id ?? nc.id ?? '')
     const videoUrl = deepVideoUrl(nc)
-    const cover = asUrl(nc.cover) || asUrl(nc.image_list) || asUrl(nc.images_list)
+    const cover = asUrl(nc.cover) || asUrl(nc.image_list) || asUrl(nc.images_list) || deepImageUrl(nc)
     const tok = w.xsec_token ? `?xsec_token=${String(w.xsec_token)}&xsec_source=pc_search` : ''
     return {
       id, videoUrl, cover,
@@ -163,11 +180,16 @@ function mapXhs(data: AnyObj): Clip[] {
     }
   }).filter((c) => c.id && c.videoUrl)
 }
-function pageXhs(key: string, q: string, sort: string, cursor: string): Promise<PageResult> {
+async function pageXhs(key: string, q: string, sort: string, cursor: string): Promise<PageResult> {
   const page = Number(cursor) || 1
-  const s = sort === 'latest' ? 'time_descending' : sort === 'general' ? 'general' : 'popularity_descending'
-  const url = `https://api.tikhub.io/api/v1/xiaohongshu/web_v3/fetch_search_notes?keyword=${encodeURIComponent(q)}&page=${page}&sort=${s}&note_type=2`
-  return tikGet(key, url)
+  // Giá trị ĐÃ verify từ SDK chính chủ: sort='general' (chỉ 'latest' đổi sang time_descending),
+  // note_type=0 (tất cả — mapper tự lọc lấy note có video). Tránh 400 "invalid parameter".
+  const s = sort === 'latest' ? 'time_descending' : 'general'
+  const base = `https://api.tikhub.io/api/v1/xiaohongshu/web_v3/fetch_search_notes?keyword=${encodeURIComponent(q)}&page=${page}`
+  const r = await tikGet(key, `${base}&sort=${s}&note_type=0`)
+  if (r.ok || r.status === 402 || r.status === 429 || r.status === 401 || r.status === 403) return r
+  // Param vẫn bị từ chối → thử tối giản (chỉ keyword+page) để chắc chắn ra dữ liệu.
+  return tikGet(key, base)
 }
 function nextXhs(data: AnyObj, cursor: string): NextCursor {
   const page = Number(cursor) || 1
@@ -185,7 +207,7 @@ function mapKuaishou(data: AnyObj): Clip[] {
     const user = (o.user as AnyObj) || {}
     const id = String(o.photo_id ?? o.photoId ?? '')
     const videoUrl = asUrl(o.main_mv_urls) || asUrl(o.mainMvUrls) || asUrl(o.playUrl) || asUrl(o.photoUrl) || deepVideoUrl(o)
-    const cover = asUrl(o.cover_thumbnail_urls) || asUrl(o.coverThumbnailUrls) || asUrl(o.cover_thumbnail_url) || asUrl(o.thumbnailUrl) || asUrl(o.coverUrls) || asUrl(o.cover)
+    const cover = asUrl(o.cover_thumbnail_urls) || asUrl(o.coverThumbnailUrls) || asUrl(o.cover_thumbnail_url) || asUrl(o.thumbnailUrl) || asUrl(o.coverUrls) || asUrl(o.cover) || deepImageUrl(o)
     return {
       id, videoUrl, cover,
       desc: String(o.caption ?? o.desc ?? '').slice(0, 160),
