@@ -312,8 +312,8 @@ SẢN PHẨM:
 - Thị trường: ${marketLabel}
 - Giá: ${cur} ${product.unitPrice} · Đã bán: ${product.sale} · Đánh giá: ${product.rating || '—'}
 Trả JSON đúng khóa (tiếng Việt, cụ thể, KHÔNG bịa chứng nhận y tế/giấy phép):
-{"productName":"tên gọn rõ","productDescription":"2-3 câu SP là gì, cho ai","targetMarket":"ĐỐI TƯỢNG KHÁCH HÀNG MỤC TIÊU cụ thể — ai nên dùng (độ tuổi/giới tính/nghề/tình trạng), 1-2 dòng. TUYỆT ĐỐI KHÔNG ghi tên quốc gia/thị trường","painPoints":"nỗi đau khách, mỗi ý 1 dòng","usps":"điểm độc nhất, mỗi ý 1 dòng","benefits":"lợi ích chính, mỗi ý 1 dòng","offer":"gợi ý ưu đãi/combo (vd mua 2 tặng 1, freeship COD)","ingredients":"thành phần/chất liệu nếu suy luận được, không thì 'Cập nhật từ NCC'","usageGuide":"cách dùng gợi ý"}
-Suy luận hợp lý từ tên + ngách. CHỈ trả JSON.`
+{"productName":"tên gọn rõ","productDescription":"2-3 câu SP là gì, cho ai","targetMarket":"ĐỐI TƯỢNG KHÁCH HÀNG MỤC TIÊU cụ thể — ai nên dùng (độ tuổi/giới tính/nghề/tình trạng), 1-2 dòng. TUYỆT ĐỐI KHÔNG ghi tên quốc gia/thị trường","painPoints":"nỗi đau khách, mỗi ý 1 dòng","usps":"điểm độc nhất của SP (đặc tính/lợi thế cạnh tranh), mỗi ý 1 dòng","benefits":"lợi ích chính, mỗi ý 1 dòng","offer":"gợi ý ưu đãi/combo (vd mua 2 tặng 1, freeship COD)","ingredients":"thành phần/chất liệu nếu suy luận được, không thì 'Cập nhật từ NCC'","usageGuide":"cách dùng gợi ý"}
+Suy luận hợp lý từ tên + ngách. TUYỆT ĐỐI KHÔNG đưa số lượt bán, đánh giá sao, hay thống kê thị trường vào usps/benefits hay bất kỳ field nào (đó là số liệu sàn, không phải đặc tính sản phẩm). CHỈ trả JSON.`
     const raw = await directGeminiText({ apiKey: geminiApiKey, prompt, responseMimeType: 'application/json', temperature: 0.5 })
     const d = JSON.parse(raw) as Record<string, string>
     const created = await addProduct({
@@ -345,8 +345,8 @@ SẢN PHẨM (nguồn ${marketLabel}):
 - Tên gốc: ${product.title}
 - Ngách: ${nicheText}
 - Giá nguồn: ${cur} ${product.unitPrice} · Đã bán: ${product.sale}
-Trả JSON đúng khóa: {"productName":"tên cho thị trường MY","productDescription":"2-3 câu","targetMarket":"ĐỐI TƯỢNG KHÁCH HÀNG MỤC TIÊU tại Malaysia — ai nên dùng (độ tuổi/giới tính/tình trạng), 1-2 dòng. KHÔNG ghi tên quốc gia/thị trường","painPoints":"nỗi đau khách MY, mỗi ý 1 dòng","usps":"điểm độc nhất, mỗi ý 1 dòng","benefits":"lợi ích, mỗi ý 1 dòng","offer":"ưu đãi/combo hợp MY (RM, COD)","ingredients":"thành phần/chất liệu hoặc 'Cập nhật từ NCC'","usageGuide":"cách dùng"}
-CHỈ trả JSON.`
+Trả JSON đúng khóa: {"productName":"tên cho thị trường MY","productDescription":"2-3 câu","targetMarket":"ĐỐI TƯỢNG KHÁCH HÀNG MỤC TIÊU tại Malaysia — ai nên dùng (độ tuổi/giới tính/tình trạng), 1-2 dòng. KHÔNG ghi tên quốc gia/thị trường","painPoints":"nỗi đau khách MY, mỗi ý 1 dòng","usps":"điểm độc nhất của SP (đặc tính/lợi thế cạnh tranh), mỗi ý 1 dòng","benefits":"lợi ích, mỗi ý 1 dòng","offer":"ưu đãi/combo hợp MY (RM, COD)","ingredients":"thành phần/chất liệu hoặc 'Cập nhật từ NCC'","usageGuide":"cách dùng"}
+TUYỆT ĐỐI KHÔNG đưa số lượt bán, đánh giá sao, hay thống kê thị trường vào usps/benefits hay bất kỳ field nào (đó là số liệu sàn, không phải đặc tính sản phẩm). CHỈ trả JSON.`
       const raw = await directGeminiText({ apiKey: geminiApiKey, prompt, responseMimeType: 'application/json', temperature: 0.6 })
       const d = JSON.parse(raw) as Record<string, string>
       const created = await addProduct({
