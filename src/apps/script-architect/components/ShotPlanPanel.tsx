@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { ArrowLeft, RotateCcw, Loader2, Scissors, ArrowDownToLine, Trash2, ChevronUp, ChevronDown, Clapperboard, Film, Sparkles, Search, Play, RefreshCw, X, ImageIcon, Video, AlertTriangle, Plus, Star, Crosshair, Package, Lock, Languages } from 'lucide-react'
+import { ArrowLeft, RotateCcw, Loader2, Scissors, ArrowDownToLine, Trash2, ChevronUp, ChevronDown, Clapperboard, Film, Sparkles, Search, Play, RefreshCw, X, ImageIcon, Video, AlertTriangle, Plus, Star, Crosshair, Package, Lock, Languages, SlidersHorizontal } from 'lucide-react'
 import type { Shot, ShotPlan, ShotBlock, ShotFill, ScriptLanguage, SourceClip, ShotClip, CtaRender, ProductLock1688 } from '../types'
 import type { Product } from '../../../stores/types'
 import { estimateDuration, DEFAULT_FILL_BY_BLOCK } from '../services/splitIntoShots'
@@ -125,6 +125,7 @@ export default function ShotPlanPanel({
   // Source-clip controls (panel-wide): length filter + the full-screen preview
   // popup. Platform is chosen per-shot (a tab in each ShotSourcePicker), not here.
   const [onlyShort, setOnlyShort] = useState(true)
+  const [optsOpen, setOptsOpen] = useState(false) // popover "Tùy chọn" (lọc <60s + cắt khi export)
   const [preview, setPreview] = useState<PreviewState | null>(null)
   const previewVideoRef = useRef<HTMLVideoElement>(null)
   const [exporting, setExporting] = useState<ExportProgress | null>(null)
@@ -344,109 +345,112 @@ export default function ShotPlanPanel({
             {productName && <span className="hidden text-[11px] text-app-subtle sm:inline">· {productName}</span>}
           </div>
 
-          {/* Primary-language toggle — re-splits on the chosen language */}
-          <div className="ml-auto flex items-center gap-0.5 rounded-lg border border-app-border bg-app-card-elevated p-0.5" title="Ngôn ngữ dòng chính (tách lại theo ngôn ngữ này)">
-            {(['my', 'vi'] as ScriptLanguage[]).map((l) => (
-              <button
-                key={l}
-                onClick={() => l !== lang && onLanguageChange(l)}
-                className={`rounded px-2.5 py-1 text-[11px] font-bold ${l === lang ? 'ui-accent-soft' : 'text-app-muted hover:bg-app-card'}`}
-              >
-                {l === 'my' ? '🇲🇾 MY chính' : '🇻🇳 VN chính'}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={onRebuild}
-            disabled={isBuilding}
-            className="flex items-center gap-1.5 rounded-full border border-app-border bg-app-card px-3 py-1.5 text-xs font-bold text-app-muted hover:bg-app-card-elevated disabled:opacity-40"
-          >
-            {isBuilding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-            Tách lại
-          </button>
-          <button
-            onClick={handleExport}
-            disabled={isBuilding || exporting != null || exportableCount === 0}
-            className="ui-accent-soft flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold disabled:opacity-40"
-            title={exportableCount === 0 ? 'Chưa có clip/CTA nào để export' : `Đóng gói ${exportableCount} clip + phụ đề cho CapCut`}
-          >
-            {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Package className="h-3.5 w-3.5" />}
-            Export CapCut
-            {exportableCount > 0 && <span className="opacity-70">· {exportableCount}</span>}
-          </button>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-app-subtle">
-          <span><b className="text-app-muted">{plan.shots.length}</b> cảnh</span>
-          <span>· tổng <b className="text-app-muted">{fmtSec(plan.totalDurationSec)}</b></span>
-          <span className="hidden sm:inline">· dòng <b>{primaryFlag}</b> = chính, <b>{glossFlag}</b> = phụ · từ khóa source = <b className="text-app-muted">tiếng Trung 🇨🇳</b> <span className="opacity-70">(TikTok: EN/Malay)</span></span>
-        </div>
-
-        {/* Source-clip controls — platform is chosen per shot (tab in each card) */}
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-bold text-app-subtle">Nguồn clip:</span>
-          <span className="rounded-lg border border-app-border bg-app-card-elevated px-2 py-0.5 text-[11px] font-bold text-app-muted" title="Mỗi cảnh có 4 tab nền — tự chọn nền & tự tìm để so chất lượng. Đổi tab không mất kết quả nền cũ. TikTok tìm bằng từ khóa EN/Malay (tự tạo), 3 nền kia tìm tiếng Trung.">
-            🔁 mỗi cảnh tự chọn nền · 📕 RED · ⚡ Kuaishou · 🎵 Douyin · 🎶 TikTok
-          </span>
-          <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-app-muted" title="Chỉ lấy clip ngắn, hợp cắt ghép">
-            <input type="checkbox" checked={onlyShort} onChange={(e) => setOnlyShort(e.target.checked)} /> ⏱ Chỉ clip &lt;60s
-          </label>
-        </div>
-
-        {/* Export option — Hướng B: cắt thật khúc đã chấm điểm bằng ffmpeg */}
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-bold text-app-subtle">Khi export:</span>
-          <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-app-muted" title="Cắt sẵn các clip ĐÃ chấm điểm cắt ngay trong trình duyệt (ffmpeg). Clip chưa chấm vẫn giữ full.">
-            <input type="checkbox" checked={cutEnabled} onChange={(e) => enableCut(e.target.checked)} />
-            <Scissors className="h-3 w-3" /> Cắt sẵn khúc đã chọn
-            {cutableCount > 0 && <span className="opacity-60">· {cutableCount} clip</span>}
-          </label>
-          {cutEnabled && (
-            <div className="flex items-center gap-0.5 rounded-lg border border-app-border bg-app-card-elevated p-0.5">
-              {([['fast', 'Nhanh'], ['accurate', 'Chuẩn']] as const).map(([m, lbl]) => (
-                <button
-                  key={m}
-                  onClick={() => setCutMode(m)}
-                  className={`rounded px-2 py-0.5 text-[10px] font-bold ${cutMode === m ? 'ui-accent-soft' : 'text-app-muted hover:bg-app-card'}`}
-                  title={m === 'fast' ? 'Cắt -c copy: rất nhanh nhưng điểm bắt đầu có thể lệch ~1-2s' : 'Re-encode: đúng từng frame, chậm hơn chút (clip ngắn nên vẫn nhanh)'}
-                >
-                  {lbl}
-                </button>
-              ))}
-            </div>
-          )}
-          {cutEnabled && cutableCount === 0 && (
-            <span className="text-[10px] text-amber-500">Chưa cảnh nào chấm điểm cắt — bấm ▶ clip đã chọn rồi “Đặt điểm bắt đầu”.</span>
-          )}
-          {cutEnabled && !isDesktop && (
-            <span className="text-[10px] text-amber-500">⚠ Trên điện thoại có thể chậm/lỗi bộ nhớ — nên cắt trên máy tính.</span>
-          )}
-        </div>
-
-        {/* Product lock — every "Source SP" shot searches by this locked 1688 title */}
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-bold text-app-subtle">Sản phẩm nguồn:</span>
+          {/* Product lock — inline với tiêu đề; mọi cảnh "Source SP" tìm theo tên 1688 đã khóa */}
           {productZh ? (
-            <div className="flex items-center gap-1.5 rounded-lg border px-2 py-0.5" style={{ borderColor: 'var(--color-accent)' }}>
+            <div className="flex items-center gap-1.5 rounded-lg border px-2 py-0.5" style={{ borderColor: 'var(--color-accent)' }} title="Sản phẩm nguồn đã khóa — cảnh Source SP tìm theo tên này">
               {productZh.image && <img src={productZh.image} alt="" className="h-5 w-5 rounded object-cover" />}
               <Lock className="h-3 w-3" style={{ color: 'var(--color-accent)' }} />
-              <span className="max-w-[200px] truncate text-[11px] font-bold text-app-text" title={`${productZh.name}${productZh.nameVi ? ` — ${productZh.nameVi}` : ''}`}>
+              <span className="max-w-[140px] truncate text-[11px] font-bold text-app-text" title={`${productZh.name}${productZh.nameVi ? ` — ${productZh.nameVi}` : ''}`}>
                 {productZh.nameVi || productZh.name}
               </span>
               <button onClick={() => void openLock()} className="rounded p-0.5 text-app-muted hover:bg-app-card-elevated" title="Đổi sản phẩm khóa"><RefreshCw className="h-3 w-3" /></button>
               <button onClick={clearLock} className="rounded p-0.5 text-app-muted hover:bg-rose-500/10 hover:text-rose-500" title="Bỏ khóa"><X className="h-3 w-3" /></button>
             </div>
           ) : (
-            <>
-              <button
-                onClick={() => void openLock()}
-                className="ui-accent-soft flex items-center gap-1.5 rounded-lg px-2.5 py-0.5 text-[11px] font-bold"
-                title="Đẩy ảnh SP lên 1688, chọn đúng SP → các cảnh Source SP tìm theo tên thật (chính xác)"
-              >
-                <Lock className="h-3 w-3" /> Khóa SP từ ảnh (1688)
-              </button>
-              <span className="text-[10px] text-app-subtle">Khóa để cảnh “Source SP” ra đúng clip sản phẩm</span>
-            </>
+            <button
+              onClick={() => void openLock()}
+              className="ui-accent-soft flex items-center gap-1.5 rounded-lg px-2.5 py-0.5 text-[11px] font-bold"
+              title="Đẩy ảnh SP lên 1688, chọn đúng SP → các cảnh Source SP tìm theo tên thật (chính xác)"
+            >
+              <Lock className="h-3 w-3" /> Khóa SP nguồn
+            </button>
           )}
+
+          {/* Right group */}
+          <div className="ml-auto flex items-center gap-2">
+            {/* Options popover — gom lọc <60s + cắt khi export cho gọn thanh */}
+            <div className="relative">
+              <button
+                onClick={() => setOptsOpen((o) => !o)}
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold hover:bg-app-card-elevated ${optsOpen || effectiveCut || !onlyShort ? 'ui-accent-soft border-transparent' : 'border-app-border bg-app-card text-app-muted'}`}
+                title="Tùy chọn nguồn clip & cắt khi export"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" /> Tùy chọn
+              </button>
+              {optsOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setOptsOpen(false)} />
+                  <div className="absolute right-0 top-full z-50 mt-1 w-72 rounded-xl border border-app-border bg-app-card p-3 text-left shadow-xl">
+                    <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-app-text" title="Chỉ lấy clip ngắn, hợp cắt ghép">
+                      <input type="checkbox" checked={onlyShort} onChange={(e) => setOnlyShort(e.target.checked)} /> ⏱ Chỉ tìm clip &lt;60s
+                    </label>
+                    <div className="my-2.5 border-t border-app-border" />
+                    <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-app-text" title="Cắt sẵn các clip ĐÃ chấm điểm cắt ngay trong trình duyệt (ffmpeg). Clip chưa chấm vẫn giữ full.">
+                      <input type="checkbox" checked={cutEnabled} onChange={(e) => enableCut(e.target.checked)} />
+                      <Scissors className="h-3 w-3" /> Cắt sẵn khúc đã chọn khi export
+                      {cutableCount > 0 && <span className="opacity-60">· {cutableCount} clip</span>}
+                    </label>
+                    {cutEnabled && (
+                      <div className="mt-2 flex items-center gap-0.5 rounded-lg border border-app-border bg-app-card-elevated p-0.5">
+                        {([['fast', 'Nhanh'], ['accurate', 'Chuẩn']] as const).map(([m, lbl]) => (
+                          <button
+                            key={m}
+                            onClick={() => setCutMode(m)}
+                            className={`flex-1 rounded px-2 py-0.5 text-[11px] font-bold ${cutMode === m ? 'ui-accent-soft' : 'text-app-muted hover:bg-app-card'}`}
+                            title={m === 'fast' ? 'Cắt -c copy: rất nhanh nhưng điểm bắt đầu có thể lệch ~1-2s' : 'Re-encode: đúng từng frame, chậm hơn chút (clip ngắn nên vẫn nhanh)'}
+                          >
+                            {lbl}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {cutEnabled && cutableCount === 0 && (
+                      <p className="mt-1.5 text-[10px] text-amber-500">Chưa cảnh nào chấm điểm cắt — bấm ▶ clip đã chọn rồi “Đặt điểm bắt đầu”.</p>
+                    )}
+                    {cutEnabled && !isDesktop && (
+                      <p className="mt-1.5 text-[10px] text-amber-500">⚠ Trên điện thoại có thể chậm/lỗi bộ nhớ — nên cắt trên máy tính.</p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Primary-language toggle — re-splits on the chosen language */}
+            <div className="flex items-center gap-0.5 rounded-lg border border-app-border bg-app-card-elevated p-0.5" title="Ngôn ngữ dòng chính (tách lại theo ngôn ngữ này)">
+              {(['my', 'vi'] as ScriptLanguage[]).map((l) => (
+                <button
+                  key={l}
+                  onClick={() => l !== lang && onLanguageChange(l)}
+                  className={`rounded px-2.5 py-1 text-[11px] font-bold ${l === lang ? 'ui-accent-soft' : 'text-app-muted hover:bg-app-card'}`}
+                >
+                  {l === 'my' ? '🇲🇾 MY chính' : '🇻🇳 VN chính'}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={onRebuild}
+              disabled={isBuilding}
+              className="flex items-center gap-1.5 rounded-full border border-app-border bg-app-card px-3 py-1.5 text-xs font-bold text-app-muted hover:bg-app-card-elevated disabled:opacity-40"
+            >
+              {isBuilding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+              Tách lại
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={isBuilding || exporting != null || exportableCount === 0}
+              className="ui-accent-soft flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold disabled:opacity-40"
+              title={exportableCount === 0 ? 'Chưa có clip/CTA nào để export' : `Đóng gói ${exportableCount} clip + phụ đề cho CapCut`}
+            >
+              {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Package className="h-3.5 w-3.5" />}
+              Export CapCut
+              {exportableCount > 0 && <span className="opacity-70">· {exportableCount}</span>}
+            </button>
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-app-subtle">
+          <span><b className="text-app-muted">{plan.shots.length}</b> cảnh</span>
+          <span>· tổng <b className="text-app-muted">{fmtSec(plan.totalDurationSec)}</b></span>
+          <span className="hidden sm:inline">· dòng <b>{primaryFlag}</b> = chính, <b>{glossFlag}</b> = phụ · từ khóa source = <b className="text-app-muted">tiếng Trung 🇨🇳</b> <span className="opacity-70">(TikTok: EN/Malay)</span> · mỗi cảnh tự chọn nền 📕⚡🎵🎶</span>
         </div>
       </div>
 
@@ -1158,6 +1162,7 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
                       alt=""
                       className="h-full w-full object-cover"
                       loading="lazy"
+                      onError={(e) => { e.currentTarget.style.display = 'none' }}
                     />
                   )}
                   <span className="absolute inset-0 flex items-center justify-center"><Play className="h-4 w-4 text-white drop-shadow" /></span>
@@ -1291,12 +1296,15 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
                   className="relative block aspect-[9/16] w-full overflow-hidden rounded-lg bg-black/40"
                   title="Xem trước"
                 >
-                  <img
-                    src={c.platform === 'douyin' ? c.cover : proxyInline(c.cover)}
-                    alt=""
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                  />
+                  {c.cover && (
+                    <img
+                      src={c.platform === 'douyin' ? c.cover : proxyInline(c.cover)}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                      onError={(e) => { e.currentTarget.style.display = 'none' }}
+                    />
+                  )}
                   <span className="absolute inset-0 flex items-center justify-center"><Play className="h-5 w-5 text-white drop-shadow" /></span>
                   <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] font-bold text-white">{platLabel(c.platform)}</span>
                   <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[9px] font-bold text-white">{Math.round(c.durationSec)}s · {fmtK(c.likes)}♥</span>

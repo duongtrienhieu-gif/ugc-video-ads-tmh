@@ -99,9 +99,12 @@ function pickRenderableCover(node: unknown): string {
   const urls: string[] = []
   allImageUrls(node, urls, new Set())
   const junk = (u: string) => /se-cdn|udata\/pkg|search_blue|caption_|collect_|merchant_|uhead|\/head|avatar/i.test(u)
+  // KHÔNG render được trong trình duyệt → loại hẳn (kvif của Kuaishou, heic/heif của Apple)
+  const unrenderable = (u: string) => /\.(kvif|heic|heif)(\?|$)/i.test(u)
   const good = urls.filter((u) => /\.(jpe?g|png|webp)(\?|$)/i.test(u) && !junk(u))
   if (good.length) return good[0]
-  const any = urls.filter((u) => !junk(u))
+  // fallback: chỉ nhận URL render được (jpg/png/webp/avif/gif); thà rỗng còn hơn trả .kvif → ô đen
+  const any = urls.filter((u) => !junk(u) && !unrenderable(u))
   return any[0] || ''
 }
 // thời lượng "M:SS"/"H:MM:SS" (XHS App V2) hoặc số (giây/ms) → giây
