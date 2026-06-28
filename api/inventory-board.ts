@@ -270,16 +270,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const bodyLinks = (req.body && typeof req.body === 'object' ? (req.body as { links?: Record<string, string> }).links : undefined) || {}
   const id = (k: SrcKey) => { const v = bodyLinks[k]; return v ? extractId(v) : DEFAULTS[k] }
 
+  // ── Nhánh NHẸ: chỉ đọc file KẾ HOẠCH QUÀ (cho tab Ghép Quà). TÁCH khỏi load
+  // chính 6 file — thêm file thứ 7 vào batch song song làm Google throttle → timeout.
+  if (req.body && (req.body as { giftOnly?: boolean }).giftOnly) {
+    try {
+      const wb = await fetchXlsx(id('giftplan'), ['3. THỰC TRẠNG TỒN', '4. KHO QUÀ & BÁN CHÉO'])
+      return res.status(200).json({ ok: true, giftMaster: parseGiftMaster(wb), giftCatalog: parseGiftCatalog(wb) })
+    } catch (e) {
+      return res.status(200).json({ ok: false, giftMaster: [], giftCatalog: [], error: (e as Error).message })
+    }
+  }
+
   const errors: string[] = []
   // Tải song song; mỗi nguồn độc lập, lỗi 1 nguồn không phá cả khối.
-  const [tongR, qlhbR, khoR, saleR, nhapR, notonR, giftR] = await Promise.allSettled([
+  const [tongR, qlhbR, khoR, saleR, nhapR, notonR] = await Promise.allSettled([
     fetchXlsx(id('tong'), ['SẢN PHẨM_TH']),
     fetchXlsx(id('qlhb'), ['Tỉ lệ sản phẩm', 'Tỉ lệ tỉnh']),
     fetchXlsx(id('kho'), ['RP_KHO_SL']),
     fetchCsv(id('sale'), 'Report_Product'),
     fetchXlsx(id('nhaphang'), ['BÁO GIÁ VÀ THANH TOÁN']),
     fetchCsv(id('noton'), 'Tồn kho dự kiến'),
-    fetchXlsx(id('giftplan'), ['3. THỰC TRẠNG TỒN', '4. KHO QUÀ & BÁN CHÉO']),
   ])
 
   const qlhbWb = qlhbR.status === 'fulfilled' ? qlhbR.value : null
@@ -328,14 +338,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     cashflow = parseCashflow(qlhbWb)
   } catch (e) { errors.push('Dòng tiền: ' + (e as Error).message) }
 
-  let giftMaster: GiftMaster[] = []
-  let giftCatalog: GiftCat[] = []
-  try {
-    if (giftR.status !== 'fulfilled') throw new Error(giftR.reason?.message || 'lỗi tải file KẾ HOẠCH QUÀ')
-    giftMaster = parseGiftMaster(giftR.value)
-    giftCatalog = parseGiftCatalog(giftR.value)
-  } catch (e) { errors.push('Quà/Combo: ' + (e as Error).message) }
-
   res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=120')
-  return res.status(200).json({ ok: products.length > 0 || inv.length > 0, products, inv, velocity, incoming, priceVnd, backorder, provinces, cashflow, giftMaster, giftCatalog, errors })
+  return res.status(200).json({ ok: products.length > 0 || inv.length > 0, products, inv, velocity, incoming, priceVnd, backorder, provinces, cashflow, errors })
 }

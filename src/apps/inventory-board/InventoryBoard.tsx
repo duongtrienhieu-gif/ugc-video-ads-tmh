@@ -10,7 +10,6 @@ import PriceCalc from './PriceCalc'
 import ProfitTruth from './ProfitTruth'
 import { computeProfit } from './profitCalc'
 import GiftCombo from './GiftCombo'
-import { type GiftMaster, type GiftCat } from './giftPlan'
 
 const TY_GIA = 5800
 const PACK_FACTOR = (name: string) => (name.trim().toUpperCase() === 'KNEE PAD' ? 2 : 1)
@@ -61,8 +60,6 @@ interface BoardData {
   backorder: BackorderItem[]
   provinces: Province[]
   cashflow: { pendingDS: number; returnDS: number; returnedDS: number; deliveryDS: number; paidDS: number } | null
-  giftMaster: GiftMaster[]
-  giftCatalog: GiftCat[]
   errors: string[]
 }
 
@@ -179,8 +176,6 @@ export default function InventoryBoard() {
   const priceVnd = data?.priceVnd ?? {}
   const provinces = data?.provinces ?? []
   const cashflow = data?.cashflow ?? null
-  const giftMaster = data?.giftMaster ?? []
-  const giftCatalog = data?.giftCatalog ?? []
   const backorder = useMemo(() => {
     const m: Record<string, { donNo: number; spNo: number }> = {}
     ;(data?.backorder ?? []).forEach((x) => { m[x.ma] = { donNo: x.donNo, spNo: x.spNo } })
@@ -415,7 +410,7 @@ export default function InventoryBoard() {
 
         {tab === 'profit' && <ProfitTruth products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} feed={feed} cockpit={cockpit} hasCashflow={!!cashflow} />}
 
-        {tab === 'gift' && <GiftCombo products={products} giftMaster={giftMaster} giftCatalog={giftCatalog} />}
+        {tab === 'gift' && <GiftCombo products={products} giftLink={sources.giftplan || ''} />}
 
         {tab === 'calc' && <PriceCalc products={products} priceVnd={priceVnd} inv={inv} velocity={velocity} />}
       </div>

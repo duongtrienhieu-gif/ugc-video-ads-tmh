@@ -18,15 +18,28 @@ const eyebrowStyle: React.CSSProperties = { fontSize: 13, fontWeight: 700, lette
 const MKT_ORDER = ['KHÁNH', 'HÀ', 'ANH', 'DUY', 'TUẤN']
 interface Prod { name: string; pctHoan: number; pctCpqc: number }
 
-export default function GiftCombo({ products, giftMaster, giftCatalog }: {
-  products: Prod[]; giftMaster: GiftMaster[]; giftCatalog: GiftCat[]
-}) {
+export default function GiftCombo({ products, giftLink }: { products: Prod[]; giftLink: string }) {
   const [isMobile, setIsMobile] = useState(false)
   useEffect(() => {
     const f = () => setIsMobile(window.innerWidth < 700)
     f(); window.addEventListener('resize', f)
     return () => window.removeEventListener('resize', f)
   }, [])
+
+  // Tự tải file KẾ HOẠCH QUÀ riêng (nhẹ, 1 request) — tách khỏi load chính nặng để né timeout.
+  const [giftMaster, setGiftMaster] = useState<GiftMaster[]>([])
+  const [giftCatalog, setGiftCatalog] = useState<GiftCat[]>([])
+  const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
+  const [errMsg, setErrMsg] = useState('')
+  useEffect(() => {
+    let alive = true
+    setStatus('loading')
+    fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ giftOnly: true, links: { giftplan: giftLink } }), cache: 'no-store' })
+      .then((r) => r.json())
+      .then((j) => { if (!alive) return; setGiftMaster(j.giftMaster || []); setGiftCatalog(j.giftCatalog || []); if (j.giftCatalog?.length) setStatus('ok'); else { setStatus('error'); setErrMsg(j.error || 'Không có dữ liệu quà') } })
+      .catch((e) => { if (alive) { setStatus('error'); setErrMsg(e instanceof Error ? e.message : 'Lỗi tải') } })
+    return () => { alive = false }
+  }, [giftLink])
   // edit theo SP: đổi quà / sửa Mốc
   const [edits, setEdits] = useState<Record<string, { giftName?: string; tiers?: Tier[] }>>({})
   const [open, setOpen] = useState<Record<string, boolean>>({})
@@ -78,8 +91,11 @@ export default function GiftCombo({ products, giftMaster, giftCatalog }: {
     setEdits((e) => ({ ...e, [k]: { ...e[k], tiers } }))
   }
 
+  if (status === 'loading') {
+    return <div style={{ ...panelStyle, textAlign: 'center', color: C.muted, fontSize: 14 }}>● Đang tải kế hoạch quà từ Google Sheet...</div>
+  }
   if (!giftCatalog.length) {
-    return <div style={{ ...panelStyle, textAlign: 'center', color: C.muted, fontSize: 14 }}>Chưa đọc được file KẾ HOẠCH QUÀ. Dán link file (sheet 3 + 4) ở ⚙ Cấu hình link tab Kho rồi Tải lại.</div>
+    return <div style={{ ...panelStyle, textAlign: 'center', color: status === 'error' ? C.red : C.muted, fontSize: 14 }}>{status === 'error' ? '⚠ ' + errMsg : 'Chưa có dữ liệu quà'}. Kiểm tra link file KẾ HOẠCH QUÀ ở ⚙ Cấu hình link (tab Kho).</div>
   }
 
   const badge = (txt: string, color: string) => <span style={{ color, border: `1px solid ${color}`, borderRadius: 20, padding: '2px 9px', fontSize: 11, whiteSpace: 'nowrap' }}>{txt}</span>
