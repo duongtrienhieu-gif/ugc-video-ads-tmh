@@ -155,8 +155,10 @@ const proxyDownload = (url: string, name: string) => {
 }
 
 // ── Lưu state để F5 không mất (localStorage) ──
-const SAVE_KEY = 'source-finder-state-v2'
-interface Saved { name?: string; imageUrl?: string; pickId?: string; tab?: 'product' | 'scenes'; brief?: Brief | null; imgProducts?: ImgProduct[] | null; clipFor?: ClipFor | null; lanes?: Record<string, Lane>; msQ?: Record<string, string>; onlyShort?: boolean; platform?: Platform }
+const SAVE_KEY = 'source-finder-state-v3'
+// Mỗi tab có selection + nền tảng RIÊNG (productCF/productPlat cho Tab 1, sceneCF/scenePlat cho Tab 2) →
+// đổi tab KHÔNG ghi đè lẫn nhau, không mất kết quả. lanes là cache CHUNG (key "${cfKey}::${plat}") → không gọi lại API.
+interface Saved { name?: string; imageUrl?: string; pickId?: string; tab?: 'product' | 'scenes'; brief?: Brief | null; imgProducts?: ImgProduct[] | null; productCF?: ClipFor | null; sceneCF?: ClipFor | null; productPlat?: Platform; scenePlat?: Platform; lanes?: Record<string, Lane>; msQ?: Record<string, string>; onlyShort?: boolean }
 function readSaved(): Saved | null { try { return JSON.parse(localStorage.getItem(SAVE_KEY) || 'null') as Saved | null } catch { return null } }
 function clearSaved() { try { localStorage.removeItem(SAVE_KEY) } catch { /* */ } }
 
@@ -182,9 +184,10 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
   const [imgProducts, setImgProducts] = useState<ImgProduct[] | null>(saved?.imgProducts ?? null)
   const [imgBusy, setImgBusy] = useState(false)
   const [imgErr, setImgErr] = useState<string | null>(null)
-  // Clip (gắn ngữ cảnh: product/scene) — render inline đúng chỗ. Lanes cache theo "${key}::${platform}" nên
-  // đổi nền tảng KHÔNG mất kết quả: lane đã có thì hiện lại ngay, lane trống mới fetch.
-  const [clipFor, setClipFor] = useState<ClipFor | null>(saved?.clipFor ?? null)
+  // Selection RIÊNG từng tab → đổi tab không ghi đè nhau. Tab 1 = productCF, Tab 2 = sceneCF.
+  // lanes cache CHUNG theo "${cfKey}::${plat}" → đổi tab/nền tảng đều KHÔNG gọi lại API, không mất kết quả.
+  const [productCF, setProductCF] = useState<ClipFor | null>(saved?.productCF ?? null)
+  const [sceneCF, setSceneCF] = useState<ClipFor | null>(saved?.sceneCF ?? null)
   const [lanes, setLanes] = useState<Record<string, Lane>>(saved?.lanes ?? {})
   const [msQ, setMsQ] = useState<Record<string, string>>(saved?.msQ ?? {})   // từ khóa TikTok đã sinh (theo source key)
   const [clipsBusy, setClipsBusy] = useState(false)
@@ -192,29 +195,33 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
   const [moreBusy, setMoreBusy] = useState(false)
   const [msBusy, setMsBusy] = useState(false)   // đang sinh từ khóa EN/Malay cho clip SP trên TikTok
   const [onlyShort, setOnlyShort] = useState(saved?.onlyShort ?? true)   // chỉ clip <60s (hợp cắt B-roll)
-  const [platform, setPlatform] = useState<Platform>(saved?.platform ?? 'douyin')   // nguồn clip
+  const [productPlat, setProductPlat] = useState<Platform>(saved?.productPlat ?? 'douyin')   // nền tảng Tab 1
+  const [scenePlat, setScenePlat] = useState<Platform>(saved?.scenePlat ?? 'douyin')         // nền tảng Tab 2
   // Popup phát video + popup ảnh/video gốc 1688
   const [playVid, setPlayVid] = useState<PlayVid | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detail, setDetail] = useState<Detail | null>(null)
   const [detailBusy, setDetailBusy] = useState(false)
 
-  // Lưu state để F5 không mất (bỏ qua nếu quá quota → bỏ ảnh data URL nặng, rồi bỏ lanes nếu vẫn quá).
+  // Lưu state để F5 không mất. Ưu tiên giữ LANES (kết quả đã tốn tiền API) → khi quá quota thì bỏ ảnh data URL
+  // nặng trước (recoverable bằng chọn lại SP), chỉ bỏ lanes ở bước cuối cùng nếu vẫn không vừa.
   useEffect(() => {
-    const snap: Saved = { name, imageUrl, pickId, tab, brief, imgProducts, clipFor, lanes, msQ, onlyShort, platform }
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(snap)) }
-    catch {
-      try { localStorage.setItem(SAVE_KEY, JSON.stringify({ ...snap, imageUrl: imageUrl.startsWith('data:') ? '' : imageUrl })) }
-      catch { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ ...snap, imageUrl: imageUrl.startsWith('data:') ? '' : imageUrl, lanes: {} })) } catch { /* */ } }
-    }
-  }, [name, imageUrl, pickId, tab, brief, imgProducts, clipFor, lanes, msQ, onlyShort, platform])
+    const snap: Saved = { name, imageUrl, pickId, tab, brief, imgProducts, productCF, sceneCF, productPlat, scenePlat, lanes, msQ, onlyShort }
+    const noImg = imageUrl.startsWith('data:') ? '' : imageUrl
+    const tries: Saved[] = [snap, { ...snap, imageUrl: noImg }, { ...snap, imageUrl: noImg, imgProducts: null }, { ...snap, imageUrl: noImg, imgProducts: null, lanes: {} }]
+    for (const t of tries) { try { localStorage.setItem(SAVE_KEY, JSON.stringify(t)); break } catch { /* thử bản gọn hơn */ } }
+  }, [name, imageUrl, pickId, tab, brief, imgProducts, productCF, sceneCF, productPlat, scenePlat, lanes, msQ, onlyShort])
 
   const close = () => { clearSaved(); onClose() }
   const copy = (t: string) => { navigator.clipboard?.writeText(t); addToast('Đã copy', 'success') }
   const safe = (s: string) => (s || 'sp').replace(/[^\w]+/g, '-').slice(0, 24)
 
-  // Lane hiện tại (theo clipFor + nền tảng đang chọn).
-  const curLane: Lane | undefined = clipFor ? lanes[laneId(clipFor.key, platform)] : undefined
+  // Selection + nền tảng của TAB đang xem (derive theo tab → mọi logic dùng chung biến này).
+  const activeCF: ClipFor | null = tab === 'product' ? productCF : sceneCF
+  const platform: Platform = tab === 'product' ? productPlat : scenePlat
+  const setActivePlat = (p: Platform) => { if (tab === 'product') setProductPlat(p); else setScenePlat(p) }
+  // Lane hiện tại (theo selection của tab + nền tảng của tab).
+  const curLane: Lane | undefined = activeCF ? lanes[laneId(activeCF.key, platform)] : undefined
 
   // Truy vấn cho 1 nền tảng: TikTok → EN/Malay (sẵn từ scene/concept, hoặc sinh qua toMsTerms cho tên 1688).
   const queryForPlat = async (cf: ClipFor, plat: Platform): Promise<string> => {
@@ -259,22 +266,32 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
     } catch (e) { setClipsErr((e as Error).message) } finally { setClipsBusy(false); setMoreBusy(false) }
   }
 
-  // Mở 1 source → set context + fetch nền tảng đang chọn nếu lane chưa có.
+  // Mở 1 source → set selection ĐÚNG TAB (theo kind) + fetch nền tảng của tab đó nếu lane chưa có.
   const openSource = (cf: ClipFor) => {
-    setClipFor(cf); setClipsErr(null)
-    if (!lanes[laneId(cf.key, platform)]) void fetchLane(cf, platform, false)
+    const plat = cf.kind === 'product' ? productPlat : scenePlat
+    if (cf.kind === 'product') setProductCF(cf); else setSceneCF(cf)
+    setClipsErr(null)
+    if (!lanes[laneId(cf.key, plat)]) void fetchLane(cf, plat, false)
   }
-  // Đổi nền tảng: chỉ đổi view; lane đã cache thì giữ nguyên (không mất kết quả), trống mới fetch.
+  // Đổi nền tảng (trong tab đang xem): chỉ đổi view; lane đã cache thì giữ nguyên (không mất kết quả), trống mới fetch.
   const switchPlat = (next: Platform) => {
     if (next === platform) return
-    setPlatform(next); setClipsErr(null)
-    if (clipFor && !lanes[laneId(clipFor.key, next)]) void fetchLane(clipFor, next, false)
+    setActivePlat(next); setClipsErr(null)
+    if (activeCF && !lanes[laneId(activeCF.key, next)]) void fetchLane(activeCF, next, false)
   }
-  const loadMoreClips = () => { if (clipFor && curLane?.hasMore && !moreBusy) void fetchLane(clipFor, platform, true) }
-  // Đổi lọc độ dài → maxSec đổi → mọi lane cũ vô nghĩa → xoá hết, fetch lại nền hiện tại.
+  const loadMoreClips = () => { if (activeCF && curLane?.hasMore && !moreBusy) void fetchLane(activeCF, platform, true) }
+  // Đổi tab: KHÔNG đụng selection/lane của tab kia (giữ nguyên kết quả). Chỉ fetch nếu lane của tab đích trống.
+  const goTab = (next: 'product' | 'scenes') => {
+    if (next === tab) return
+    setTab(next); setClipsErr(null)
+    const cf = next === 'product' ? productCF : sceneCF
+    const plat = next === 'product' ? productPlat : scenePlat
+    if (cf && !lanes[laneId(cf.key, plat)]) void fetchLane(cf, plat, false)
+  }
+  // Đổi lọc độ dài → maxSec đổi → mọi lane cũ vô nghĩa → xoá hết, fetch lại cho selection của tab hiện tại.
   const changeOnlyShort = (v: boolean) => {
     setOnlyShort(v); setLanes({})
-    if (clipFor) void fetchLane(clipFor, platform, false)
+    if (activeCF) void fetchLane(activeCF, platform, false)
   }
 
   const findByImage = async () => {
@@ -310,7 +327,7 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
     setPickId(id)
     const p = products.find((x) => x.id === id)
     if (!p) return
-    setName(p.productName || ''); setBrief(null); setImgProducts(null); setClipFor(null); setLanes({})
+    setName(p.productName || ''); setBrief(null); setImgProducts(null); setProductCF(null); setSceneCF(null); setLanes({})
     const raw = p.productImages?.[0] || ''
     if (isAssetRef(raw)) { const a = await getAsBase64(raw); setImageUrl(a ? `data:${a.mimeType};base64,${a.base64}` : '') }
     else setImageUrl(raw)
@@ -318,14 +335,14 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
   const onPickFile = (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]; if (!f) return
     const rd = new FileReader()
-    rd.onload = () => { setImageUrl(String(rd.result || '')); setPickId(''); setBrief(null); setImgProducts(null); setClipFor(null); setLanes({}) }
+    rd.onload = () => { setImageUrl(String(rd.result || '')); setPickId(''); setBrief(null); setImgProducts(null); setProductCF(null); setSceneCF(null); setLanes({}) }
     rd.readAsDataURL(f)
   }
 
   const genBrief = async () => {
     if (!name.trim() && !imageUrl) { setErr('Chọn SP từ Kho, gõ tên, hoặc tải ảnh lên'); return }
     if (!geminiApiKey) { setErr('Cần Gemini API key trong Cài đặt'); return }
-    setBusy(true); setErr(null); setBrief(null); setClipFor(null); setLanes({})
+    setBusy(true); setErr(null); setBrief(null); setProductCF(null); setSceneCF(null); setLanes({})
     try {
       const label = name.trim() || '(không cho tên — TỰ NHẬN DIỆN sản phẩm từ ảnh)'
       const prompt = `Bạn là đạo diễn B-roll cho quảng cáo COD bán ở Malaysia. Sản phẩm: "${label}".${imageUrl ? ' (Có ảnh sản phẩm kèm theo — NHÌN ẢNH để nhận diện đúng sản phẩm; nếu không có tên thì dựa hoàn toàn vào ảnh.)' : ''}
@@ -362,11 +379,11 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không lung linh điện ảnh. CHỈ 
     return (
       <div className="mt-2">
         {/* Nền tảng nguồn — đổi nền tảng KHÔNG mất kết quả (cache theo lane). */}
-        {clipFor && (
+        {activeCF && (
           <div className="mb-2 flex flex-wrap items-center gap-1">
             <span className="mr-1 text-[10px] font-bold text-app-subtle">Nguồn:</span>
             {PLATS.map((p) => {
-              const n = lanes[laneId(clipFor.key, p.id)]?.clips.length ?? 0
+              const n = lanes[laneId(activeCF.key, p.id)]?.clips.length ?? 0
               return (
                 <button key={p.id} onClick={() => switchPlat(p.id)}
                   className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold ${platform === p.id ? 'ui-accent-soft' : 'border border-app-border bg-app-card text-app-muted hover:bg-app-card-elevated'}`}
@@ -464,8 +481,8 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không lung linh điện ảnh. CHỈ 
 
         {/* Tabs */}
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-app-border bg-app-card px-4 py-2">
-          <button onClick={() => setTab('product')} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'product' ? 'ui-accent-soft' : 'text-app-muted'}`}><Film className="h-3.5 w-3.5" /> Clip có SP</button>
-          <button onClick={() => setTab('scenes')} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'scenes' ? 'ui-accent-soft' : 'text-app-muted'}`}><Clapperboard className="h-3.5 w-3.5" /> Cảnh B-roll liên quan</button>
+          <button onClick={() => goTab('product')} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'product' ? 'ui-accent-soft' : 'text-app-muted'}`}><Film className="h-3.5 w-3.5" /> Clip có SP</button>
+          <button onClick={() => goTab('scenes')} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'scenes' ? 'ui-accent-soft' : 'text-app-muted'}`}><Clapperboard className="h-3.5 w-3.5" /> Cảnh B-roll liên quan</button>
           <label className="ml-auto flex items-center gap-1.5 text-[11px] font-medium text-app-muted" title="Chỉ lấy clip ngắn để cắt B-roll">
             <input type="checkbox" checked={onlyShort} onChange={(e) => changeOnlyShort(e.target.checked)} /> ⏱ Chỉ clip &lt;60s
           </label>
@@ -501,7 +518,7 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không lung linh điện ảnh. CHỈ 
                   {imgProducts && imgProducts.length > 0 && (
                     <div className="flex gap-2 overflow-x-auto pb-1">
                       {imgProducts.map((p) => (
-                        <div key={p.itemId} className={`flex w-[150px] shrink-0 flex-col overflow-hidden rounded-xl border bg-app-card ${clipFor?.kind === 'product' && clipFor.key === p.itemId ? 'border-app-border-strong ring-1 ring-accent' : 'border-app-border'}`}>
+                        <div key={p.itemId} className={`flex w-[150px] shrink-0 flex-col overflow-hidden rounded-xl border bg-app-card ${productCF?.key === p.itemId ? 'border-app-border-strong ring-1 ring-accent' : 'border-app-border'}`}>
                           <button onClick={() => openSource(productSource(p))} className="relative block aspect-square bg-black" title="Xem clip SP này">
                             {p.image ? <img src={p.image} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
                             {p.sold ? <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1 text-[10px] font-bold text-white">🔥 {p.sold}/90d</span> : null}
@@ -520,9 +537,9 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không lung linh điện ảnh. CHỈ 
                   )}
 
                   {/* Clip của SP đang chọn */}
-                  {clipFor?.kind === 'product' && (
+                  {productCF && (
                     <div>
-                      <div className="mb-1 text-[11px] font-bold text-app-muted">🎬 Clip {platLabel(platform)}: {clipFor.label}{curLane ? ` · ${curLane.clips.length}` : ''}</div>
+                      <div className="mb-1 text-[11px] font-bold text-app-muted">🎬 Clip {platLabel(platform)}: {productCF.label}{curLane ? ` · ${curLane.clips.length}` : ''}</div>
                       {clipGrid()}
                     </div>
                   )}
@@ -547,7 +564,7 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không lung linh điện ảnh. CHỈ 
                 <div className="flex flex-col gap-3">
                   {brief.scenes.map((s, i) => {
                     const key = `scene-${i}`
-                    const open = clipFor?.kind === 'scene' && clipFor.key === key
+                    const open = sceneCF?.key === key
                     return (
                       <div key={i} className="rounded-xl border border-app-border bg-app-card p-3">
                         <div className="mb-1.5 flex flex-wrap items-center gap-2">
