@@ -435,6 +435,9 @@ export async function synthSceneVoice(
   return { audioRef, audioBytes, voiceSec, frames }
 }
 
+// Bộ đếm tăng dần → token tên file ffmpeg DUY NHẤT mỗi lần mux (chống đụng khi pool song song).
+let muxSeq = 0
+
 /** BƯỚC GHÉP: pad-fit 9:16 nền blur + voiceover + overlay karaoke vào clip i2v (ffmpeg, 0cr). */
 export async function muxSceneVoiceover(
   p: { clipRef: string; voice: SceneVoice; scene: PersonifiedScene; signal?: AbortSignal },
@@ -448,12 +451,16 @@ export async function muxSceneVoiceover(
   const voiceSec = Math.max(0.5, p.voice.voiceSec || p.scene.clipDuration)
   const ffmpeg = await getFFmpeg()
   const W = 720, H = 1280
-  const vIn = 'vo_in.mp4', aIn = 'vo_in.mp3', out = 'vo_out.mp4'
+  // ⚠ TÊN FILE DUY NHẤT mỗi lần mux: ffmpeg.wasm chung 1 FS, execLock chỉ serialize exec()
+  // chứ KHÔNG serialize writeFile/readFile → pool 3 chạy song song mà dùng tên cố định sẽ
+  // GHI ĐÈ input của nhau → ra video TRÙNG. Token = idx + seq tăng dần → không bao giờ đụng.
+  const u = `${p.scene.idx}_${++muxSeq}`
+  const vIn = `vo_in_${u}.mp4`, aIn = `vo_in_${u}.mp3`, out = `vo_out_${u}.mp4`
   await ffmpeg.writeFile(vIn, await fetchFile(clipUrl))
   await ffmpeg.writeFile(aIn, audioBytes)
   const capFiles: string[] = []
   for (let i = 0; i < frames.length; i++) {
-    const f = `vo_c${i}.png`
+    const f = `vo_c${u}_${i}.png`
     await ffmpeg.writeFile(f, frames[i].png)
     capFiles.push(f)
   }
