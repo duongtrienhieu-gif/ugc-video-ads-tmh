@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   FolderOpen, Mic, RefreshCw, Trash2, Loader2,
-  Library, Sliders, RotateCcw, AudioLines, Plus,
+  Library, Sliders, RotateCcw, AudioLines, Plus, Play, Pause,
 } from 'lucide-react'
 import type { VoiceSettings, Gender, VoiceOption } from '../types'
 import { useSettingsStore } from '../../../stores/settingsStore'
@@ -71,6 +71,8 @@ export default function ControlsSidebar({
   const [libraryVoices, setLibraryVoices] = useState<VoiceOption[]>([])
   const [isLoading, setIsLoading]         = useState(false)
   const [addingVoiceId, setAddingVoiceId] = useState<string | null>(null)
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const hasElevenLabsKey = useSettingsStore((s) => s.hasElevenLabsKey())
   const addToast = useAppStore((s) => s.addToast)
@@ -148,6 +150,26 @@ export default function ControlsSidebar({
   const selectVoice = (voice: VoiceOption) => {
     onSettingsChange({ ...settings, voiceId: voice.voiceId, voiceName: voice.name, gender: voice.gender })
   }
+
+  // Preview a voice's sample audio without selecting it (mirrors the Library modal).
+  const handlePreviewVoice = (e: React.MouseEvent, voice: VoiceOption) => {
+    e.stopPropagation()
+    if (!voice.previewUrl) return
+    if (playingVoiceId === voice.voiceId) {
+      audioRef.current?.pause()
+      setPlayingVoiceId(null)
+      return
+    }
+    audioRef.current?.pause()
+    const audio = new Audio(voice.previewUrl)
+    audio.onended = () => setPlayingVoiceId(null)
+    audio.play().catch(() => setPlayingVoiceId(null))
+    audioRef.current = audio
+    setPlayingVoiceId(voice.voiceId)
+  }
+
+  // Stop any preview playback when the component unmounts.
+  useEffect(() => () => { audioRef.current?.pause(); audioRef.current = null }, [])
 
   const handleGenderSwitch = (gender: Gender) => {
     if (gender === settings.gender) return
@@ -317,9 +339,18 @@ export default function ControlsSidebar({
                       isActive ? 'bg-indigo-500 text-white shadow-sm' : 'hover:bg-white'
                     }`}
                   >
-                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                      isActive ? 'bg-white' : isCloned ? 'bg-emerald-400' : 'bg-amber-400'
-                    }`} />
+                    <button
+                      onClick={(e) => handlePreviewVoice(e, voice)}
+                      disabled={!voice.previewUrl}
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-30 ${
+                        isActive ? 'bg-white/20 text-white hover:bg-white/30'
+                        : isCloned ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
+                        : 'bg-amber-100 text-amber-600 hover:bg-amber-200'
+                      }`}
+                      title="Nghe thử"
+                    >
+                      {playingVoiceId === voice.voiceId ? <Pause className="h-2.5 w-2.5" /> : <Play className="h-2.5 w-2.5 translate-x-[0.5px]" />}
+                    </button>
                     <span className={`min-w-0 flex-1 truncate text-[11px] font-medium ${isActive ? 'text-white' : 'text-slate-700'}`}>
                       {voice.name}
                     </span>
@@ -362,7 +393,14 @@ export default function ControlsSidebar({
                     key={voice.voiceId}
                     className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-white"
                   >
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300" />
+                    <button
+                      onClick={(e) => handlePreviewVoice(e, voice)}
+                      disabled={!voice.previewUrl}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition-colors hover:bg-slate-300 disabled:opacity-30"
+                      title="Nghe thử"
+                    >
+                      {playingVoiceId === voice.voiceId ? <Pause className="h-2.5 w-2.5" /> : <Play className="h-2.5 w-2.5 translate-x-[0.5px]" />}
+                    </button>
                     <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">
                       {voice.name}
                     </span>
