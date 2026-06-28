@@ -53,6 +53,14 @@ const DEFAULT_CONFIG: PersonifiedConfig = {
   falseSolution: true, ctaStyle: 'villain_flees',
 }
 
+/** 1 giọng ElevenLabs có hợp ngôn ngữ thị trường đích không (đọc nhãn/tên/mô tả). */
+function voiceMatchesMarket(v: ElevenLabsVoice, market: TargetMarket): boolean {
+  const lang = (v.labels?.language ?? '').toLowerCase()
+  const hay = `${v.name} ${v.description ?? ''} ${Object.values(v.labels ?? {}).join(' ')}`.toLowerCase()
+  if (market === 'VN') return lang === 'vi' || /viet|việt|tiếng việt/.test(hay)
+  return lang === 'ms' || lang === 'id' || /malay|melayu|indones|bahasa/.test(hay)
+}
+
 // Persist toàn bộ input + kết quả vào localStorage → chuyển tab mode (unmount) /
 // F5 không mất việc. KHÔNG lưu cờ loading (analyzing/generating) — chúng là transient.
 const CACHE_KEY = 'personified-state-v1'
@@ -112,6 +120,9 @@ export default function Personified() {
   const kfResume = useRef<number[]>([])
   // Clip i2v đang chạy lúc F5 → NỐI LẠI job đã trả tiền (poll taskId, 0 credit thêm).
   const clipResume = useRef<{ idx: number; taskId: string }[]>([])
+  // Auto-match giọng theo thị trường: nhớ các nhân vật đã gán TỰ ĐỘNG + market lần cuối.
+  const autoVoiced = useRef<Set<string>>(new Set())
+  const lastVoiceMarket = useRef<TargetMarket | null>(null)
   // Xem to (lightbox) ảnh keyframe / video clip khi bấm thumbnail.
   const [zoom, setZoom] = useState<{ isVideo: boolean; ref: string } | null>(null)
   // P2e — Thư viện video đã lưu.
@@ -253,6 +264,36 @@ export default function Personified() {
   async function refreshMyVoices() {
     try { setMyVoices(await listVoices(elevenKey)) } catch { /* offline */ }
   }
+
+  // Auto-GỢI-Ý giọng theo thị trường đích: gán distinct cho mỗi nhân vật giọng hợp ngôn
+  // ngữ (VN/MY) từ thư viện. Đổi market → gán lại (chỉ các giọng AUTO; GIỮ giọng user tự
+  // chọn). Nhân vật user đã chọn (kể cả "Tự động"=rỗng) thì tôn trọng, không đè.
+  useEffect(() => {
+    if (!script || !myVoices.length) return
+    setCharVoices((prev) => {
+      const next = { ...prev }
+      if (lastVoiceMarket.current !== null && lastVoiceMarket.current !== market) {
+        for (const n of autoVoiced.current) if (next[n] !== undefined) delete next[n]
+        autoVoiced.current = new Set()
+      }
+      lastVoiceMarket.current = market
+      const matched = myVoices.filter((v) => voiceMatchesMarket(v, market))
+      if (!matched.length) return next
+      const used = new Set(Object.values(next).filter(Boolean))
+      let mi = 0
+      for (const ch of script.characters) {
+        if (next[ch.name] !== undefined) continue   // user/auto đã đụng → tôn trọng
+        while (mi < matched.length && used.has(matched[mi].voice_id)) mi++
+        if (mi >= matched.length) break
+        next[ch.name] = matched[mi].voice_id
+        used.add(matched[mi].voice_id)
+        autoVoiced.current.add(ch.name)
+        mi++
+      }
+      return next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [script, myVoices, market])
   // Nghe thử 1 giọng (TTS 1 câu mẫu eleven_v3).
   async function handlePreviewVoice(charName: string, voiceId: string) {
     if (!elevenKey || !voiceId || previewingVoice) return
@@ -956,6 +997,13 @@ export default function Personified() {
                                     {previewingVoice === ch.name ? '⏳ đang phát…' : '🔊 Thử'}</button>
                                 )}
                               </div>
+                              {elevenKey && charVoices[ch.name] && (
+                                myVoices.find((v) => v.voice_id === charVoices[ch.name] && voiceMatchesMarket(v, market))
+                                  ? <span className="mt-0.5 block text-[10px] font-semibold text-emerald-600">⭐ Giọng hợp {isVN ? 'Việt Nam' : 'Malaysia'}{autoVoiced.current.has(ch.name) ? ' (AI gợi ý)' : ''}</span>
+                                  : <span className="mt-0.5 block text-[10px] text-amber-600">⚠ Giọng này có thể không phải tiếng {isVN ? 'Việt' : 'Mã'}</span>
+                              )}
+                              {elevenKey && myVoices.length > 0 && !myVoices.some((v) => voiceMatchesMarket(v, market)) &&
+                                <span className="mt-0.5 block text-[10px] text-amber-600">Thư viện chưa có giọng {isVN ? 'Việt' : 'Mã'} → bấm 📚 Thư viện thêm</span>}
                               {!elevenKey && <span className="text-[10px] text-amber-600">cần ElevenLabs key trong Cài đặt</span>}
                             </div>
                           </div>
