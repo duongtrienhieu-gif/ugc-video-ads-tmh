@@ -7,7 +7,7 @@ const GIFT_ROLES = new Set(['CỨU', 'QUÀ', 'NGỦ']) // hàng cần thoát (kh
 
 export interface GiftMaster { name: string; vaiTro: string; ngach: string; ton: number; vonSp: number }
 export interface GiftCat { ngach: string; maChinh: string; quaCheo: string; vonQua: number; tonQua: number; marketer: string }
-export interface Live { hoanPct: number; adsPct: number; vonReal: number }
+export interface Live { hoanPct: number; adsPct: number; vonReal: number; chotPct: number }
 export type Tone = 'red' | 'amber' | 'green' | 'muted'
 
 export interface Tier { loai: string; mua: number; tangChinh: number; quaCheo: number; pctDon: number; giaRM: number }
@@ -19,14 +19,14 @@ export const DEFAULT_TIERS: Tier[] = [
 ]
 export const cloneTiers = () => DEFAULT_TIERS.map((t) => ({ ...t }))
 
-export interface GiftOption { name: string; ton: number; vonKet: number; stuck: boolean }
-// quà ứng viên = SP CÙNG NGÁCH (khác SP chính), ưu tiên hàng cần thoát + vốn kẹt cao
+export interface GiftOption { name: string; ton: number; vonKet: number; stuck: boolean; sameNiche: boolean; ngach: string }
+// quà ứng viên = TẤT CẢ hàng còn tồn; ưu tiên CÙNG NGÁCH + hàng cần thoát (vốn kẹt cao) lên đầu
 export function giftOptions(ngach: string, master: GiftMaster[], excludeUpper: string): GiftOption[] {
+  const rank = (o: { sameNiche: boolean; stuck: boolean }) => (o.sameNiche ? 0 : 2) + (o.stuck ? 0 : 1)
   return master
-    .filter((m) => m.ngach === ngach && m.name.trim().toUpperCase() !== excludeUpper && m.ton > 200)
-    .map((m) => ({ name: m.name, ton: m.ton, vonKet: m.ton * m.vonSp, stuck: GIFT_ROLES.has(m.vaiTro.toUpperCase()) }))
-    .sort((a, b) => (a.stuck === b.stuck ? 0 : a.stuck ? -1 : 1) || b.vonKet - a.vonKet)
-    .slice(0, 8)
+    .filter((m) => m.name.trim().toUpperCase() !== excludeUpper && m.ton > 0)
+    .map((m) => ({ name: m.name, ton: m.ton, vonKet: m.ton * m.vonSp, stuck: GIFT_ROLES.has(m.vaiTro.toUpperCase()), sameNiche: m.ngach === ngach, ngach: m.ngach }))
+    .sort((a, b) => rank(a) - rank(b) || b.vonKet - a.vonKet)
 }
 
 export interface TierCalc extends Tier { aov: number; vonGiao: number; laiDon: number; laiPct: number }
@@ -36,7 +36,7 @@ export interface Plan {
   gift: GiftOption | null
   options: GiftOption[]
   tiers: TierCalc[]
-  aovW: number; laiDonW: number; laiPctW: number; cpqcTarget: number
+  aovW: number; laiDonW: number; laiPctW: number; cpqcTarget: number; cpaTarget: number; chot: number
   quaTB: number; chinhTB: number; soDonMaxQua: number; soDonMaxChinh: number; soDonMax: number
   den: { t: string; tone: Tone }
 }
@@ -54,6 +54,7 @@ export function computePlan(cat: GiftCat, master: GiftMaster[], live: Live | und
   const mainM = master.find((m) => m.name.trim().toUpperCase() === upper)
   const hoan = live?.hoanPct ?? 0.35
   const ads = live?.adsPct ?? 0.30
+  const chot = live?.chotPct && live.chotPct > 0 ? live.chotPct : 0.7 // tỉ lệ chốt — để suy CPA/lead
   const vonChinh = mainM?.vonSp || live?.vonReal || 0
   const mainTon = mainM?.ton ?? 0
   const options = giftOptions(cat.ngach, master, upper)
@@ -74,6 +75,8 @@ export function computePlan(cat: GiftCat, master: GiftMaster[], live: Live | und
   const vonNetW = tc.reduce((s, t) => s + t.pctDon * t.vonGiao * (1 - hoan), 0) / sumP
   const laiPctW = aovW > 0 ? laiDonW / aovW : 0
   const cpqcTarget = 1 - LN_TARGET - (aovW > 0 ? vonNetW / aovW : 0) - SHIP - VH - hoan
+  // CPA/lead mục tiêu = (ads/đơn chốt tối đa) × tỉ lệ chốt = %CPQC ngưỡng × AOV × chốt%
+  const cpaTarget = Math.max(0, cpqcTarget) * aovW * chot
   const quaTB = tc.reduce((s, t) => s + t.pctDon * t.quaCheo, 0) / sumP
   const chinhTB = tc.reduce((s, t) => s + t.pctDon * (t.mua + t.tangChinh), 0) / sumP
   const soDonMaxQua = gift && quaTB > 0 ? Math.max(0, Math.floor(gift.ton / quaTB)) : Infinity
@@ -83,7 +86,7 @@ export function computePlan(cat: GiftCat, master: GiftMaster[], live: Live | und
   return {
     main: cat.maChinh, ngach: cat.ngach, marketer: cat.marketer || '—',
     hoan, ads, vonChinh, mainTon, gift, options, tiers: tc,
-    aovW, laiDonW, laiPctW, cpqcTarget, quaTB, chinhTB, soDonMaxQua, soDonMaxChinh, soDonMax,
+    aovW, laiDonW, laiPctW, cpqcTarget, cpaTarget, chot, quaTB, chinhTB, soDonMaxQua, soDonMaxChinh, soDonMax,
     den: den(laiPctW, hoan, ads, cpqcTarget),
   }
 }

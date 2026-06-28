@@ -16,7 +16,7 @@ const fmtInt = (n: number) => (Number.isFinite(n) ? Math.round(n).toLocaleString
 const panelStyle: React.CSSProperties = { background: C.panel, border: `1px solid ${C.line}`, borderRadius: 14, padding: '14px 16px', marginBottom: 12 }
 const eyebrowStyle: React.CSSProperties = { fontSize: 13, fontWeight: 700, letterSpacing: 0.3, color: C.gold }
 const MKT_ORDER = ['KHÁNH', 'HÀ', 'ANH', 'DUY', 'TUẤN']
-interface Prod { name: string; pctHoan: number; pctCpqc: number }
+interface Prod { name: string; pctHoan: number; pctCpqc: number; pctChot: number }
 
 export default function GiftCombo({ products, giftLink }: { products: Prod[]; giftLink: string }) {
   const [isMobile, setIsMobile] = useState(false)
@@ -47,7 +47,7 @@ export default function GiftCombo({ products, giftLink }: { products: Prod[]; gi
 
   const liveMap = useMemo(() => {
     const m: Record<string, Live> = {}
-    products.forEach((p) => { m[p.name.trim().toUpperCase()] = { hoanPct: p.pctHoan, adsPct: p.pctCpqc, vonReal: 0 } })
+    products.forEach((p) => { m[p.name.trim().toUpperCase()] = { hoanPct: p.pctHoan, adsPct: p.pctCpqc, vonReal: 0, chotPct: p.pctChot } })
     return m
   }, [products])
 
@@ -135,7 +135,7 @@ export default function GiftCombo({ products, giftLink }: { products: Prod[]; gi
                   <select value={p.gift?.name ?? ''} onChange={(e) => setGift(k, e.target.value)}
                     style={{ background: C.panel2, border: `1px solid ${C.line}`, color: C.text, borderRadius: 8, padding: '7px 10px', fontSize: 13, minWidth: 200, flex: isMobile ? '1 1 100%' : undefined }}>
                     {p.options.length === 0 && <option value="">(không có SP cùng ngách còn tồn)</option>}
-                    {p.options.map((o) => <option key={o.name} value={o.name}>{o.stuck ? '🔴 ' : ''}{o.name} — tồn {fmtInt(o.ton)} · kẹt {fmtMoney(o.vonKet)}</option>)}
+                    {p.options.map((o) => <option key={o.name} value={o.name}>{o.stuck ? '🔴 ' : ''}{o.name}{o.sameNiche ? '' : ` (${o.ngach})`} — tồn {fmtInt(o.ton)} · kẹt {fmtMoney(o.vonKet)}</option>)}
                   </select>
                   {p.gift && <span style={{ fontSize: 11, color: C.muted2 }}>tồn quà {fmtInt(p.gift.ton)} → thoát {fmtMoney(p.gift.vonKet)} vốn kẹt</span>}
                 </div>
@@ -153,6 +153,14 @@ export default function GiftCombo({ products, giftLink }: { products: Prod[]; gi
                       <div style={{ fontSize: 15, fontWeight: 600, color: s.c, whiteSpace: 'nowrap' }}>{s.v}</div>
                     </div>
                   ))}
+                </div>
+
+                {/* 🎯 MỤC TIÊU ADS — quan trọng nhì sau lợi nhuận, cho MKT care ads */}
+                <div style={{ marginTop: 10, background: 'rgba(245,196,81,0.10)', border: '1px solid #4a4015', borderRadius: 10, padding: '10px 14px', display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: C.gold, fontWeight: 700, letterSpacing: 0.3, whiteSpace: 'nowrap' }}>🎯 MỤC TIÊU ADS (đạt lãi 10%)</span>
+                  <span style={{ fontSize: 13, color: C.muted2, whiteSpace: 'nowrap' }}>%CPQC ≤ <b style={{ color: p.cpaTarget > 0 ? C.green : C.red, fontSize: 19 }}>{fmtPct(Math.max(0, p.cpqcTarget))}</b></span>
+                  <span style={{ fontSize: 13, color: C.muted2, whiteSpace: 'nowrap' }}>CPA ≤ <b style={{ color: p.cpaTarget > 0 ? C.green : C.red, fontSize: 19 }}>{p.cpaTarget > 0 ? fmtMoney(p.cpaTarget) + '/lead' : 'không khả thi'}</b></span>
+                  <span style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', marginLeft: 'auto' }}>đang chạy CPQC {fmtPct(p.ads)} · chốt {fmtPct(p.chot)}</span>
                 </div>
 
                 <button onClick={() => setOpen((o) => ({ ...o, [k]: !isOpen }))} style={{ marginTop: 10, background: 'transparent', color: C.gold, border: `1px solid ${C.line}`, borderRadius: 8, padding: '6px 12px', fontSize: 12.5, cursor: 'pointer' }}>
