@@ -49,12 +49,17 @@ const fmtSec = (n: number) => `~${n}s`
 
 // ── Source clip plumbing (mirrors Research → SourceFinder) ───────────────
 type Platform = 'douyin' | 'xhs' | 'kuaishou'
+// Search priority (operator-rated): RED 📕 best, Kuaishou ⚡ good, Douyin 🎵 worst → last.
+// We query ALL three at once and merge results in this order.
+const PLAT_PRIORITY: Platform[] = ['xhs', 'kuaishou', 'douyin']
 const PLATS: { id: Platform; label: string; emoji: string }[] = [
-  { id: 'douyin', label: 'Douyin', emoji: '🎵' },
   { id: 'xhs', label: 'RED', emoji: '📕' },
   { id: 'kuaishou', label: 'Kuaishou', emoji: '⚡' },
+  { id: 'douyin', label: 'Douyin', emoji: '🎵' },
 ]
-const platLabel = (p: string) => PLATS.find((x) => x.id === p)?.label ?? 'Douyin'
+const platLabel = (p: string) => PLATS.find((x) => x.id === p)?.label ?? p
+// How many clips each "Tải thêm" press reveals.
+const SOURCE_PAGE = 10
 const proxyInline = (url: string) => `/api/dl-video?url=${encodeURIComponent(url)}&inline=1`
 const proxyDownload = (url: string, name: string) => {
   const href = `/api/dl-video?url=${encodeURIComponent(url)}&name=${encodeURIComponent(name)}`
@@ -84,9 +89,9 @@ const matchForFill = (fill: ShotFill): Shot['matchMode'] => (fill === 'source-pr
 export default function ShotPlanPanel({
   plan, productName, product, isBuilding, onChange, onRebuild, onLanguageChange, onBack,
 }: ShotPlanPanelProps) {
-  // Source-clip controls (panel-wide): which platform to search, length filter,
-  // and the full-screen video preview popup.
-  const [platform, setPlatform] = useState<Platform>('douyin')
+  // Source-clip controls (panel-wide): length filter + the full-screen preview
+  // popup. Platform is no longer a single choice — every search hits all three
+  // platforms and merges by priority (RED › Kuaishou › Douyin).
   const [onlyShort, setOnlyShort] = useState(true)
   const [playClip, setPlayClip] = useState<SourceClip | null>(null)
 
@@ -215,20 +220,12 @@ export default function ShotPlanPanel({
           <span className="hidden sm:inline">· dòng <b>{primaryFlag}</b> = chính, <b>{glossFlag}</b> = phụ · từ khóa source = <b className="text-app-muted">tiếng Trung 🇨🇳</b></span>
         </div>
 
-        {/* Source-clip controls */}
+        {/* Source-clip controls — searches all 3 platforms, priority order */}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-bold text-app-subtle">Nguồn clip:</span>
-          <div className="flex items-center gap-0.5 rounded-lg border border-app-border bg-app-card-elevated p-0.5">
-            {PLATS.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setPlatform(p.id)}
-                className={`rounded px-2 py-0.5 text-[11px] font-bold ${platform === p.id ? 'ui-accent-soft' : 'text-app-muted hover:bg-app-card'}`}
-              >
-                {p.emoji} {p.label}
-              </button>
-            ))}
-          </div>
+          <span className="rounded-lg border border-app-border bg-app-card-elevated px-2 py-0.5 text-[11px] font-bold text-app-muted" title="Mỗi lần tìm sẽ quét cả 3 nền và gộp theo thứ tự ưu tiên này">
+            🔍 cả 3 nền · 📕 RED › ⚡ Kuaishou › 🎵 Douyin
+          </span>
           <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-app-muted" title="Chỉ lấy clip ngắn, hợp cắt ghép">
             <input type="checkbox" checked={onlyShort} onChange={(e) => setOnlyShort(e.target.checked)} /> ⏱ Chỉ clip &lt;60s
           </label>
@@ -269,7 +266,6 @@ export default function ShotPlanPanel({
                 onMergeDown={() => mergeDown(i)}
                 onSplit={() => splitShot(i)}
                 onRemove={() => removeShot(s.id)}
-                platform={platform}
                 onlyShort={onlyShort}
                 onPlay={setPlayClip}
                 onPickClip={(c) => patchShot(s.id, { clip: c })}
@@ -342,7 +338,6 @@ interface ShotCardProps {
   onSplit: () => void
   onRemove: () => void
   // Source-clip wiring (B3)
-  platform: Platform
   onlyShort: boolean
   onPlay: (c: SourceClip) => void
   onPickClip: (c: SourceClip) => void
@@ -496,7 +491,6 @@ function ShotCard(p: ShotCardProps) {
         ) : (
           <ShotSourcePicker
             shot={shot}
-            platform={p.platform}
             onlyShort={p.onlyShort}
             onPlay={p.onPlay}
             onPickClip={p.onPickClip}
@@ -516,7 +510,8 @@ function ShotCard(p: ShotCardProps) {
 
 interface TikhubResponse {
   clips: SourceClip[]
-  cursor?: number
+  /** Opaque next-page token — STRING (Kuaishou pcursor token, XHS page no., Douyin cursor). */
+  cursor?: string
   hasMore?: boolean
   error?: string
   detail?: string
@@ -525,36 +520,99 @@ interface TikhubResponse {
 
 interface ShotSourcePickerProps {
   shot: Shot
-  platform: Platform
   onlyShort: boolean
   onPlay: (c: SourceClip) => void
   onPickClip: (c: SourceClip) => void
   onClearClip: () => void
 }
 
+type PlatBuckets = Record<Platform, SourceClip[]>
+const emptyBuckets = (): PlatBuckets => ({ xhs: [], kuaishou: [], douyin: [] })
+
 function ShotSourcePicker(p: ShotSourcePickerProps) {
   const { shot } = p
+  // Fetched clips grouped per platform + per-platform pagination state. The pool
+  // (all clips, priority-ordered) is derived; `shown` is how many we reveal.
+  const [byPlat, setByPlat] = useState<PlatBuckets>(emptyBuckets)
+  const [cursor, setCursor] = useState<Partial<Record<Platform, string>>>({})
+  const [hasMore, setHasMore] = useState<Record<Platform, boolean>>({ xhs: true, kuaishou: true, douyin: true })
+  const [shown, setShown] = useState(0)
   const [busy, setBusy] = useState(false)
-  const [clips, setClips] = useState<SourceClip[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
 
   const query = (shot.zhQuery || '').trim() || (shot.visualIdea || '').trim()
 
-  const search = async () => {
+  // Pool = every fetched clip, ordered RED › Kuaishou › Douyin (priority), keeping
+  // each platform's API order (by likes) inside its group. `visible` = first `shown`.
+  const pool: SourceClip[] = [...byPlat.xhs, ...byPlat.kuaishou, ...byPlat.douyin]
+  const poolLen = pool.length
+  const visible = pool.slice(0, shown)
+  const anyHasMore = PLAT_PRIORITY.some((pl) => hasMore[pl])
+
+  const fetchPlat = async (pl: Platform, cur: string | undefined): Promise<TikhubResponse> => {
+    const curParam = cur ? `&cursor=${encodeURIComponent(cur)}` : ''
+    const url = `/api/tikhub-search?q=${encodeURIComponent(query)}&platform=${pl}&sort=like&maxSec=${p.onlyShort ? 60 : 0}${curParam}`
+    const res = await fetch(url)
+    return (await res.json()) as TikhubResponse
+  }
+
+  // Ensure the pool holds at least `target` clips — fetching the next page from
+  // each platform (priority order, in parallel) until full or all platforms dry —
+  // then reveal up to `target`. reset=true starts a fresh search.
+  const ensureAndShow = async (reset: boolean) => {
     if (!query) { setErr('Chưa có từ khóa tiếng Trung để tìm.'); return }
     setBusy(true); setErr(null); setOpen(true)
     try {
-      const url = `/api/tikhub-search?q=${encodeURIComponent(query)}&platform=${p.platform}&sort=like&maxSec=${p.onlyShort ? 60 : 0}`
-      const res = await fetch(url)
-      const data = (await res.json()) as TikhubResponse
-      if (data.error) { setErr(data.detail || data.error); setClips([]) }
-      else setClips(Array.isArray(data.clips) ? data.clips : [])
+      let nByPlat: PlatBuckets = reset ? emptyBuckets() : { ...byPlat }
+      const nCursor: Partial<Record<Platform, string>> = reset ? {} : { ...cursor }
+      const nHasMore: Record<Platform, boolean> = reset
+        ? { xhs: true, kuaishou: true, douyin: true }
+        : { ...hasMore }
+      const len = (b: PlatBuckets) => b.xhs.length + b.kuaishou.length + b.douyin.length
+      const target = reset ? SOURCE_PAGE : shown + SOURCE_PAGE
+      let sawError: string | null = null
+      let guard = 0
+      while (len(nByPlat) < target && PLAT_PRIORITY.some((pl) => nHasMore[pl]) && guard < 6) {
+        guard++
+        const rounds = await Promise.all(
+          PLAT_PRIORITY.map(async (pl) => {
+            if (!nHasMore[pl]) return null
+            try {
+              return { pl, data: await fetchPlat(pl, nCursor[pl]) }
+            } catch (e) {
+              return { pl, data: { clips: [], error: e instanceof Error ? e.message : String(e) } as TikhubResponse }
+            }
+          }),
+        )
+        for (const r of rounds) {
+          if (!r) continue
+          const { pl, data } = r
+          if (data.error) { nHasMore[pl] = false; sawError = data.detail || data.error || sawError; continue }
+          const fresh = (Array.isArray(data.clips) ? data.clips : []).filter(
+            (c) => !nByPlat[pl].some((x) => x.id === c.id),
+          )
+          nByPlat = { ...nByPlat, [pl]: [...nByPlat[pl], ...fresh] }
+          nCursor[pl] = data.cursor
+          nHasMore[pl] = !!data.hasMore && fresh.length > 0
+        }
+      }
+      setByPlat(nByPlat); setCursor(nCursor); setHasMore(nHasMore)
+      const newLen = len(nByPlat)
+      setShown(Math.min(target, newLen))
+      if (newLen === 0 && sawError) setErr(sawError)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e)); setClips([])
+      setErr(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
+  }
+
+  const search = () => void ensureAndShow(true)
+  // Reveal +10 from the pool if hidden clips remain; otherwise fetch more first.
+  const loadMore = () => {
+    if (shown < poolLen) setShown(Math.min(shown + SOURCE_PAGE, poolLen))
+    else void ensureAndShow(false)
   }
 
   const picked = shot.clip ?? null
@@ -604,25 +662,25 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
           onClick={search}
           disabled={busy || !query}
           className="ui-accent-soft flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold disabled:opacity-40"
-          title={query ? `Tìm trên ${platLabel(p.platform)}: ${query}` : 'Chưa có từ khóa'}
+          title={query ? `Tìm cả 3 nền (RED › Kuaishou › Douyin): ${query}` : 'Chưa có từ khóa'}
         >
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : picked ? <RefreshCw className="h-3 w-3" /> : <Search className="h-3 w-3" />}
           {picked ? 'Đổi clip' : 'Tìm clip'}
         </button>
         {query && (
-          <span className="line-clamp-1 text-[10px] text-app-subtle">🇨🇳 {query} · {platLabel(p.platform)}</span>
+          <span className="line-clamp-1 text-[10px] text-app-subtle">🇨🇳 {query} · cả 3 nền</span>
         )}
       </div>
 
       {err && <p className="text-[10px] text-rose-500">{err}</p>}
 
       {/* Results strip */}
-      {open && !busy && !err && clips.length === 0 && (
-        <p className="text-[10px] text-app-subtle">Không tìm thấy clip. Thử đổi từ khóa hoặc nền tảng.</p>
+      {open && !busy && !err && poolLen === 0 && (
+        <p className="text-[10px] text-app-subtle">Không tìm thấy clip. Thử đổi từ khóa.</p>
       )}
-      {open && clips.length > 0 && (
+      {open && visible.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1">
-          {clips.map((c) => {
+          {visible.map((c) => {
             const isPicked = picked?.id === c.id && picked?.platform === c.platform
             return (
               <div key={`${c.platform}_${c.id}`} className="w-28 shrink-0">
@@ -638,6 +696,7 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
                     loading="lazy"
                   />
                   <span className="absolute inset-0 flex items-center justify-center"><Play className="h-5 w-5 text-white drop-shadow" /></span>
+                  <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] font-bold text-white">{platLabel(c.platform)}</span>
                   <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[9px] font-bold text-white">{Math.round(c.durationSec)}s · {fmtK(c.likes)}♥</span>
                 </button>
                 <div className="mt-1 flex items-center gap-1">
@@ -659,6 +718,19 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
             )
           })}
         </div>
+      )}
+
+      {/* Load more — reveals +10 each press (fetches next pages when pool runs out) */}
+      {open && visible.length > 0 && (shown < poolLen || anyHasMore) && (
+        <button
+          onClick={loadMore}
+          disabled={busy}
+          className="flex items-center justify-center gap-1.5 self-start rounded-lg border border-app-border bg-app-card px-2.5 py-1 text-[11px] font-bold text-app-muted hover:bg-app-card-elevated disabled:opacity-40"
+        >
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowDownToLine className="h-3 w-3" />}
+          Tải thêm 10 video
+          <span className="opacity-60">· đang xem {visible.length}</span>
+        </button>
       )}
     </div>
   )

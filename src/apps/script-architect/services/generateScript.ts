@@ -74,9 +74,10 @@ NON-NEGOTIABLE RULES (both languages)
 8. No emojis. No markdown. No bullet points. No section labels in the output. No "Hook:" / "Pain:" prefixes
 
 ═══════════════════════════════════════════════════════════════
-SCRIPT STRUCTURE — COD HARDSELL SELL-ARC
+SCRIPT STRUCTURE — COD HARDSELL SELL-ARC (PRIORITY ORDER, not 9 mandatory paragraphs)
 ═══════════════════════════════════════════════════════════════
-Follow this order (the preset shapes the hook & angle; this is the spine):
+The blocks below are a PRIORITY SPINE — the order to sell in, NOT a checklist where every block must appear. You MUST compress this spine to fit the WORD BUDGET given in the user message. A short script uses FEWER blocks; a long script uses more. Merging two adjacent ideas into one short line is expected, not a failure. NEVER write all 9 blocks unless the budget is large enough.
+
   1. Vấn đề — name the customer's exact problem (the hook)
   2. Nỗi đau — twist the knife, but SHORT (just enough to make it sting, don't dwell)
   3. Sản phẩm — introduce the product as the answer
@@ -87,7 +88,11 @@ Follow this order (the preset shapes the hook & angle; this is the spine):
   8. Proof — concrete result / customer proof (third-person, never "tôi")
   9. CTA — clear, confident order-now close
 
-Keep the pain section SHORT and spend your richest language on block 7 (customer benefit). When EDUCATIONAL MODE is ON, expand blocks 5-6 (thành phần + cơ chế) — explain WHY the problem happens and HOW the ingredients fix it, conversationally with analogies (e.g. "Inulin giống như thức ăn cho lợi khuẩn đường ruột"), NEVER medical-textbook, NEVER cure claims. When OFF, compress 5-6 and push harder on benefit + CTA.
+ALWAYS KEEP (never drop, even in the shortest script): 1 (hook) + 7 (★customer benefit) + 9 (CTA).
+DROP FIRST when the budget is tight, in this exact order: 2 (nỗi đau) → 6 (cơ chế) → 5 (thành phần) → 8 (proof) → 4 → 3.
+The user message states HOW MANY beats to use and the HARD word cap for the chosen length — obey both. Do NOT exceed the cap; if everything won't fit, drop lower-priority blocks rather than overflowing.
+
+Keep the pain section SHORT and spend your richest language on block 7 (customer benefit). When EDUCATIONAL MODE is ON, blocks 5-6 (thành phần + cơ chế) become priority kept blocks — explain WHY the problem happens and HOW the ingredients fix it, conversationally with analogies (e.g. "Inulin giống như thức ăn cho lợi khuẩn đường ruột"), NEVER medical-textbook, NEVER cure claims — but STILL inside the same word cap (make room by cutting pain/proof). When OFF, drop 5-6 and push harder on benefit + CTA.
 
 ═══════════════════════════════════════════════════════════════
 OUTPUT FORMAT — exactly these markers, nothing else
@@ -101,12 +106,18 @@ OUTPUT FORMAT — exactly these markers, nothing else
 
 (The structured JSON is internal metadata in English — keep each value to one short sentence. "benefits" = the customer-benefit block. Omit "whyItHappens" and "ingredientMechanism" if educational mode is OFF.)`
 
-// ── Length → target word count (Vietnamese spoken ~140 wpm) ─────────────
-const LENGTH_TARGETS: Record<LengthSeconds, { words: number; lines: number }> = {
-  15: { words: 35,  lines: 3 },
-  30: { words: 70,  lines: 5 },
-  45: { words: 105, lines: 7 },
-  60: { words: 140, lines: 9 },
+// ── Length → word budget (Vietnamese/Malay spoken ~2.5 words/sec ≈ 150 wpm) ──
+//  `max` is a HARD cap per language (spoken words). `beats` = how many sell-arc
+//  blocks to use at this length. `arc` names which beats to keep so the model
+//  stops writing all 9 blocks on a 15s ad. The voice-over MUST fit `max`.
+const LENGTH_TARGETS: Record<
+  LengthSeconds,
+  { words: number; max: number; beats: number; arc: string }
+> = {
+  15: { words: 38,  max: 48,  beats: 3, arc: 'Hook → ★customer benefit → CTA (3 beats only — drop everything else).' },
+  30: { words: 75,  max: 90,  beats: 5, arc: 'Hook → short pain → product/benefit → ★customer benefit → CTA (5 beats).' },
+  45: { words: 112, max: 130, beats: 7, arc: 'Hook → short pain → product → benefit → ingredient/mechanism → ★customer benefit → CTA (7 beats).' },
+  60: { words: 150, max: 175, beats: 9, arc: 'Full 9-block arc, but each block stays one or two short spoken lines.' },
 }
 
 // ── Hook strength briefing ──────────────────────────────────────────────
@@ -157,9 +168,12 @@ function buildUserPrompt(params: ScriptGenerationParams, product: Product): stri
 
   lines.push('')
   lines.push('═══════════════════════════════════════════════════════════════')
-  lines.push('LENGTH + INTENSITY')
+  lines.push(`LENGTH BUDGET — ${params.lengthSec}s VIDEO (HARD LIMIT — obey exactly)`)
   lines.push('═══════════════════════════════════════════════════════════════')
-  lines.push(`Target length: ${params.lengthSec} seconds (~${target.words} English words, ~${target.lines} spoken lines).`)
+  lines.push(`This is a ${params.lengthSec}-second ad. Spoken pace ≈ 2.5 words/second.`)
+  lines.push(`TARGET: about ${target.words} spoken words per language. HARD CAP: NEVER exceed ${target.max} words in the Vietnamese version, and NEVER exceed ${target.max} words in the Malay version. Count as you write.`)
+  lines.push(`USE ONLY ${target.beats} sell-arc beats: ${target.arc}`)
+  lines.push(`If the content does not fit, DROP lower-priority blocks (see drop order) — do NOT overflow the cap. A ${params.lengthSec}s ad that runs ${target.max * 2}+ words is WRONG and will be rejected. Both languages must be roughly the same length.`)
   lines.push(`Hook strength: ${params.hookStrength.toUpperCase()} — ${HOOK_STRENGTH_BRIEF[params.hookStrength]}`)
 
   if (toneHints) {
@@ -178,6 +192,7 @@ function buildUserPrompt(params: ScriptGenerationParams, product: Product): stri
     lines.push('- How one or two key ingredients work, named specifically')
     lines.push('- Why this product is different from the category default')
     lines.push('Explanations must sound conversational, like a creator explaining to a friend. Use analogies. NEVER use medical-textbook tone. NEVER claim to cure / treat / guarantee.')
+    lines.push('BUT this still lives inside the LENGTH BUDGET above — fit the explanation into the word cap by keeping it to one or two tight sentences and cutting pain/proof. Do NOT let educational content overflow the length.')
   } else {
     lines.push('')
     lines.push('EDUCATIONAL MODE — OFF. Focus on emotional selling, fast hook, and direct conversion.')
