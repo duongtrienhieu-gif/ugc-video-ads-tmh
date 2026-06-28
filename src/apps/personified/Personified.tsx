@@ -15,7 +15,7 @@ import {
   CTA_STYLE_LABEL, LENGTH_LABEL, LENGTH_TARGET_SEC, SCENE_TYPE_LABEL, RENDER_TIER_LABEL, type RenderTier,
   estimateProjectCredits, formatCreditEstimate, pickClipDuration, estimateSpeechSec, playbackWps,
 } from './constants'
-import { analyzeInsight, generateScript } from './services/personifiedBrain'
+import { analyzeInsight, generateScript, resyncStoryboard } from './services/personifiedBrain'
 import { renderKeyframe, renderClipFromKeyframe, renderCharacterRef, addSceneVoiceover, synthSceneVoice, muxSceneVoiceover, synthVoiceSample } from './services/personifiedRenderer'   // P2a/P2b/P2c (cũng đăng ký dev helper __testRenderScene)
 import VoiceLibraryModal from '../voice-studio/components/VoiceLibraryModal'
 import CloneVoiceModal from '../voice-studio/components/CloneVoiceModal'
@@ -65,6 +65,27 @@ async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promis
     await run()
   }
   await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, () => run()))
+}
+
+// #1 — Editor kịch bản liền mạch: dựng text có nhãn [Cảnh N] để user sửa thoại tự do,
+// rồi parse ngược về map idx→thoại. Nhãn [Cảnh N] là mỏ neo (giữ nhãn = khớp đúng cảnh).
+function buildReadDraft(scenes: PersonifiedScene[]): string {
+  return scenes.map((s) => `[Cảnh ${s.idx}] ${s.dialoguePrimary ?? ''}`.trimEnd()).join('\n\n')
+}
+function parseReadDraft(text: string, scenes: PersonifiedScene[]): Record<number, string> {
+  const out: Record<number, string> = {}
+  // Tách theo nhãn [Cảnh N]; phần text tới nhãn kế tiếp là thoại của cảnh đó.
+  const re = /\[\s*Cảnh\s*(\d+)\s*\]/gi
+  const marks: { idx: number; start: number; end: number }[] = []
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) marks.push({ idx: parseInt(m[1], 10), start: m.index, end: re.lastIndex })
+  for (let i = 0; i < marks.length; i++) {
+    const body = text.slice(marks[i].end, i + 1 < marks.length ? marks[i + 1].start : undefined)
+    out[marks[i].idx] = body.replace(/\s+/g, ' ').trim()
+  }
+  // Cảnh không xuất hiện trong draft → giữ thoại cũ (đừng xóa).
+  for (const s of scenes) if (!(s.idx in out)) out[s.idx] = s.dialoguePrimary ?? ''
+  return out
 }
 
 /** 1 giọng ElevenLabs có hợp ngôn ngữ thị trường đích không (đọc nhãn/tên/mô tả). */
@@ -117,6 +138,9 @@ export default function Personified() {
   // C — kịch bản hiển thị dạng tab + bảng cảnh dày (bỏ scroll dài / cột voice trùng).
   const [scriptTab, setScriptTab] = useState<'table' | 'read' | 'chars'>('table')
   const [expandedScene, setExpandedScene] = useState<number | null>(null)
+  // #1 — Editor "Đọc liền mạch": sửa thoại TỰ DO → Lưu → AI đồng bộ hình storyboard.
+  const [readDraft, setReadDraft] = useState('')
+  const [resyncing, setResyncing] = useState(false)
   // P2a — clip đã render mỗi cảnh (keyed theo scene.idx), persist cùng kịch bản.
   const [clips, setClips] = useState<Record<number, SceneRender>>({})
   const [renderingAll, setRenderingAll] = useState(false)
@@ -379,6 +403,94 @@ export default function Personified() {
         totalSec: scenes.reduce((sum, s) => sum + s.clipDuration, 0),
       }
     })
+  }
+
+  // #1 — Giữ editor "Đọc liền mạch" khớp kịch bản hiện tại. Chạy khi script đổi
+  // (tạo mới / sửa bảng cảnh / resync). User gõ trong tab này → script chưa đổi →
+  // effect KHÔNG chạy → không đè chữ đang gõ.
+  useEffect(() => {
+    setReadDraft(script ? buildReadDraft(script.scenes) : '')
+  }, [script])
+
+  // #1 — LƯU & ĐỒNG BỘ: user sửa thoại tự do ở "Đọc liền mạch" → giữ NGUYÊN VĂN thoại,
+  // gọi AI vẽ lại hình (action/i2v/setting) cho khớp → prompt chính xác. Dọn render cũ
+  // thông minh: cảnh đổi HÌNH → xóa keyframe+clip; cảnh chỉ đổi CHỮ → giữ clip, reset giọng.
+  async function handleResyncScript() {
+    if (!script || !product) return
+    if (!geminiKey) { setError('Thiếu Gemini API key trong Cài đặt'); return }
+    const newDia = parseReadDraft(readDraft, script.scenes)
+    const changed = script.scenes.filter((s) => (newDia[s.idx] ?? '') !== (s.dialoguePrimary ?? ''))
+    if (!changed.length) { setError(''); setScriptTab('table'); return }
+
+    // Cảnh đã render mà sắp bị vẽ lại hình → cảnh báo trước khi xóa (tốn credit).
+    const renderedChanged = changed.filter((s) => clips[s.idx]?.keyframeRef || clips[s.idx]?.clipRef)
+    if (renderedChanged.length &&
+      !window.confirm(`${changed.length} cảnh đổi thoại — trong đó ${renderedChanged.length} cảnh đã render. Đồng bộ sẽ vẽ lại prompt cho khớp; ảnh/clip cảnh đổi HÌNH sẽ phải render lại (giọng phải lồng lại). Tiếp tục?`)) return
+
+    setError(''); setResyncing(true)
+    try {
+      const updates = await resyncStoryboard({
+        product, market, worldEnv: script.worldEnv, characters: script.characters,
+        scenes: changed.map((s) => ({
+          idx: s.idx, sceneType: s.sceneType, speaker: s.speaker,
+          newDialoguePrimary: newDia[s.idx] ?? '',
+          prevAction: s.action, prevSetting: s.setting, prevVideoPromptEn: s.videoPromptEn,
+        })),
+        geminiKey,
+      })
+
+      // Cảnh nào đổi HÌNH (action/setting/videoPromptEn) → render cũ vô hiệu hoàn toàn.
+      const visualChanged = new Set<number>()
+      const dialogueOnly = new Set<number>()   // chỉ đổi chữ → giữ clip, lồng giọng lại
+      const nextScenes = script.scenes.map((s) => {
+        if (!changed.some((c) => c.idx === s.idx)) return s
+        const u = updates[s.idx]
+        const dia = newDia[s.idx] ?? ''
+        const sp = estimateSpeechSec(dia || (isVN ? dia : u?.dialogueVi) || '', playbackWps(market))
+        const next: PersonifiedScene = {
+          ...s,
+          dialoguePrimary: dia,
+          dialogueVi: isVN ? dia : (u?.dialogueVi ?? s.dialogueVi),
+          clipDuration: pickClipDuration(sp),
+          ...(u ? {
+            emotion: u.emotion || s.emotion, camera: u.camera || s.camera,
+            sfx: u.sfx?.length ? u.sfx : s.sfx,
+            action: u.action || s.action, setting: u.setting || s.setting,
+            videoPromptEn: u.videoPromptEn || s.videoPromptEn,
+          } : {}),
+        }
+        if (u && (u.action !== s.action || u.setting !== s.setting || u.videoPromptEn !== s.videoPromptEn)) visualChanged.add(s.idx)
+        else dialogueOnly.add(s.idx)
+        return next
+      })
+
+      setScript((prev) => prev ? {
+        ...prev, scenes: nextScenes,
+        fullVoiceScriptPrimary: nextScenes.map((s) => s.dialoguePrimary).filter(Boolean).join('\n'),
+        fullVoiceScriptVi: nextScenes.map((s) => s.dialogueVi).filter(Boolean).join('\n'),
+        totalSec: nextScenes.reduce((sum, s) => sum + s.clipDuration, 0),
+      } : prev)
+
+      // Dọn render: đổi hình → xóa cả keyframe+clip; chỉ đổi chữ → giữ clip, bỏ giọng (lồng lại).
+      if (visualChanged.size || dialogueOnly.size) {
+        setClips((prev) => {
+          const nx = { ...prev }
+          for (const idx of visualChanged) delete nx[idx]
+          for (const idx of dialogueOnly) {
+            const c = nx[idx]
+            if (c) nx[idx] = { ...c, lipStatus: 'idle', lipsyncRef: undefined, audioRef: undefined, voiceSec: undefined, lipError: undefined }
+          }
+          return nx
+        })
+        if (visualChanged.size) setFinalVideo({ status: 'idle' })   // video cuối cũ lệch → bỏ
+      }
+
+      setScriptTab('table')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Đồng bộ kịch bản lỗi')
+    } finally {
+      setResyncing(false)
+    }
   }
 
   // P2b — render CHARACTER SHEET 1 nhân vật → Character Bank (khóa diện mạo xuyên cảnh).
@@ -993,22 +1105,48 @@ export default function Personified() {
               </div>
             )}
 
-            {/* ── Đọc liền mạch: voice script song ngữ (gộp cột cũ vào đây, hết trùng) ── */}
-            {scriptTab === 'read' && (
-              <div className="space-y-2">
-                <div className="w-full whitespace-pre-wrap rounded-lg border border-black/10 bg-white p-3 text-sm leading-relaxed text-gray-800">
-                  {script.fullVoiceScriptPrimary}
+            {/* ── Đọc liền mạch: EDITOR SỬA THOẠI TỰ DO → Lưu → AI đồng bộ hình storyboard ── */}
+            {scriptTab === 'read' && (() => {
+              const dirty = readDraft !== buildReadDraft(script.scenes)
+              return (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-violet-200 bg-violet-50/60 px-3 py-2 text-[11px] text-gray-700">
+                    <span>✏️ <b>Sửa thoại thoải mái</b> — giữ nhãn <code className="rounded bg-white px-1 font-mono text-violet-700">[Cảnh N]</code> để khớp đúng cảnh. Bấm <b>Lưu</b> → AI vẽ lại hình (keyframe/i2v) cho khớp thoại mới (rẻ, không tốn credit ảnh). Cảnh đổi hình sẽ phải render lại.</span>
+                  </div>
+                  <textarea
+                    value={readDraft}
+                    onChange={(e) => setReadDraft(e.target.value)}
+                    rows={Math.min(22, Math.max(8, script.scenes.length * 2 + 2))}
+                    spellCheck={false}
+                    className="w-full resize-y rounded-lg border border-violet-200 bg-white p-3 text-sm leading-relaxed text-gray-800 focus:border-violet-400 focus:outline-none"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button onClick={handleResyncScript} disabled={resyncing || !dirty || !geminiKey}
+                      className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-violet-700 disabled:opacity-40">
+                      {resyncing ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang đồng bộ hình…</> : <>💾 Lưu &amp; đồng bộ storyboard</>}
+                    </button>
+                    {dirty && !resyncing && (
+                      <button onClick={() => setReadDraft(buildReadDraft(script.scenes))}
+                        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50">
+                        ↩ Hoàn tác
+                      </button>
+                    )}
+                    {dirty
+                      ? <span className="text-[11px] font-semibold text-amber-600">● Đã sửa — chưa lưu</span>
+                      : <span className="text-[11px] text-gray-400">Khớp storyboard</span>}
+                    {!geminiKey && <span className="text-[11px] text-rose-600">cần Gemini key để đồng bộ</span>}
+                  </div>
+                  {!isVN && (
+                    <>
+                      <p className="pt-1 text-xs font-semibold text-gray-600">↳ Nghĩa VN (tự cập nhật sau khi Lưu)</p>
+                      <div className="w-full whitespace-pre-wrap rounded-lg border border-black/10 bg-gray-50 p-3 text-sm leading-relaxed text-gray-600">
+                        {script.fullVoiceScriptVi}
+                      </div>
+                    </>
+                  )}
                 </div>
-                {!isVN && (
-                  <>
-                    <p className="text-xs font-semibold text-gray-600">↳ Bản dịch nghĩa VN (duyệt)</p>
-                    <div className="w-full whitespace-pre-wrap rounded-lg border border-black/10 bg-gray-50 p-3 text-sm leading-relaxed text-gray-600">
-                      {script.fullVoiceScriptVi}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
+              )
+            })()}
 
             {/* ── Nhân vật + Character Bank (P2b) ── */}
             {scriptTab === 'chars' && (
