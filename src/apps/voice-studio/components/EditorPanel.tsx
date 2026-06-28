@@ -52,7 +52,7 @@ export default function EditorPanel({
           </div>
           <div className="hidden shrink-0 items-center gap-2 text-[11px] text-slate-400 sm:flex">
             <Sparkles className="h-3 w-3 text-indigo-400" />
-            <span>ElevenLabs Multilingual v2</span>
+            <span>ElevenLabs v3</span>
           </div>
         </div>
       </div>

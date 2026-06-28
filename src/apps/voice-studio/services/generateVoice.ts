@@ -7,15 +7,22 @@ import { getFFmpeg } from '../../video-builder/v3/services/ffmpegLoader'
 import { fetchFile } from '@ffmpeg/util'
 
 /**
- * Generate voiceover using ElevenLabs eleven_multilingual_v2.
+ * Generate voiceover using ElevenLabs eleven_v3 (richer intonation than v2).
  * Supports cloned voices (via /voices/add) and library/premade voices.
  *
- * Speed handling: eleven_multilingual_v2 silently ignores the
- * `voice_settings.speed` parameter (verified empirically — 0.7x and 1.2x
- * produce identical output). To make the speed slider actually work, we
- * tell ElevenLabs speed=1.0 and apply ffmpeg.wasm's `atempo` filter
- * client-side after the audio comes back. atempo preserves pitch — it
- * doesn't sound chipmunked at fast speeds or doped-up at slow speeds.
+ * Model: eleven_v3 reads with far more natural intonation and understands
+ * inline emotion tags like `[excited]` / `[whispers]` (we already prepend the
+ * user's styleInstructions in brackets below). textToSpeech snaps stability to
+ * v3's discrete {0,0.5,1} buckets and auto-falls-back to multilingual_v2 if v3
+ * is unavailable for this key/voice — `onModelUsed` reports the model that
+ * actually rendered so history reflects the truth.
+ *
+ * Speed handling: both v2 AND v3 silently ignore the `voice_settings.speed`
+ * parameter (verified empirically — 0.7x and 1.2x produce identical output).
+ * To make the speed slider actually work, we tell ElevenLabs speed=1.0 and
+ * apply ffmpeg.wasm's `atempo` filter client-side after the audio comes back.
+ * atempo preserves pitch — it doesn't sound chipmunked at fast speeds or
+ * doped-up at slow speeds.
  */
 export async function generateVoice(
   settings: VoiceSettings,
@@ -30,14 +37,17 @@ export async function generateVoice(
   // Map creativity (0–2) → stability (1.0 → 0.0). More creative = lower stability = more expressive variation.
   const stability = Math.max(0, Math.min(1, 1 - settings.creativity / 2))
 
-  // Style instructions can be prepended in brackets — ElevenLabs v2/v3 understands inline directives
+  // Style instructions can be prepended in brackets — eleven_v3 reads these as
+  // inline emotion/delivery tags (e.g. "[excited]", "[whispers]").
   let ttsText = scriptText
   if (settings.styleInstructions.trim()) {
     ttsText = `[${settings.styleInstructions.trim()}] ${scriptText}`
   }
 
   // Always request speed=1.0 from ElevenLabs (see header note). We apply
-  // the chosen tempo locally after.
+  // the chosen tempo locally after. onModelUsed captures the model that
+  // ACTUALLY rendered (eleven_v3, or multilingual_v2 if it fell back).
+  let actualModel = 'eleven_v3'
   const rawAudioBuffer = await textToSpeech({
     apiKey,
     voiceId: settings.voiceId,
@@ -47,7 +57,8 @@ export async function generateVoice(
     style: settings.styleExaggeration,
     speed: 1.0,
     useSpeakerBoost: settings.useSpeakerBoost,
-    modelId: 'eleven_multilingual_v2',
+    modelId: 'eleven_v3',
+    onModelUsed: (m) => { actualModel = m },
   })
 
   const finalBuffer = needsTempoChange(settings.speed)
@@ -66,7 +77,7 @@ export async function generateVoice(
     id: crypto.randomUUID(),
     voiceName: settings.voiceName,
     voiceId: settings.voiceId,
-    modelId: 'eleven_multilingual_v2',
+    modelId: actualModel,
     scriptText,
     scriptPreview: scriptText.slice(0, 80) + (scriptText.length > 80 ? '...' : ''),
     audioUrl: assetId,

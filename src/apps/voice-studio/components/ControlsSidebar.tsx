@@ -248,8 +248,13 @@ export default function ControlsSidebar({
         </div>
       </div>
 
+      {/* Scroll body — voice list + settings share ONE scroll area so the
+          always-visible settings block can never squeeze the voice list to
+          zero height (the old bug where settings "covered" the voice picker). */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+
       {/* Voice list — Malaysian accent only */}
-      <div className="flex min-h-0 flex-1 flex-col px-3 py-3">
+      <div className="flex flex-col px-3 py-3">
         <div className="mb-2 flex items-center justify-between px-1">
           <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
             Giọng Malaysian
@@ -281,7 +286,7 @@ export default function ControlsSidebar({
         </div>
 
         {/* Voice list */}
-        <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/30">
+        <div className="max-h-[44vh] min-h-[140px] overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/30">
           {!hasElevenLabsKey ? (
             <div className="flex h-full flex-col items-center justify-center gap-1 p-4 text-center">
               <p className="text-xs font-medium text-slate-500">Chưa có ElevenLabs key</p>
@@ -380,8 +385,9 @@ export default function ControlsSidebar({
         </div>
       </div>
 
-      {/* Settings — always visible (no toggle) */}
-      <div className="shrink-0 border-t border-slate-200 bg-slate-50/30 p-3">
+      {/* Settings — always visible (no toggle), now flows under the voice list
+          inside the shared scroll area instead of pinning to the bottom. */}
+      <div className="border-t border-slate-200 bg-slate-50/30 p-3">
         {/* Creativity */}
         <div className="mb-2 rounded-lg bg-white p-2.5 shadow-sm">
           <div className="flex items-center justify-between">
@@ -461,6 +467,7 @@ export default function ControlsSidebar({
             </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   )

@@ -229,11 +229,20 @@ export async function textToSpeech(params: {
    *  to v2" to the user. */
   onModelUsed?: (model: string) => void
 }): Promise<ArrayBuffer> {
+  const model = params.modelId ?? 'eleven_multilingual_v2'
+  // eleven_v3 only accepts DISCRETE stability values {0.0, 0.5, 1.0}. Any other
+  // value 422s → silent fallback to v2, defeating the whole upgrade. Snap the
+  // continuous slider value to the nearest allowed bucket for v3 only; v2 keeps
+  // the full continuous range.
+  let stability = params.stability ?? 0.75       // raised from 0.5 — better long-text consistency
+  if (model === 'eleven_v3') {
+    stability = stability >= 0.75 ? 1.0 : stability >= 0.25 ? 0.5 : 0.0
+  }
   const body: Record<string, unknown> = {
     text: params.text,
-    model_id: params.modelId ?? 'eleven_multilingual_v2',
+    model_id: model,
     voice_settings: {
-      stability: params.stability ?? 0.75,         // raised from 0.5 — better long-text consistency
+      stability,
       similarity_boost: params.similarity ?? 0.75,
       style: params.style ?? 0,
       use_speaker_boost: params.useSpeakerBoost ?? true,
