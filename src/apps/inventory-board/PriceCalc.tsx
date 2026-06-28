@@ -50,7 +50,7 @@ function NumField({ label, value, onChange, suffix, step = 1, tint }: { label: s
   )
 }
 
-export default function PriceCalc({ products, priceVnd, inv, velocity }: { products: Prod[]; priceVnd: Record<string, number>; inv: InvItem[]; velocity: Record<string, number> }) {
+export default function PriceCalc({ products, priceVnd, inv, velocity, saleStats }: { products: Prod[]; priceVnd: Record<string, number>; inv: InvItem[]; velocity: Record<string, number>; saleStats: Record<string, { chot: number; upsell: number }> }) {
   const [isMobile, setIsMobile] = useState(false)
   useEffect(() => {
     const f = () => setIsMobile(window.innerWidth < 700)
@@ -93,8 +93,10 @@ export default function PriceCalc({ products, priceVnd, inv, velocity }: { produ
     const gv = (priceVnd[key] ?? 0) / PACK_FACTOR(key) || it?.giaVonVnd || (it ? it.giaVonRM * tyGia : 0)
     if (gv > 0) setGiaVonSp(Math.round(gv))
     const p = products.find((x) => x.name.trim().toUpperCase() === key)
-    if (p && p.pctHoan > 0) setHoanPct(+p.pctHoan.toFixed(3))
-    if (p && p.pctChot > 0) setChotPct(+p.pctChot.toFixed(3)) // tỉ lệ chốt THẬT của SP (cột %C2)
+    if (p && p.pctHoan > 0) setHoanPct(+p.pctHoan.toFixed(3)) // hoàn Cách A (QLHB)
+    // tỉ lệ chốt: ưu tiên file SALE (C2/Data) → fallback TỔNG %C2
+    const chot = saleStats[key]?.chot && saleStats[key].chot > 0 ? saleStats[key].chot : (p && p.pctChot > 0 ? p.pctChot : 0)
+    if (chot > 0) setChotPct(+chot.toFixed(3))
   }
   function saveChannels() { localStorage.setItem(CH_KEY, JSON.stringify(channels)) }
 
@@ -139,8 +141,9 @@ export default function PriceCalc({ products, priceVnd, inv, velocity }: { produ
     const p = products.find((x) => x.name.trim().toUpperCase() === key)
     const it = inv.find((x) => x.ten.trim().toUpperCase() === key)
     if (!p || p.c2 <= 0) return null
-    return { name: p.name, aovRM: p.rmRevenue / p.c2, upsell: it && it.ban > 0 ? it.ban / p.c2 : 0 }
-  }, [fromProd, products, inv])
+    const upsell = saleStats[key]?.upsell && saleStats[key].upsell > 0 ? saleStats[key].upsell : (it && it.ban > 0 ? it.ban / p.c2 : 0)
+    return { name: p.name, aovRM: p.rmRevenue / p.c2, upsell }
+  }, [fromProd, products, inv, saleStats])
 
   const pnlRows: { label: string; val: string; c?: string; bold?: boolean; hi?: boolean }[] = [
     { label: 'Doanh số chốt đơn', val: '100%' },

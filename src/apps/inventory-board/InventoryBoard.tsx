@@ -55,6 +55,7 @@ interface BoardData {
   products: Prod[]
   inv: InvItem[]
   velocity: Record<string, number>
+  saleStats: Record<string, { chot: number; upsell: number }>
   incoming: Incoming[]
   priceVnd: Record<string, number>
   backorder: BackorderItem[]
@@ -172,6 +173,7 @@ export default function InventoryBoard() {
   const products = data?.products ?? []
   const inv = data?.inv ?? []
   const velocity = data?.velocity ?? {}
+  const saleStats = data?.saleStats ?? {}
   const incoming = data?.incoming ?? []
   const priceVnd = data?.priceVnd ?? {}
   const provinces = data?.provinces ?? []
@@ -412,7 +414,7 @@ export default function InventoryBoard() {
 
         {tab === 'gift' && <GiftCombo products={products} giftLink={sources.giftplan || ''} />}
 
-        {tab === 'calc' && <PriceCalc products={products} priceVnd={priceVnd} inv={inv} velocity={velocity} />}
+        {tab === 'calc' && <PriceCalc products={products} priceVnd={priceVnd} inv={inv} velocity={velocity} saleStats={saleStats} />}
       </div>
     </div>
   )
