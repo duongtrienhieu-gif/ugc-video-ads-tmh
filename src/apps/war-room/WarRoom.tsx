@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useWarStore, memberEmails, type Member } from './store'
 import { useAuthStore } from '../../stores/authStore'
+import { useAppStore } from '../../stores/appStore'
 import { fetchSpStats, fetchMarketerSp, aggregate, type SpStat, type SpProfit } from './actuals'
 import TestPipeline from './TestPipeline'
 
@@ -68,10 +69,12 @@ export default function WarRoom() {
   if (!loaded) return <Shell><div style={{ ...panelStyle, textAlign: 'center', color: C.muted }}>● Đang tải Tác Chiến...</div></Shell>
   if (error && !members.length) return <Shell><div style={{ ...panelStyle, color: C.red }}>⚠ {error}. Đã chạy SQL tạo bảng team_members / targets / tasks trong Supabase chưa?</div></Shell>
 
-  // Nhân viên (không phải CEO) CHỈ được tab "Bảng của tôi" — không xem target/KPI/việc của đứa khác.
+  // Nhân viên chỉ được "Bảng của tôi" + "Test SP" (tự đề xuất test, CEO theo dõi cùng).
+  // Target/Việc/Nhân sự là quản lý xem chéo → CHỈ CEO.
   const ALL_TABS = [['me', '🎯 Bảng của tôi'], ['target', '📊 Target'], ['viec', '✅ Việc'], ['test', '🧪 Test SP'], ['nhansu', '👥 Nhân sự']] as const
-  const visibleTabs = isCEO ? ALL_TABS : ALL_TABS.filter(([k]) => k === 'me')
-  const effTab = isCEO ? tab : 'me' // ép nội dung về 'me' cho nhân viên dù state có lệch
+  const EMP_TABS = new Set(['me', 'test'])
+  const visibleTabs = isCEO ? ALL_TABS : ALL_TABS.filter(([k]) => EMP_TABS.has(k))
+  const effTab = isCEO || EMP_TABS.has(tab) ? tab : 'me' // nhân viên bấm tab cấm → ép về 'me'
 
   return (
     <Shell>
@@ -95,11 +98,11 @@ export default function WarRoom() {
         </div>
       )}
 
-      {effTab === 'me' && <MyBoard {...{ members, targets, tasks, stats, isCEO, myMember, userEmail, updateTask, reloadStats, stale }} />}
+      {effTab === 'me' && <MyBoard {...{ members, targets, tasks, stats, profit, isCEO, myMember, userEmail, updateTask, reloadStats, stale }} />}
       {isCEO && effTab === 'nhansu' && <NhanSu {...{ members, isCEO, mktSp, addMember, updateMember, deleteMember }} />}
       {isCEO && effTab === 'target' && <TargetTab {...{ members, targets, stats, isCEO, setTarget, reloadStats }} />}
       {isCEO && effTab === 'viec' && <ViecTab {...{ members, tasks, profit, spOwner, userEmail, addTask, updateTask, deleteTask }} />}
-      {isCEO && effTab === 'test' && <TestPipeline isCEO={isCEO} userEmail={userEmail} />}
+      {effTab === 'test' && <TestPipeline isCEO={isCEO} userEmail={userEmail} />}
     </Shell>
   )
 }
@@ -112,13 +115,14 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 // ── BẢNG CỦA TÔI — buồng lái cá nhân: con số hôm nay · KPI tháng · việc của tôi ─
 // CEO chọn được từng nhân viên để soi dashboard của đứa đó. Tất cả ×5800 (qua aggregate/computeProfit), KHÔNG 6500.
-function MyBoard({ members, targets, tasks, stats, isCEO, myMember, userEmail, updateTask, reloadStats, stale }: {
+function MyBoard({ members, targets, tasks, stats, profit, isCEO, myMember, userEmail, updateTask, reloadStats, stale }: {
   members: Member[]; targets: { member_id: string; period: string; metric: string; value: number }[]
-  tasks: ReturnType<typeof useWarStore.getState>['tasks']; stats: Record<string, SpStat>
+  tasks: ReturnType<typeof useWarStore.getState>['tasks']; stats: Record<string, SpStat>; profit: SpProfit[]
   isCEO: boolean; myMember: Member | undefined; userEmail: string
   updateTask: (id: string, p: Partial<ReturnType<typeof useWarStore.getState>['tasks'][number]>) => Promise<void>
   reloadStats: () => Promise<void>; stale: boolean
 }) {
+  const openApp = useAppStore((s) => s.openApp)
   const [viewId, setViewId] = useState('')
   // CEO xem được mọi người; nhân viên khoá vào chính mình
   const fallback = myMember ?? (isCEO ? members.find((m) => m.role === 'marketer') ?? members[0] : undefined)
@@ -154,6 +158,36 @@ function MyBoard({ members, targets, tasks, stats, isCEO, myMember, userEmail, u
   const hitMonth = remainingDt === 0 && tDt != null
   const noData = act.dt === 0 // chưa gán mã / endpoint chưa tải
   const noAov = act.aov === 0 || act.chot === 0 // SALE chưa tải → không bẻ ra đơn/data được
+
+  // ── SP của tôi (đèn) + ⚡ việc hôm nay tự sinh từ số thật của chính mình ──
+  const denRank = (d: string) => (d === 'Cắt' ? 0 : d === 'Sửa' ? 1 : d === 'Scale' ? 2 : 3)
+  const denColor = (d: string) => (d === 'Cắt' ? C.red : d === 'Sửa' ? C.amber : d === 'Scale' ? C.green : C.muted)
+  const myProfit = (view.sp_codes ?? [])
+    .map((code) => { const key = code.trim().toUpperCase(); const prof = profit.find((p) => p.name.trim().toUpperCase() === key); const st = stats[key]; return prof && st ? { code: prof.name, prof, st, laiDon: st.aov * prof.laiPct } : null })
+    .filter((x): x is { code: string; prof: SpProfit; st: SpStat; laiDon: number } => !!x)
+    .sort((a, b) => denRank(a.prof.den) - denRank(b.prof.den) || b.prof.hoanPct - a.prof.hoanPct)
+  const A = {
+    spy: { app: 'spy-ads', label: '🔍 Mở Spy' }, script: { app: 'script-architect', label: '📝 Viết script' },
+    video: { app: 'video-builder', label: '🎥 Làm video' }, ladi: { app: 'super-ladipage', label: '📄 Ladipage' },
+    gia: { app: 'inventory-board', label: '🧮 Máy tính giá' }, tinh: { app: 'inventory-board', label: '📦 Tỉnh bom' },
+  }
+  type Sugg = { tone: string; tag: string; title: string; sub: string; apps: { app: string; label: string }[] }
+  const suggestions: Sugg[] = []
+  for (const { code, prof, laiDon } of myProfit) {
+    const h = (prof.hoanPct * 100).toFixed(0)
+    if (prof.den === 'Cắt') suggestions.push({ tone: C.red, tag: 'GẤP', title: `Cắt / sửa gấp ${code}`, sub: prof.hoanPct > 0.45 ? `hoàn ${h}% — chặn COD tỉnh bom / ép cọc, ĐỪNG đổ thêm ads` : `lỗ ${fmtMoney(laiDon)}/đơn — sửa giá·combo hoặc cắt`, apps: [A.gia, A.tinh] })
+    else if (prof.hoanPct > 0.45) suggestions.push({ tone: C.amber, tag: 'HOÀN', title: `Giảm hoàn ${code} ${h}%`, sub: `khách bom nặng — chặn tỉnh bom / ép cọc lead`, apps: [A.tinh] })
+    else if (prof.den === 'Scale') suggestions.push({ tone: C.green, tag: 'SCALE', title: `Đẩy mạnh ${code}`, sub: `lãi tốt, CPQC còn rẻ — tăng ads + ra thêm content`, apps: [A.video, A.spy, A.ladi] })
+    else if (prof.den === 'Sửa') suggestions.push({ tone: C.amber, tag: 'SỬA', title: `Ghìm ${code}`, sub: `ads/hoàn hơi cao — ghìm CPQC, soi lại nhắm mục tiêu`, apps: [A.spy] })
+  }
+  const topSugg = suggestions.slice(0, 6)
+  // ⚠ callout khi đang lỗ + 🧭 coaching theo nhịp
+  const losing = !noData && act.lai < 0
+  let coaching = ''
+  if (!noData && tDt != null && !hitMonth && headPace) {
+    if (headPace.tone === C.red) coaching = `Đang chậm nhịp — dồn sức kéo ${noAov ? 'thêm data' : `${Math.ceil(dataPerDay as number)} data`}/ngày, ưu tiên đẩy mã 🟢 Scale & cắt mã 🔴 lỗ để khỏi phí ads.`
+    else if (headPace.tone === C.green) coaching = `Đang vượt nhịp — giữ phong độ, ghìm %hoàn để không tụt lãi.`
+  }
 
   const myTasks = tasks.filter((t) => t.assignee_id === view.id)
   const todoCount = myTasks.filter((t) => t.status !== 'done').length
@@ -230,6 +264,14 @@ function MyBoard({ members, targets, tasks, stats, isCEO, myMember, userEmail, u
       </div>
       {stale && <div style={{ marginTop: -6, marginBottom: 14, fontSize: 11.5, color: C.amber }}>● Đang hiện <b>số tốt gần nhất</b> (lần tải này bị Google chặn) — bấm ⟳ Tải lại để lấy số mới.</div>}
 
+      {/* ⚠ CẢNH BÁO LỖ */}
+      {losing && (
+        <div style={{ ...panelStyle, borderColor: C.red, background: 'rgba(255,77,94,0.06)' }}>
+          <div style={{ fontSize: 14, color: C.red, fontWeight: 700 }}>⚠ ĐANG LỖ {fmtMoney(act.lai)} tháng này</div>
+          <div style={{ fontSize: 12.5, color: C.muted2, marginTop: 4, lineHeight: 1.6 }}>Việc số 1 hôm nay: <b style={{ color: C.text }}>ghìm CPQC</b> ({fmtPct(act.cpqc * 100)}{tCpqc != null ? ` / trần ${tCpqc}%` : ''}) · <b style={{ color: C.text }}>cắt mã đang lỗ</b> · <b style={{ color: C.text }}>giảm hoàn</b> ({fmtPct(act.hoan * 100)}). <b style={{ color: C.red }}>ĐỪNG</b> đổ thêm ads vào mã đang lỗ.</div>
+        </div>
+      )}
+
       {/* CON SỐ HÔM NAY */}
       <div style={{ ...panelStyle, borderColor: '#3a3414' }}>
         <div style={eyebrowStyle}>🔥 HÔM NAY PHẢI ĐẠT — để cán target tháng</div>
@@ -255,6 +297,46 @@ function MyBoard({ members, targets, tasks, stats, isCEO, myMember, userEmail, u
           </>
         )}
       </div>
+
+      {/* 🧭 COACHING theo nhịp */}
+      {coaching && <div style={{ ...panelStyle, padding: '10px 14px', fontSize: 12.5, color: headPace?.tone ?? C.muted2, lineHeight: 1.6 }}>🧭 {coaching}</div>}
+
+      {/* 🚦 SP CỦA TÔI — đèn từng mã */}
+      {myProfit.length > 0 && (
+        <div style={panelStyle}>
+          <div style={eyebrowStyle}>🚦 SP CỦA TÔI · {myProfit.length} mã — 🔴 cắt/sửa · 🟠 ghìm · 🟢 đẩy</div>
+          {myProfit.map(({ code, prof, laiDon }) => (
+            <div key={code} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 0', borderTop: `1px solid ${C.line2}`, flexWrap: 'wrap' }}>
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: denColor(prof.den), flexShrink: 0 }} />
+              <span style={{ fontWeight: 600, flex: 1, minWidth: 130 }}>{code}</span>
+              <span style={{ fontSize: 11.5, color: denColor(prof.den), border: `1px solid ${denColor(prof.den)}`, borderRadius: 20, padding: '1px 9px', minWidth: 42, textAlign: 'center' }}>{prof.den}</span>
+              <span style={{ fontSize: 12, color: C.muted2, minWidth: 110 }}>lãi/đơn <b style={{ color: laiDon < 0 ? C.red : C.green }}>{fmtMoney(laiDon)}</b></span>
+              <span style={{ fontSize: 12, color: C.muted2, minWidth: 84 }}>CPQC {fmtPct(prof.adsPct * 100)}</span>
+              <span style={{ fontSize: 12, color: prof.hoanPct > 0.45 ? C.red : C.muted2, minWidth: 76 }}>hoàn {fmtPct(prof.hoanPct * 100)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ⚡ VIỆC HÔM NAY tự sinh từ số của chính mình + nút mở công cụ */}
+      {topSugg.length > 0 && (
+        <div style={{ ...panelStyle, borderColor: '#3a3414' }}>
+          <div style={eyebrowStyle}>⚡ VIỆC HÔM NAY — gợi ý từ số của bạn · {topSugg.length}</div>
+          {topSugg.map((s, i) => (
+            <div key={i} style={{ padding: '10px 0', borderTop: i ? `1px solid ${C.line2}` : 'none' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.tone, flexShrink: 0 }} />
+                <span style={{ fontSize: 13.5, fontWeight: 600, flex: 1, minWidth: 180 }}>{s.title}</span>
+                <span style={{ fontSize: 10.5, color: s.tone, border: `1px solid ${s.tone}`, borderRadius: 6, padding: '1px 7px' }}>{s.tag}</span>
+              </div>
+              <div style={{ fontSize: 12, color: C.muted2, margin: '4px 0 7px 15px' }}>{s.sub}</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 15 }}>
+                {s.apps.map((a) => <button key={a.label} onClick={() => openApp(a.app)} style={{ background: 'transparent', color: C.muted2, border: `1px solid ${C.line}`, borderRadius: 7, padding: '4px 10px', fontSize: 11.5, cursor: 'pointer' }}>{a.label} ↗</button>)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* KPI THÁNG */}
       <div style={panelStyle}>
