@@ -241,8 +241,8 @@ export default function PriceCalc({ products, priceVnd, inv }: { products: ProdL
         ))}
       </div>
 
-      {/* ④ THAM CHIẾU — care ads */}
-      <div style={{ ...panelStyle, marginBottom: 0 }}>
+      {/* ④ THAM CHIẾU — care ads · order:1 → đứng sau ⑤ trên desktop (swap ④↔⑤), mobile giữ thứ tự gốc */}
+      <div style={{ ...panelStyle, marginBottom: 0, order: isMobile ? 0 : 1 }}>
         <div style={eyebrowStyle}>④ THAM CHIẾU — care ads</div>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '12px 16px' }}>
