@@ -60,19 +60,14 @@ async function handleSearch(req: VercelRequest, res: VercelResponse, key: string
       if (items.length) return res.status(200).json({ products: items, via: 'imgUrl', ...(debug ? { rawTop: Object.keys(d) } : {}) })
     }
   }
-  // Lấy base64: ảnh http → qua weserv RESIZE (w=1000, jpg) để né "ảnh quá lớn → base64 bị cắt".
+  // Base64: client GỬI ẢNH ĐÃ RESIZE (canvas) qua field base64. Fallback: fetch thẳng URL.
   let b64 = ''
   let srcType = ''
   if (base64) {
     b64 = base64.replace(/^data:[^,]+,/, '')
   } else if (imageUrl) {
-    const noScheme = imageUrl.replace(/^https?:\/\//i, '')
-    try {
-      const w = await fetch(`https://images.weserv.nl/?url=${encodeURIComponent(noScheme)}&w=1000&output=jpg&q=82`)
-      const ct = w.headers.get('content-type') || ''
-      if (w.ok && /image\//i.test(ct)) { b64 = Buffer.from(await w.arrayBuffer()).toString('base64'); srcType = 'image/jpeg' }
-    } catch { /* fallback dưới */ }
-    if (!b64) { const ir = await fetch(imageUrl); srcType = ir.headers.get('content-type') || ''; b64 = Buffer.from(await ir.arrayBuffer()).toString('base64') }
+    const ir = await fetch(imageUrl); srcType = ir.headers.get('content-type') || ''
+    b64 = Buffer.from(await ir.arrayBuffer()).toString('base64')
   }
   if (!b64) return res.status(400).json({ error: 'Không đọc được ảnh' })
   if (srcType && !/image\//i.test(srcType)) return res.status(502).json({ error: `Ảnh tải về không phải ảnh (content-type: ${srcType}) — link ảnh bị chặn`, b64head: b64.slice(0, 24) })

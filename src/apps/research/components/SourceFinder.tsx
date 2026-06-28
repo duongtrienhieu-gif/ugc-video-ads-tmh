@@ -64,6 +64,27 @@ async function urlToInline(url: string): Promise<{ mimeType: string; data: strin
   } catch { return null }
 }
 
+// Resize ảnh bằng canvas → JPEG nhỏ (data URL) trước khi gửi 1688 (né "ảnh quá lớn").
+function toResizedBase64(src: string, max = 1000, q = 0.82): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      let w = img.naturalWidth || img.width
+      let h = img.naturalHeight || img.height
+      const scale = Math.min(1, max / Math.max(w, h))
+      w = Math.max(1, Math.round(w * scale)); h = Math.max(1, Math.round(h * scale))
+      const c = document.createElement('canvas'); c.width = w; c.height = h
+      const ctx = c.getContext('2d')
+      if (!ctx) { reject(new Error('no canvas ctx')); return }
+      ctx.drawImage(img, 0, 0, w, h)
+      try { resolve(c.toDataURL('image/jpeg', q)) } catch (e) { reject(e as Error) }
+    }
+    img.onerror = () => reject(new Error('load image failed'))
+    img.src = src
+  })
+}
+
 const proxyDownload = (url: string, name: string) => {
   const href = `/api/dl-video?url=${encodeURIComponent(url)}&name=${encodeURIComponent(name)}`
   const el = document.createElement('a'); el.href = href; el.download = name
@@ -100,7 +121,10 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
     if (!imageUrl) { setImgErr('Cần ảnh SP (chọn từ Kho hoặc 📁 Tải ảnh) để khớp hình'); return }
     setImgBusy(true); setImgErr(null); setImgProducts(null)
     try {
-      const body = imageUrl.startsWith('data:') ? { base64: imageUrl } : { imageUrl }
+      // Resize client-side → JPEG nhỏ; nếu ảnh cross-origin chặn canvas → để server tự fetch.
+      let body: { base64?: string; imageUrl?: string }
+      try { body = { base64: await toResizedBase64(imageUrl) } }
+      catch { body = imageUrl.startsWith('data:') ? { base64: imageUrl } : { imageUrl } }
       const d = await fetch('/api/rapid-1688?action=search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json())
       if (d.error) { setImgErr(d.error + (d.detail ? ` — ${String(d.detail).slice(0, 120)}` : '')); setImgBusy(false); return }
       setImgProducts(Array.isArray(d.products) ? d.products : [])
