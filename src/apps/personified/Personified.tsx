@@ -16,7 +16,10 @@ import {
   estimateProjectCredits, formatCreditEstimate, pickClipDuration, estimateSpeechSec, playbackWps,
 } from './constants'
 import { analyzeInsight, generateScript } from './services/personifiedBrain'
-import { renderKeyframe, renderClipFromKeyframe, renderCharacterRef, addSceneVoiceover } from './services/personifiedRenderer'   // P2a/P2b/P2c (cũng đăng ký dev helper __testRenderScene)
+import { renderKeyframe, renderClipFromKeyframe, renderCharacterRef, addSceneVoiceover, synthVoiceSample } from './services/personifiedRenderer'   // P2a/P2b/P2c (cũng đăng ký dev helper __testRenderScene)
+import VoiceLibraryModal from '../voice-studio/components/VoiceLibraryModal'
+import CloneVoiceModal from '../voice-studio/components/CloneVoiceModal'
+import { listVoices, type ElevenLabsVoice } from '../../utils/elevenlabs'
 import { assemblePersonifiedVideo } from './services/personifiedAssembler'   // P2d
 import { type LibVideo, getLibraryLocal, syncLibrary, addToLibrary, removeFromLibrary } from './services/personifiedLibrary'   // P2e
 import { useAssetUrl } from '../../hooks/useAssetUrl'
@@ -65,6 +68,7 @@ interface PersistedState {
   tier: RenderTier
   clips?: Record<number, SceneRender>
   charBank?: Record<string, CharRef>
+  charVoices?: Record<string, string>
   finalVideoRef?: string
 }
 
@@ -97,6 +101,11 @@ export default function Personified() {
   // P2b — Character Bank (keyed theo character.name).
   const [charBank, setCharBank] = useState<Record<string, CharRef>>({})
   const [bankRunning, setBankRunning] = useState(false)
+  // P2c+ — giọng ElevenLabs gán per-nhân-vật (name → voiceId), persist. + cache danh sách giọng.
+  const [charVoices, setCharVoices] = useState<Record<string, string>>({})
+  const [myVoices, setMyVoices] = useState<ElevenLabsVoice[]>([])
+  const [voiceModal, setVoiceModal] = useState<{ kind: 'lib' | 'clone'; charName: string } | null>(null)
+  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null)
   // P2d — video cuối (ghép + upscale 720p).
   const [finalVideo, setFinalVideo] = useState<{ status: 'idle' | 'running' | 'done' | 'failed'; videoRef?: string; stage?: string; error?: string }>({ status: 'idle' })
   // Keyframe đang render dở lúc F5 → tự nối lại (chỉ keyframe, rẻ). idx gom khi restore.
@@ -189,6 +198,7 @@ export default function Personified() {
             }
             setCharBank(fixedBank)
           }
+          if (s.charVoices) setCharVoices(s.charVoices)
           if (s.finalVideoRef) setFinalVideo({ status: 'done', videoRef: s.finalVideoRef })
         }
       }
@@ -204,10 +214,10 @@ export default function Personified() {
     // pre-restore empty state) — never overwrite a good cache with nothing.
     if (!productId && !insight && !script && !problemHint) return
     try {
-      const s: PersistedState = { v: 1, productId, market, problemHint, insight, config, script, variant, tier, clips, charBank, finalVideoRef: finalVideo.videoRef }
+      const s: PersistedState = { v: 1, productId, market, problemHint, insight, config, script, variant, tier, clips, charBank, charVoices, finalVideoRef: finalVideo.videoRef }
       localStorage.setItem(CACHE_KEY, JSON.stringify(s))
     } catch { /* quota / serialization — non-fatal */ }
-  }, [productId, market, problemHint, insight, config, script, variant, tier, clips, charBank, finalVideo.videoRef])
+  }, [productId, market, problemHint, insight, config, script, variant, tier, clips, charBank, charVoices, finalVideo.videoRef])
 
   // F5-resume: nối lại render đang dở khi reload. Keyframe → render lại (rẻ). Clip i2v →
   // POLL LẠI job đã trả tiền (resumeTaskId, 0 credit thêm). Chạy 1 lần khi có script + key.
@@ -234,6 +244,31 @@ export default function Personified() {
 
   // P2e — kéo thư viện từ cloud 1 lần khi mount (degrade về local nếu chưa login).
   useEffect(() => { void syncLibrary().then(setLibrary) }, [])
+
+  // Tải danh sách giọng ElevenLabs của tài khoản (để hiện tên + dropdown chọn).
+  useEffect(() => {
+    if (!elevenKey) return
+    void listVoices(elevenKey).then(setMyVoices).catch(() => {})
+  }, [elevenKey])
+  async function refreshMyVoices() {
+    try { setMyVoices(await listVoices(elevenKey)) } catch { /* offline */ }
+  }
+  // Nghe thử 1 giọng (TTS 1 câu mẫu eleven_v3).
+  async function handlePreviewVoice(charName: string, voiceId: string) {
+    if (!elevenKey || !voiceId || previewingVoice) return
+    setPreviewingVoice(charName)
+    try {
+      const sample = isVN ? 'Xin chào, đây là giọng đọc thử cho nhân vật.' : 'Hai, ini suara untuk watak ini.'
+      const url = await synthVoiceSample(elevenKey, voiceId, sample)
+      const audio = new Audio(url)
+      audio.onended = () => URL.revokeObjectURL(url)
+      await audio.play()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Nghe thử lỗi')
+    } finally {
+      setPreviewingVoice(null)
+    }
+  }
 
   async function handleAnalyze() {
     if (!product || analyzing) return
@@ -390,6 +425,7 @@ export default function Personified() {
     try {
       const { audioRef, voicedRef } = await addSceneVoiceover({
         elevenKey, scene, character, clipRef: cur.clipRef,
+        voiceId: character ? charVoices[character.name] : undefined,
         onStage: (stage) => setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: stage === 'done' ? 'done' : stage } })),
       })
       setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: 'done', audioRef, lipsyncRef: voicedRef } }))
@@ -901,6 +937,27 @@ export default function Personified() {
                               {bank?.status === 'done' && <span className="text-[10px] font-semibold text-emerald-600">✅ đã khóa diện mạo</span>}
                               {bank?.status === 'failed' && <span className="text-[10px] text-rose-600">⚠ {bank.error?.slice(0, 70)}</span>}
                             </div>
+                            {/* Giọng ElevenLabs (v3) per-nhân-vật: chọn từ thư viện / clone / nghe thử */}
+                            <div className="mt-1.5 border-t border-black/5 pt-1.5">
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-fuchsia-600">🎙️ Giọng (ElevenLabs v3)</span>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                <select value={charVoices[ch.name] ?? ''} onChange={(e) => setCharVoices((p) => ({ ...p, [ch.name]: e.target.value }))}
+                                  className="max-w-[150px] rounded border border-black/10 bg-white px-2 py-1 text-[11px]">
+                                  <option value="">— Tự động —</option>
+                                  {myVoices.map((v) => <option key={v.voice_id} value={v.voice_id}>{v.name}{v.category === 'cloned' ? ' (clone)' : ''}</option>)}
+                                </select>
+                                <button onClick={() => setVoiceModal({ kind: 'lib', charName: ch.name })} disabled={!elevenKey}
+                                  className="rounded border border-fuchsia-300 bg-fuchsia-50 px-2 py-1 text-[11px] font-bold text-fuchsia-700 hover:bg-fuchsia-100 disabled:opacity-40">📚 Thư viện</button>
+                                <button onClick={() => setVoiceModal({ kind: 'clone', charName: ch.name })} disabled={!elevenKey}
+                                  className="rounded border border-fuchsia-300 bg-fuchsia-50 px-2 py-1 text-[11px] font-bold text-fuchsia-700 hover:bg-fuchsia-100 disabled:opacity-40">🎤 Clone</button>
+                                {charVoices[ch.name] && (
+                                  <button onClick={() => handlePreviewVoice(ch.name, charVoices[ch.name])} disabled={!!previewingVoice}
+                                    className="rounded bg-fuchsia-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-fuchsia-700 disabled:opacity-40">
+                                    {previewingVoice === ch.name ? '⏳ đang phát…' : '🔊 Thử'}</button>
+                                )}
+                              </div>
+                              {!elevenKey && <span className="text-[10px] text-amber-600">cần ElevenLabs key trong Cài đặt</span>}
+                            </div>
                           </div>
                         </div>
                       )
@@ -924,6 +981,26 @@ export default function Personified() {
             : <ZoomImage refId={zoom.ref} />}
         </div>
       )}
+
+      {/* Modal chọn giọng từ thư viện ElevenLabs / clone giọng — gán cho 1 nhân vật */}
+      <VoiceLibraryModal
+        open={voiceModal?.kind === 'lib'}
+        onClose={() => setVoiceModal(null)}
+        onAdded={(voiceId) => {
+          if (voiceModal) setCharVoices((p) => ({ ...p, [voiceModal.charName]: voiceId }))
+          void refreshMyVoices()
+          setVoiceModal(null)
+        }}
+      />
+      <CloneVoiceModal
+        open={voiceModal?.kind === 'clone'}
+        onClose={() => setVoiceModal(null)}
+        onCloned={(voiceId) => {
+          if (voiceModal) setCharVoices((p) => ({ ...p, [voiceModal.charName]: voiceId }))
+          void refreshMyVoices()
+          setVoiceModal(null)
+        }}
+      />
     </div>
   )
 }

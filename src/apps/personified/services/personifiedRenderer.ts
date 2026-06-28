@@ -297,6 +297,8 @@ export interface VoiceoverSceneParams {
   elevenKey: string
   scene: PersonifiedScene
   character?: PersonifiedCharacter
+  /** voiceId ElevenLabs gán cho nhân vật (user chọn từ thư viện / clone). Rỗng → map mặc định. */
+  voiceId?: string
   /** Clip i2v CÂM đã render (P2a/b) — ghép voiceover lên đây bằng ffmpeg. */
   clipRef: string
   /** Tốc độ đọc (atempo trong textToSpeech ElevenLabs); mặc định 1.0. */
@@ -318,9 +320,9 @@ export async function addSceneVoiceover(p: VoiceoverSceneParams): Promise<Voiceo
   // ── 1. TTS (ElevenLabs multilingual — đọc đúng ngôn ngữ đích) ──────────────
   const buf = await textToSpeech({
     apiKey: p.elevenKey,
-    voiceId: pickVoiceId(p.character?.voice),
+    voiceId: (p.voiceId ?? '').trim() || pickVoiceId(p.character?.voice),
     text,
-    modelId: 'eleven_multilingual_v2',
+    modelId: 'eleven_v3',   // ngữ điệu giàu hơn; textToSpeech tự fallback v2 nếu v3 chưa hỗ trợ
     speed: p.speed ?? 1.0,
   })
   const audioBytes = new Uint8Array(buf.byteLength)
@@ -360,6 +362,14 @@ export async function addSceneVoiceover(p: VoiceoverSceneParams): Promise<Voiceo
   await ffmpeg.deleteFile(out).catch(() => {})
   p.onStage?.('done', { audioRef, voicedRef })
   return { audioRef, voicedRef }
+}
+
+/** Nghe thử 1 giọng — TTS 1 câu mẫu (eleven_v3) → object URL để phát. Caller tự revoke. */
+export async function synthVoiceSample(elevenKey: string, voiceId: string, text: string): Promise<string> {
+  const buf = await textToSpeech({ apiKey: elevenKey, voiceId, text, modelId: 'eleven_v3' })
+  const bytes = new Uint8Array(buf.byteLength)
+  bytes.set(new Uint8Array(buf))
+  return URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' }))
 }
 
 // ── Dev helper — test render 1 cảnh từ kịch bản đang lưu (console, P2a) ───────
