@@ -16,11 +16,10 @@ const fmtPct = (n: number) => (n * 100).toFixed(1) + '%'
 const panelStyle: React.CSSProperties = { background: C.panel, border: `1px solid ${C.line}`, borderRadius: 14, padding: '16px 20px', marginBottom: 14 }
 const eyebrowStyle: React.CSSProperties = { fontSize: 13, fontWeight: 700, letterSpacing: 0.3, color: C.gold }
 
-export default function ProfitTruth({ products, inv, velocity, priceVnd, feed, cockpit, hasCashflow }: {
+export default function ProfitTruth({ products, inv, velocity, priceVnd, feed, cockpit }: {
   products: Prod[]; inv: InvItem[]; velocity: Record<string, number>; priceVnd: Record<string, number>
   feed: { tone: 'red' | 'amber'; title: string; reason: string }[]
-  cockpit: { vonNhap: number; eDong: number; tienKet: number; duKienThu: number }
-  hasCashflow: boolean
+  cockpit: { vonNhap: number; eDong: number }
 }) {
   const [isMobile, setIsMobile] = useState(false)
   useEffect(() => {
@@ -73,14 +72,13 @@ export default function ProfitTruth({ products, inv, velocity, priceVnd, feed, c
         </div>
       )}
 
-      {/* 💰 BUỒNG LÁI VỐN */}
-      {(cockpit.vonNhap > 0 || cockpit.eDong > 0 || hasCashflow) && (
+      {/* 💰 BUỒNG LÁI VỐN — KHÔNG hiện tiền COD (không cho nhân viên thấy dòng tiền công ty) */}
+      {(cockpit.vonNhap > 0 || cockpit.eDong > 0) && (
         <div style={panelStyle}>
           <div style={eyebrowStyle}>💰 BUỒNG LÁI VỐN</div>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit,minmax(180px,1fr))', gap: 10, margin: '10px 0 0' }}>
             {[
               { l: 'Vốn CẦN nhập', v: fmtPlain(cockpit.vonNhap), c: C.gold, sub: 'để không đứt hàng' },
-              { l: 'Tiền COD đang KẸT', v: hasCashflow ? fmtPlain(cockpit.tienKet) : '—', c: C.amber, sub: hasCashflow ? `dự kiến thu ~${fmtPlain(cockpit.duKienThu)}` : 'chưa đọc được QLHB' },
               { l: 'Vốn ĐỌNG ở hàng ế', v: fmtPlain(cockpit.eDong), c: C.muted2, sub: 'thanh lý để lấy vốn' },
             ].map((k) => (
               <div key={k.l} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '12px 14px', minWidth: 0 }}>
@@ -90,7 +88,7 @@ export default function ProfitTruth({ products, inv, velocity, priceVnd, feed, c
               </div>
             ))}
           </div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>Cần nhập <b style={{ color: C.muted2 }}>{fmtPlain(cockpit.vonNhap)}</b>{hasCashflow ? <> · đang kẹt <b style={{ color: C.muted2 }}>{fmtPlain(cockpit.tienKet)}</b> ngoài đường</> : null} · đọng <b style={{ color: C.muted2 }}>{fmtPlain(cockpit.eDong)}</b> ở hàng ế. Mẹo: thanh lý hàng ế để có vốn nhập thay vì bơm thêm tiền.</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>Cần nhập <b style={{ color: C.muted2 }}>{fmtPlain(cockpit.vonNhap)}</b> · đọng <b style={{ color: C.muted2 }}>{fmtPlain(cockpit.eDong)}</b> ở hàng ế. Mẹo: thanh lý hàng ế để có vốn nhập thay vì bơm thêm tiền.</div>
         </div>
       )}
 

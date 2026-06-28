@@ -207,7 +207,6 @@ export default function InventoryBoard() {
   const incoming = data?.incoming ?? []
   const priceVnd = data?.priceVnd ?? {}
   const provinces = data?.provinces ?? []
-  const cashflow = data?.cashflow ?? null
   const backorder = useMemo(() => {
     const m: Record<string, { donNo: number; spNo: number }> = {}
     ;(data?.backorder ?? []).forEach((x) => { m[x.ma] = { donNo: x.donNo, spNo: x.spNo } })
@@ -290,19 +289,12 @@ export default function InventoryBoard() {
     return acts.sort((a, b) => b.score - a.score).slice(0, 6)
   }, [restock, profitRows])
 
-  // 💰 BUỒNG LÁI VỐN — vốn cần nhập vs tiền COD kẹt vs vốn đọng hàng ế
+  // 💰 BUỒNG LÁI VỐN — vốn cần nhập + vốn đọng hàng ế (KHÔNG tính tiền COD — đã bỏ vì không cho nhân viên thấy)
   const cockpit = useMemo(() => {
     const vonNhap = restock.reduce((s, r) => s + r.von, 0)
     const eDong = invRows.filter((r) => r.st.t === 'Ế/đọng').reduce((s, r) => s + r.value, 0)
-    let tienKet = 0, duKienThu = 0
-    if (cashflow) {
-      tienKet = (cashflow.pendingDS + cashflow.deliveryDS + cashflow.returnDS) * TY_GIA
-      const choThu = (cashflow.pendingDS + cashflow.deliveryDS) * TY_GIA
-      const sr = cashflow.paidDS + cashflow.returnedDS > 0 ? cashflow.paidDS / (cashflow.paidDS + cashflow.returnedDS) : 0
-      duKienThu = choThu * sr
-    }
-    return { vonNhap, eDong, tienKet, duKienThu }
-  }, [restock, invRows, cashflow])
+    return { vonNhap, eDong }
+  }, [restock, invRows])
 
   // ── cột bảng (port từ dashboard) ───────────────────────────────────────────
   const restockCols: Col<(typeof restock)[number]>[] = [
@@ -444,7 +436,7 @@ export default function InventoryBoard() {
         )}
         </>)}
 
-        {tab === 'profit' && <ProfitTruth products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} feed={feed} cockpit={cockpit} hasCashflow={!!cashflow} />}
+        {tab === 'profit' && <ProfitTruth products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} feed={feed} cockpit={cockpit} />}
 
         {tab === 'gift' && <GiftCombo products={products} giftLink={sources.giftplan || ''} />}
 
