@@ -92,10 +92,31 @@ export type ShotBlock =
   | 'van-de' | 'noi-dau' | 'san-pham' | 'loi-ich-sp'
   | 'thanh-phan' | 'co-che' | 'loi-ich-kh' | 'proof' | 'cta'
 
-/** How a shot gets its footage. `ai-render` is reserved for the CTA shot only. */
-export type ShotFill = 'source-broad' | 'source-product' | 'ai-render'
+/** How a shot gets its footage. `ai-render` is reserved for the CTA shot only.
+ *   - source-broad     : situation/symptom b-roll (search by short ZH symptom terms).
+ *   - source-product   : footage of THE exact product — resolved via 1688 reverse-image
+ *                        lock (ShotPlan.productZh), NOT a generic category guess.
+ *   - source-ingredient: one beat that names several ingredients — search each ZH
+ *                        ingredient term separately and merge (avoids the combined
+ *                        query collapsing to the dominant term).
+ *   - ai-render        : the CTA shot only (generated, not sourced). */
+export type ShotFill = 'source-broad' | 'source-product' | 'source-ingredient' | 'ai-render'
 /** Strictness when querying Source Finder (ignored when fill = ai-render). */
 export type ShotMatchMode = 'broad' | 'product-exact'
+
+/** A product locked from a 1688 reverse-image search. The REAL Chinese title is the
+ *  only query that returns footage of THE exact product (a generic category keyword
+ *  drifts to random same-category items). Locked once at the plan level and reused by
+ *  every source-product shot. */
+export interface ProductLock1688 {
+  itemId: string
+  /** Real Chinese 1688 title — used verbatim as the product-shot search query. */
+  name: string
+  /** Vietnamese translation of the title (display only). */
+  nameVi?: string
+  /** 1688 thumbnail (display only). */
+  image?: string
+}
 
 /** A source clip returned by /api/tikhub-search (Douyin / RED / Kuaishou). */
 export interface SourceClip {
@@ -147,12 +168,19 @@ export interface Shot {
   /** WHAT to show on screen — drives the source query / render brief.
    *  NEVER the literal voice text (querying raw dialogue returns junk clips). */
   visualIdea: string
-  /** Chinese search keyword for Douyin/RED/Kuaishou (the 3 source platforms are
-   *  Chinese — querying in Chinese returns far better clips). Derived from
-   *  visualIdea, NOT the voice line. source-broad = situation/emotion only (no
-   *  product/brand); source-product = product category in Chinese. Empty for
-   *  ai-render (the CTA shot is generated, not sourced). Feeds Source Finder. */
-  zhQuery: string
+  /** Chinese search keywords for Douyin/RED/Kuaishou (the 3 source platforms are
+   *  Chinese — querying in Chinese returns far better clips). Reasoned from the
+   *  product's PROBLEM DOMAIN, NOT a literal transliteration of the voice line:
+   *   - source-broad     : 2-3 SHORT symptom/situation terms (e.g. 耳朵痒 / 耳朵痛
+   *                        / 耳鸣 — never a whole-sentence phrase).
+   *   - source-ingredient: one term per ingredient named in the beat (each searched
+   *                        separately, then merged).
+   *   - source-product   : empty — product shots search by ShotPlan.productZh.name
+   *                        (the real 1688 title), resolved via image lock.
+   *   - ai-render        : empty (the CTA shot is generated, not sourced).
+   *  Each term feeds Source Finder as its own query; the operator can edit the list
+   *  (remove chips, or type Vietnamese → translate to a short ZH term). */
+  zhTerms: string[]
   /** Estimated spoken duration of this shot, seconds (from primary-lang words). */
   durationSec: number
   fill: ShotFill
@@ -172,6 +200,10 @@ export interface ShotPlan {
   shots: Shot[]
   /** Sum of all shot durations, seconds. */
   totalDurationSec: number
+  /** The product locked from a 1688 reverse-image search. Set once by the operator
+   *  (picks the correct match), reused by every source-product shot so they search
+   *  THE exact product instead of a generic category guess. null = not locked yet. */
+  productZh?: ProductLock1688 | null
 }
 
 export interface ScriptGenerationResult {

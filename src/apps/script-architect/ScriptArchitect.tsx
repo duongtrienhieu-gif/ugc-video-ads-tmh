@@ -38,15 +38,27 @@ const DEFAULT_PRESET_ID = 'problem-solution'
 const DEFAULT_LENGTH: LengthSeconds = 30
 const DEFAULT_HOOK: HookStrength = 'balanced'
 
-// Migrate pre-B3v3 snapshots: a shot used to hold a single `clip`; now it holds
-// `clips[]`. Promote any legacy single clip into a one-item list (role = main).
+// Migrate old snapshots forward:
+//  • pre-B3v3: a shot held a single `clip`; now it holds `clips[]`.
+//  • pre-zhTerms: a shot held a single Chinese phrase `zhQuery`; now it holds a
+//    list `zhTerms[]` (each term is searched separately). Promote the old single
+//    phrase into a one-item list (dropped if empty).
 const migrateShotPlan = (plan: ShotPlan): ShotPlan => ({
   ...plan,
+  productZh: plan.productZh ?? null,
   shots: plan.shots.map((s) => {
-    const legacy = (s as Shot & { clip?: SourceClip | null }).clip
-    if (s.clips || !legacy) return s
-    const { clip: _drop, ...rest } = s as Shot & { clip?: SourceClip | null }
-    return { ...rest, clips: [{ ...legacy, role: 'main' as const }] }
+    let out = s
+    const legacyClip = (out as Shot & { clip?: SourceClip | null }).clip
+    if (!out.clips && legacyClip) {
+      const { clip: _drop, ...rest } = out as Shot & { clip?: SourceClip | null }
+      out = { ...rest, clips: [{ ...legacyClip, role: 'main' as const }] }
+    }
+    if (!Array.isArray(out.zhTerms)) {
+      const legacyQuery = (out as Shot & { zhQuery?: string }).zhQuery
+      const { zhQuery: _dropQ, ...rest } = out as Shot & { zhQuery?: string }
+      out = { ...rest, zhTerms: legacyQuery && legacyQuery.trim() ? [legacyQuery.trim()] : [] }
+    }
+    return out
   }),
 })
 

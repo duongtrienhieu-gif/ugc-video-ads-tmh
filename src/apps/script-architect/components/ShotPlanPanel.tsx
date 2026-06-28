@@ -1,10 +1,11 @@
 import { useState, useRef } from 'react'
-import { ArrowLeft, RotateCcw, Loader2, Scissors, ArrowDownToLine, Trash2, ChevronUp, ChevronDown, Clapperboard, Film, Sparkles, Search, Play, RefreshCw, X, ImageIcon, Video, AlertTriangle, Plus, Star, Crosshair, Package } from 'lucide-react'
-import type { Shot, ShotPlan, ShotBlock, ShotFill, ScriptLanguage, SourceClip, ShotClip, CtaRender } from '../types'
+import { ArrowLeft, RotateCcw, Loader2, Scissors, ArrowDownToLine, Trash2, ChevronUp, ChevronDown, Clapperboard, Film, Sparkles, Search, Play, RefreshCw, X, ImageIcon, Video, AlertTriangle, Plus, Star, Crosshair, Package, Lock, Languages } from 'lucide-react'
+import type { Shot, ShotPlan, ShotBlock, ShotFill, ScriptLanguage, SourceClip, ShotClip, CtaRender, ProductLock1688 } from '../types'
 import type { Product } from '../../../stores/types'
 import { estimateDuration, DEFAULT_FILL_BY_BLOCK } from '../services/splitIntoShots'
 import { renderCtaImage, renderCtaVideo, CTA_IMAGE_CREDITS, CTA_VIDEO_CREDITS } from '../services/renderCtaShot'
 import { exportCapcutBundle, type ExportProgress } from '../services/exportBundle'
+import { viToZhTerms, hasHan, productImageDataUrl, searchProduct1688, fetch1688Media, type Media1688 } from '../services/sourceFinding'
 import { useSettingsStore } from '../../../stores/settingsStore'
 
 // ── Co-pilot scene-split table (Phase B / B2) ────────────────────────────
@@ -41,9 +42,10 @@ const BLOCK_META: Record<ShotBlock, { label: string }> = {
 const BLOCK_ORDER: ShotBlock[] = ['van-de', 'noi-dau', 'san-pham', 'loi-ich-sp', 'thanh-phan', 'co-che', 'loi-ich-kh', 'proof', 'cta']
 
 const FILL_META: Record<ShotFill, { label: string; hint: string; cls: string }> = {
-  'source-broad':   { label: 'Source rộng',   hint: 'Clip đời thường / cảm xúc — không cần trúng SP', cls: 'bg-sky-100 text-sky-700' },
-  'source-product': { label: 'Source SP',     hint: 'Tìm đúng clip sản phẩm trên Douyin/RED',          cls: 'bg-violet-100 text-violet-700' },
-  'ai-render':      { label: 'AI render',     hint: 'CTA tạo bằng AI (SP + ưu đãi + hộp quà) — không giá', cls: 'bg-amber-100 text-amber-700' },
+  'source-broad':     { label: 'Source rộng',   hint: 'Clip đời thường / cảm xúc — tìm theo từ khóa triệu chứng (tiếng Trung)', cls: 'bg-sky-100 text-sky-700' },
+  'source-product':   { label: 'Source SP',     hint: 'Tìm ĐÚNG clip sản phẩm — khóa ảnh SP qua 1688 rồi tìm theo tên thật',  cls: 'bg-violet-100 text-violet-700' },
+  'source-ingredient':{ label: 'Source thành phần', hint: 'Cảnh nhắc nhiều thành phần — mỗi thành phần tìm riêng rồi gộp',     cls: 'bg-teal-100 text-teal-700' },
+  'ai-render':        { label: 'AI render',     hint: 'CTA tạo bằng AI (SP + ưu đãi + hộp quà) — không giá', cls: 'bg-amber-100 text-amber-700' },
 }
 
 const fmtSec = (n: number) => `~${n}s`
@@ -123,6 +125,39 @@ export default function ShotPlanPanel({
   const previewVideoRef = useRef<HTMLVideoElement>(null)
   const [exporting, setExporting] = useState<ExportProgress | null>(null)
 
+  // Gemini key (panel-wide) — needed for the VN→ZH keyword translation.
+  const geminiKey = useSettingsStore((s) => s.geminiApiKey)
+
+  // ── Product lock (issue 1) — reverse-image the product on 1688 so every
+  //    source-product shot searches by the REAL Chinese title, not a guess. ──
+  const productZh = plan.productZh ?? null
+  const [lockOpen, setLockOpen] = useState(false)
+  const [lockBusy, setLockBusy] = useState(false)
+  const [lockErr, setLockErr] = useState<string | null>(null)
+  const [lockMatches, setLockMatches] = useState<ProductLock1688[] | null>(null)
+
+  const openLock = async () => {
+    setLockOpen(true); setLockErr(null)
+    // Re-run the reverse-image search every time the modal opens (cheap, and the
+    // product image may have changed). Skip if matches are already loaded.
+    if (lockMatches) return
+    setLockBusy(true)
+    try {
+      const img = await productImageDataUrl(product)
+      if (!img) { setLockErr('Sản phẩm chưa có ảnh trong Kho — thêm ảnh SP để khóa theo hình.'); setLockBusy(false); return }
+      const matches = await searchProduct1688(img)
+      setLockMatches(matches)
+      if (!matches.length) setLockErr('Không tìm thấy SP khớp ảnh trên 1688 — thử ảnh nền sạch hơn.')
+    } catch (e) {
+      setLockErr(e instanceof Error ? e.message : String(e))
+    } finally { setLockBusy(false) }
+  }
+  const lockProduct = (m: ProductLock1688) => {
+    onChange({ ...plan, productZh: m })
+    setLockOpen(false)
+  }
+  const clearLock = () => onChange({ ...plan, productZh: null })
+
   // How many assets the export would bundle (picked source clips + rendered CTA).
   const exportableCount = plan.shots.reduce(
     (n, s) => n + (s.fill === 'ai-render' ? (s.ctaRender?.videoUrl ? 1 : 0) : (s.clips?.length ?? 0)),
@@ -159,6 +194,10 @@ export default function ShotPlanPanel({
   const editGloss = (id: string, value: string) =>
     patchShot(id, lang === 'my' ? { vi: value } : { my: value })
 
+  // Product & ai-render shots carry no search terms (product = 1688 lock; ai = generated).
+  const termsForFill = (fill: ShotFill, current: string[]): string[] =>
+    (fill === 'ai-render' || fill === 'source-product') ? [] : current
+
   const changeBlock = (id: string, block: ShotBlock) => {
     const shot = plan.shots.find((s) => s.id === id)
     if (!shot) return
@@ -166,14 +205,16 @@ export default function ShotPlanPanel({
     let fill = shot.fill
     if (block === 'cta') fill = 'ai-render'
     else if (fill === 'ai-render') fill = DEFAULT_FILL_BY_BLOCK[block]
-    patchShot(id, { block, fill, matchMode: matchForFill(fill), zhQuery: fill === 'ai-render' ? '' : shot.zhQuery })
+    patchShot(id, { block, fill, matchMode: matchForFill(fill), zhTerms: termsForFill(fill, shot.zhTerms) })
   }
 
   const changeFill = (id: string, fill: ShotFill) => {
     const shot = plan.shots.find((s) => s.id === id)
     if (!shot) return
-    patchShot(id, { fill, matchMode: matchForFill(fill), zhQuery: fill === 'ai-render' ? '' : shot.zhQuery })
+    patchShot(id, { fill, matchMode: matchForFill(fill), zhTerms: termsForFill(fill, shot.zhTerms) })
   }
+
+  const setZhTerms = (id: string, zhTerms: string[]) => patchShot(id, { zhTerms })
 
   const move = (index: number, dir: -1 | 1) => {
     const j = index + dir
@@ -330,6 +371,33 @@ export default function ShotPlanPanel({
             <input type="checkbox" checked={onlyShort} onChange={(e) => setOnlyShort(e.target.checked)} /> ⏱ Chỉ clip &lt;60s
           </label>
         </div>
+
+        {/* Product lock — every "Source SP" shot searches by this locked 1688 title */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-bold text-app-subtle">Sản phẩm nguồn:</span>
+          {productZh ? (
+            <div className="flex items-center gap-1.5 rounded-lg border px-2 py-0.5" style={{ borderColor: 'var(--color-accent)' }}>
+              {productZh.image && <img src={productZh.image} alt="" className="h-5 w-5 rounded object-cover" />}
+              <Lock className="h-3 w-3" style={{ color: 'var(--color-accent)' }} />
+              <span className="max-w-[200px] truncate text-[11px] font-bold text-app-text" title={`${productZh.name}${productZh.nameVi ? ` — ${productZh.nameVi}` : ''}`}>
+                {productZh.nameVi || productZh.name}
+              </span>
+              <button onClick={() => void openLock()} className="rounded p-0.5 text-app-muted hover:bg-app-card-elevated" title="Đổi sản phẩm khóa"><RefreshCw className="h-3 w-3" /></button>
+              <button onClick={clearLock} className="rounded p-0.5 text-app-muted hover:bg-rose-500/10 hover:text-rose-500" title="Bỏ khóa"><X className="h-3 w-3" /></button>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => void openLock()}
+                className="ui-accent-soft flex items-center gap-1.5 rounded-lg px-2.5 py-0.5 text-[11px] font-bold"
+                title="Đẩy ảnh SP lên 1688, chọn đúng SP → các cảnh Source SP tìm theo tên thật (chính xác)"
+              >
+                <Lock className="h-3 w-3" /> Khóa SP từ ảnh (1688)
+              </button>
+              <span className="text-[10px] text-app-subtle">Khóa để cảnh “Source SP” ra đúng clip sản phẩm</span>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Building overlay */}
@@ -358,7 +426,7 @@ export default function ShotPlanPanel({
                 onEditPrimary={(v) => editPrimary(s.id, v)}
                 onEditGloss={(v) => editGloss(s.id, v)}
                 onEditVisualIdea={(v) => patchShot(s.id, { visualIdea: v })}
-                onEditZhQuery={(v) => patchShot(s.id, { zhQuery: v })}
+                onSetZhTerms={(t) => setZhTerms(s.id, t)}
                 onChangeBlock={(b) => changeBlock(s.id, b)}
                 onChangeFill={(f) => changeFill(s.id, f)}
                 onMoveUp={() => move(i, -1)}
@@ -375,8 +443,51 @@ export default function ShotPlanPanel({
                 product={product}
                 lang={lang}
                 onChangeCta={(r) => patchShot(s.id, { ctaRender: r })}
+                productZh={productZh}
+                geminiKey={geminiKey}
+                onRequestLock={() => void openLock()}
               />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Product-lock modal — pick the correct 1688 match to lock */}
+      {lockOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3" onClick={() => setLockOpen(false)}>
+          <div className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-app-border bg-app-base" onClick={(e) => e.stopPropagation()}>
+            <div className="flex shrink-0 items-center gap-2 border-b border-app-border bg-app-card px-4 py-3">
+              <Lock className="h-4 w-4" style={{ color: 'var(--color-accent)' }} />
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-app-text">Khóa sản phẩm từ ảnh (1688)</h3>
+                <p className="truncate text-[11px] text-app-muted">Chọn đúng sản phẩm → các cảnh “Source SP” tìm theo TÊN THẬT (chính xác hơn từ khóa đoán)</p>
+              </div>
+              <button onClick={() => setLockOpen(false)} className="ml-auto rounded-full p-1 text-app-muted hover:bg-app-card-elevated"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              {lockBusy && <div className="py-10 text-center text-sm text-app-muted">🔍 Đang khớp ảnh sản phẩm trên 1688…</div>}
+              {lockErr && !lockBusy && <p className="rounded-lg border border-app-border bg-app-card px-3 py-2 text-xs text-rose-500">{lockErr}</p>}
+              {!lockBusy && lockMatches && lockMatches.length > 0 && (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {lockMatches.map((m) => (
+                    <button
+                      key={m.itemId}
+                      onClick={() => lockProduct(m)}
+                      className={`flex flex-col overflow-hidden rounded-xl border bg-app-card text-left hover:bg-app-card-elevated ${productZh?.itemId === m.itemId ? 'ring-1 ring-accent' : ''}`}
+                      style={{ borderColor: productZh?.itemId === m.itemId ? 'var(--color-accent)' : 'var(--color-border)' }}
+                    >
+                      <div className="aspect-square w-full bg-black/30">
+                        {m.image && <img src={m.image} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />}
+                      </div>
+                      <div className="flex flex-1 flex-col gap-0.5 p-2">
+                        <p className="line-clamp-2 text-[11px] font-bold text-app-text">{m.nameVi || m.name}</p>
+                        <p className="line-clamp-1 text-[10px] text-app-subtle" lang="zh">{m.name}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -483,7 +594,7 @@ interface ShotCardProps {
   onEditPrimary: (v: string) => void
   onEditGloss: (v: string) => void
   onEditVisualIdea: (v: string) => void
-  onEditZhQuery: (v: string) => void
+  onSetZhTerms: (terms: string[]) => void
   onChangeBlock: (b: ShotBlock) => void
   onChangeFill: (f: ShotFill) => void
   onMoveUp: () => void
@@ -502,6 +613,10 @@ interface ShotCardProps {
   product: Product | null
   lang: ScriptLanguage
   onChangeCta: (r: CtaRender) => void
+  // Product lock (issue 1) + VN→ZH translate (issue 3)
+  productZh: ProductLock1688 | null
+  geminiKey: string
+  onRequestLock: () => void
 }
 
 function ShotCard(p: ShotCardProps) {
@@ -551,6 +666,7 @@ function ShotCard(p: ShotCardProps) {
           >
             <option value="source-broad" style={OPT_STYLE}>Source rộng</option>
             <option value="source-product" style={OPT_STYLE}>Source SP</option>
+            <option value="source-ingredient" style={OPT_STYLE}>Source thành phần</option>
           </select>
         )}
 
@@ -586,8 +702,8 @@ function ShotCard(p: ShotCardProps) {
         </div>
       </div>
 
-      {/* Visual idea + Chinese keyword */}
-      <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+      {/* Visual idea */}
+      <div className="mt-2">
         <label className="flex items-center gap-1.5 rounded-lg border border-app-border bg-app-surface px-2 py-1">
           <Film className="h-3 w-3 shrink-0 text-app-subtle" />
           <input
@@ -597,23 +713,30 @@ function ShotCard(p: ShotCardProps) {
             className="w-full bg-transparent text-[11px] text-app-text outline-none placeholder:text-app-faint"
           />
         </label>
-        {isAiRender ? (
-          <div className="flex items-center gap-1.5 rounded-lg border border-dashed border-app-border bg-app-surface px-2 py-1 text-[11px] text-app-subtle">
-            <Sparkles className="h-3 w-3 shrink-0" /> AI render — không cần tìm source
-          </div>
-        ) : (
-          <label className="flex items-center gap-1.5 rounded-lg border border-app-border bg-app-surface px-2 py-1" title="Từ khóa tiếng Trung dùng tìm clip trên Douyin / RED / Kuaishou">
-            <Search className="h-3 w-3 shrink-0 text-app-subtle" />
-            <input
-              value={shot.zhQuery}
-              onChange={(e) => p.onEditZhQuery(e.target.value)}
-              placeholder="从关键词 (tiếng Trung)"
-              className="w-full bg-transparent text-[11px] text-app-text outline-none placeholder:text-app-faint"
-              lang="zh"
-            />
-          </label>
-        )}
       </div>
+
+      {/* Search-term editor — varies by fill mode (issues 2, 3, 4) */}
+      {isAiRender ? (
+        <div className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-dashed border-app-border bg-app-surface px-2 py-1 text-[11px] text-app-subtle">
+          <Sparkles className="h-3 w-3 shrink-0" /> AI render — không cần tìm source
+        </div>
+      ) : shot.fill === 'source-product' ? (
+        <div className="mt-1.5 rounded-lg border border-app-border bg-app-surface px-2 py-1.5">
+          {p.productZh ? (
+            <div className="flex items-center gap-1.5">
+              <Lock className="h-3 w-3 shrink-0" style={{ color: 'var(--color-accent)' }} />
+              <span className="text-[11px] text-app-muted">Tìm theo SP đã khóa:</span>
+              <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-app-text" lang="zh" title={p.productZh.name}>{p.productZh.name}</span>
+            </div>
+          ) : (
+            <button onClick={p.onRequestLock} className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: 'var(--color-accent)' }}>
+              <Lock className="h-3 w-3" /> Khóa SP từ ảnh (1688) để tìm đúng clip sản phẩm
+            </button>
+          )}
+        </div>
+      ) : (
+        <KeywordEditor terms={shot.zhTerms} geminiKey={p.geminiKey} onSetTerms={p.onSetZhTerms} />
+      )}
 
       {/* Card actions: merge / split */}
       <div className="mt-2 flex items-center gap-1.5">
@@ -647,12 +770,14 @@ function ShotCard(p: ShotCardProps) {
         ) : (
           <ShotSourcePicker
             shot={shot}
+            productZh={p.productZh}
             onlyShort={p.onlyShort}
             onPlay={p.onPlay}
             onAddClip={p.onAddClip}
             onRemoveClip={p.onRemoveClip}
             onSetMainClip={p.onSetMainClip}
             onToggleNeedsReplace={p.onToggleNeedsReplace}
+            onRequestLock={p.onRequestLock}
           />
         )}
       </div>
@@ -660,10 +785,93 @@ function ShotCard(p: ShotCardProps) {
   )
 }
 
+// ── Chinese search-term editor (issues 2, 3, 4) ───────────────────────────
+// The shot carries an ARRAY of short Chinese symptom/ingredient terms. The
+// operator sees them as removable chips and can add more by typing VIETNAMESE
+// (the mandatory VN→ZH bridge: the source platforms search in Chinese) or raw
+// Chinese. The picker below searches EACH term separately and merges, so a
+// multi-ingredient beat doesn't collapse to one dominant clip.
+interface KeywordEditorProps {
+  terms: string[]
+  geminiKey: string
+  onSetTerms: (terms: string[]) => void
+}
+
+function KeywordEditor({ terms, geminiKey, onSetTerms }: KeywordEditorProps) {
+  const [input, setInput] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const addUnique = (incoming: string[]) => {
+    const next = [...terms]
+    for (const t of incoming) {
+      const v = t.trim()
+      if (v && !next.includes(v)) next.push(v)
+    }
+    onSetTerms(next)
+  }
+
+  const addFromInput = async () => {
+    const raw = input.trim()
+    if (!raw || busy) return
+    setErr(null)
+    // Already Chinese → add verbatim. Vietnamese → translate to SHORT ZH terms.
+    if (hasHan(raw)) { addUnique([raw]); setInput(''); return }
+    if (!geminiKey) { setErr('Cần Google Gemini API key trong Cài đặt để dịch sang tiếng Trung.'); return }
+    setBusy(true)
+    try {
+      const zh = await viToZhTerms(raw, geminiKey)
+      if (zh.length) { addUnique(zh); setInput('') }
+      else setErr('Không dịch được — thử gõ ngắn gọn hơn (vd: "tai bị ngứa").')
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally { setBusy(false) }
+  }
+
+  const removeTerm = (i: number) => onSetTerms(terms.filter((_, idx) => idx !== i))
+
+  return (
+    <div className="mt-1.5 rounded-lg border border-app-border bg-app-surface px-2 py-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Search className="h-3 w-3 shrink-0 text-app-subtle" />
+        {terms.length === 0 && <span className="text-[10px] text-app-faint">Chưa có từ khóa — gõ tiếng Việt bên dưới để thêm</span>}
+        {terms.map((t, i) => (
+          <span key={`${t}_${i}`} className="inline-flex items-center gap-1 rounded-full bg-app-card px-2 py-0.5 text-[11px] font-bold text-app-text" lang="zh">
+            {t}
+            <button onClick={() => removeTerm(i)} className="rounded-full text-app-muted hover:text-rose-500" title="Bỏ từ khóa"><X className="h-2.5 w-2.5" /></button>
+          </span>
+        ))}
+      </div>
+      <div className="mt-1.5 flex items-center gap-1.5">
+        <Languages className="h-3 w-3 shrink-0 text-app-subtle" />
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addFromInput() } }}
+          placeholder="Gõ tiếng Việt (vd: tai bị ngứa) → dịch sang tiếng Trung"
+          className="w-full bg-transparent text-[11px] text-app-text outline-none placeholder:text-app-faint"
+        />
+        <button
+          onClick={() => void addFromInput()}
+          disabled={busy || !input.trim()}
+          className="ui-accent-soft flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold disabled:opacity-40"
+          title="Dịch tiếng Việt sang từ khóa tiếng Trung ngắn rồi thêm"
+        >
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />} Dịch &amp; thêm
+        </button>
+      </div>
+      {err && <p className="mt-1 text-[10px] text-rose-500">{err}</p>}
+    </div>
+  )
+}
+
 // ── Per-shot source picker (B3) ──────────────────────────────────────────
-// Queries /api/tikhub-search by the shot's CHINESE keyword (zhQuery) — the 3
-// source platforms are Chinese, so a Chinese query returns far better clips.
-// Falls back to visualIdea only if zhQuery is empty. Shows a results strip with
+// Searches /api/tikhub-search across all 3 Chinese platforms (RED › Kuaishou ›
+// Douyin) for EACH of the shot's terms separately, then merges round-robin so
+// every term (e.g. each ingredient) is represented. For source-product shots the
+// single "term" is the locked 1688 product title, and the seller's own 1688
+// videos/images are offered too (the most exact footage of THE product).
+// Falls back to visualIdea only if a term list is empty. Shows a results strip with
 // play / pick / download; once an operator picks a clip it's pinned on the shot.
 
 interface TikhubResponse {
@@ -678,89 +886,134 @@ interface TikhubResponse {
 
 interface ShotSourcePickerProps {
   shot: Shot
+  /** Locked 1688 product — the query for source-product shots. */
+  productZh: ProductLock1688 | null
   onlyShort: boolean
   onPlay: (p: PreviewState) => void
   onAddClip: (c: SourceClip) => void
   onRemoveClip: (key: string) => void
   onSetMainClip: (key: string) => void
   onToggleNeedsReplace: (key: string) => void
+  onRequestLock: () => void
 }
 
-type PlatBuckets = Record<Platform, SourceClip[]>
-const emptyBuckets = (): PlatBuckets => ({ xhs: [], kuaishou: [], douyin: [] })
+// Lane = one (termIndex, platform) search stream. Keyed "ti|plat".
+const laneKey = (ti: number, plat: Platform) => `${ti}|${plat}`
+
+// Build the merged result pool: round-robin across terms (so every term — e.g.
+// each ingredient — is represented), priority platform order within each term,
+// deduped by clipKey. This is what fixes a multi-ingredient beat collapsing to
+// the dominant term's clips.
+function buildPool(termCount: number, lanes: Record<string, SourceClip[]>): SourceClip[] {
+  const perTerm: SourceClip[][] = []
+  for (let ti = 0; ti < termCount; ti++) {
+    perTerm.push(PLAT_PRIORITY.flatMap((plat) => lanes[laneKey(ti, plat)] ?? []))
+  }
+  const pool: SourceClip[] = []
+  const seen = new Set<string>()
+  let depth = 0
+  let more = true
+  while (more) {
+    more = false
+    for (let ti = 0; ti < termCount; ti++) {
+      const arr = perTerm[ti]
+      if (depth < arr.length) {
+        more = true
+        const c = arr[depth]
+        const k = clipKey(c)
+        if (!seen.has(k)) { seen.add(k); pool.push(c) }
+      }
+    }
+    depth++
+  }
+  return pool
+}
 
 function ShotSourcePicker(p: ShotSourcePickerProps) {
   const { shot } = p
-  // Fetched clips grouped per platform + per-platform pagination state. The pool
-  // (all clips, priority-ordered) is derived; `shown` is how many we reveal.
-  const [byPlat, setByPlat] = useState<PlatBuckets>(emptyBuckets)
-  const [cursor, setCursor] = useState<Partial<Record<Platform, string>>>({})
-  const [hasMore, setHasMore] = useState<Record<Platform, boolean>>({ xhs: true, kuaishou: true, douyin: true })
+  const isProduct = shot.fill === 'source-product'
+
+  // The search terms for this shot. Product shots search by the locked 1688 title
+  // (one term); other shots search each zhTerm separately. Fall back to visualIdea
+  // only when a non-product shot has no terms at all.
+  const terms: string[] = isProduct
+    ? (p.productZh ? [p.productZh.name] : [])
+    : (shot.zhTerms.length ? shot.zhTerms : (shot.visualIdea.trim() ? [shot.visualIdea.trim()] : []))
+
+  // Per-lane fetched clips + pagination. Pool (merged, deduped) is derived.
+  const [lanes, setLanes] = useState<Record<string, SourceClip[]>>({})
+  const [cursor, setCursor] = useState<Record<string, string | undefined>>({})
+  const [hasMore, setHasMore] = useState<Record<string, boolean>>({})
   const [shown, setShown] = useState(0)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
 
-  const query = (shot.zhQuery || '').trim() || (shot.visualIdea || '').trim()
+  // 1688 seller media (product shots only) — the most exact footage of THE product.
+  const [media, setMedia] = useState<Media1688 | null>(null)
+  const [mediaBusy, setMediaBusy] = useState(false)
+  const [mediaErr, setMediaErr] = useState<string | null>(null)
 
-  // Pool = every fetched clip, ordered RED › Kuaishou › Douyin (priority), keeping
-  // each platform's API order (by likes) inside its group. `visible` = first `shown`.
-  const pool: SourceClip[] = [...byPlat.xhs, ...byPlat.kuaishou, ...byPlat.douyin]
+  const pool = buildPool(terms.length, lanes)
   const poolLen = pool.length
   const visible = pool.slice(0, shown)
-  const anyHasMore = PLAT_PRIORITY.some((pl) => hasMore[pl])
+  const anyHasMore = Object.values(hasMore).some(Boolean)
 
-  const fetchPlat = async (pl: Platform, cur: string | undefined): Promise<TikhubResponse> => {
+  const fetchLane = async (term: string, plat: Platform, cur: string | undefined): Promise<TikhubResponse> => {
     const curParam = cur ? `&cursor=${encodeURIComponent(cur)}` : ''
-    const url = `/api/tikhub-search?q=${encodeURIComponent(query)}&platform=${pl}&sort=like&maxSec=${p.onlyShort ? 60 : 0}${curParam}`
+    const url = `/api/tikhub-search?q=${encodeURIComponent(term)}&platform=${plat}&sort=like&maxSec=${p.onlyShort ? 60 : 0}${curParam}`
     const res = await fetch(url)
     return (await res.json()) as TikhubResponse
   }
 
-  // Ensure the pool holds at least `target` clips — fetching the next page from
-  // each platform (priority order, in parallel) until full or all platforms dry —
-  // then reveal up to `target`. reset=true starts a fresh search.
+  // Fetch the next page from every lane (term × platform) in parallel until the
+  // merged pool holds `target` clips or all lanes are dry, then reveal up to it.
   const ensureAndShow = async (reset: boolean) => {
-    if (!query) { setErr('Chưa có từ khóa tiếng Trung để tìm.'); return }
+    if (terms.length === 0) {
+      setErr(isProduct ? 'Chưa khóa SP — bấm "Khóa SP từ ảnh (1688)" ở thanh trên.' : 'Chưa có từ khóa tiếng Trung để tìm.')
+      return
+    }
     setBusy(true); setErr(null); setOpen(true)
     try {
-      let nByPlat: PlatBuckets = reset ? emptyBuckets() : { ...byPlat }
-      const nCursor: Partial<Record<Platform, string>> = reset ? {} : { ...cursor }
-      const nHasMore: Record<Platform, boolean> = reset
-        ? { xhs: true, kuaishou: true, douyin: true }
-        : { ...hasMore }
-      const len = (b: PlatBuckets) => b.xhs.length + b.kuaishou.length + b.douyin.length
+      const keys: { ti: number; plat: Platform; key: string }[] = []
+      terms.forEach((_, ti) => PLAT_PRIORITY.forEach((plat) => keys.push({ ti, plat, key: laneKey(ti, plat) })))
+      let nLanes: Record<string, SourceClip[]> = reset ? {} : { ...lanes }
+      const nCursor: Record<string, string | undefined> = reset ? {} : { ...cursor }
+      const nHasMore: Record<string, boolean> = reset ? {} : { ...hasMore }
+      keys.forEach(({ key }) => {
+        if (!nLanes[key]) nLanes[key] = []
+        if (nHasMore[key] === undefined) nHasMore[key] = true
+      })
       const target = reset ? SOURCE_PAGE : shown + SOURCE_PAGE
       let sawError: string | null = null
       let guard = 0
-      while (len(nByPlat) < target && PLAT_PRIORITY.some((pl) => nHasMore[pl]) && guard < 6) {
+      while (buildPool(terms.length, nLanes).length < target && keys.some(({ key }) => nHasMore[key]) && guard < 6) {
         guard++
         const rounds = await Promise.all(
-          PLAT_PRIORITY.map(async (pl) => {
-            if (!nHasMore[pl]) return null
+          keys.map(async ({ ti, plat, key }) => {
+            if (!nHasMore[key]) return null
             try {
-              return { pl, data: await fetchPlat(pl, nCursor[pl]) }
+              return { key, data: await fetchLane(terms[ti], plat, nCursor[key]) }
             } catch (e) {
-              return { pl, data: { clips: [], error: e instanceof Error ? e.message : String(e) } as TikhubResponse }
+              return { key, data: { clips: [], error: e instanceof Error ? e.message : String(e) } as TikhubResponse }
             }
           }),
         )
         for (const r of rounds) {
           if (!r) continue
-          const { pl, data } = r
-          if (data.error) { nHasMore[pl] = false; sawError = data.detail || data.error || sawError; continue }
-          const fresh = (Array.isArray(data.clips) ? data.clips : []).filter(
-            (c) => !nByPlat[pl].some((x) => x.id === c.id),
-          )
-          nByPlat = { ...nByPlat, [pl]: [...nByPlat[pl], ...fresh] }
-          nCursor[pl] = data.cursor
-          nHasMore[pl] = !!data.hasMore && fresh.length > 0
+          const { key, data } = r
+          if (data.error) { nHasMore[key] = false; sawError = data.detail || data.error || sawError; continue }
+          const existing = nLanes[key] ?? []
+          const fresh = (Array.isArray(data.clips) ? data.clips : []).filter((c) => !existing.some((x) => x.id === c.id))
+          nLanes = { ...nLanes, [key]: [...existing, ...fresh] }
+          nCursor[key] = data.cursor
+          nHasMore[key] = !!data.hasMore && fresh.length > 0
         }
       }
-      setByPlat(nByPlat); setCursor(nCursor); setHasMore(nHasMore)
-      const newLen = len(nByPlat)
-      setShown(Math.min(target, newLen))
-      if (newLen === 0 && sawError) setErr(sawError)
+      setLanes(nLanes); setCursor(nCursor); setHasMore(nHasMore)
+      const newPool = buildPool(terms.length, nLanes)
+      setShown(Math.min(target, newPool.length))
+      if (newPool.length === 0 && sawError) setErr(sawError)
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
     } finally {
@@ -775,6 +1028,32 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
     else void ensureAndShow(false)
   }
 
+  // Load the seller's original 1688 media for the locked product (product shots).
+  const loadMedia = async () => {
+    if (!p.productZh) return
+    setMediaBusy(true); setMediaErr(null)
+    try {
+      const m = await fetch1688Media(p.productZh.itemId)
+      setMedia(m)
+      if (!m.videos.length && !m.images.length) setMediaErr('Không lấy được ảnh/video gốc của SP này.')
+    } catch (e) {
+      setMediaErr(e instanceof Error ? e.message : String(e))
+    } finally { setMediaBusy(false) }
+  }
+  // A seller video → a SourceClip the operator can pin like any other clip.
+  const mediaClip = (videoUrl: string, i: number): SourceClip => ({
+    id: `1688_${i}`,
+    videoUrl,
+    cover: '',
+    desc: `Video gốc nhà bán · ${p.productZh?.name ?? ''}`.trim(),
+    author: '1688',
+    likes: 0,
+    durationSec: 0,
+    shareUrl: '',
+    platform: '1688',
+  })
+
+  const dlName = (shot.zhTerms[0] || shot.visualIdea)
   const picked = shot.clips ?? []
   const pickedKeys = new Set(picked.map(clipKey))
 
@@ -833,7 +1112,7 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
                   <AlertTriangle className="h-3.5 w-3.5" />
                 </button>
                 <button
-                  onClick={() => proxyDownload(c.videoUrl, `${safeName(shot.zhQuery || shot.visualIdea)}-${c.id}.mp4`)}
+                  onClick={() => proxyDownload(c.videoUrl, `${safeName(dlName)}-${c.id}.mp4`)}
                   className="shrink-0 rounded-md p-1.5 text-app-muted hover:bg-app-card-elevated"
                   title="Tải clip"
                 >
@@ -852,21 +1131,87 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
         </div>
       )}
 
-      {/* Search trigger */}
-      <div className="flex items-center gap-1.5">
+      {/* Product shot with no lock yet → can't search; point to the lock CTA. */}
+      {isProduct && !p.productZh ? (
         <button
-          onClick={search}
-          disabled={busy || !query}
-          className="ui-accent-soft flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold disabled:opacity-40"
-          title={query ? `Tìm cả 3 nền (RED › Kuaishou › Douyin): ${query}` : 'Chưa có từ khóa'}
+          onClick={p.onRequestLock}
+          className="ui-accent-soft flex items-center gap-1.5 self-start rounded-lg px-2.5 py-1 text-[11px] font-bold"
+          title="Khóa ảnh sản phẩm trên 1688 để tìm đúng clip của SP"
         >
-          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : picked.length ? <RefreshCw className="h-3 w-3" /> : <Search className="h-3 w-3" />}
-          {picked.length ? 'Tìm thêm clip' : 'Tìm clip'}
+          <Lock className="h-3 w-3" /> Khóa SP từ ảnh (1688) để tìm clip
         </button>
-        {query && (
-          <span className="line-clamp-1 text-[10px] text-app-subtle">🇨🇳 {query} · cả 3 nền</span>
-        )}
-      </div>
+      ) : (
+        <>
+          {/* Search trigger — each term searched separately, merged by priority. */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={search}
+              disabled={busy || terms.length === 0}
+              className="ui-accent-soft flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold disabled:opacity-40"
+              title={terms.length ? `Tìm cả 3 nền (RED › Kuaishou › Douyin): ${terms.join(' · ')}` : 'Chưa có từ khóa'}
+            >
+              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : picked.length ? <RefreshCw className="h-3 w-3" /> : <Search className="h-3 w-3" />}
+              {picked.length ? 'Tìm thêm clip' : 'Tìm clip'}
+            </button>
+            {terms.length > 0 && (
+              <span className="line-clamp-1 text-[10px] text-app-subtle">
+                🇨🇳 {terms.join(' · ')} · {terms.length > 1 ? `${terms.length} từ khóa · ` : ''}cả 3 nền
+              </span>
+            )}
+          </div>
+
+          {/* Seller's own 1688 media — the most exact footage of THE product. */}
+          {isProduct && p.productZh && (
+            <div className="flex flex-col gap-1.5">
+              <button
+                onClick={() => void loadMedia()}
+                disabled={mediaBusy}
+                className="flex items-center gap-1.5 self-start rounded-lg border border-app-border bg-app-card px-2.5 py-1 text-[11px] font-bold text-app-muted hover:bg-app-card-elevated disabled:opacity-40"
+                title="Lấy video/ảnh gốc của nhà bán trên 1688"
+              >
+                {mediaBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                🎬 Video gốc nhà bán 1688
+              </button>
+              {mediaErr && <p className="text-[10px] text-rose-500">{mediaErr}</p>}
+              {media && media.videos.length > 0 && (
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {media.videos.map((v, i) => {
+                    const c = mediaClip(v, i)
+                    const isPicked = pickedKeys.has(clipKey(c))
+                    return (
+                      <div key={`1688v_${i}`} className="w-28 shrink-0">
+                        <button
+                          onClick={() => p.onPlay({ clip: c })}
+                          className="relative block aspect-[9/16] w-full overflow-hidden rounded-lg bg-black/40"
+                          title="Xem trước"
+                        >
+                          <span className="absolute inset-0 flex items-center justify-center"><Play className="h-5 w-5 text-white drop-shadow" /></span>
+                          <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] font-bold text-white">1688</span>
+                        </button>
+                        <div className="mt-1 flex items-center gap-1">
+                          <button
+                            onClick={() => (isPicked ? p.onRemoveClip(clipKey(c)) : p.onAddClip(c))}
+                            className={`flex flex-1 items-center justify-center gap-0.5 rounded px-1.5 py-1 text-[10px] font-bold ${isPicked ? 'bg-emerald-500/15 text-emerald-500' : 'ui-accent-soft'}`}
+                          >
+                            {isPicked ? '✓ Đã thêm' : <><Plus className="h-2.5 w-2.5" /> Thêm</>}
+                          </button>
+                          <button
+                            onClick={() => proxyDownload(v, `${safeName(dlName)}-1688-${i}.mp4`)}
+                            className="rounded p-1 text-app-muted hover:bg-app-card-elevated"
+                            title="Tải"
+                          >
+                            <ArrowDownToLine className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
 
       {err && <p className="text-[10px] text-rose-500">{err}</p>}
 
@@ -903,7 +1248,7 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
                     {isPicked ? '✓ Đã thêm' : <><Plus className="h-2.5 w-2.5" /> Thêm</>}
                   </button>
                   <button
-                    onClick={() => proxyDownload(c.videoUrl, `${safeName(shot.zhQuery || shot.visualIdea)}-${c.id}.mp4`)}
+                    onClick={() => proxyDownload(c.videoUrl, `${safeName(dlName)}-${c.id}.mp4`)}
                     className="rounded p-1 text-app-muted hover:bg-app-card-elevated"
                     title="Tải"
                   >
