@@ -376,6 +376,23 @@ export interface VoiceoverSceneResult { audioRef: string; voicedRef: string; voi
 /** Giọng đã tổng hợp 1 cảnh (chưa ghép vào clip) — để CHẠY SONG SONG với i2v. */
 export interface SceneVoice { audioRef: string; audioBytes: Uint8Array; voiceSec: number; frames: CapFrame[] }
 
+/** Đo ĐỘ DÀI THẬT của file mp3 (decode Web Audio) → giây. Dùng khi THIẾU timestamp
+ *  (vd eleven_v3 trả null alignment với Malay) để voiceSec vẫn ĐÚNG → không cắt giọng.
+ *  Trả null nếu decode lỗi (caller rơi về clipDuration). */
+async function decodeAudioDurationSec(bytes: Uint8Array): Promise<number | null> {
+  try {
+    const AC = (globalThis as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext })
+    const Ctor = AC.AudioContext ?? AC.webkitAudioContext
+    if (!Ctor) return null
+    const ctx = new Ctor()
+    const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+    const audio = await ctx.decodeAudioData(ab)
+    const dur = audio.duration
+    await ctx.close().catch(() => {})
+    return Number.isFinite(dur) && dur > 0 ? dur : null
+  } catch { return null }
+}
+
 /** BƯỚC GIỌNG (KHÔNG cần clip i2v) → TTS eleven_v3 + karaoke frames. Chạy song song i2v được. */
 export async function synthSceneVoice(
   p: { elevenKey: string; scene: PersonifiedScene; character?: PersonifiedCharacter; voiceId?: string; speed?: number; signal?: AbortSignal },
@@ -384,17 +401,32 @@ export async function synthSceneVoice(
   const text = (p.scene.dialoguePrimary ?? '').trim()
   if (!text) throw new Error('Cảnh không có thoại — không cần lồng giọng')
   const voiceId = (p.voiceId ?? '').trim() || pickVoiceId(p.character?.voice)
+  const speed = p.speed ?? EXPRESSIVE_SPEED
   // Đọc ở 1.2x (EXPRESSIVE_SPEED) cho KHỚP ước lượng giây (playbackWps đã tính 1.2x) —
   // nếu để 1.0x thì giọng dài hơn ~20% → tràn clip, cắt chữ. ElevenLabs trả timestamp
   // theo đúng tốc độ này nên caption karaoke vẫn chuẩn.
-  const { buffer, alignment } = await textToSpeechWithTimestamps({
-    apiKey: p.elevenKey, voiceId, text, modelId: 'eleven_v3', speed: p.speed ?? EXPRESSIVE_SPEED,
+  let { buffer, alignment } = await textToSpeechWithTimestamps({
+    apiKey: p.elevenKey, voiceId, text, modelId: 'eleven_v3', speed,
   })
+  // FIX MY: eleven_v3 HAY trả null alignment với Malay → retry eleven_multilingual_v2 (đảm bảo
+  // timing) để karaoke chạy đúng. Dùng cặp buffer+alignment KHỚP nhau (đổi cả audio lẫn timestamp).
+  if (!alignment || !alignment.characters?.length) {
+    try {
+      const v2 = await textToSpeechWithTimestamps({
+        apiKey: p.elevenKey, voiceId, text, modelId: 'eleven_multilingual_v2', speed,
+      })
+      if (v2.alignment?.characters?.length) { buffer = v2.buffer; alignment = v2.alignment }
+    } catch { /* giữ kết quả v3 (vẫn có audio) — độ dài lấy bằng cách ĐO file mp3 bên dưới */ }
+  }
   const audioBytes = new Uint8Array(buffer.byteLength)
   audioBytes.set(new Uint8Array(buffer))
   const audioRef = await saveAsset(new Blob([audioBytes], { type: 'audio/mpeg' }), 'audio/mpeg')
   const ends = alignment?.characterEndTimesSeconds
-  const ttsLen = ends && ends.length ? ends[ends.length - 1] : p.scene.clipDuration
+  const alignLen = ends && ends.length ? ends[ends.length - 1] : 0
+  // ĐỘ DÀI THẬT: timestamp (khớp caption) → nếu thiếu thì ĐO file mp3 (decode) → cuối mới đoán
+  // clipDuration. → KHÔNG bao giờ cắt giọng dù alignment rỗng (lỗi MY trước đây).
+  const measured = alignLen > 0 ? 0 : (await decodeAudioDurationSec(audioBytes)) ?? 0
+  const ttsLen = alignLen || measured || p.scene.clipDuration
   // GIỌNG = ĐỒNG HỒ CHUẨN của cảnh: lấy ĐỘ DÀI THẬT (KHÔNG kẹp về clipDuration nữa) →
   // bước ghép sẽ cắt clip 8s thừa về đúng đây (hết im) hoặc kéo clip 4s ngắn cho đủ giọng
   // (không cắt chữ). Caption cũng phủ trọn câu theo độ dài thật.
