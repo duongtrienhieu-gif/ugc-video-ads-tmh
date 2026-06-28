@@ -101,7 +101,7 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
     setImgBusy(true); setImgErr(null); setImgProducts(null)
     try {
       const body = imageUrl.startsWith('data:') ? { base64: imageUrl } : { imageUrl }
-      const d = await fetch('/api/img-search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json())
+      const d = await fetch('/api/rapid-1688?action=search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json())
       if (d.error) { setImgErr(d.error + (d.detail ? ` — ${String(d.detail).slice(0, 120)}` : '')); setImgBusy(false); return }
       setImgProducts(Array.isArray(d.products) ? d.products : [])
       if (!d.products?.length) setImgErr(d.note || 'Không tìm thấy SP khớp ảnh — thử ảnh nền sạch hơn')
@@ -109,7 +109,7 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
   }
   const openDetail = async (itemId: string) => {
     setDetailFor(itemId); setDetail(null); setDetailBusy(true)
-    try { const d = await fetch(`/api/item-detail?itemId=${encodeURIComponent(itemId)}`).then((r) => r.json()); setDetail(d as Detail) }
+    try { const d = await fetch(`/api/rapid-1688?action=detail&itemId=${encodeURIComponent(itemId)}`).then((r) => r.json()); setDetail(d as Detail) }
     catch { /* */ } finally { setDetailBusy(false) }
   }
 
