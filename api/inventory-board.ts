@@ -25,6 +25,7 @@ const DEFAULTS = {
   sale: '1vSy4LHxx6WeFysdMJNT0c7473RNmpo8bKuRZvMueqtE',
   nhaphang: '1amJrEI5Z279_4ALWIco3oZETrB4F77cpkD1zSXENrg8',
   noton: '18OdPLkDSLuzKhuO1VheLzkAM0K7xHEoepxhy4JNlYAI',
+  giftplan: '1NiCESFek8BYyycTHUMvcMhxpuNDsCI7KplpIxERhOW8',
 }
 type SrcKey = keyof typeof DEFAULTS
 
@@ -233,6 +234,37 @@ function parseCashflow(wb: XLSX.WorkBook) {
   return { pendingDS, returnDS, returnedDS, deliveryDS, paidDS }
 }
 
+// File KẾ HOẠCH QUÀ — sheet "3. THỰC TRẠNG TỒN": SP → vai trò + ngách + tồn + vốn
+interface GiftMaster { name: string; vaiTro: string; ngach: string; ton: number; vonSp: number }
+function parseGiftMaster(wb: XLSX.WorkBook): GiftMaster[] {
+  const ws = wb.Sheets['3. THỰC TRẠNG TỒN']
+  if (!ws) throw new Error('Không thấy sheet 3. THỰC TRẠNG TỒN')
+  const items: GiftMaster[] = []
+  let blanks = 0
+  for (let r = 4; r <= 1000; r++) {
+    const name = String(ws[`A${r}`]?.v ?? '').trim()
+    if (!name) { if (++blanks > 8) break; continue }
+    blanks = 0
+    if (name.startsWith('SHEET') || name === 'Sản phẩm') continue
+    items.push({ name, vaiTro: String(ws[`B${r}`]?.v ?? '').trim(), ngach: String(ws[`C${r}`]?.v ?? '').trim(), ton: num(ws[`D${r}`]?.v), vonSp: num(ws[`E${r}`]?.v) })
+  }
+  return items
+}
+// sheet "4. KHO QUÀ & BÁN CHÉO": ngách → SP chính + quà chéo gợi ý + tồn quà + marketer
+interface GiftCat { ngach: string; maChinh: string; quaCheo: string; vonQua: number; tonQua: number; marketer: string }
+function parseGiftCatalog(wb: XLSX.WorkBook): GiftCat[] {
+  const ws = wb.Sheets['4. KHO QUÀ & BÁN CHÉO']
+  if (!ws) throw new Error('Không thấy sheet 4. KHO QUÀ & BÁN CHÉO')
+  const items: GiftCat[] = []
+  for (let r = 5; r <= 1001; r++) {
+    const ngach = String(ws[`A${r}`]?.v ?? '').trim()
+    const maChinh = String(ws[`B${r}`]?.v ?? '').trim()
+    if (!maChinh || !ngach || ngach.includes('🔷') || ngach.startsWith('SHEET') || ngach === 'Ngách') continue
+    items.push({ ngach, maChinh, quaCheo: String(ws[`C${r}`]?.v ?? '').trim(), vonQua: num(ws[`E${r}`]?.v), tonQua: num(ws[`F${r}`]?.v), marketer: String(ws[`G${r}`]?.v ?? '').trim() })
+  }
+  return items
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed' })
   const bodyLinks = (req.body && typeof req.body === 'object' ? (req.body as { links?: Record<string, string> }).links : undefined) || {}
@@ -240,13 +272,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const errors: string[] = []
   // Tải song song; mỗi nguồn độc lập, lỗi 1 nguồn không phá cả khối.
-  const [tongR, qlhbR, khoR, saleR, nhapR, notonR] = await Promise.allSettled([
+  const [tongR, qlhbR, khoR, saleR, nhapR, notonR, giftR] = await Promise.allSettled([
     fetchXlsx(id('tong'), ['SẢN PHẨM_TH']),
     fetchXlsx(id('qlhb'), ['Tỉ lệ sản phẩm', 'Tỉ lệ tỉnh']),
     fetchXlsx(id('kho'), ['RP_KHO_SL']),
     fetchCsv(id('sale'), 'Report_Product'),
     fetchXlsx(id('nhaphang'), ['BÁO GIÁ VÀ THANH TOÁN']),
     fetchCsv(id('noton'), 'Tồn kho dự kiến'),
+    fetchXlsx(id('giftplan'), ['3. THỰC TRẠNG TỒN', '4. KHO QUÀ & BÁN CHÉO']),
   ])
 
   const qlhbWb = qlhbR.status === 'fulfilled' ? qlhbR.value : null
@@ -295,6 +328,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     cashflow = parseCashflow(qlhbWb)
   } catch (e) { errors.push('Dòng tiền: ' + (e as Error).message) }
 
+  let giftMaster: GiftMaster[] = []
+  let giftCatalog: GiftCat[] = []
+  try {
+    if (giftR.status !== 'fulfilled') throw new Error(giftR.reason?.message || 'lỗi tải file KẾ HOẠCH QUÀ')
+    giftMaster = parseGiftMaster(giftR.value)
+    giftCatalog = parseGiftCatalog(giftR.value)
+  } catch (e) { errors.push('Quà/Combo: ' + (e as Error).message) }
+
   res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=120')
-  return res.status(200).json({ ok: products.length > 0 || inv.length > 0, products, inv, velocity, incoming, priceVnd, backorder, provinces, cashflow, errors })
+  return res.status(200).json({ ok: products.length > 0 || inv.length > 0, products, inv, velocity, incoming, priceVnd, backorder, provinces, cashflow, giftMaster, giftCatalog, errors })
 }

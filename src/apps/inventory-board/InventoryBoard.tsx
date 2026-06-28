@@ -9,6 +9,8 @@ import type { ReactNode } from 'react'
 import PriceCalc from './PriceCalc'
 import ProfitTruth from './ProfitTruth'
 import { computeProfit } from './profitCalc'
+import GiftCombo from './GiftCombo'
+import { type GiftMaster, type GiftCat } from './giftPlan'
 
 const TY_GIA = 5800
 const PACK_FACTOR = (name: string) => (name.trim().toUpperCase() === 'KNEE PAD' ? 2 : 1)
@@ -30,6 +32,7 @@ const SOURCE_DEFS: { key: string; label: string }[] = [
   { key: 'sale', label: 'File SALE (chốt theo ngày — tốc độ bán)' },
   { key: 'nhaphang', label: 'File NHẬP HÀNG (đơn đang về — sheet Báo giá & thanh toán)' },
   { key: 'noton', label: 'File SALE NỢ ĐƠN (sheet Tồn kho dự kiến — SP nợ chưa gửi)' },
+  { key: 'giftplan', label: 'File KẾ HOẠCH QUÀ (sheet 3 Tồn + 4 Kho quà — cho tab Ghép Quà)' },
 ]
 const DEFAULT_SOURCES: Record<string, string> = {
   tong: 'https://docs.google.com/spreadsheets/d/19KaRjRgg0YhT8RBFfDbI25iF9wp7HKxaFZaqiS6ObfU/edit',
@@ -38,6 +41,7 @@ const DEFAULT_SOURCES: Record<string, string> = {
   sale: 'https://docs.google.com/spreadsheets/d/1vSy4LHxx6WeFysdMJNT0c7473RNmpo8bKuRZvMueqtE/edit',
   nhaphang: 'https://docs.google.com/spreadsheets/d/1amJrEI5Z279_4ALWIco3oZETrB4F77cpkD1zSXENrg8/edit',
   noton: 'https://docs.google.com/spreadsheets/d/18OdPLkDSLuzKhuO1VheLzkAM0K7xHEoepxhy4JNlYAI/edit',
+  giftplan: 'https://docs.google.com/spreadsheets/d/1NiCESFek8BYyycTHUMvcMhxpuNDsCI7KplpIxERhOW8/edit',
 }
 const STORAGE_KEY = 'inv_board_sources'
 
@@ -57,6 +61,8 @@ interface BoardData {
   backorder: BackorderItem[]
   provinces: Province[]
   cashflow: { pendingDS: number; returnDS: number; returnedDS: number; deliveryDS: number; paidDS: number } | null
+  giftMaster: GiftMaster[]
+  giftCatalog: GiftCat[]
   errors: string[]
 }
 
@@ -117,7 +123,7 @@ export default function InventoryBoard() {
     return () => window.removeEventListener('resize', f)
   }, [])
 
-  const [tab, setTab] = useState<'kho' | 'calc' | 'profit'>('kho')
+  const [tab, setTab] = useState<'kho' | 'calc' | 'profit' | 'gift'>('kho')
   const [sources, setSources] = useState<Record<string, string>>({})
   const [showCfg, setShowCfg] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -173,6 +179,8 @@ export default function InventoryBoard() {
   const priceVnd = data?.priceVnd ?? {}
   const provinces = data?.provinces ?? []
   const cashflow = data?.cashflow ?? null
+  const giftMaster = data?.giftMaster ?? []
+  const giftCatalog = data?.giftCatalog ?? []
   const backorder = useMemo(() => {
     const m: Record<string, { donNo: number; spNo: number }> = {}
     ;(data?.backorder ?? []).forEach((x) => { m[x.ma] = { donNo: x.donNo, spNo: x.spNo } })
@@ -318,7 +326,7 @@ export default function InventoryBoard() {
 
         {/* tab switcher */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-          {([['kho', '📦 Kho & Nhập hàng'], ['calc', '🧮 Máy tính giá'], ['profit', '🔥 Lãi thật/SP']] as const).map(([k, lbl]) => (
+          {([['kho', '📦 Kho & Nhập hàng'], ['calc', '🧮 Máy tính giá'], ['profit', '🔥 Lãi thật/SP'], ['gift', '🎁 Ghép Quà']] as const).map(([k, lbl]) => (
             <button key={k} onClick={() => setTab(k)} style={{ background: tab === k ? C.gold : 'transparent', color: tab === k ? '#0a0a0a' : C.muted2, border: `1px solid ${tab === k ? C.gold : C.line}`, borderRadius: 10, padding: '9px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{lbl}</button>
           ))}
         </div>
@@ -406,6 +414,8 @@ export default function InventoryBoard() {
         </>)}
 
         {tab === 'profit' && <ProfitTruth products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} feed={feed} cockpit={cockpit} hasCashflow={!!cashflow} />}
+
+        {tab === 'gift' && <GiftCombo products={products} giftMaster={giftMaster} giftCatalog={giftCatalog} />}
 
         {tab === 'calc' && <PriceCalc products={products} priceVnd={priceVnd} inv={inv} velocity={velocity} />}
       </div>
