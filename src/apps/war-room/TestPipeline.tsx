@@ -39,14 +39,25 @@ function verdict(t: TestProduct): { txt: string; tone: string } | null {
   if (t.chot != null && t.chot >= 10 && (t.hoan == null || t.hoan < 30) && t.data != null && t.data >= 20) return { txt: 'Số đẹp → nghiêng WIN, scale thử', tone: C.green }
   return { txt: 'Chưa đủ kết luận → gom thêm data', tone: C.amber }
 }
+// Cảnh báo theo DEADLINE (ngày hoàn thành nhân viên tự đặt) — CEO theo dõi trễ/đúng hạn.
+function deadlineStatus(t: TestProduct): { txt: string; tone: string } | null {
+  if (!t.deadline || t.outcome) return null // đã kết luận thì khỏi cảnh báo
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const diff = Math.round((new Date(t.deadline + 'T00:00:00').getTime() - today.getTime()) / 86400000)
+  if (diff < 0) return { txt: `⚠ trễ ${-diff} ngày`, tone: C.red }
+  if (diff === 0) return { txt: '⏰ hạn HÔM NAY', tone: C.amber }
+  if (diff <= 2) return { txt: `⏰ còn ${diff} ngày`, tone: C.amber }
+  return { txt: `📅 ${t.deadline.slice(5)}`, tone: C.muted2 }
+}
 
 export default function TestPipeline({ isCEO, userEmail }: { isCEO: boolean; userEmail: string }) {
-  const { members, tests, addTest, updateTest, deleteTest } = useWarStore()
+  const { members, tests, error, addTest, updateTest, deleteTest } = useWarStore()
   const openApp = useAppStore((s) => s.openApp)
   const [mob, setMob] = useState(false)
   const [activeStage, setActiveStage] = useState('idea')
   const [ownerFilter, setOwnerFilter] = useState('all')
   const [name, setName] = useState(''); const [niche, setNiche] = useState(''); const [owner, setOwner] = useState(''); const [spy, setSpy] = useState('')
+  const [deadline, setDeadline] = useState(''); const [budget, setBudget] = useState('')
   useEffect(() => { const f = () => setMob(window.innerWidth < 760); f(); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) }, [])
 
   const myMember = members.find((m) => memberEmails(m).includes(userEmail.trim().toLowerCase()))
@@ -58,12 +69,13 @@ export default function TestPipeline({ isCEO, userEmail }: { isCEO: boolean; use
     return ownerFilter === 'all' ? tests : tests.filter((t) => t.owner_id === ownerFilter)
   }, [tests, ownerFilter, isCEO, myId])
   const byStage = (st: string) => filtered.filter((t) => t.stage === st)
+  const overdue = useMemo(() => filtered.filter((t) => { const d = deadlineStatus(t); return !!d && d.tone === C.red }).length, [filtered])
 
   const add = () => {
     if (!name.trim()) return
     const ownerId = isCEO ? (owner || null) : myId // nhân viên TỰ sở hữu SP test, không giao ai khác
-    void addTest({ name: name.trim(), niche: niche.trim() || null, stage: 'idea', outcome: null, owner_id: ownerId, spy_link: spy.trim() || null, note: null, data: null, cpa: null, chot: null, hoan: null, created_by: userEmail })
-    setName(''); setNiche(''); setSpy('')
+    void addTest({ name: name.trim(), niche: niche.trim() || null, stage: 'idea', outcome: null, owner_id: ownerId, spy_link: spy.trim() || null, note: null, data: null, cpa: null, chot: null, hoan: null, deadline: deadline || null, budget: budget ? parseFloat(budget.replace(/[^\d.]/g, '')) || null : null, created_by: userEmail })
+    setName(''); setNiche(''); setSpy(''); setDeadline(''); setBudget('')
   }
 
   const Card = ({ t }: { t: TestProduct }) => {
@@ -73,14 +85,23 @@ export default function TestPipeline({ isCEO, userEmail }: { isCEO: boolean; use
       <div style={{ background: C.panel2, border: `1px solid ${t.outcome ? OUTCOMES.find((o) => o.key === t.outcome)?.color ?? C.line : C.line}`, borderRadius: 11, padding: '11px 12px', marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{t.name}</div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{t.niche || 'chưa rõ ngách'} · {nameOf(t.owner_id)}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+              {t.name}
+              {(() => { const ds = deadlineStatus(t); return ds ? <span style={{ fontSize: 10, fontWeight: 600, color: ds.tone, border: `1px solid ${ds.tone}`, borderRadius: 6, padding: '1px 6px' }}>{ds.txt}</span> : null })()}
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{t.niche || 'chưa rõ ngách'} · {nameOf(t.owner_id)}{t.budget ? ` · 💰 ${Math.round(t.budget).toLocaleString('vi-VN')}đ` : ''}</div>
           </div>
           <button onClick={() => void deleteTest(t.id)} title="xoá" style={{ background: 'transparent', color: C.muted, border: 'none', fontSize: 14, cursor: 'pointer' }}>✕</button>
         </div>
 
-        {/* người phụ trách (CEO đổi được; nhân viên khoá vào mình) + link spy */}
+        {/* deadline (hạn hoàn thành) + ngân sách test — sửa được để CEO theo dõi */}
         <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+          <input type="date" value={t.deadline ?? ''} onChange={(e) => void updateTest(t.id, { deadline: e.target.value || null })} title="hạn hoàn thành" style={{ ...inp, fontSize: 11, padding: '5px 7px' }} />
+          <input defaultValue={t.budget ?? ''} placeholder="ngân sách đ" inputMode="numeric" onBlur={(e) => { const raw = e.target.value.replace(/[^\d.]/g, ''); const val = raw === '' ? null : parseFloat(raw); if (val !== (t.budget ?? null)) void updateTest(t.id, { budget: val }) }} style={{ ...inp, fontSize: 11, padding: '5px 7px', width: 96 }} />
+        </div>
+
+        {/* người phụ trách (CEO đổi được; nhân viên khoá vào mình) + link spy */}
+        <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
           {isCEO ? (
             <select value={t.owner_id ?? ''} onChange={(e) => void updateTest(t.id, { owner_id: e.target.value || null })} style={{ ...inp, fontSize: 11, padding: '5px 7px', flex: 1, minWidth: 110 }}>
               <option value="">— giao ai —</option>
@@ -156,15 +177,20 @@ export default function TestPipeline({ isCEO, userEmail }: { isCEO: boolean; use
     <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 14, padding: '16px 18px' }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, marginBottom: 6 }}>🧪 PIPELINE TEST SP — săn winner</div>
       <div style={{ fontSize: 12, color: C.muted2, marginBottom: 12, lineHeight: 1.6 }}>
-        Mỗi thẻ là 1 SP đang test, kéo qua 4 bước. Bước <b style={{ color: C.text }}>Test ads</b> nhập data/CPA/chốt/hoàn → app gợi ý nên WIN hay KILL. Nút <b style={{ color: C.text }}>Spy/Kịch bản/Video/Ladipage</b> mở thẳng công cụ làm.
+        Mỗi thẻ là 1 SP đang test, kéo qua 4 bước. Đặt <b style={{ color: C.text }}>deadline</b> + <b style={{ color: C.text }}>ngân sách</b> để CEO theo dõi đúng hạn. Bước <b style={{ color: C.text }}>Test ads</b> nhập data/CPA/chốt/hoàn → app gợi ý WIN hay KILL.
       </div>
+
+      {error && <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 8, border: `1px solid ${C.red}`, background: 'rgba(255,77,94,0.07)', fontSize: 12.5, color: C.red }}>⚠ Lỗi lưu: {error}. {/relation|does not exist|column/i.test(error) ? 'Bảng test_products chưa tạo / thiếu cột — CEO chạy SQL (kèm trong chat).' : 'Thử lại; nếu vẫn lỗi báo CEO.'}</div>}
+      {overdue > 0 && <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 8, border: `1px solid #4a1d22`, background: 'rgba(255,77,94,0.05)', fontSize: 12.5, color: C.red }}>⚠ <b>{overdue}</b> SP test TRỄ deadline — cần xử lý / dời hạn.</div>}
 
       {/* thêm SP + lọc người */}
       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14, paddingBottom: 14, borderBottom: `1px solid ${C.line2}` }}>
         <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add() }} placeholder="Tên SP test..." style={{ ...inp, width: 150 }} />
         <input value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="ngách" style={{ ...inp, width: 110 }} />
         {isCEO && <select value={owner} onChange={(e) => setOwner(e.target.value)} style={{ ...inp, fontSize: 12 }}><option value="">— giao ai —</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}
-        <input value={spy} onChange={(e) => setSpy(e.target.value)} placeholder="link spy (tuỳ chọn)" style={{ ...inp, flex: 1, minWidth: 150 }} />
+        <input value={spy} onChange={(e) => setSpy(e.target.value)} placeholder="link spy (tuỳ chọn)" style={{ ...inp, flex: 1, minWidth: 130 }} />
+        <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} title="hạn hoàn thành (deadline)" style={{ ...inp, fontSize: 12, width: 150 }} />
+        <input value={budget} onChange={(e) => setBudget(e.target.value)} inputMode="numeric" placeholder="ngân sách test (đ)" style={{ ...inp, width: 150 }} />
         <button onClick={add} style={{ background: C.gold, color: '#1a1405', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ Thêm SP</button>
         {isCEO && (
           <select value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)} style={{ ...inp, fontSize: 12 }}>

@@ -16,7 +16,8 @@ export interface Task {
 export interface TestProduct {
   id: string; name: string; niche: string | null; stage: string; outcome: string | null
   owner_id: string | null; spy_link: string | null; note: string | null
-  data: number | null; cpa: number | null; chot: number | null; hoan: number | null; created_by: string | null
+  data: number | null; cpa: number | null; chot: number | null; hoan: number | null
+  deadline: string | null; budget: number | null; created_by: string | null
 }
 
 interface WarState {
