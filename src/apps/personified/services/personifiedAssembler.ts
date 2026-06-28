@@ -1,9 +1,9 @@
 // ── Mode 3 — Personified ASSEMBLER (P2d) ─────────────────────────────────────
-// Ghép các clip cảnh (đã render) thành 1 video dọc 9:16, UPSCALE 480p→720p khi ghép.
-// Khác hybrid (mode-1): GIỮ audio RIÊNG từng clip (clip lipsync đã có tiếng nhân vật);
-// clip CÂM (i2v không thoại) được chèn 1 track audio im để concat đồng nhất stream.
-// Memory-safe: normalize mỗi clip ra 1 đoạn MPEG-TS rồi nối bằng concat DEMUXER
-// (stream-copy, không decode lại) → gần như không tốn RAM, chạy được 720p trong wasm.
+// Ghép clip cảnh → 1 video dọc 9:16, pad-fit nền blur, upscale 720p.
+// CHỐNG DESYNC (như hybrid): KHÔNG concat audio per-clip (demuxer không re-stamp PTS →
+// tiếng lệch hình, đè hình). Thay vào: tách VIDEO CÂM + AUDIO riêng, mỗi cảnh CLAMP đúng
+// `durationSec` (= độ dài giọng) cho CẢ video lẫn audio → concat 2 luồng rồi mux 1 lần →
+// khớp tuyệt đối cảnh-theo-cảnh. Memory-safe: per-segment MPEG-TS + concat demuxer.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { fetchFile } from '@ffmpeg/util'
@@ -11,12 +11,12 @@ import { getFFmpeg } from '../../video-builder/v3/services/ffmpegLoader'
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
 
 export interface PersonifiedAssembleClip {
-  /** Clip cuối cùng của cảnh (lipsyncRef nếu có, không thì clipRef i2v câm). */
+  /** Video cảnh (voiced clip có caption, hoặc i2v câm). Audio của nó sẽ BỊ BỎ — dùng audioRef. */
   videoRef: string
-  /** Độ dài slot (giây) — dùng cho track audio im của clip câm. */
+  /** Audio giọng cảnh (asset mp3). Rỗng/undefined → cảnh câm (chèn im đúng durationSec). */
+  audioRef?: string
+  /** Độ dài cảnh (giây) — CLAMP cả video lẫn audio về đúng số này để khớp. */
   durationSec: number
-  /** Clip có sẵn tiếng (đã lipsync) → giữ audio; false → chèn audio im. */
-  hasAudio: boolean
 }
 
 export interface PersonifiedAssembleParams {
@@ -61,84 +61,85 @@ export async function assemblePersonifiedVideo(
   // nguyên vào giữa, nền là bản blur phóng to. Clip đã 9:16 (cảnh có giọng) → fit khít.
   const vf = `split=2[a][b];[a]scale=${evenW}:${evenH}:force_original_aspect_ratio=increase,crop=${evenW}:${evenH},boxblur=24:4[bg];[b]scale=${evenW}:${evenH}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1`
 
-  const normFiles: string[] = []
+  const vSegs: string[] = []   // đoạn VIDEO câm (.ts) theo thứ tự
+  const aSegs: string[] = []   // đoạn AUDIO (.ts) cùng thứ tự, cùng độ dài
+  const tmp: string[] = []     // file tạm để dọn
   const failedIdx: number[] = []
 
-  // ── STAGE 1: normalize từng clip → đoạn MPEG-TS (video 720p + audio aac đồng nhất) ──
+  // ── STAGE 1: mỗi cảnh → 1 đoạn video câm + 1 đoạn audio, ĐỀU clamp đúng durationSec ──
   for (let i = 0; i < params.clips.length; i++) {
     const c = params.clips[i]
     params.onStage?.(`Chuẩn hoá cảnh ${i + 1}/${params.clips.length}…`)
-    params.onProgress?.((i / Math.max(1, params.clips.length)) * 0.9)
-
-    const url = isAssetRef(c.videoRef) ? await getUrl(c.videoRef) : c.videoRef
-    if (!url) { console.warn(`[PERS_ASM] cảnh ${i} thiếu videoRef — bỏ qua`); failedIdx.push(i); continue }
-
-    let bytes: Uint8Array
-    try { bytes = await fetchFile(url) }
-    catch (err) { console.warn(`[PERS_ASM] cảnh ${i} fetch lỗi — bỏ qua`, err); failedIdx.push(i); continue }
-    if (!bytes || bytes.byteLength < 512) {
-      console.warn(`[PERS_ASM] cảnh ${i} dữ liệu rỗng/hỏng (${bytes?.byteLength ?? 0}B — URL hết hạn?) — bỏ qua`)
-      failedIdx.push(i); continue
-    }
-
-    const inFile = `pin_${i}.mp4`
-    const normFile = `pnorm_${i}.ts`
+    params.onProgress?.((i / Math.max(1, params.clips.length)) * 0.85)
     const dur = Math.max(0.3, c.durationSec || 4)
+
+    const vUrl = isAssetRef(c.videoRef) ? await getUrl(c.videoRef) : c.videoRef
+    if (!vUrl) { console.warn(`[PERS_ASM] cảnh ${i} thiếu video — bỏ qua`); failedIdx.push(i); continue }
+    let vBytes: Uint8Array
+    try { vBytes = await fetchFile(vUrl) } catch { console.warn(`[PERS_ASM] cảnh ${i} fetch video lỗi`); failedIdx.push(i); continue }
+    if (!vBytes || vBytes.byteLength < 512) { console.warn(`[PERS_ASM] cảnh ${i} video rỗng`); failedIdx.push(i); continue }
+
+    const vin = `pvin_${i}.mp4`, vts = `pv_${i}.ts`, ats = `pa_${i}.ts`
     try {
-      await ffmpeg.writeFile(inFile, bytes)
-      const common = [
-        '-vf', vf, '-r', '30',
+      // VIDEO CÂM: pad-fit blur 9:16, 30fps, BỎ audio. tpad giữ frame cuối nếu clip ngắn
+      // hơn dur → video LUÔN đủ dur (khớp audio); -t cắt nếu dài hơn.
+      await ffmpeg.writeFile(vin, vBytes)
+      tmp.push(vin)
+      const vfClip = `${vf},tpad=stop_mode=clone:stop_duration=${dur.toFixed(3)}`
+      await ffmpeg.exec([
+        '-i', vin, '-vf', vfClip, '-t', dur.toFixed(3), '-r', '30', '-an',
         '-c:v', 'libx264', '-preset', preset, '-crf', crf, '-pix_fmt', 'yuv420p',
-        '-c:a', 'aac', '-ar', '44100', '-ac', '2',
-        '-f', 'mpegts', '-y', normFile,
-      ]
-      if (c.hasAudio) {
-        // Giữ tiếng của clip (đã lipsync).
-        await ffmpeg.exec(['-i', inFile, ...common])
-      } else {
-        // Clip câm → chèn 1 track audio im đúng độ dài để concat đồng nhất stream.
+        '-f', 'mpegts', '-y', vts,
+      ])
+      // AUDIO: giọng cảnh (pad im rồi cắt đúng dur) HOẶC im hoàn toàn (cảnh câm).
+      const aUrl = c.audioRef ? (isAssetRef(c.audioRef) ? await getUrl(c.audioRef) : c.audioRef) : null
+      if (aUrl) {
+        const ain = `pain_${i}.mp3`
+        await ffmpeg.writeFile(ain, await fetchFile(aUrl))
+        tmp.push(ain)
         await ffmpeg.exec([
-          '-i', inFile,
+          '-i', ain, '-af', 'apad', '-t', dur.toFixed(3),
+          '-ar', '44100', '-ac', '2', '-c:a', 'aac', '-f', 'mpegts', '-y', ats,
+        ])
+      } else {
+        await ffmpeg.exec([
           '-f', 'lavfi', '-t', dur.toFixed(3), '-i', 'anullsrc=r=44100:cl=stereo',
-          '-map', '0:v:0', '-map', '1:a:0', '-shortest',
-          ...common,
+          '-ar', '44100', '-ac', '2', '-c:a', 'aac', '-f', 'mpegts', '-y', ats,
         ])
       }
     } catch (err) {
       console.warn(`[PERS_ASM] cảnh ${i} encode lỗi — bỏ qua`, err)
       failedIdx.push(i)
-      await ffmpeg.deleteFile(inFile).catch(() => {})
       continue
     }
-    normFiles.push(normFile)
-    await ffmpeg.deleteFile(inFile).catch(() => {})
+    vSegs.push(vts); aSegs.push(ats)
   }
 
-  if (!normFiles.length) throw new Error('Không clip nào ghép được (tất cả lỗi/hết hạn URL)')
+  if (!vSegs.length) throw new Error('Không clip nào ghép được (tất cả lỗi/hết hạn URL)')
 
-  // ── STAGE 2: nối các đoạn TS bằng concat demuxer (stream-copy) ──────────────
-  params.onStage?.('Đang nối video…')
-  params.onProgress?.(0.92)
-  const listFile = 'pconcat.txt'
-  await ffmpeg.writeFile(listFile, new TextEncoder().encode(normFiles.map((f) => `file '${f}'`).join('\n')))
-  const outFile = 'pfinal.mp4'
+  // ── STAGE 2: concat VIDEO câm + concat AUDIO (demuxer copy), rồi MUX 1 lần ──
+  params.onStage?.('Đang nối video + giọng…')
+  params.onProgress?.(0.9)
+  const vList = 'pvlist.txt', aList = 'palist.txt', vCat = 'pvcat.ts', aCat = 'pacat.ts', outFile = 'pfinal.mp4'
+  await ffmpeg.writeFile(vList, new TextEncoder().encode(vSegs.map((f) => `file '${f}'`).join('\n')))
+  await ffmpeg.writeFile(aList, new TextEncoder().encode(aSegs.map((f) => `file '${f}'`).join('\n')))
+  await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', vList, '-c', 'copy', '-y', vCat])
+  await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', aList, '-c', 'copy', '-y', aCat])
+  // Mux: video câm + master audio. Cả 2 đã = tổng độ dài cảnh → khớp tuyệt đối.
   await ffmpeg.exec([
-    '-f', 'concat', '-safe', '0', '-i', listFile,
-    '-c', 'copy', '-movflags', '+faststart', '-y', outFile,
+    '-i', vCat, '-i', aCat,
+    '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac',
+    '-movflags', '+faststart', '-shortest', '-y', outFile,
   ])
 
   const out = await ffmpeg.readFile(outFile)
   const src = typeof out === 'string' ? new TextEncoder().encode(out) : out
-  // Copy sang ArrayBuffer phẳng — out.buffer có thể là SharedArrayBuffer (wasm cross-origin-isolated).
-  const outBytes = new Uint8Array(src.byteLength)
+  const outBytes = new Uint8Array(src.byteLength)   // copy khỏi SharedArrayBuffer (wasm)
   outBytes.set(src)
-  const blob = new Blob([outBytes], { type: 'video/mp4' })
-  const videoRef = await saveAsset(blob, 'video/mp4')
+  const videoRef = await saveAsset(new Blob([outBytes], { type: 'video/mp4' }), 'video/mp4')
 
   // Dọn FS.
-  for (const f of normFiles) await ffmpeg.deleteFile(f).catch(() => {})
-  await ffmpeg.deleteFile(listFile).catch(() => {})
-  await ffmpeg.deleteFile(outFile).catch(() => {})
+  for (const f of [...vSegs, ...aSegs, ...tmp, vList, aList, vCat, aCat, outFile]) await ffmpeg.deleteFile(f).catch(() => {})
 
   params.onStage?.('Xong')
   params.onProgress?.(1)

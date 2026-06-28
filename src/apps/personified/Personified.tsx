@@ -37,6 +37,7 @@ interface SceneRender {
   lipStatus?: 'idle' | 'tts' | 'mux' | 'done' | 'failed'
   audioRef?: string
   lipsyncRef?: string
+  voiceSec?: number   // độ dài giọng cảnh (để ghép khớp)
   lipError?: string
 }
 
@@ -464,12 +465,12 @@ export default function Personified() {
     const character = script?.characters.find((c) => c.name === scene.speaker || c.role === scene.speaker) ?? script?.characters[0]
     setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: 'tts', lipError: undefined } }))
     try {
-      const { audioRef, voicedRef } = await addSceneVoiceover({
+      const { audioRef, voicedRef, voiceSec } = await addSceneVoiceover({
         elevenKey, scene, character, clipRef: cur.clipRef,
         voiceId: character ? charVoices[character.name] : undefined,
         onStage: (stage) => setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: stage === 'done' ? 'done' : stage } })),
       })
-      setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: 'done', audioRef, lipsyncRef: voicedRef } }))
+      setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: 'done', audioRef, lipsyncRef: voicedRef, voiceSec } }))
     } catch (e) {
       setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: 'failed', lipError: e instanceof Error ? e.message : String(e) } }))
     }
@@ -493,11 +494,17 @@ export default function Personified() {
     if (!script || finalVideo.status === 'running') return
     const list = script.scenes
       .filter((s) => clips[s.idx]?.clipRef)
-      .map((s) => ({
-        videoRef: (clips[s.idx]?.lipsyncRef ?? clips[s.idx]!.clipRef!),
-        durationSec: s.clipDuration,
-        hasAudio: !!clips[s.idx]?.lipsyncRef,
-      }))
+      .map((s) => {
+        const c = clips[s.idx]!
+        const voiced = !!c.lipsyncRef
+        return {
+          // Cảnh có giọng → dùng voiced clip (đã có caption) + audioRef + đúng độ dài giọng;
+          // cảnh câm → i2v clip + im, dài bằng slot.
+          videoRef: voiced ? c.lipsyncRef! : c.clipRef!,
+          audioRef: voiced ? c.audioRef : undefined,
+          durationSec: voiced ? (c.voiceSec ?? s.clipDuration) : s.clipDuration,
+        }
+      })
     if (!list.length) { setError('Chưa cảnh nào có clip — render clip trước khi ghép'); return }
     setFinalVideo({ status: 'running', stage: 'Bắt đầu…' })
     try {

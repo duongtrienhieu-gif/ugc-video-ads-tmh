@@ -336,7 +336,7 @@ export interface VoiceoverSceneParams {
   onStage?: (stage: 'tts' | 'mux' | 'done', info?: { audioRef?: string; voicedRef?: string }) => void
 }
 
-export interface VoiceoverSceneResult { audioRef: string; voicedRef: string }
+export interface VoiceoverSceneResult { audioRef: string; voicedRef: string; voiceSec: number }
 
 /** P2c — lồng giọng 1 cảnh: TTS ElevenLabs → ghép voiceover vào clip i2v bằng ffmpeg
  *  (0 credit) → { audioRef, voicedRef }. Không lipsync — giữ full action của i2v. */
@@ -356,6 +356,11 @@ export async function addSceneVoiceover(p: VoiceoverSceneParams): Promise<Voiceo
   const audioRef = await saveAsset(new Blob([audioBytes], { type: 'audio/mpeg' }), 'audio/mpeg')
   p.onStage?.('tts', { audioRef })
   if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
+
+  // Độ dài giọng (= độ dài voiced clip do -shortest). Cap ở clipDuration để khớp video.
+  const ends = alignment?.characterEndTimesSeconds
+  const ttsLen = ends && ends.length ? ends[ends.length - 1] : p.scene.clipDuration
+  const voiceSec = Math.min(ttsLen || p.scene.clipDuration, p.scene.clipDuration)
 
   // ── 2. Frame caption KARAOKE (mỗi từ 1 PNG, theo timing giọng) ────────────
   const frames = await buildKaraokeFrames(text, alignment, p.scene.clipDuration)
@@ -409,7 +414,7 @@ export async function addSceneVoiceover(p: VoiceoverSceneParams): Promise<Voiceo
   await ffmpeg.deleteFile(aIn).catch(() => {})
   await ffmpeg.deleteFile(out).catch(() => {})
   p.onStage?.('done', { audioRef, voicedRef })
-  return { audioRef, voicedRef }
+  return { audioRef, voicedRef, voiceSec }
 }
 
 /** Nghe thử 1 giọng — TTS 1 câu mẫu (eleven_v3) → object URL để phát. Caller tự revoke. */
