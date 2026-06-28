@@ -189,17 +189,38 @@ export default function SpyAds() {
   const loadMore = async () => {
     if (!cursor || moreLoading) return
     setMoreLoading(true)
+    const existing = new Set((ads || []).map((a) => a.id))
+    const collected: FbAd[] = []
+    let cur: string | null = cursor
+    let added = 0
+    let lastCredits = credits
     try {
-      const d = await fetch(buildUrl(q, cursor, viewPageId || undefined)).then((r) => r.json())
-      const more: FbAd[] = Array.isArray(d.ads) ? d.ads : []
-      setAds((prev) => {
-        const seen = new Set((prev || []).map((a) => a.id))
-        return [...(prev || []), ...more.filter((a) => !seen.has(a.id))]
-      })
-      setCursor(d.cursor != null ? String(d.cursor) : null)
-      setHasMore(!!d.hasMore && d.cursor != null)
-      setCredits(d.credits ?? credits)
-    } catch { /* bỏ qua */ } finally { setMoreLoading(false) }
+      // Server + filter hao nên 1 cụm hay ra 0 ad mới → tự kéo tối đa 3 cụm
+      // đến khi có ad mới HOẶC cursor thật sự hết. KHÔNG tắt nút khi gặp lỗi tạm thời.
+      for (let i = 0; i < 3; i++) {
+        if (!cur) break
+        const resp = await fetch(buildUrl(q, cur, viewPageId || undefined))
+        const d = (await resp.json()) as { error?: string; ads?: FbAd[]; cursor?: string | number | null; hasMore?: boolean; credits?: number | null }
+        // Lỗi tạm thời (SC 502 / rate-limit / timeout): GIỮ nguyên cursor + hasMore,
+        // báo nhẹ rồi dừng — để người dùng bấm lại, nút KHÔNG biến mất.
+        if (d?.error) { addToast('Tải thêm gặp lỗi tạm thời — bấm lại nhé', 'error'); return }
+        const more: FbAd[] = Array.isArray(d.ads) ? d.ads : []
+        for (const a of more) {
+          if (a?.id && !existing.has(a.id)) { existing.add(a.id); collected.push(a); added++ }
+        }
+        lastCredits = d.credits ?? lastCredits
+        cur = d.cursor != null && d.hasMore ? String(d.cursor) : null
+        if (added > 0) break   // đã có ad mới → dừng, khỏi kéo thừa
+      }
+      if (collected.length) setAds((prev) => [...(prev || []), ...collected])
+      setCursor(cur)
+      setHasMore(cur != null)
+      setCredits(lastCredits)
+      if (!added && cur == null) addToast('Đã hết ad cho từ khóa này', 'success')
+    } catch {
+      // Lỗi mạng/parse: KHÔNG tắt nút (giữ nguyên cursor/hasMore cũ) để bấm lại.
+      addToast('Tải thêm gặp lỗi mạng — bấm lại nhé', 'error')
+    } finally { setMoreLoading(false) }
   }
 
   // Bước 1 — Radar: dò SP đang bán chạy trên TikTok Shop (tái dùng /api/research).
