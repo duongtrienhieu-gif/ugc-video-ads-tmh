@@ -81,6 +81,52 @@ export interface ScriptGenerationParams {
   educationalMode: boolean
 }
 
+// ── Phase B — scene/shot planning (kịch bản → bảng "shot ↔ clip") ────────
+// A "shot" is a VISUAL BEAT, not a sentence: one coherent on-screen idea long
+// enough to be a watchable clip. Several short sentences describing the same
+// thing merge into one shot; a long sentence with two ideas can split into two.
+export type ScriptLanguage = 'vi' | 'my'
+
+/** COD sell-arc blocks — used as the natural visual-beat boundaries. */
+export type ShotBlock =
+  | 'van-de' | 'noi-dau' | 'san-pham' | 'loi-ich-sp'
+  | 'thanh-phan' | 'co-che' | 'loi-ich-kh' | 'proof' | 'cta'
+
+/** How a shot gets its footage. `ai-render` is reserved for the CTA shot only. */
+export type ShotFill = 'source-broad' | 'source-product' | 'ai-render'
+/** Strictness when querying Source Finder (ignored when fill = ai-render). */
+export type ShotMatchMode = 'broad' | 'product-exact'
+
+export interface Shot {
+  id: string
+  /** Malay voice line — the MAIN line (MY is the primary market). */
+  my: string
+  /** Vietnamese gloss — rendered under the MY line as a readable sub. */
+  vi: string
+  block: ShotBlock
+  /** WHAT to show on screen — drives the source query / render brief.
+   *  NEVER the literal voice text (querying raw dialogue returns junk clips). */
+  visualIdea: string
+  /** Chinese search keyword for Douyin/RED/Kuaishou (the 3 source platforms are
+   *  Chinese — querying in Chinese returns far better clips). Derived from
+   *  visualIdea, NOT the voice line. source-broad = situation/emotion only (no
+   *  product/brand); source-product = product category in Chinese. Empty for
+   *  ai-render (the CTA shot is generated, not sourced). Feeds Source Finder. */
+  zhQuery: string
+  /** Estimated spoken duration of this shot, seconds (from primary-lang words). */
+  durationSec: number
+  fill: ShotFill
+  matchMode: ShotMatchMode
+}
+
+export interface ShotPlan {
+  /** Which language was primary (main line) when the plan was built. */
+  language: ScriptLanguage
+  shots: Shot[]
+  /** Sum of all shot durations, seconds. */
+  totalDurationSec: number
+}
+
 export interface ScriptGenerationResult {
   /** Master Vietnamese voice-over script — left box in the UI. */
   vietnamese: string

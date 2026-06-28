@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Copy, Check, Save, RotateCcw, Loader2, GraduationCap, Sparkles, X, Package, Wand2, ArrowLeftRight } from 'lucide-react'
+import { Copy, Check, Save, RotateCcw, Loader2, GraduationCap, Sparkles, X, Package, Wand2, ArrowLeftRight, Clapperboard } from 'lucide-react'
 import type { ScriptGenerationResult } from '../types'
 import { useBankStore } from '../../../stores/bankStore'
 import { useAppStore } from '../../../stores/appStore'
@@ -12,12 +12,14 @@ interface OutputPanelProps {
   productName: string | null
   isGenerating: boolean
   onRegenerate: () => void
+  /** Phase B — go to / build the "Tách cảnh & Source" view. */
+  onOpenShotPlan: () => void
 }
 
 const wordCount = (s: string) => (s.trim() ? s.trim().split(/\s+/).length : 0)
 
 export default function OutputPanel({
-  result, productId, productName, isGenerating, onRegenerate,
+  result, productId, productName, isGenerating, onRegenerate, onOpenShotPlan,
 }: OutputPanelProps) {
   const [copied, setCopied] = useState<'vietnamese' | 'malay' | null>(null)
   const [saved, setSaved] = useState(false)
@@ -219,6 +221,13 @@ export default function OutputPanel({
             >
               {isGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
               Tạo lại
+            </button>
+            <button
+              onClick={onOpenShotPlan}
+              className="ui-accent-soft flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-bold"
+              title="Tách kịch bản thành các cảnh + tìm/tạo clip"
+            >
+              <Clapperboard className="h-3.5 w-3.5" /> Tách cảnh &amp; Source
             </button>
             <button
               onClick={openSaveModal}
