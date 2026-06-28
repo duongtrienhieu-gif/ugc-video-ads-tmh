@@ -8,9 +8,15 @@ export interface Task {
   id: string; assignee_id: string | null; title: string; detail: string | null
   type: string | null; source: string | null; status: string; due: string | null; created_by: string | null
 }
+// SP đang test (pipeline tìm winner): idea → content → ads → done(+outcome win/keep/kill)
+export interface TestProduct {
+  id: string; name: string; niche: string | null; stage: string; outcome: string | null
+  owner_id: string | null; spy_link: string | null; note: string | null
+  data: number | null; cpa: number | null; chot: number | null; hoan: number | null; created_by: string | null
+}
 
 interface WarState {
-  members: Member[]; targets: Target[]; tasks: Task[]; loaded: boolean; error: string
+  members: Member[]; targets: Target[]; tasks: Task[]; tests: TestProduct[]; loaded: boolean; error: string
   load: () => Promise<void>
   addMember: (m: Omit<Member, 'id'>) => Promise<void>
   updateMember: (id: string, patch: Partial<Member>) => Promise<void>
@@ -19,20 +25,26 @@ interface WarState {
   addTask: (t: Omit<Task, 'id'>) => Promise<void>
   updateTask: (id: string, patch: Partial<Task>) => Promise<void>
   deleteTask: (id: string) => Promise<void>
+  addTest: (t: Omit<TestProduct, 'id'>) => Promise<void>
+  updateTest: (id: string, patch: Partial<TestProduct>) => Promise<void>
+  deleteTest: (id: string) => Promise<void>
 }
 
 export const useWarStore = create<WarState>((set) => ({
-  members: [], targets: [], tasks: [], loaded: false, error: '',
+  members: [], targets: [], tasks: [], tests: [], loaded: false, error: '',
 
   load: async () => {
     try {
-      const [m, t, k] = await Promise.all([
+      const [m, t, k, p] = await Promise.all([
         supabase.from('team_members').select('*').order('created_at'),
         supabase.from('targets').select('*'),
         supabase.from('tasks').select('*').order('created_at', { ascending: false }),
+        // bảng test_products có thể chưa tạo (chưa chạy SQL) → lỗi ở đây không throw,
+        // chỉ trả [] để các bảng khác vẫn tải bình thường.
+        supabase.from('test_products').select('*').order('created_at', { ascending: false }),
       ])
       if (m.error) throw m.error
-      set({ members: (m.data ?? []) as Member[], targets: (t.data ?? []) as Target[], tasks: (k.data ?? []) as Task[], loaded: true, error: '' })
+      set({ members: (m.data ?? []) as Member[], targets: (t.data ?? []) as Target[], tasks: (k.data ?? []) as Task[], tests: (p.data ?? []) as TestProduct[], loaded: true, error: '' })
     } catch (e) { set({ error: (e as Error).message || 'Lỗi tải dữ liệu', loaded: true }) }
   },
 
@@ -72,5 +84,21 @@ export const useWarStore = create<WarState>((set) => ({
     const { error } = await supabase.from('tasks').delete().eq('id', id)
     if (error) return set({ error: error.message })
     set((s) => ({ tasks: s.tasks.filter((x) => x.id !== id), error: '' }))
+  },
+
+  addTest: async (t) => {
+    const { data, error } = await supabase.from('test_products').insert(t).select().single()
+    if (error) return set({ error: error.message })
+    set((s) => ({ tests: [data as TestProduct, ...s.tests], error: '' }))
+  },
+  updateTest: async (id, patch) => {
+    const { error } = await supabase.from('test_products').update(patch).eq('id', id)
+    if (error) return set({ error: error.message })
+    set((s) => ({ tests: s.tests.map((x) => (x.id === id ? { ...x, ...patch } : x)), error: '' }))
+  },
+  deleteTest: async (id) => {
+    const { error } = await supabase.from('test_products').delete().eq('id', id)
+    if (error) return set({ error: error.message })
+    set((s) => ({ tests: s.tests.filter((x) => x.id !== id), error: '' }))
   },
 }))

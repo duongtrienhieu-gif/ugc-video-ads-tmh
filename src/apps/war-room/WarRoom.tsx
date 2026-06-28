@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useWarStore, type Member } from './store'
 import { useAuthStore } from '../../stores/authStore'
 import { fetchSpStats, fetchMarketerSp, aggregate, type SpStat, type SpProfit } from './actuals'
+import TestPipeline from './TestPipeline'
 
 const C = {
   bg: '#070a12', panel: '#0c111c', panel2: '#0a0f19', line: '#1b2233', line2: '#161d2c',
@@ -33,7 +34,7 @@ const statusColor = (s: string) => (s === 'done' ? C.green : s === 'doing' ? C.a
 export default function WarRoom() {
   const { members, targets, tasks, loaded, error, load, addMember, updateMember, deleteMember, setTarget, addTask, updateTask, deleteTask } = useWarStore()
   const userEmail = useAuthStore((s) => s.user?.email ?? '')
-  const [tab, setTab] = useState<'me' | 'target' | 'viec' | 'nhansu'>('me')
+  const [tab, setTab] = useState<'me' | 'target' | 'viec' | 'test' | 'nhansu'>('me')
   const [stats, setStats] = useState<Record<string, SpStat>>({})
   const [profit, setProfit] = useState<SpProfit[]>([])
   const [mktSp, setMktSp] = useState<Record<string, string[]>>({})
@@ -69,7 +70,7 @@ export default function WarRoom() {
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-        {([['me', '🎯 Bảng của tôi'], ['target', '📊 Target'], ['viec', '✅ Việc'], ['nhansu', '👥 Nhân sự']] as const).map(([k, l]) => (
+        {([['me', '🎯 Bảng của tôi'], ['target', '📊 Target'], ['viec', '✅ Việc'], ['test', '🧪 Test SP'], ['nhansu', '👥 Nhân sự']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ background: tab === k ? C.gold : 'transparent', color: tab === k ? '#0a0a0a' : C.muted2, border: `1px solid ${tab === k ? C.gold : C.line}`, borderRadius: 10, padding: '9px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{l}</button>
         ))}
       </div>
@@ -84,6 +85,7 @@ export default function WarRoom() {
       {tab === 'nhansu' && <NhanSu {...{ members, isCEO, mktSp, addMember, updateMember, deleteMember }} />}
       {tab === 'target' && <TargetTab {...{ members, targets, stats, isCEO, setTarget, reloadStats }} />}
       {tab === 'viec' && <ViecTab {...{ members, tasks, profit, spOwner, userEmail, addTask, updateTask, deleteTask }} />}
+      {tab === 'test' && <TestPipeline isCEO={isCEO} userEmail={userEmail} />}
     </Shell>
   )
 }
