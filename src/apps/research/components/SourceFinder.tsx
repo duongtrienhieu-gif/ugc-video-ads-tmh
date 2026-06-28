@@ -256,8 +256,8 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
   )
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-3" onClick={onClose}>
-      <div className="flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-app-border bg-app-base" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-3">
+      <div className="flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-app-border bg-app-base">
         {/* Header */}
         <div className="flex shrink-0 items-center gap-3 border-b border-app-border bg-app-card px-4 py-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-dim"><Clapperboard className="h-4 w-4 text-accent" /></div>
