@@ -115,12 +115,42 @@ async function handleDetail(req: VercelRequest, res: VercelResponse, key: string
   })
 }
 
+// ── PROBE TẠM THỜI: dò đúng "hợp đồng" của /1688/upload-image (xoá sau khi tìm ra) ──
+// 1 ảnh PNG 1×1 (≈68 byte) → loại trừ hẳn nguyên nhân "ảnh quá lớn". Thử nhiều method/field.
+async function handleProbe(res: VercelResponse, key: string) {
+  const rawB64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+  const dataUri = `data:image/png;base64,${rawB64}`
+  const U = `https://${HOST}/1688/upload-image`
+  const jsonHdr = { ...rapidHeaders(key), 'Content-Type': 'application/json' }
+  const post = (o: object): RequestInit => ({ method: 'POST', headers: jsonHdr, body: JSON.stringify(o) })
+  const get = (): RequestInit => ({ method: 'GET', headers: rapidHeaders(key) })
+  type Trial = { label: string; url: string; init: RequestInit }
+  const trials: Trial[] = [
+    { label: 'POST json base64=dataURI', url: U, init: post({ base64: dataUri }) },
+    { label: 'POST json base64=raw', url: U, init: post({ base64: rawB64 }) },
+    { label: 'POST json image=raw', url: U, init: post({ image: rawB64 }) },
+    { label: 'POST json image=dataURI', url: U, init: post({ image: dataUri }) },
+    { label: 'POST json img=raw', url: U, init: post({ img: rawB64 }) },
+    { label: 'POST json imageBase64=raw', url: U, init: post({ imageBase64: rawB64 }) },
+    { label: 'GET ?base64=raw', url: `${U}?base64=${encodeURIComponent(rawB64)}`, init: get() },
+    { label: 'GET ?image=raw', url: `${U}?image=${encodeURIComponent(rawB64)}`, init: get() },
+    { label: 'GET ?img=raw', url: `${U}?img=${encodeURIComponent(rawB64)}`, init: get() },
+  ]
+  const out: { label: string; status: number; body: string }[] = []
+  for (const t of trials) {
+    try { const r = await fetch(t.url, t.init); out.push({ label: t.label, status: r.status, body: (await r.text()).slice(0, 140) }) }
+    catch (e) { out.push({ label: t.label, status: -1, body: (e as Error).message }) }
+  }
+  return res.status(200).json({ probe: 'upload-image', host: HOST, results: out })
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const key = process.env.RAPIDAPI_KEY
   if (!key) return res.status(500).json({ error: 'Server thiếu RAPIDAPI_KEY (đặt trên Vercel)' })
   const action = typeof req.query.action === 'string' ? req.query.action : (req.method === 'POST' ? 'search' : 'detail')
   const debug = req.query.debug === '1'
   try {
+    if (action === 'probe') return await handleProbe(res, key)
     if (action === 'detail') return await handleDetail(req, res, key, debug)
     return await handleSearch(req, res, key, debug)
   } catch (e) {

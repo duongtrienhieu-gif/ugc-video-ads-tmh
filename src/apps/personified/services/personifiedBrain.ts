@@ -362,3 +362,120 @@ XUẤT JSON: { characters:[...], scenes:[${sceneCount} cảnh đúng thứ tự]
     totalSec,
   }
 }
+
+// ══ RESYNC — đồng bộ storyboard sau khi USER SỬA THOẠI TỰ DO ═════════════════
+// User sửa lời thoại ở tab "Đọc liền mạch" → GIỮ NGUYÊN VĂN thoại mới, chỉ VẼ LẠI
+// hình (action/videoPromptEn/setting/emotion/camera/sfx) cho KHỚP thoại mới → prompt
+// chính xác. Giữ nguyên: nhân vật, worldEnv, loại cảnh, thứ tự, số cảnh, người nói.
+// 1 call Gemini TEXT (rẻ — không tốn credit ảnh/video).
+
+export interface ResyncSceneInput {
+  idx: number
+  sceneType: PersonifiedScene['sceneType']
+  speaker: string
+  newDialoguePrimary: string   // thoại user vừa sửa (giữ nguyên văn)
+  prevAction: string
+  prevSetting: string
+  prevVideoPromptEn: string
+}
+
+const RESYNC_SCHEMA = {
+  type: 'object',
+  properties: {
+    scenes: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          idx: { type: 'number' },
+          dialogueVi: { type: 'string' },
+          emotion: { type: 'string' },
+          camera: { type: 'string' },
+          sfx: { type: 'array', items: { type: 'string' } },
+          action: { type: 'string' },
+          setting: { type: 'string' },
+          videoPromptEn: { type: 'string' },
+        },
+        required: ['idx', 'dialogueVi', 'emotion', 'camera', 'sfx', 'action', 'setting', 'videoPromptEn'],
+      },
+    },
+  },
+  required: ['scenes'],
+} as const
+
+export interface ResyncSceneOut {
+  idx: number; dialogueVi: string; emotion: string; camera: string
+  sfx: string[]; action: string; setting: string; videoPromptEn: string
+}
+
+/** Re-derive visual fields cho mỗi cảnh khớp thoại user vừa sửa. Trả map theo idx.
+ *  KHÔNG sửa dialoguePrimary (caller giữ nguyên văn user). */
+export async function resyncStoryboard(p: {
+  product: Product
+  market: TargetMarket
+  worldEnv: string
+  characters: PersonifiedScript['characters']
+  scenes: ResyncSceneInput[]
+  geminiKey: string
+}): Promise<Record<number, ResyncSceneOut>> {
+  const isVN = p.market === 'VN'
+  const langName = TARGET_MARKET_GEMINI_NAME[p.market]
+
+  const charList = (p.characters ?? [])
+    .map((c) => `- "${c.name}" (${c.role}): nhân cách hóa ${c.represents}. Hình: ${c.appearance}`)
+    .join('\n') || '(không có)'
+
+  const sceneBlocks = p.scenes.map((s) => {
+    const dialogue = s.newDialoguePrimary.trim()
+    return `[Cảnh ${s.idx}] loại=${s.sceneType} · người nói="${s.speaker}"
+  THOẠI MỚI (GIỮ NGUYÊN — chỉ vẽ hình cho khớp câu này; rỗng = cảnh câm chỉ có hình): "${dialogue}"
+  (hình cũ) action: ${s.prevAction || '(trống)'}
+  (hình cũ) setting: ${s.prevSetting || '(trống)'}
+  (hình cũ) i2v: ${s.prevVideoPromptEn || '(trống)'}`
+  }).join('\n\n')
+
+  const systemInstruction =
+`Bạn là biên kịch hình ảnh cho format video "NHÂN CÁCH HÓA VẤN ĐỀ" 3D (mụn-có-mặt, dạ-dày-công-nhân).
+User vừa SỬA TAY lời thoại của storyboard. Việc của bạn: ĐỒNG BỘ phần HÌNH ẢNH cho khớp thoại MỚI.
+
+🔒 NGUYÊN TẮC:
+- KHÔNG đổi thoại (dialoguePrimary user tự viết — bạn không xuất trường đó).
+- GIỮ NGUYÊN: nhân vật, thế giới (worldEnv), loại cảnh, thứ tự, người nói, số cảnh.
+- BẢO TOÀN TỐI ĐA hình cũ: nếu thoại mới CÙNG BEAT với hình cũ → GIỮ NGUYÊN action/setting/videoPromptEn cũ. CHỈ sửa khi thoại mới đổi nội dung khiến hình cũ KHÔNG còn khớp (đổi địa điểm, đổi hành động, đổi hoạt chất…). Đừng vẽ lại từ đầu nếu không cần.
+- videoPromptEn = prompt image-to-video TIẾNG ANH GIÀU HÌNH: shot + hành động cụ thể + ĐÚNG bối cảnh "setting" + bề mặt nhân vật (glossy/subsurface) + cảm xúc. KHÔNG bắt model render chữ. (Hệ thống tự thêm chất điện ảnh.)
+- setting (EN, 1 câu): thoại nhắc ĐỜI THỰC (chợ/cầu thang/gym/soi gương…) → đúng nơi đó; beat NỘI TẠI (sản phẩm vào cơ thể/diệt phản diện/hồi phục) → trong cơ thể (≈ worldEnv). KHÔNG nhét mọi cảnh vào trong cơ thể.
+- KHÔNG gore/máu/giải phẫu thật (model chặn) — cartoon Pixar cách điệu.
+- Cảnh cta: action/videoPromptEn CHỈ tả packshot sản phẩm thật + tay chỉ xuống, KHÔNG render chữ/giá/nút.
+- dialogueVi = ${isVN ? 'GIỐNG HỆT thoại mới (đã là tiếng Việt)' : `bản dịch NGHĨA sang tiếng Việt của thoại ${langName} mới (cho operator đọc)`}.
+
+THẾ GIỚI (worldEnv, dùng cho beat nội tại): ${p.worldEnv || '(trống)'}
+NHÂN VẬT:
+${charList}
+${buildProductContext(p.product)}
+
+XUẤT JSON: { scenes: [ { idx, dialogueVi, emotion, camera, sfx[], action, setting, videoPromptEn } ... ] } — đúng ${p.scenes.length} cảnh theo idx đã cho. Không markdown.`
+
+  const raw = await directGeminiText({
+    apiKey: p.geminiKey, systemInstruction,
+    prompt: `Đồng bộ hình cho ${p.scenes.length} cảnh sau (thị trường ${langName}). Trả JSON:\n\n${sceneBlocks}`,
+    maxOutputTokens: 8192, temperature: 0.5, thinkingBudget: 0,
+    responseMimeType: 'application/json', responseSchema: RESYNC_SCHEMA,
+  })
+
+  const parsed = JSON.parse(stripFence(raw)) as { scenes?: Array<Partial<ResyncSceneOut>> }
+  const out: Record<number, ResyncSceneOut> = {}
+  for (const r of parsed.scenes ?? []) {
+    if (typeof r.idx !== 'number') continue
+    out[r.idx] = {
+      idx: r.idx,
+      dialogueVi: r.dialogueVi ?? '',
+      emotion: r.emotion ?? '',
+      camera: r.camera ?? '',
+      sfx: Array.isArray(r.sfx) ? r.sfx : [],
+      action: r.action ?? '',
+      setting: r.setting ?? '',
+      videoPromptEn: r.videoPromptEn ?? '',
+    }
+  }
+  return out
+}
