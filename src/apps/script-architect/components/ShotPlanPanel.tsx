@@ -897,26 +897,26 @@ interface ShotSourcePickerProps {
   onRequestLock: () => void
 }
 
-// Lane = one (termIndex, platform) search stream. Keyed "ti|plat".
-const laneKey = (ti: number, plat: Platform) => `${ti}|${plat}`
+// Lane = one (term, platform) search stream. Keyed by the term TEXT (not its
+// index) so editing the keyword chips — remove / reorder — never mis-maps cached
+// results onto a different keyword. '::' can't appear in a ZH/VN search term.
+const laneKey = (term: string, plat: Platform) => `${plat}::${term}`
 
 // Build the merged result pool: round-robin across terms (so every term — e.g.
 // each ingredient — is represented), priority platform order within each term,
 // deduped by clipKey. This is what fixes a multi-ingredient beat collapsing to
 // the dominant term's clips.
-function buildPool(termCount: number, lanes: Record<string, SourceClip[]>): SourceClip[] {
-  const perTerm: SourceClip[][] = []
-  for (let ti = 0; ti < termCount; ti++) {
-    perTerm.push(PLAT_PRIORITY.flatMap((plat) => lanes[laneKey(ti, plat)] ?? []))
-  }
+function buildPool(terms: string[], lanes: Record<string, SourceClip[]>): SourceClip[] {
+  const perTerm: SourceClip[][] = terms.map((term) =>
+    PLAT_PRIORITY.flatMap((plat) => lanes[laneKey(term, plat)] ?? []),
+  )
   const pool: SourceClip[] = []
   const seen = new Set<string>()
   let depth = 0
   let more = true
   while (more) {
     more = false
-    for (let ti = 0; ti < termCount; ti++) {
-      const arr = perTerm[ti]
+    for (const arr of perTerm) {
       if (depth < arr.length) {
         more = true
         const c = arr[depth]
@@ -954,10 +954,12 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
   const [mediaBusy, setMediaBusy] = useState(false)
   const [mediaErr, setMediaErr] = useState<string | null>(null)
 
-  const pool = buildPool(terms.length, lanes)
+  const pool = buildPool(terms, lanes)
   const poolLen = pool.length
   const visible = pool.slice(0, shown)
-  const anyHasMore = Object.values(hasMore).some(Boolean)
+  // Only the CURRENT terms' lanes count — a removed term's stale lane must not
+  // keep the "load more" button alive.
+  const anyHasMore = terms.some((term) => PLAT_PRIORITY.some((plat) => hasMore[laneKey(term, plat)]))
 
   const fetchLane = async (term: string, plat: Platform, cur: string | undefined): Promise<TikhubResponse> => {
     const curParam = cur ? `&cursor=${encodeURIComponent(cur)}` : ''
@@ -975,8 +977,8 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
     }
     setBusy(true); setErr(null); setOpen(true)
     try {
-      const keys: { ti: number; plat: Platform; key: string }[] = []
-      terms.forEach((_, ti) => PLAT_PRIORITY.forEach((plat) => keys.push({ ti, plat, key: laneKey(ti, plat) })))
+      const keys: { term: string; plat: Platform; key: string }[] = []
+      terms.forEach((term) => PLAT_PRIORITY.forEach((plat) => keys.push({ term, plat, key: laneKey(term, plat) })))
       let nLanes: Record<string, SourceClip[]> = reset ? {} : { ...lanes }
       const nCursor: Record<string, string | undefined> = reset ? {} : { ...cursor }
       const nHasMore: Record<string, boolean> = reset ? {} : { ...hasMore }
@@ -987,13 +989,13 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
       const target = reset ? SOURCE_PAGE : shown + SOURCE_PAGE
       let sawError: string | null = null
       let guard = 0
-      while (buildPool(terms.length, nLanes).length < target && keys.some(({ key }) => nHasMore[key]) && guard < 6) {
+      while (buildPool(terms, nLanes).length < target && keys.some(({ key }) => nHasMore[key]) && guard < 6) {
         guard++
         const rounds = await Promise.all(
-          keys.map(async ({ ti, plat, key }) => {
+          keys.map(async ({ term, plat, key }) => {
             if (!nHasMore[key]) return null
             try {
-              return { key, data: await fetchLane(terms[ti], plat, nCursor[key]) }
+              return { key, data: await fetchLane(term, plat, nCursor[key]) }
             } catch (e) {
               return { key, data: { clips: [], error: e instanceof Error ? e.message : String(e) } as TikhubResponse }
             }
@@ -1011,7 +1013,7 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
         }
       }
       setLanes(nLanes); setCursor(nCursor); setHasMore(nHasMore)
-      const newPool = buildPool(terms.length, nLanes)
+      const newPool = buildPool(terms, nLanes)
       setShown(Math.min(target, newPool.length))
       if (newPool.length === 0 && sawError) setErr(sawError)
     } catch (e) {
@@ -1076,12 +1078,14 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
                   className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md bg-black/40"
                   title="Xem clip / đặt điểm cắt"
                 >
-                  <img
-                    src={c.platform === 'douyin' ? c.cover : proxyInline(c.cover)}
-                    alt=""
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                  />
+                  {c.cover && (
+                    <img
+                      src={c.platform === 'douyin' ? c.cover : proxyInline(c.cover)}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  )}
                   <span className="absolute inset-0 flex items-center justify-center"><Play className="h-4 w-4 text-white drop-shadow" /></span>
                 </button>
                 <div className="min-w-0 flex-1">
