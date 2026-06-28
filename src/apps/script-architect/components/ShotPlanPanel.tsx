@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, RotateCcw, Loader2, Scissors, ArrowDownToLine, Trash2, ChevronUp, ChevronDown, Clapperboard, Film, Sparkles, Search, Play, RefreshCw, X } from 'lucide-react'
+import { ArrowLeft, RotateCcw, Loader2, Scissors, ArrowDownToLine, Trash2, ChevronUp, ChevronDown, Clapperboard, Film, Sparkles, Search, X } from 'lucide-react'
 import type { Shot, ShotPlan, ShotBlock, ShotFill, ScriptLanguage, SourceClip } from '../types'
 import { estimateDuration, DEFAULT_FILL_BY_BLOCK } from '../services/splitIntoShots'
 
@@ -49,14 +49,12 @@ const PLATS: { id: Platform; label: string; emoji: string }[] = [
   { id: 'xhs', label: 'RED', emoji: '📕' },
   { id: 'kuaishou', label: 'Kuaishou', emoji: '⚡' },
 ]
-const platLabel = (p: string) => PLATS.find((x) => x.id === p)?.label ?? 'Douyin'
 const proxyInline = (url: string) => `/api/dl-video?url=${encodeURIComponent(url)}&inline=1`
 const proxyDownload = (url: string, name: string) => {
   const href = `/api/dl-video?url=${encodeURIComponent(url)}&name=${encodeURIComponent(name)}`
   const el = document.createElement('a'); el.href = href; el.download = name
   document.body.appendChild(el); el.click(); el.remove()
 }
-const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : String(n))
 const safeName = (s: string) => (s || 'shot').replace(/[^\w]+/g, '-').slice(0, 24)
 
 // Native <select> popups render with the OS default (white) background, which
