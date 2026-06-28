@@ -29,6 +29,20 @@ export async function fetchSpStats(): Promise<{ stats: Record<string, SpStat>; p
   return { stats, profit }
 }
 
+// Map marketer → các mã SP họ phụ trách (từ file Ghép quà sheet 4 cột marketer) → để TỰ GÁN
+export async function fetchMarketerSp(): Promise<Record<string, string[]>> {
+  const r = await fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ giftOnly: true }), cache: 'no-store' })
+  const j = (await r.json()) as { giftCatalog?: { maChinh: string; marketer: string }[] }
+  const map: Record<string, string[]> = {}
+  for (const c of j.giftCatalog ?? []) {
+    if (!c.marketer || !c.maChinh) continue
+    const k = c.marketer.trim().toUpperCase()
+    ;(map[k] ??= [])
+    if (!map[k].includes(c.maChinh)) map[k].push(c.maChinh)
+  }
+  return map
+}
+
 // Gộp các mã của 1 nhân sự → DT · lãi · %CPQC (weighted) · %hoàn (weighted)
 export function aggregate(spCodes: string[], stats: Record<string, SpStat>): SpStat {
   let dt = 0, lai = 0, cpqcW = 0, hoanW = 0

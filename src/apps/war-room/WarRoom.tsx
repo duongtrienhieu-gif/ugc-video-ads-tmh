@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useWarStore, type Member } from './store'
 import { useAuthStore } from '../../stores/authStore'
-import { fetchSpStats, aggregate, type SpStat, type SpProfit } from './actuals'
+import { fetchSpStats, fetchMarketerSp, aggregate, type SpStat, type SpProfit } from './actuals'
 
 const C = {
   bg: '#070a12', panel: '#0c111c', panel2: '#0a0f19', line: '#1b2233', line2: '#161d2c',
@@ -36,9 +36,13 @@ export default function WarRoom() {
   const [tab, setTab] = useState<'target' | 'viec' | 'nhansu'>('target')
   const [stats, setStats] = useState<Record<string, SpStat>>({})
   const [profit, setProfit] = useState<SpProfit[]>([])
+  const [mktSp, setMktSp] = useState<Record<string, string[]>>({})
 
   useEffect(() => { void load() }, [load])
-  useEffect(() => { void fetchSpStats().then((r) => { setStats(r.stats); setProfit(r.profit) }).catch(() => {}) }, [])
+  useEffect(() => {
+    void fetchSpStats().then((r) => { setStats(r.stats); setProfit(r.profit) }).catch(() => {})
+    void fetchMarketerSp().then(setMktSp).catch(() => {})
+  }, [])
 
   const myMember = members.find((m) => m.email.trim().toLowerCase() === userEmail.trim().toLowerCase())
   const hasCeo = members.some((m) => m.role === 'ceo')
@@ -68,7 +72,11 @@ export default function WarRoom() {
         ))}
       </div>
 
-      {tab === 'nhansu' && <NhanSu {...{ members, isCEO, addMember, updateMember, deleteMember }} />}
+      <div style={{ ...panelStyle, padding: '10px 14px', fontSize: 12.5, color: C.muted2, lineHeight: 1.7 }}>
+        <b style={{ color: C.gold }}>Cách dùng — 3 bước:</b> ① <b>👥 Nhân sự</b>: thêm người (email Gmail họ đăng nhập) → bấm <b>🪄 Tự gán mã SP</b> (app tự biết marketer nào ôm mã nào từ data). ② <b>📊 Target</b>: gõ chỉ tiêu tháng cho từng người → cột THỰC TẾ <b>tự lên số</b> + đèn. ③ <b>✅ Việc</b>: app <b>tự gợi ý việc</b> từ số thật (cắt mã lỗ / giảm hoàn / đẩy mã ngon) gán sẵn đúng người → bấm Nhận; hoặc tự giao việc tay.
+      </div>
+
+      {tab === 'nhansu' && <NhanSu {...{ members, isCEO, mktSp, addMember, updateMember, deleteMember }} />}
       {tab === 'target' && <TargetTab {...{ members, targets, stats, isCEO, setTarget }} />}
       {tab === 'viec' && <ViecTab {...{ members, tasks, profit, spOwner, userEmail, addTask, updateTask, deleteTask }} />}
     </Shell>
@@ -82,16 +90,26 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 // ── NHÂN SỰ ──────────────────────────────────────────────────────────────────
-function NhanSu({ members, isCEO, addMember, updateMember, deleteMember }: {
-  members: Member[]; isCEO: boolean
+// khớp tên nhân sự với marketer trong data (HÀ + PHY → token 'HÀ' khớp marketer 'HÀ')
+function spForMember(name: string, map: Record<string, string[]>): string[] {
+  const tokens = name.toUpperCase().split(/[\s+,/]+/).filter(Boolean)
+  for (const [mk, codes] of Object.entries(map)) if (tokens.includes(mk)) return codes
+  return []
+}
+function NhanSu({ members, isCEO, mktSp, addMember, updateMember, deleteMember }: {
+  members: Member[]; isCEO: boolean; mktSp: Record<string, string[]>
   addMember: (m: Omit<Member, 'id'>) => Promise<void>; updateMember: (id: string, p: Partial<Member>) => Promise<void>; deleteMember: (id: string) => Promise<void>
 }) {
   const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [role, setRole] = useState('marketer'); const [sp, setSp] = useState('')
   const add = () => { if (!name.trim() || !email.trim()) return; void addMember({ name: name.trim(), email: email.trim().toLowerCase(), role, sp_codes: sp.split(',').map((s) => s.trim()).filter(Boolean) }); setName(''); setEmail(''); setSp('') }
+  const autoAssign = async () => { for (const m of members.filter((x) => x.role === 'marketer')) { const codes = spForMember(m.name, mktSp); if (codes.length) await updateMember(m.id, { sp_codes: codes }) } }
   return (
     <div style={panelStyle}>
-      <div style={eyebrowStyle}>👥 NHÂN SỰ · {members.length} người</div>
-      <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Email = Gmail nhân viên dùng đăng nhập app. MÃ SP (cho marketer) = các mã họ phụ trách, phẩy ngăn cách → để tính số thực tế.</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <div style={eyebrowStyle}>👥 NHÂN SỰ · {members.length} người</div>
+        {isCEO && Object.keys(mktSp).length > 0 && <button onClick={() => void autoAssign()} style={{ background: 'rgba(245,196,81,0.1)', color: C.gold, border: '1px solid #4a4015', borderRadius: 8, padding: '7px 13px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>🪄 Tự gán mã SP từ data</button>}
+      </div>
+      <div style={{ fontSize: 12, color: C.muted, margin: '4px 0 12px' }}>Email = Gmail nhân viên dùng đăng nhập app. Mã SP marketer phụ trách → bấm 🪄 ở trên để app tự điền từ file Ghép quà (khỏi gõ tay), hoặc gõ tay vào ô bên dưới.</div>
       {members.map((m) => (
         <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 0', borderTop: `1px solid ${C.line2}`, flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 600, minWidth: 90 }}>{m.name}</span>
