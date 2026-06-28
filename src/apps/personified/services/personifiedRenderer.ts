@@ -16,7 +16,7 @@ import { renderCaptionPng } from './personifiedCaption'
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
 
 /** 1 frame caption karaoke đã render (PNG) + cửa sổ hiện (giây, gốc clip). */
-interface CapFrame { png: Uint8Array; startSec: number; endSec: number }
+export interface CapFrame { png: Uint8Array; startSec: number; endSec: number }
 
 /** Build các frame karaoke từ alignment giọng: mỗi TỪ 1 frame (cụm chữ, tô vàng từ đó),
  *  hiện trong [word.start, word.end]. Không alignment → 1 frame tĩnh cả câu suốt clip. */
@@ -338,15 +338,16 @@ export interface VoiceoverSceneParams {
 
 export interface VoiceoverSceneResult { audioRef: string; voicedRef: string; voiceSec: number }
 
-/** P2c — lồng giọng 1 cảnh: TTS ElevenLabs → ghép voiceover vào clip i2v bằng ffmpeg
- *  (0 credit) → { audioRef, voicedRef }. Không lipsync — giữ full action của i2v. */
-export async function addSceneVoiceover(p: VoiceoverSceneParams): Promise<VoiceoverSceneResult> {
+/** Giọng đã tổng hợp 1 cảnh (chưa ghép vào clip) — để CHẠY SONG SONG với i2v. */
+export interface SceneVoice { audioRef: string; audioBytes: Uint8Array; voiceSec: number; frames: CapFrame[] }
+
+/** BƯỚC GIỌNG (KHÔNG cần clip i2v) → TTS eleven_v3 + karaoke frames. Chạy song song i2v được. */
+export async function synthSceneVoice(
+  p: { elevenKey: string; scene: PersonifiedScene; character?: PersonifiedCharacter; voiceId?: string; speed?: number; signal?: AbortSignal },
+): Promise<SceneVoice> {
   if (!p.elevenKey) throw new Error('Thiếu ElevenLabs API key (Cài đặt)')
   const text = (p.scene.dialoguePrimary ?? '').trim()
   if (!text) throw new Error('Cảnh không có thoại — không cần lồng giọng')
-  if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
-
-  // ── 1. TTS KÈM TIMESTAMP (eleven_v3) → giọng + alignment cho karaoke ───────
   const voiceId = (p.voiceId ?? '').trim() || pickVoiceId(p.character?.voice)
   const { buffer, alignment } = await textToSpeechWithTimestamps({
     apiKey: p.elevenKey, voiceId, text, modelId: 'eleven_v3', speed: p.speed ?? 1.0,
@@ -354,21 +355,21 @@ export async function addSceneVoiceover(p: VoiceoverSceneParams): Promise<Voiceo
   const audioBytes = new Uint8Array(buffer.byteLength)
   audioBytes.set(new Uint8Array(buffer))
   const audioRef = await saveAsset(new Blob([audioBytes], { type: 'audio/mpeg' }), 'audio/mpeg')
-  p.onStage?.('tts', { audioRef })
-  if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
-
-  // Độ dài giọng (= độ dài voiced clip do -shortest). Cap ở clipDuration để khớp video.
   const ends = alignment?.characterEndTimesSeconds
   const ttsLen = ends && ends.length ? ends[ends.length - 1] : p.scene.clipDuration
   const voiceSec = Math.min(ttsLen || p.scene.clipDuration, p.scene.clipDuration)
-
-  // ── 2. Frame caption KARAOKE (mỗi từ 1 PNG, theo timing giọng) ────────────
   const frames = await buildKaraokeFrames(text, alignment, p.scene.clipDuration)
+  return { audioRef, audioBytes, voiceSec, frames }
+}
 
-  // ── 3. Ghép: pad-fit 9:16 nền BLUR (KHÔNG cắt) + giọng + overlay karaoke ──
+/** BƯỚC GHÉP: pad-fit 9:16 nền blur + voiceover + overlay karaoke vào clip i2v (ffmpeg, 0cr). */
+export async function muxSceneVoiceover(
+  p: { clipRef: string; voice: SceneVoice; scene: PersonifiedScene; signal?: AbortSignal },
+): Promise<string> {
+  if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
   const clipUrl = isAssetRef(p.clipRef) ? await getUrl(p.clipRef) : p.clipRef
   if (!clipUrl) throw new Error('Không lấy được URL clip i2v')
-  p.onStage?.('mux', { audioRef })
+  const { audioBytes, frames } = p.voice
   const ffmpeg = await getFFmpeg()
   const W = 720, H = 1280
   const vIn = 'vo_in.mp4', aIn = 'vo_in.mp3', out = 'vo_out.mp4'
@@ -413,8 +414,18 @@ export async function addSceneVoiceover(p: VoiceoverSceneParams): Promise<Voiceo
   await ffmpeg.deleteFile(vIn).catch(() => {})
   await ffmpeg.deleteFile(aIn).catch(() => {})
   await ffmpeg.deleteFile(out).catch(() => {})
-  p.onStage?.('done', { audioRef, voicedRef })
-  return { audioRef, voicedRef, voiceSec }
+  return voicedRef
+}
+
+/** P2c — lồng giọng 1 cảnh (standalone, dùng cho "Lồng giọng lại"): synth → mux. */
+export async function addSceneVoiceover(p: VoiceoverSceneParams): Promise<VoiceoverSceneResult> {
+  const voice = await synthSceneVoice(p)
+  p.onStage?.('tts', { audioRef: voice.audioRef })
+  if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
+  p.onStage?.('mux', { audioRef: voice.audioRef })
+  const voicedRef = await muxSceneVoiceover({ clipRef: p.clipRef, voice, scene: p.scene, signal: p.signal })
+  p.onStage?.('done', { audioRef: voice.audioRef, voicedRef })
+  return { audioRef: voice.audioRef, voicedRef, voiceSec: voice.voiceSec }
 }
 
 /** Nghe thử 1 giọng — TTS 1 câu mẫu (eleven_v3) → object URL để phát. Caller tự revoke. */

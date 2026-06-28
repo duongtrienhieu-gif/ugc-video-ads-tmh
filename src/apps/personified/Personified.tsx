@@ -16,7 +16,7 @@ import {
   estimateProjectCredits, formatCreditEstimate, pickClipDuration, estimateSpeechSec, playbackWps,
 } from './constants'
 import { analyzeInsight, generateScript } from './services/personifiedBrain'
-import { renderKeyframe, renderClipFromKeyframe, renderCharacterRef, addSceneVoiceover, synthVoiceSample } from './services/personifiedRenderer'   // P2a/P2b/P2c (cũng đăng ký dev helper __testRenderScene)
+import { renderKeyframe, renderClipFromKeyframe, renderCharacterRef, addSceneVoiceover, synthSceneVoice, muxSceneVoiceover, synthVoiceSample } from './services/personifiedRenderer'   // P2a/P2b/P2c (cũng đăng ký dev helper __testRenderScene)
 import VoiceLibraryModal from '../voice-studio/components/VoiceLibraryModal'
 import CloneVoiceModal from '../voice-studio/components/CloneVoiceModal'
 import { listVoices, type ElevenLabsVoice } from '../../utils/elevenlabs'
@@ -440,6 +440,48 @@ export default function Personified() {
     }
   }
 
+  // GỘP: Tạo clip i2v + lồng giọng CHẠY SONG SONG (TTS không cần clip) → đỡ chờ.
+  //   i2v (KIE) ∥ synthSceneVoice (ElevenLabs) → xong cả 2 thì mux. Cảnh không thoại → chỉ i2v.
+  async function handleRenderClipVoice(scene: PersonifiedScene) {
+    if (!script || !kieKey) { if (!kieKey) setError('Thiếu KIE API key trong Cài đặt'); return }
+    const cur = clips[scene.idx]
+    if (!cur?.keyframeRef) { setError('Cảnh này chưa có keyframe — tạo keyframe trước'); return }
+    if (cur.status === 'clip') return
+    const hasDialogue = !!(scene.dialoguePrimary ?? '').trim()
+    const character = script.characters.find((c) => c.name === scene.speaker || c.role === scene.speaker) ?? script.characters[0]
+    const doVoice = hasDialogue && !!elevenKey
+    setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], status: 'clip', lipStatus: doVoice ? 'tts' : p[scene.idx]?.lipStatus, error: undefined } }))
+    // Chạy SONG SONG: i2v + giọng.
+    const clipP = renderClipFromKeyframe({
+      apiKey: kieKey, scene, tier, keyframeRef: cur.keyframeRef,
+      onSubmit: (tid) => setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], status: 'clip', taskId: tid } })),
+    })
+    const voiceP = doVoice
+      ? synthSceneVoice({ elevenKey, scene, character, voiceId: character ? charVoices[character.name] : undefined })
+      : Promise.resolve(null)
+    const [clipR, voiceR] = await Promise.allSettled([clipP, voiceP])
+
+    if (clipR.status === 'rejected') {
+      setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], status: 'kf_ready', error: clipR.reason instanceof Error ? clipR.reason.message : String(clipR.reason) } }))
+      return
+    }
+    const { clipRef, taskId } = clipR.value
+    setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], status: 'done', clipRef, taskId } }))
+    if (voiceR.status === 'rejected') {
+      setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: 'failed', lipError: voiceR.reason instanceof Error ? voiceR.reason.message : String(voiceR.reason) } }))
+      return
+    }
+    const voice = voiceR.value
+    if (!voice) return   // cảnh không thoại → xong ở clip
+    try {
+      setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: 'mux' } }))
+      const voicedRef = await muxSceneVoiceover({ clipRef, voice, scene })
+      setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: 'done', audioRef: voice.audioRef, lipsyncRef: voicedRef, voiceSec: voice.voiceSec } }))
+    } catch (e) {
+      setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], lipStatus: 'failed', lipError: e instanceof Error ? e.message : String(e) } }))
+    }
+  }
+
   // P2a — STORYBOARD: render keyframe TẤT CẢ cảnh (rẻ) để soi cả phim trước khi đốt i2v.
   //   Bỏ qua cảnh đã có keyframe (kf_ready/clip/done).
   async function handleRenderAllKeyframes() {
@@ -539,7 +581,7 @@ export default function Personified() {
     setLibrary(getLibraryLocal())
   }
 
-  // P2a — i2v TẤT CẢ cảnh đã duyệt keyframe (status kf_ready). Cảnh chưa có keyframe → bỏ qua.
+  // P2a — i2v + GIỌNG (song song) TẤT CẢ cảnh đã duyệt keyframe. Cảnh chưa có keyframe → bỏ qua.
   async function handleRenderAllClips() {
     if (!script || renderingAll) return
     if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
@@ -547,7 +589,7 @@ export default function Personified() {
     try {
       for (const s of script.scenes) {
         const st = clips[s.idx]?.status
-        if (st === 'kf_ready') await handleRenderClip(s)
+        if (st === 'kf_ready') await handleRenderClipVoice(s)
       }
     } finally { setRenderingAll(false) }
   }
@@ -722,8 +764,8 @@ export default function Personified() {
               </button>
               <button onClick={handleRenderAllClips} disabled={renderingAll || !kieKey || kfReadyCount === 0}
                 className="flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 font-bold text-white transition-colors hover:bg-violet-700 disabled:opacity-40"
-                title={kfReadyCount > 0 ? `i2v ${kfReadyCount} cảnh đã duyệt keyframe (tốn credit)` : 'Duyệt keyframe trước (chưa cảnh nào sẵn sàng i2v)'}>
-                {renderingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang chạy…</> : <>🎬 Clip tất cả{kfReadyCount > 0 && ` (${kfReadyCount})`}</>}
+                title={kfReadyCount > 0 ? `i2v + lồng giọng song song ${kfReadyCount} cảnh (i2v tốn KIE, giọng ElevenLabs)` : 'Duyệt keyframe trước (chưa cảnh nào sẵn sàng i2v)'}>
+                {renderingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang chạy…</> : <>🎬 Clip + giọng tất cả{kfReadyCount > 0 && ` (${kfReadyCount})`}</>}
               </button>
               {/* P2c — lồng giọng tất cả cảnh có clip + thoại (TTS + ghép ffmpeg, 0 credit KIE) */}
               <button onClick={handleVoiceoverAll} disabled={renderingAll || !elevenKey || lipReadyCount === 0}
@@ -873,15 +915,15 @@ export default function Personified() {
                                     ? <><RefreshCw className="h-3 w-3" /> Đổi keyframe</>
                                     : <>🖼️ Tạo keyframe</>}
                                 </button>
-                                {/* Bước 2 — i2v (chỉ bật khi đã có keyframe duyệt) */}
+                                {/* Bước 2 — i2v + giọng SONG SONG (chỉ bật khi đã có keyframe duyệt) */}
                                 {clips[s.idx]?.keyframeRef && (
-                                  <button onClick={() => handleRenderClip(s)} disabled={busy || renderingAll || !kieKey}
+                                  <button onClick={() => handleRenderClipVoice(s)} disabled={busy || renderingAll || !kieKey}
                                     className="flex items-center gap-1 rounded bg-violet-600 px-2 py-1 text-[11px] font-bold text-white transition-colors hover:bg-violet-700 disabled:opacity-40">
                                     {st === 'clip'
-                                      ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang i2v…</>
+                                      ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang i2v + giọng…</>
                                       : st === 'done'
                                       ? <><RefreshCw className="h-3 w-3" /> Tạo clip lại</>
-                                      : <>✅ Tạo clip (i2v)</>}
+                                      : <>✅ Tạo clip + giọng</>}
                                   </button>
                                 )}
                                 {st === 'kf_ready' && <span className="text-[10px] font-semibold text-violet-600">👁️ Soi ảnh dưới — đẹp thì bấm "Tạo clip", drift thì "Đổi keyframe"</span>}
