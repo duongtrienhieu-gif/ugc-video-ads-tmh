@@ -1,4 +1,4 @@
-﻿import { useEffect } from 'react'
+﻿import { useEffect, useRef } from 'react'
 import TopNav from './components/TopNav'
 import ToastContainer from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -15,6 +15,7 @@ import { useVideoTranslateStore } from './stores/videoTranslateStore'
 import { useBrandKitStore } from './stores/brandKitStore'
 import { useTikTokShopListingsStore } from './apps/tiktok-shop/listingsStore'
 import { useChatBotStore } from './apps/chat-bot/store'
+import { useWarStore } from './apps/war-room/store'
 import AuthScreen from './components/AuthScreen'
 import RestoreSessionModal from './components/RestoreSessionModal'
 import { useSettingsStore } from './stores/settingsStore'
@@ -107,6 +108,9 @@ export default function App() {
   const { user, loading, setUser, setLoading } = useAuthStore()
   const loadAll = useBankStore((s) => s.loadAll)
   const { theme } = useSettingsStore()
+  const warMembers = useWarStore((s) => s.members)
+  const warLoaded = useWarStore((s) => s.loaded)
+  const autoRouted = useRef(false)
 
   // ── Theme: 3 modes.
   //   'light'  → no attributes (default, unchanged)
@@ -151,6 +155,8 @@ export default function App() {
       void useBrandKitStore.getState().hydrate()
       void useTikTokShopListingsStore.getState().hydrate()
       void useChatBotStore.getState().hydrate()
+      // Tải đội ngũ Tác Chiến sớm để biết role → nhân viên auto vào "Bảng của tôi".
+      void useWarStore.getState().load()
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -170,6 +176,16 @@ export default function App() {
   useEffect(() => {
     openApp('home')
   }, [openApp])
+
+  // Sau khi tải đội Tác Chiến: nếu người đăng nhập là NHÂN VIÊN (không phải CEO)
+  // thì mở thẳng "Bảng của tôi". CEO giữ nguyên Trang chủ. Chỉ tự điều hướng 1 lần,
+  // và chỉ khi user chưa tự bấm đi đâu (vẫn ở 'home').
+  useEffect(() => {
+    if (autoRouted.current || !user || !warLoaded) return
+    autoRouted.current = true
+    const me = warMembers.find((m) => m.email.trim().toLowerCase() === (user.email ?? '').trim().toLowerCase())
+    if (me && me.role !== 'ceo' && useAppStore.getState().activeApp === 'home') openApp('war-room')
+  }, [user, warLoaded, warMembers, openApp])
 
   if (loading) {
     return (

@@ -33,7 +33,7 @@ const statusColor = (s: string) => (s === 'done' ? C.green : s === 'doing' ? C.a
 export default function WarRoom() {
   const { members, targets, tasks, loaded, error, load, addMember, updateMember, deleteMember, setTarget, addTask, updateTask, deleteTask } = useWarStore()
   const userEmail = useAuthStore((s) => s.user?.email ?? '')
-  const [tab, setTab] = useState<'target' | 'viec' | 'nhansu'>('target')
+  const [tab, setTab] = useState<'me' | 'target' | 'viec' | 'nhansu'>('me')
   const [stats, setStats] = useState<Record<string, SpStat>>({})
   const [profit, setProfit] = useState<SpProfit[]>([])
   const [mktSp, setMktSp] = useState<Record<string, string[]>>({})
@@ -69,15 +69,18 @@ export default function WarRoom() {
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-        {([['target', '📊 Target'], ['viec', '✅ Việc'], ['nhansu', '👥 Nhân sự']] as const).map(([k, l]) => (
+        {([['me', '🎯 Bảng của tôi'], ['target', '📊 Target'], ['viec', '✅ Việc'], ['nhansu', '👥 Nhân sự']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ background: tab === k ? C.gold : 'transparent', color: tab === k ? '#0a0a0a' : C.muted2, border: `1px solid ${tab === k ? C.gold : C.line}`, borderRadius: 10, padding: '9px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{l}</button>
         ))}
       </div>
 
-      <div style={{ ...panelStyle, padding: '10px 14px', fontSize: 12.5, color: C.muted2, lineHeight: 1.7 }}>
-        <b style={{ color: C.gold }}>Cách dùng — 3 bước:</b> ① <b>👥 Nhân sự</b>: thêm người (email Gmail họ đăng nhập) → bấm <b>🪄 Tự gán mã SP</b> (app tự biết marketer nào ôm mã nào từ data). ② <b>📊 Target</b>: gõ chỉ tiêu tháng cho từng người → cột THỰC TẾ <b>tự lên số</b> + đèn. ③ <b>✅ Việc</b>: app <b>tự gợi ý việc</b> từ số thật (cắt mã lỗ / giảm hoàn / đẩy mã ngon) gán sẵn đúng người → bấm Nhận; hoặc tự giao việc tay.
-      </div>
+      {tab !== 'me' && (
+        <div style={{ ...panelStyle, padding: '10px 14px', fontSize: 12.5, color: C.muted2, lineHeight: 1.7 }}>
+          <b style={{ color: C.gold }}>Cách dùng — 3 bước:</b> ① <b>👥 Nhân sự</b>: thêm người (email Gmail họ đăng nhập) → bấm <b>🪄 Tự gán mã SP</b> (app tự biết marketer nào ôm mã nào từ data). ② <b>📊 Target</b>: gõ chỉ tiêu tháng cho từng người → cột THỰC TẾ <b>tự lên số</b> + đèn. ③ <b>✅ Việc</b>: app <b>tự gợi ý việc</b> từ số thật (cắt mã lỗ / giảm hoàn / đẩy mã ngon) gán sẵn đúng người → bấm Nhận; hoặc tự giao việc tay.
+        </div>
+      )}
 
+      {tab === 'me' && <MyBoard {...{ members, targets, tasks, stats, isCEO, myMember, userEmail, updateTask, reloadStats }} />}
       {tab === 'nhansu' && <NhanSu {...{ members, isCEO, mktSp, addMember, updateMember, deleteMember }} />}
       {tab === 'target' && <TargetTab {...{ members, targets, stats, isCEO, setTarget, reloadStats }} />}
       {tab === 'viec' && <ViecTab {...{ members, tasks, profit, spOwner, userEmail, addTask, updateTask, deleteTask }} />}
@@ -89,6 +92,148 @@ function Shell({ children }: { children: React.ReactNode }) {
   const [mob, setMob] = useState(false)
   useEffect(() => { const f = () => setMob(window.innerWidth < 700); f(); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) }, [])
   return <div style={{ minHeight: '100%', background: C.bg, color: C.text }}><div style={{ maxWidth: 1180, margin: '0 auto', padding: mob ? '16px 12px 50px' : '24px 24px 60px' }}>{children}</div></div>
+}
+
+// ── BẢNG CỦA TÔI — buồng lái cá nhân: con số hôm nay · KPI tháng · việc của tôi ─
+// CEO chọn được từng nhân viên để soi dashboard của đứa đó. Tất cả ×5800 (qua aggregate/computeProfit), KHÔNG 6500.
+function MyBoard({ members, targets, tasks, stats, isCEO, myMember, userEmail, updateTask, reloadStats }: {
+  members: Member[]; targets: { member_id: string; period: string; metric: string; value: number }[]
+  tasks: ReturnType<typeof useWarStore.getState>['tasks']; stats: Record<string, SpStat>
+  isCEO: boolean; myMember: Member | undefined; userEmail: string
+  updateTask: (id: string, p: Partial<ReturnType<typeof useWarStore.getState>['tasks'][number]>) => Promise<void>
+  reloadStats: () => Promise<void>
+}) {
+  const [viewId, setViewId] = useState('')
+  // CEO xem được mọi người; nhân viên khoá vào chính mình
+  const fallback = myMember ?? (isCEO ? members.find((m) => m.role === 'marketer') ?? members[0] : undefined)
+  const view = (isCEO ? members.find((m) => m.id === viewId) : null) ?? fallback
+
+  if (!view) {
+    return (
+      <div style={{ ...panelStyle, textAlign: 'center', color: C.muted2, lineHeight: 1.7 }}>
+        Email <b style={{ color: C.text }}>{userEmail}</b> chưa được thêm vào đội.<br />
+        Báo CEO thêm bạn ở tab <b>👥 Nhân sự</b> (đúng email Gmail bạn đang đăng nhập) để hiện buồng lái.
+      </div>
+    )
+  }
+
+  const act = aggregate(view.sp_codes ?? [], stats)
+  const tgt = (k: string) => targets.find((t) => t.member_id === view.id && t.period === 'month' && t.metric === k)?.value
+  const tDt = tgt('dt'), tLai = tgt('lai'), tCpqc = tgt('cpqc'), tHoan = tgt('hoan')
+
+  // ── Con số HÔM NAY PHẢI ĐẠT — bẻ target tháng ÷ ngày còn lại ÷ chốt ──
+  const now = new Date()
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const daysLeft = Math.max(1, daysInMonth - now.getDate() + 1) // gồm hôm nay
+  const remainingDt = tDt != null ? Math.max(0, tDt - act.dt) : null
+  const dtPerDay = remainingDt != null ? remainingDt / daysLeft : null
+  const cpqcFrac = tCpqc != null ? tCpqc / 100 : act.cpqc // ưu tiên trần CPQC CEO đặt
+  const ordersPerDay = dtPerDay != null && act.aov > 0 ? dtPerDay / act.aov : null
+  const dataPerDay = ordersPerDay != null && act.chot > 0 ? ordersPerDay / act.chot : null
+  const adsPerDay = dtPerDay != null ? dtPerDay * cpqcFrac : null
+  const cpaTarget = adsPerDay != null && dataPerDay != null && dataPerDay > 0 ? adsPerDay / dataPerDay : null
+  const hitMonth = remainingDt === 0 && tDt != null
+  const noData = act.dt === 0 // chưa gán mã / endpoint chưa tải
+  const noAov = act.aov === 0 || act.chot === 0 // SALE chưa tải → không bẻ ra đơn/data được
+
+  const myTasks = tasks.filter((t) => t.assignee_id === view.id)
+  const todoCount = myTasks.filter((t) => t.status !== 'done').length
+
+  const Big = ({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: string }) => (
+    <div style={{ flex: '1 1 150px', minWidth: 140, background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 12, padding: '14px 14px' }}>
+      <div style={{ fontSize: 10.5, letterSpacing: 1, color: C.muted, marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: tone ?? C.gold, lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: C.muted2, marginTop: 4 }}>{sub}</div>}
+    </div>
+  )
+
+  const Bar = ({ label, actual, target, lowerBetter, money }: { label: string; actual: number; target: number | undefined; lowerBetter: boolean; money: boolean }) => {
+    const has = target != null && !noData && !(label.includes('Hoàn') && act.hoan === 0)
+    const ok = has ? (lowerBetter ? actual <= (target as number) : actual >= (target as number)) : null
+    const pctRaw = target ? (lowerBetter ? (target as number) / Math.max(actual, 1e-9) : actual / (target as number)) : 0
+    const pct = Math.max(0, Math.min(1, pctRaw)) * 100
+    const show = (v: number) => (money ? fmtMoney(v) : fmtPct(v))
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 5 }}>
+          <span style={{ color: C.muted2 }}>{label}</span>
+          <span><b style={{ color: ok == null ? C.muted : ok ? C.green : C.red }}>{noData || (label.includes('Hoàn') && act.hoan === 0) ? '—' : show(actual)}</b><span style={{ color: C.muted }}> / {target != null ? show(target) : '—'}</span></span>
+        </div>
+        <div style={{ height: 6, background: C.line2, borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: ok == null ? C.muted : ok ? C.green : C.red, borderRadius: 4 }} />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {/* Chọn người (CEO) + tiêu đề */}
+      <div style={{ ...panelStyle, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>Chào {view.name} 👋</div>
+          <div style={{ fontSize: 12, color: C.muted }}>{roleLabel(view.role)} · còn <b style={{ color: C.amber }}>{daysLeft} ngày</b> trong tháng · phụ trách {(view.sp_codes ?? []).length} mã SP</div>
+        </div>
+        {isCEO && (
+          <select value={view.id} onChange={(e) => setViewId(e.target.value)} title="CEO: chọn nhân viên để soi buồng lái của họ"
+            style={{ ...inp, border: `1px solid ${C.gold}`, color: C.gold, fontWeight: 600 }}>
+            {members.map((m) => <option key={m.id} value={m.id}>👁 {m.name} · {roleLabel(m.role)}</option>)}
+          </select>
+        )}
+        <button onClick={() => void reloadStats()} title="tải lại số thực tế" style={{ background: 'transparent', color: C.muted2, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 12px', fontSize: 12.5, cursor: 'pointer' }}>⟳ Tải lại</button>
+      </div>
+
+      {/* CON SỐ HÔM NAY */}
+      <div style={{ ...panelStyle, borderColor: '#3a3414' }}>
+        <div style={eyebrowStyle}>🔥 HÔM NAY PHẢI ĐẠT — để cán target tháng</div>
+        {noData ? (
+          <div style={{ fontSize: 13, color: C.amber, padding: '6px 0' }}>{view.name} chưa gán mã SP (hoặc số chưa tải) → CEO bấm 🪄 ở tab Nhân sự, rồi ⟳ Tải lại.</div>
+        ) : tDt == null ? (
+          <div style={{ fontSize: 13, color: C.muted2, padding: '6px 0' }}>Chưa có target doanh thu tháng. {isCEO ? 'Đặt ở tab 📊 Target.' : 'Báo CEO đặt ở tab Target.'}</div>
+        ) : hitMonth ? (
+          <div style={{ fontSize: 15, color: C.green, fontWeight: 600, padding: '6px 0' }}>🎉 Đã cán target doanh thu tháng! Giữ nhịp & ghìm hoàn.</div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <Big label="DOANH THU / NGÀY" value={fmtMoney(dtPerDay as number)} sub={`còn thiếu ${fmtMoney(remainingDt as number)}`} />
+              <Big label="ĐƠN CẦN CHỐT / NGÀY" value={noAov ? '—' : String(Math.ceil(ordersPerDay as number))} sub={noAov ? 'cần tải SALE' : `AOV ${fmtMoney(act.aov)}`} tone={C.text} />
+              <Big label="DATA CẦN RA / NGÀY" value={noAov ? '—' : String(Math.ceil(dataPerDay as number))} sub={noAov ? 'cần tải SALE' : `chốt ${fmtPct(act.chot * 100)}`} tone={C.text} />
+              <Big label="NGÂN SÁCH ADS / NGÀY" value={fmtMoney(adsPerDay as number)} sub={`CPQC ${fmtPct(cpqcFrac * 100)}${tCpqc != null ? ' (trần)' : ''}`} tone={C.text} />
+              <Big label="CPA MỤC TIÊU / DATA" value={noAov ? '—' : fmtMoney(cpaTarget as number)} sub="≤ giá này mới có lãi" tone={C.green} />
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.6 }}>
+              Công thức: thiếu {fmtMoney(remainingDt as number)} ÷ {daysLeft} ngày = DT/ngày → ÷ AOV = đơn/ngày → ÷ chốt% = data/ngày. CPA mục tiêu = CPQC × AOV × chốt%. Care ads bám đúng <b style={{ color: C.green }}>CPA ≤ {noAov ? '—' : fmtMoney(cpaTarget as number)}</b>.
+              {noAov && <span style={{ color: C.amber }}> · Đơn/data đang "—" vì file SALE chưa tải (Google chặn) → bấm ⟳ Tải lại vài lần.</span>}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* KPI THÁNG */}
+      <div style={panelStyle}>
+        <div style={eyebrowStyle}>📊 KPI THÁNG — thực tế / target</div>
+        <Bar label="Doanh thu" actual={act.dt} target={tDt} lowerBetter={false} money />
+        <Bar label="Lãi thật" actual={act.lai} target={tLai} lowerBetter={false} money />
+        <Bar label="% CPQC" actual={act.cpqc * 100} target={tCpqc} lowerBetter money={false} />
+        <Bar label="% Hoàn" actual={act.hoan * 100} target={tHoan} lowerBetter money={false} />
+      </div>
+
+      {/* VIỆC CỦA TÔI */}
+      <div style={panelStyle}>
+        <div style={eyebrowStyle}>✅ VIỆC CỦA {view.name.toUpperCase()} · {todoCount} cần làm</div>
+        {myTasks.length === 0 && <div style={{ fontSize: 13, color: C.muted, padding: '4px 0' }}>Chưa có việc nào. Vào tab ✅ Việc để nhận gợi ý từ số thật.</div>}
+        {myTasks.map((t) => (
+          <div key={t.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 0', borderTop: `1px solid ${C.line2}`, flexWrap: 'wrap' }}>
+            <button onClick={() => void updateTask(t.id, { status: STATUS_NEXT[t.status] })} title="đổi trạng thái"
+              style={{ background: 'transparent', color: statusColor(t.status), border: `1px solid ${statusColor(t.status)}`, borderRadius: 20, padding: '2px 10px', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>{STATUS_LABEL[t.status]}</button>
+            <span style={{ fontSize: 13, flex: 1, minWidth: 180, textDecoration: t.status === 'done' ? 'line-through' : 'none', color: t.status === 'done' ? C.muted : C.text }}>{t.title}</span>
+            {t.type && <span style={{ fontSize: 11, color: C.muted2 }}>{TYPE_LABEL[t.type] ?? t.type}</span>}
+            {t.due && <span style={{ fontSize: 11, color: C.amber }}>{t.due}</span>}
+          </div>
+        ))}
+      </div>
+    </>
+  )
 }
 
 // ── NHÂN SỰ ──────────────────────────────────────────────────────────────────
