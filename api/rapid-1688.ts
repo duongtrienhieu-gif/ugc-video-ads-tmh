@@ -156,19 +156,14 @@ async function handleProbe2(res: VercelResponse, key: string) {
     return { status: r.status, body: (await r.text()).slice(0, 120) }
   }
   const out: { label: string; bodyKB: number; status: number; body: string }[] = []
-  // 1) ảnh JPEG thật ~600px (xác nhận ảnh thường → token thật, không phải "0")
-  try {
-    const ir = await fetch('https://picsum.photos/seed/probe1688/600/600.jpg')
-    const realB64 = Buffer.from(await ir.arrayBuffer()).toString('base64')
-    const r = await callUpload(realB64)
-    out.push({ label: 'ảnh thật ~600px', bodyKB: Math.round(realB64.length / 1024), ...r })
-  } catch (e) { out.push({ label: 'ảnh thật ~600px', bodyKB: 0, status: -1, body: (e as Error).message }) }
-  // 2) blob base64 cỡ tăng dần (không phải ảnh thật) — chỉ để dò ngưỡng size:
-  //    còn nhỏ → 500 "图片编码异常" (qua được size, lỗi giải mã); vượt ngưỡng → 400 "bad request".
-  for (const kb of [120, 280, 500]) {
-    await sleep(1300)
-    const r = await callUpload('A'.repeat(kb * 1024))
-    out.push({ label: `blob ${kb}KB`, bodyKB: kb, ...r })
+  // blob base64 cỡ tăng dần (không phải ảnh thật) — dò ngưỡng size:
+  //   còn nhỏ → 500 "图片编码异常" (qua được size, chỉ lỗi giải mã); vượt ngưỡng → 400 "bad request".
+  let first = true
+  for (const kb of [80, 160, 240, 360]) {
+    if (!first) await sleep(1000)
+    first = false
+    try { const r = await callUpload('A'.repeat(kb * 1024)); out.push({ label: `blob ${kb}KB`, bodyKB: kb, ...r }) }
+    catch (e) { out.push({ label: `blob ${kb}KB`, bodyKB: kb, status: -1, body: (e as Error).message }) }
   }
   return res.status(200).json({ probe: 'upload-image-size', results: out })
 }
