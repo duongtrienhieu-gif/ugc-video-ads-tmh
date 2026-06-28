@@ -188,6 +188,14 @@ export default function Personified() {
   }, [script, clips])
   // P2d — số cảnh đã có clip (để ghép). Bằng tổng cảnh = đủ; ít hơn = ghép phần đã render.
   const clipCount = useMemo(() => script ? script.scenes.filter((s) => clips[s.idx]?.clipRef).length : 0, [script, clips])
+  // Độ dài THẬT dự kiến của video cuối = tổng giọng (cảnh đã lồng giọng) + render-length cảnh
+  // chưa lồng. Khớp với cột Giây + video ghép ra (ghép cắt/kéo về voiceSec). voicedAny để biết
+  // có nên hiện "thật" khác "render" không.
+  const realTotalSec = useMemo(
+    () => script ? Math.round(script.scenes.reduce((sum, s) => sum + (clips[s.idx]?.voiceSec ?? s.clipDuration), 0)) : 0,
+    [script, clips],
+  )
+  const voicedAny = useMemo(() => script ? script.scenes.some((s) => clips[s.idx]?.voiceSec) : false, [script, clips])
 
   const noKey = !geminiKey
   const isVN = market === 'VN'
@@ -707,7 +715,7 @@ export default function Personified() {
       id: crypto.randomUUID(),
       title: `${product?.productName || 'Video'} · ${market} · ${stamp}`,
       videoRef: finalVideo.videoRef, market,
-      sceneCount: script.scenes.length, totalSec: script.totalSec, createdAt: Date.now(),
+      sceneCount: script.scenes.length, totalSec: voicedAny ? realTotalSec : script.totalSec, createdAt: Date.now(),
     }
     await addToLibrary(item)
     setLibrary(getLibraryLocal())
@@ -883,7 +891,9 @@ export default function Personified() {
         {script && (
           <Section step={3} title="Kịch bản">
             <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
-              <span className="rounded-full bg-gray-100 px-2 py-1 font-semibold text-gray-700">{script.scenes.length} cảnh · ~{script.totalSec}s <span className="font-normal text-gray-400">(mục tiêu ~{LENGTH_TARGET_SEC[config.length]}s)</span></span>
+              <span className="rounded-full bg-gray-100 px-2 py-1 font-semibold text-gray-700"
+                title={voicedAny ? `Độ dài thật theo giọng ~${realTotalSec}s (render ${script.totalSec}s, ghép cắt/kéo về giọng) · mục tiêu ~${LENGTH_TARGET_SEC[config.length]}s` : `Render ~${script.totalSec}s · mục tiêu ~${LENGTH_TARGET_SEC[config.length]}s`}>
+                {script.scenes.length} cảnh · ~{voicedAny ? realTotalSec : script.totalSec}s <span className="font-normal text-gray-400">(mục tiêu ~{LENGTH_TARGET_SEC[config.length]}s)</span></span>
               <label className="flex items-center gap-1">
                 <span className="text-gray-500">Tier render:</span>
                 <select value={tier} onChange={(e) => setTier(e.target.value as RenderTier)}
