@@ -188,21 +188,25 @@ function nextDouyin(data: AnyObj, cursor: string): NextCursor {
   return { cursor: String(next), hasMore: truthy(hm) }
 }
 
-// ── TIKTOK (thị trường MY/global) — web search video, offset-based, GET ──
-// Cùng nhà ByteDance với Douyin nên dùng chung mapAwemes. Endpoint web fetch_search_video
-// trả {data:[…aweme…], cursor, has_more}.
-// QUAN TRỌNG: param tên là "keywords" (số nhiều), không phải "keyword" như Douyin/RED.
+// ── TIKTOK (thị trường MY/global) — APP V3 search video, offset-based, GET ──
+// Cùng nhà ByteDance với Douyin nên dùng chung mapAwemes (App V3 bọc clip trong
+// aweme_info → collectAwemes vẫn bắt theo aweme_id).
+// DÙNG endpoint APP V3 (TikTok mobile API) — KHÔNG dùng web/fetch_search_video:
+// endpoint web là scraper trang tiktok.com, trả 400 "Request failed. Please retry"
+// (cào fail), trong khi app/v3 gọi API nội bộ, ổn định. Path + param verify từ
+// TikHub Python SDK chính chủ: keyword (bắt buộc) / offset / count / sort_type /
+// publish_time / region. region=MY để ra footage thị trường Malaysia.
 const mapTiktok = (data: AnyObj): Clip[] => mapAwemes(data, 'tiktok')
 async function pageTiktok(key: string, q: string, sort: string, cursor: string): Promise<PageResult> {
   const offset = Number(cursor) || 0
-  // sort_type web TikTok: 0=liên quan, 1=nhiều like nhất, 2=mới nhất
+  // sort_type App V3: 0=liên quan, 1=nhiều like nhất, 2=mới nhất
   const sortType = sort === 'latest' ? '2' : sort === 'general' ? '0' : '1'
-  const base = 'https://api.tikhub.io/api/v1/tiktok/web/fetch_search_video'
-  const url = `${base}?keywords=${encodeURIComponent(q)}&offset=${offset}&count=20&sort_type=${sortType}&publish_time=0`
+  const base = 'https://api.tikhub.io/api/v1/tiktok/app/v3/fetch_video_search_result'
+  const url = `${base}?keyword=${encodeURIComponent(q)}&offset=${offset}&count=20&sort_type=${sortType}&publish_time=0&region=MY`
   const r = await tikGet(key, url)
   if (r.ok || r.status === 402 || r.status === 429 || r.status === 401 || r.status === 403) return r
-  // Fallback tối giản nếu sort/publish_time gây 4xx
-  return tikGet(key, `${base}?keywords=${encodeURIComponent(q)}&offset=${offset}&count=20`)
+  // Fallback: bỏ region + sort phòng 4xx vùng/sắp xếp
+  return tikGet(key, `${base}?keyword=${encodeURIComponent(q)}&offset=${offset}&count=20`)
 }
 function nextTiktok(data: AnyObj, cursor: string): NextCursor {
   const cur = Number(cursor) || 0
