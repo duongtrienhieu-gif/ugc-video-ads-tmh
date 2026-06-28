@@ -100,6 +100,10 @@ export interface PersonifiedScene {
   /** Bối cảnh RIÊNG của cảnh (EN) — bám ngữ cảnh thoại: đời thực (chợ/cầu thang/gym…)
    *  cho beat agitation, hoặc trong-cơ-thể cho beat nội tại. Rỗng → fallback worldEnv. */
   setting: string
+  /** Tên các nhân vật XUẤT HIỆN trong khung cảnh (brain tự khai, khớp tên ở characters) —
+   *  để khóa diện mạo ĐÚNG nhân vật-hình, TÁCH khỏi speaker (người nói). Rỗng → suy theo
+   *  sceneType (tương thích kịch bản cũ). Tối đa 2 tên dùng để khóa. */
+  inFrame: string[]
   videoPromptEn: string    // prompt i2v cho cảnh (dùng ở P3)
 }
 

@@ -328,7 +328,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     cursor: String(cursor),
     hasMore,
     platform,
-    ...(debug ? { pages, topKeys: firstData ? Object.keys(firstData) : [], imgFields: (() => { const s: string[] = []; if (firstData) sampleImgFields(firstData, s, new Set()); return s })(), dataSample: firstData ? JSON.stringify((firstData as AnyObj).data ?? firstData).slice(0, 3500) : '' } : {}),
+    ...(debug ? (() => {
+      const dbg: AnyObj = { pages, topKeys: firstData ? Object.keys(firstData) : [] }
+      // tìm note đầu tiên + dump field video/keys để biết có url phát được không
+      if (firstData) {
+        const notes: AnyObj[] = []
+        collectBy(firstData, (o) => o.note != null && typeof o.note === 'object', notes, new Set())
+        const n0 = (notes[0]?.note ?? notes[0]) as AnyObj | undefined
+        if (n0) {
+          dbg.noteKeys = Object.keys(n0)
+          dbg.noteVideo = JSON.stringify(n0.video ?? {}).slice(0, 2500)
+          dbg.deepVid = deepVideoUrl(n0)
+        }
+        const vids: string[] = []
+        collectBy(firstData, (o) => typeof (o as AnyObj).url === 'string' && /\.(mp4|m3u8)/i.test(String((o as AnyObj).url)), vids, new Set())
+        dbg.anyMp4 = JSON.stringify(vids).slice(0, 400)
+      }
+      return dbg
+    })() : {}),
     note: out.length ? undefined : `Không có clip ${platform} — đổi từ khóa${maxSec ? ' hoặc bỏ lọc <60s' : ''}`,
   })
 }

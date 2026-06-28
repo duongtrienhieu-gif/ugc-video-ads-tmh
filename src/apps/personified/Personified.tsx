@@ -94,14 +94,39 @@ function parseReadDraft(text: string, scenes: PersonifiedScene[]): Record<number
 // sceneType: cảnh sản phẩm ra tay → HERO; cảnh đối đầu (hero gặp villain) → CẢ HAI; còn lại → villain/organ.
 const HERO_LEAD_SCENES = new Set<SceneType>(['hero_entrance', 'application', 'destruction', 'result', 'cta'])
 const CONFRONT_SCENES = new Set<SceneType>(['hero_entrance', 'application', 'destruction'])
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+// HERO = sản phẩm. Phòng khi Gemini KHÔNG gắn đúng role='hero': fallback theo tên ≈ tên SP,
+// rồi theo role chứa 'hero'/'product' → tránh "hero=undefined" làm phí ảnh bank (regression).
+function findHeroChar(characters: PersonifiedCharacter[], productName?: string): PersonifiedCharacter | undefined {
+  const byRole = characters.find((c) => c.role === 'hero')
+  if (byRole) return byRole
+  if (productName) {
+    const pn = norm(productName)
+    const byName = characters.find((c) => { const n = norm(c.name); return !!n && (pn.includes(n) || n.includes(pn)) })
+    if (byName) return byName
+  }
+  return characters.find((c) => /hero|product|san\s?pham|sản phẩm/i.test(c.role))
+}
+// Nhân vật TRONG KHUNG để khóa diện mạo. Ưu tiên inFrame brain TỰ KHAI (đúng cho cả 4 KB +
+// người-thật KB2); rỗng (kịch bản cũ) → fallback heuristic theo sceneType.
 function pickSceneVisuals(
-  scene: PersonifiedScene, characters: PersonifiedCharacter[],
+  scene: PersonifiedScene, characters: PersonifiedCharacter[], productName?: string,
 ): { main?: PersonifiedCharacter; extra?: PersonifiedCharacter } {
-  const hero = characters.find((c) => c.role === 'hero')
+  const hero = findHeroChar(characters, productName)
+  // 1) Brain đã khai inFrame → dùng trực tiếp (ưu tiên hero làm main để khớp heroVfx + khóa SP).
+  const declared = (scene.inFrame ?? [])
+    .map((n) => characters.find((c) => c.name === n) ?? characters.find((c) => c.role === n))
+    .filter((c): c is PersonifiedCharacter => !!c)
+  const uniq = declared.filter((c, i) => declared.findIndex((d) => d.name === c.name) === i)
+  if (uniq.length) {
+    const main = (hero && uniq.some((c) => c.name === hero.name)) ? hero : uniq[0]
+    const extra = uniq.find((c) => c.name !== main.name)
+    return { main, extra }
+  }
+  // 2) Fallback heuristic (kịch bản tạo trước khi có inFrame).
   const speaker = characters.find((c) => c.name === scene.speaker || c.role === scene.speaker)
-    ?? characters.find((c) => c.role !== 'hero') ?? characters[0]
+    ?? characters.find((c) => !hero || c.name !== hero.name) ?? characters[0]
   if (hero && HERO_LEAD_SCENES.has(scene.sceneType)) {
-    // cta = packshot sạch (chỉ sản phẩm); confront = hero + villain cùng khung; result = hero (người + SP).
     const extra = CONFRONT_SCENES.has(scene.sceneType) && speaker && speaker.name !== hero.name ? speaker : undefined
     return { main: hero, extra }
   }
@@ -584,7 +609,7 @@ export default function Personified() {
     const st = clips[scene.idx]?.status
     if (!force && (st === 'kf' || st === 'clip')) return
     const refOf = (name?: string) => name ? (bankOverride?.[name] ?? bankRefs.current[name] ?? charBank[name]?.refImage) : undefined
-    const { main, extra } = pickSceneVisuals(scene, script.characters)
+    const { main, extra } = pickSceneVisuals(scene, script.characters, product?.productName)
     setClips((p) => ({ ...p, [scene.idx]: { status: 'kf' } }))
     const task = (async () => {
       try {
@@ -1062,7 +1087,7 @@ export default function Personified() {
                       {/* #2 — hiện NHÂN VẬT TRONG KHUNG (main + phụ) chứ không phải người nói → thấy rõ
                           hero xuất hiện ở cảnh sản phẩm. Tooltip ghi cả giọng (speaker). */}
                       {(() => {
-                        const v = pickSceneVisuals(s, script.characters)
+                        const v = pickSceneVisuals(s, script.characters, product?.productName)
                         const names = [v.main?.name, v.extra?.name].filter(Boolean).join(' + ')
                         return <span className="w-20 shrink-0 truncate text-[11px] text-gray-400" title={`Trong khung: ${names || '—'} · 🎙️ Giọng: ${s.speaker}`}>{names || s.speaker}</span>
                       })()}
@@ -1104,7 +1129,7 @@ export default function Personified() {
                           const st = clips[s.idx]?.status
                           const busy = st === 'kf' || st === 'clip'
                           // #2 — nhân vật khóa diện mạo = nhân vật TRONG KHUNG (main + phụ), không phải speaker.
-                          const { main, extra } = pickSceneVisuals(s, script.characters)
+                          const { main, extra } = pickSceneVisuals(s, script.characters, product?.productName)
                           const visChars = [main, extra].filter((c): c is PersonifiedCharacter => !!c)
                           const unlocked = visChars.filter((c) => !charBank[c.name]?.refImage)
                           return (

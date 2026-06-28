@@ -197,9 +197,10 @@ const SCRIPT_SCHEMA = {
           sfx: { type: 'array', items: { type: 'string' } },
           action: { type: 'string' },
           setting: { type: 'string' },
+          inFrame: { type: 'array', items: { type: 'string' } },
           videoPromptEn: { type: 'string' },
         },
-        required: ['sceneType', 'speaker', 'dialoguePrimary', 'dialogueVi', 'emotion', 'camera', 'sfx', 'action', 'setting', 'videoPromptEn'],
+        required: ['sceneType', 'speaker', 'dialoguePrimary', 'dialogueVi', 'emotion', 'camera', 'sfx', 'action', 'setting', 'inFrame', 'videoPromptEn'],
       },
     },
   },
@@ -208,7 +209,8 @@ const SCRIPT_SCHEMA = {
 
 interface RawScene {
   sceneType: string; speaker: string; dialoguePrimary: string; dialogueVi: string
-  emotion: string; camera: string; sfx: string[]; action: string; setting: string; videoPromptEn: string
+  emotion: string; camera: string; sfx: string[]; action: string; setting: string
+  inFrame?: string[]; videoPromptEn: string
 }
 
 const VALID_SCENE_TYPES = new Set<string>([
@@ -301,7 +303,13 @@ LUẬT VIẾT (bắt buộc):
 3. COMPLIANCE (ngách sức khỏe/mỹ phẩm): dùng từ "hỗ trợ", KHÔNG hứa tuyệt đối/chữa khỏi. Cảnh CTA phải có ý "hiệu quả tùy cơ địa".
 4. dialoguePrimary = thoại bằng ${langName} (đưa vào giọng đọc). dialogueVi = ${isVN ? 'GIỐNG HỆT dialoguePrimary' : 'bản dịch NGHĨA sang tiếng Việt cho operator hiểu'}.
 5. videoPromptEn = 1 prompt image-to-video TIẾNG ANH GIÀU HÌNH ẢNH: shot type + hành động cụ thể + ĐÚNG bối cảnh của cảnh (KHỚP trường "setting" — đời thực thì tả nơi đó, nội tại thì tả trong cơ thể) + bề mặt nhân vật chi tiết (glossy, subsurface) + cảm xúc/động lực. KHÔNG bắt model render chữ. (Hệ thống TỰ THÊM chất render điện ảnh — chỉ cần tả NỘI DUNG khung hình thật giàu, đừng ghi camera/lens.)
-6. imagePromptEn mỗi nhân vật = prompt EN tả NHÂN VẬT 3D THẬT CHI TIẾT: hình khối + MÀU + chất liệu bề mặt (glossy/subsurface) + ĐÔI MẮT to biểu cảm + biểu cảm đặc trưng + (nếu hero) phụ kiện anh hùng "glowing energy shield, flowing cape".
+7. inFrame = MẢNG TÊN nhân vật XUẤT HIỆN trong khung của cảnh (khớp ĐÚNG tên ở "characters"), KHÔNG phải người nói. Để hệ thống khóa diện mạo đúng nhân vật-hình. Quy tắc:
+   - Cảnh vấn đề (challenger/rootcause/agitation/false_solution) = villain/organ đang quậy (KB2: THÊM người-thật nếu họ trong khung — vd quỷ thì thầm bên tai người).
+   - Cảnh sản phẩm ra tay (hero_entrance/application/destruction) = HERO (sản phẩm) + villain CÙNG khung (đối đầu) → liệt kê CẢ HAI.
+   - result = ai là TÂM ĐIỂM (KB2 = người-thật thở phào; KB khác = hero + người sống lại).
+   - cta = CHỈ hero (packshot sản phẩm).
+   - TỐI ĐA 2 tên/cảnh (cái chính trước). Tên phải trùng khít field name trong characters.
+8. imagePromptEn mỗi nhân vật = prompt EN tả NHÂN VẬT 3D THẬT CHI TIẾT: hình khối + MÀU + chất liệu bề mặt (glossy/subsurface) + ĐÔI MẮT to biểu cảm + biểu cảm đặc trưng + (nếu hero) phụ kiện anh hùng "glowing energy shield, flowing cape".
    VILLAIN: HÌNH HÀI phải GỢI ĐÚNG vấn đề/bộ phận bị hại (đọc được ngay là gì), KHÔNG để ra "cục tròn vô danh". Lấy chính HÌNH DẠNG bộ phận/ẩn dụ làm thân: vd đau khớp gối → "a gnarled, knobbly knee-joint creature with cracked stiff segments and a grumpy old face"; mụn → "a fat oily pimple blob"; vi khuẩn → "a spiky green germ"; đờm → "a gooey mucus blob". Mascot cartoon dễ thương/tinh nghịch kiểu phim hoạt hình, hình mềm, có mặt + tay chân nhỏ — KHÔNG ghê rợn/máu me/giải phẫu/xương sọ (sẽ bị model chặn).
    KHÔNG cần ghi camera/style/--ar (hệ thống tự thêm chất render điện ảnh).
 ${market === 'MY' ? buildMyNativeVoiceBlock() : ''}
@@ -344,6 +352,7 @@ XUẤT JSON: { characters:[...], scenes:[${sceneCount} cảnh đúng thứ tự]
       sfx: Array.isArray(s.sfx) ? s.sfx : [],
       action: s.action ?? '',
       setting: s.setting ?? '',
+      inFrame: Array.isArray(s.inFrame) ? s.inFrame.filter((x): x is string => typeof x === 'string' && !!x.trim()) : [],
       videoPromptEn: s.videoPromptEn ?? '',
     }
   })
