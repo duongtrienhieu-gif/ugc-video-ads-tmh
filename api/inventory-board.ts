@@ -77,13 +77,21 @@ function serialToISO(v: unknown): string {
   if (isNaN(d.getTime())) return ''
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
 }
+// fetch có TIMEOUT — 1 request Google treo KHÔNG được giết cả function (→ Vercel
+// trả HTML "An error occurred" thay JSON → vỡ board). Quá hạn thì abort → soft error.
+async function tfetch(url: string, ms = 20000): Promise<Response> {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), ms)
+  try { return await fetch(url, { cache: 'no-store', signal: ctrl.signal }) }
+  finally { clearTimeout(t) }
+}
 async function fetchXlsx(id: string, sheets: string[]): Promise<XLSX.WorkBook> {
-  const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`, { cache: 'no-store' })
+  const res = await tfetch(`https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return XLSX.read(Buffer.from(await res.arrayBuffer()), { type: 'buffer', sheets })
 }
 async function fetchCsv(id: string, sheet: string): Promise<string[][]> {
-  const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}`, { cache: 'no-store' })
+  const res = await tfetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return parseCSV(await res.text())
 }
