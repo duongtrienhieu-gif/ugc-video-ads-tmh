@@ -72,7 +72,13 @@ function buildCharacterSheetPrompt(character: PersonifiedCharacter, hasProductRe
  *  Giữ luật "preserve product" của repo (copy bao bì, cấm bịa). */
 function buildKeyframePrompt(
   scene: PersonifiedScene, character: PersonifiedCharacter | undefined,
-  opts: { hasCharRef: boolean; hasProductRef: boolean; worldEnv?: string; dropAction?: boolean },
+  opts: {
+    hasCharRef: boolean; hasProductRef: boolean; worldEnv?: string; dropAction?: boolean
+    // Nhân vật PHỤ cùng khung (vd hero_entrance: villain panic + hero vào) — khóa bằng ref riêng.
+    hasExtraChar?: boolean; extraCharacter?: PersonifiedCharacter
+    // Index ref ĐỘNG (renderKeyframe tính theo số ref thật sự push) — khớp đúng filesUrl.
+    charRefIdx?: string; extraRefIdx?: string; productIdx?: string
+  },
 ): string {
   const base = (character?.imagePromptEn ?? '').trim() || (scene.action ?? '').trim() || 'A 3D Pixar cartoon character'
   const mood = scene.emotion ? ` Expression / mood: ${scene.emotion}.` : ''
@@ -88,15 +94,18 @@ function buildKeyframePrompt(
     ? ' Render it as an epic hero: surround the product with a glowing energy aura, a translucent light shield and a flowing cape, dynamic motion energy and sparks — these are ADDED visual effects only and must NOT change the product packaging, label, colour or shape.'
     : ''
   const charLock = opts.hasCharRef
-    ? ` The MAIN CHARACTER is reference image #1 — keep the EXACT same face, body, colour, material and packaging; change only the pose and expression to match this scene${isHeroVfx ? ' (you MAY add the heroic effects described below around it)' : ', and do NOT redesign the character'}.`
+    ? ` The MAIN CHARACTER is reference image ${opts.charRefIdx ?? '#1'} — keep the EXACT same face, body, colour, material and packaging; change only the pose and expression to match this scene${isHeroVfx ? ' (you MAY add the heroic effects described below around it)' : ', and do NOT redesign the character'}.`
     : ''
-  const productIdx = opts.hasCharRef ? '#2' : '#1'
+  // Nhân vật phụ trong cùng khung — khóa diện mạo từ ref riêng (vd cảnh hero gặp villain).
+  const extraLock = opts.hasExtraChar
+    ? ` A SECOND character is ALSO present in the SAME frame — reference image ${opts.extraRefIdx} (${opts.extraCharacter?.represents || opts.extraCharacter?.name || 'the other character'}): keep its EXACT face, body, colour and material from that reference; change only its pose and expression to fit the action. Both characters share one cohesive 3D scene, interacting naturally.`
+    : ''
   const product = opts.hasProductRef
-    ? ` The REAL PRODUCT appears in frame EXACTLY as reference image ${productIdx} — same packaging, label, colour, shape and on-pack text; do NOT invent, alter, or re-spell any packaging or text, copy it from the reference.`
+    ? ` The REAL PRODUCT appears in frame EXACTLY as reference image ${opts.productIdx ?? '#2'} — same packaging, label, colour, shape and on-pack text; do NOT invent, alter, or re-spell any packaging or text, copy it from the reference.`
     : ''
   // Khi đã khóa nhân vật bằng ảnh ref thì không cần tả lại base (tránh prompt "đè" lên ảnh).
   const desc = opts.hasCharRef ? '' : `${base} `
-  return `${desc}${charLock}${mood}${act}${world}${product}${heroVfx} ${CINEMATIC_STYLE}`
+  return `${desc}${charLock}${extraLock}${mood}${act}${world}${product}${heroVfx} ${CINEMATIC_STYLE}`
 }
 
 export interface RenderSceneParams {
@@ -106,6 +115,10 @@ export interface RenderSceneParams {
   character?: PersonifiedCharacter
   /** Ảnh chân dung nhân vật từ Character Bank (P2b) — khóa diện mạo xuyên cảnh (i2i ref #1). */
   characterRef?: string
+  /** Nhân vật PHỤ cùng khung (vd hero_entrance: villain + hero) — để khóa diện mạo bằng ref #2. */
+  extraCharacter?: PersonifiedCharacter
+  /** Ảnh bank của nhân vật phụ (i2i ref #2). */
+  extraCharacterRef?: string
   /** Biome cố định của video (PersonifiedScript.worldEnv) — nhồi vào keyframe để nhất quán bối cảnh. */
   worldEnv?: string
   /** Ảnh sản phẩm thật (asset ref hoặc URL) — chỉ dùng khi scene.hasProduct. */
@@ -212,30 +225,37 @@ export async function renderCharacterRef(
 /** Bước 1 — chỉ render KEYFRAME (ảnh tĩnh) → { keyframeRef }. Rẻ, để duyệt trước i2v.
  *  Nếu có characterRef (Character Bank) → ref #1 khóa diện mạo nhân vật; SP thật → ref #2. */
 export async function renderKeyframe(
-  p: Pick<RenderSceneParams, 'apiKey' | 'scene' | 'character' | 'characterRef' | 'productRefs' | 'worldEnv' | 'signal'>,
+  p: Pick<RenderSceneParams, 'apiKey' | 'scene' | 'character' | 'characterRef' | 'extraCharacter' | 'extraCharacterRef' | 'productRefs' | 'worldEnv' | 'signal'>,
 ): Promise<{ keyframeRef: string }> {
   if (!p.apiKey) throw new Error('Thiếu KIE API key (Cài đặt)')
   if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
 
-  // Thứ tự ref BẮT BUỘC khớp index trong prompt: [nhân vật, ...sản phẩm].
+  // Thứ tự ref BẮT BUỘC khớp index trong prompt: [nhân vật chính, nhân vật phụ, ...sản phẩm].
   const filesUrl: string[] = []
   const charUrl = await refToUrl(p.characterRef)
   if (charUrl) filesUrl.push(charUrl)
+  const extraUrl = await refToUrl(p.extraCharacterRef)
+  if (extraUrl) filesUrl.push(extraUrl)
 
   const useProduct = !!(p.scene.hasProduct && p.productRefs && p.productRefs.length > 0)
+  let productIdx: string | undefined
   if (useProduct) {
+    productIdx = `#${filesUrl.length + 1}`   // index ĐỘNG = sau các ref nhân vật đã push
     for (const ref of p.productRefs!.slice(0, 4)) {
       const url = await refToUrl(ref)
       if (url) filesUrl.push(url)
     }
   }
-  const kfPrompt = buildKeyframePrompt(p.scene, p.character, {
+  const promptOpts = {
     hasCharRef: !!charUrl, hasProductRef: useProduct, worldEnv: p.worldEnv,
-  })
+    hasExtraChar: !!extraUrl, extraCharacter: p.extraCharacter,
+    charRefIdx: charUrl ? '#1' : undefined,
+    extraRefIdx: extraUrl ? (charUrl ? '#2' : '#1') : undefined,
+    productIdx,
+  }
+  const kfPrompt = buildKeyframePrompt(p.scene, p.character, promptOpts)
   // Bản an toàn (bỏ action gore) cho lần retry nếu dính content-policy.
-  const softPrompt = buildKeyframePrompt(p.scene, p.character, {
-    hasCharRef: !!charUrl, hasProductRef: useProduct, worldEnv: p.worldEnv, dropAction: true,
-  })
+  const softPrompt = buildKeyframePrompt(p.scene, p.character, { ...promptOpts, dropAction: true })
   const remoteUrl = await genImageModSafe({ apiKey: p.apiKey, prompt: kfPrompt, softPrompt, filesUrl, signal: p.signal })
   const kfBlob = await fetch(remoteUrl).then((r) => r.blob())
   const keyframeRef = await saveAsset(kfBlob, kfBlob.type || 'image/png')

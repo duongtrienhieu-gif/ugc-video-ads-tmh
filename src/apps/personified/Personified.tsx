@@ -7,7 +7,7 @@ import { useBankStore } from '../../stores/bankStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import {
   type TargetMarket, type PersonifiedConfig, type ProductInsight,
-  type PersonifiedScript, type PersonifiedScene, type PersonifiedCharacter, type ArchetypeId, type HeroType, type CtaStyle, type VideoLength,
+  type PersonifiedScript, type PersonifiedScene, type PersonifiedCharacter, type SceneType, type ArchetypeId, type HeroType, type CtaStyle, type VideoLength,
   TARGET_MARKET_LABEL,
 } from './types'
 import {
@@ -88,6 +88,26 @@ function parseReadDraft(text: string, scenes: PersonifiedScene[]): Record<number
   return out
 }
 
+// #2 — Nhân vật XUẤT HIỆN trong khung 1 cảnh (để khóa diện mạo keyframe) — TÁCH khỏi
+// "người nói" (speaker, chỉ dùng chọn giọng). Vì format "bộ phận cằn nhằn" có narrator nói
+// xuyên suốt → nếu khóa theo speaker thì ảnh bank HERO không bao giờ được dùng. Suy theo
+// sceneType: cảnh sản phẩm ra tay → HERO; cảnh đối đầu (hero gặp villain) → CẢ HAI; còn lại → villain/organ.
+const HERO_LEAD_SCENES = new Set<SceneType>(['hero_entrance', 'application', 'destruction', 'result', 'cta'])
+const CONFRONT_SCENES = new Set<SceneType>(['hero_entrance', 'application', 'destruction'])
+function pickSceneVisuals(
+  scene: PersonifiedScene, characters: PersonifiedCharacter[],
+): { main?: PersonifiedCharacter; extra?: PersonifiedCharacter } {
+  const hero = characters.find((c) => c.role === 'hero')
+  const speaker = characters.find((c) => c.name === scene.speaker || c.role === scene.speaker)
+    ?? characters.find((c) => c.role !== 'hero') ?? characters[0]
+  if (hero && HERO_LEAD_SCENES.has(scene.sceneType)) {
+    // cta = packshot sạch (chỉ sản phẩm); confront = hero + villain cùng khung; result = hero (người + SP).
+    const extra = CONFRONT_SCENES.has(scene.sceneType) && speaker && speaker.name !== hero.name ? speaker : undefined
+    return { main: hero, extra }
+  }
+  return { main: speaker, extra: undefined }
+}
+
 /** 1 giọng ElevenLabs có hợp ngôn ngữ thị trường đích không (đọc nhãn/tên/mô tả). */
 function voiceMatchesMarket(v: ElevenLabsVoice, market: TargetMarket): boolean {
   const lang = (v.labels?.language ?? '').toLowerCase()
@@ -161,6 +181,11 @@ export default function Personified() {
   // Auto-match giọng theo thị trường: nhớ các nhân vật đã gán TỰ ĐỘNG + market lần cuối.
   const autoVoiced = useRef<Set<string>>(new Set())
   const lastVoiceMarket = useRef<TargetMarket | null>(null)
+  // #1 — Render ĐANG CHẠY (manual lẫn "tất cả") để nút "tất cả" ĐỢI đúng cái dở rồi nối tiếp,
+  // KHÔNG chạy lại từ đầu. bankRefs = ref TƯƠI (vượt stale-closure) của ảnh bank đã xong.
+  const bankInflight = useRef<Record<string, Promise<string | undefined>>>({})
+  const bankRefs = useRef<Record<string, string>>({})
+  const kfInflight = useRef<Record<number, Promise<void>>>({})
   // Xem to (lightbox) ảnh keyframe / video clip khi bấm thumbnail.
   const [zoom, setZoom] = useState<{ isVideo: boolean; ref: string } | null>(null)
   // P2e — Thư viện video đã lưu.
@@ -252,6 +277,7 @@ export default function Personified() {
             const fixedBank: Record<string, CharRef> = {}
             for (const [k, v] of Object.entries(s.charBank)) {
               fixedBank[k] = v.status === 'rendering' ? { ...v, status: v.refImage ? 'done' : 'idle' } : v
+              if (fixedBank[k].refImage) bankRefs.current[k] = fixedBank[k].refImage!   // seed ref tươi (dedup sau F5)
             }
             setCharBank(fixedBank)
           }
@@ -502,24 +528,36 @@ export default function Personified() {
   }
 
   // P2b — render CHARACTER SHEET 1 nhân vật → Character Bank (khóa diện mạo xuyên cảnh).
-  //   Trả về refImage (để caller dùng NGAY, tránh stale state khi chạy chuỗi bank→keyframe).
-  async function handleRenderCharacterRef(character: PersonifiedCharacter): Promise<string | undefined> {
+  //   Trả về refImage. IDEMPOTENT: đã xong → trả ref ngay (bankRefs tươi); đang chạy → trả
+  //   ĐÚNG promise đang chạy (caller ĐỢI nó xong, không submit lại) → nút "tất cả" nối tiếp được.
+  async function handleRenderCharacterRef(character: PersonifiedCharacter, force = false): Promise<string | undefined> {
     if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return undefined }
-    if (charBank[character.name]?.status === 'rendering') return charBank[character.name]?.refImage
-    setCharBank((p) => ({ ...p, [character.name]: { status: 'rendering' } }))
-    try {
-      // Hero = SP nhân cách hóa → khóa bao bì thật bằng ảnh sản phẩm (chống drift màu/nhãn).
-      const isProductHero = character.role === 'hero'
-      const { refImage } = await renderCharacterRef({
-        apiKey: kieKey, character,
-        productRefs: isProductHero ? productRefs : [],
-      })
-      setCharBank((p) => ({ ...p, [character.name]: { status: 'done', refImage } }))
-      return refImage
-    } catch (e) {
-      setCharBank((p) => ({ ...p, [character.name]: { status: 'failed', error: e instanceof Error ? e.message : String(e) } }))
-      return undefined
-    }
+    // force = user bấm "Đổi ảnh" (re-roll có chủ đích) → xóa cache, render mới. Bulk thì force=false.
+    if (force) delete bankRefs.current[character.name]
+    else if (bankRefs.current[character.name]) return bankRefs.current[character.name]   // đã xong (ref tươi)
+    const inflight = bankInflight.current[character.name]
+    if (inflight) return inflight                                                   // đang chạy → đợi chính nó
+    const task = (async () => {
+      setCharBank((p) => ({ ...p, [character.name]: { status: 'rendering' } }))
+      try {
+        // Hero = SP nhân cách hóa → khóa bao bì thật bằng ảnh sản phẩm (chống drift màu/nhãn).
+        const isProductHero = character.role === 'hero'
+        const { refImage } = await renderCharacterRef({
+          apiKey: kieKey, character,
+          productRefs: isProductHero ? productRefs : [],
+        })
+        bankRefs.current[character.name] = refImage
+        setCharBank((p) => ({ ...p, [character.name]: { status: 'done', refImage } }))
+        return refImage
+      } catch (e) {
+        setCharBank((p) => ({ ...p, [character.name]: { status: 'failed', error: e instanceof Error ? e.message : String(e) } }))
+        return undefined
+      } finally {
+        delete bankInflight.current[character.name]
+      }
+    })()
+    bankInflight.current[character.name] = task
+    return task
   }
 
   // P2b — render bank cho TẤT CẢ nhân vật chưa có (pool 3 song song). Làm trước khi render cảnh.
@@ -1192,7 +1230,7 @@ export default function Personified() {
                               <div className="mt-1 text-[10px] text-gray-400">Giọng: {ch.voice.vungMien} · {ch.voice.gioiTinh} · {ch.voice.tuoi} · {ch.voice.texture}</div>
                             )}
                             <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                              <button onClick={() => handleRenderCharacterRef(ch)} disabled={bank?.status === 'rendering' || bankRunning || !kieKey}
+                              <button onClick={() => handleRenderCharacterRef(ch, !!bank?.refImage)} disabled={bank?.status === 'rendering' || bankRunning || !kieKey}
                                 className="flex items-center gap-1 rounded border border-violet-300 bg-violet-50 px-2 py-1 text-[11px] font-bold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-40">
                                 {bank?.status === 'rendering'
                                   ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang tạo…</>

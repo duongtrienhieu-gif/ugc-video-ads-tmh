@@ -79,6 +79,19 @@ function deepImageUrl(node: unknown, depth = 0): string {
   return ''
 }
 const durSec = (raw: unknown): number => { const n = Number(raw) || 0; return n > 1000 ? Math.round(n / 1000) : Math.round(n) }
+// DEBUG ONLY: gom các string URL ảnh (kèm tên field) để soi field cover thật của Kuaishou/XHS.
+function sampleImgFields(node: unknown, out: string[], seen: Set<unknown>, depth = 0) {
+  if (!node || typeof node !== 'object' || depth > 9 || seen.has(node) || out.length >= 30) return
+  seen.add(node)
+  if (Array.isArray(node)) { for (const x of node) sampleImgFields(x, out, seen, depth + 1); return }
+  const o = node as AnyObj
+  for (const k in o) {
+    const v = o[k]
+    if (typeof v === 'string' && /^https?:/i.test(v) && /\.(jpe?g|png|webp|kvif|heic|avif|gif)(\?|$)/i.test(v)) {
+      if (out.length < 30) out.push(`${k} = ${v.slice(0, 80)}`)
+    } else if (v && typeof v === 'object') sampleImgFields(v, out, seen, depth + 1)
+  }
+}
 // gom node theo điều kiện (không đệ quy vào node đã khớp → tránh trùng lồng nhau)
 function collectBy(node: unknown, pred: (o: AnyObj) => boolean, out: AnyObj[], seen: Set<unknown>, depth = 0) {
   if (!node || typeof node !== 'object' || depth > 8 || seen.has(node)) return
@@ -182,14 +195,17 @@ function mapXhs(data: AnyObj): Clip[] {
 }
 async function pageXhs(key: string, q: string, sort: string, cursor: string): Promise<PageResult> {
   const page = Number(cursor) || 1
-  // Giá trị ĐÃ verify từ SDK chính chủ: sort='general' (chỉ 'latest' đổi sang time_descending),
-  // note_type=0 (tất cả — mapper tự lọc lấy note có video). Tránh 400 "invalid parameter".
-  const s = sort === 'latest' ? 'time_descending' : 'general'
-  const base = `https://api.tikhub.io/api/v1/xiaohongshu/web_v3/fetch_search_notes?keyword=${encodeURIComponent(q)}&page=${page}`
-  const r = await tikGet(key, `${base}&sort=${s}&note_type=0`)
+  // DÙNG App V2 (TikHub xếp hạng tin cậy App V2 > App > Web V3): web_v3/fetch_search_notes 400 cả
+  // với keyword demo 口红 → endpoint hỏng. App V2 dùng param KHÁC: sort_type (không phải sort),
+  // note_type='不限' (chữ Hán, không phải 0), kèm source/ai_mode. Giá trị lấy verbatim từ SDK example.
+  const st = sort === 'latest' ? 'time_descending' : 'general'
+  const all = encodeURIComponent('不限')
+  const base = `https://api.tikhub.io/api/v1/xiaohongshu/app_v2/search_notes?keyword=${encodeURIComponent(q)}&page=${page}`
+  const full = `${base}&sort_type=${st}&note_type=${all}&time_filter=${all}&source=explore_feed&ai_mode=0`
+  const r = await tikGet(key, full)
   if (r.ok || r.status === 402 || r.status === 429 || r.status === 401 || r.status === 403) return r
-  // Param vẫn bị từ chối → thử tối giản (chỉ keyword+page) để chắc chắn ra dữ liệu.
-  return tikGet(key, base)
+  // Fallback tối giản đúng tên param App V2.
+  return tikGet(key, `${base}&sort_type=general&note_type=${all}`)
 }
 function nextXhs(data: AnyObj, cursor: string): NextCursor {
   const page = Number(cursor) || 1
@@ -254,12 +270,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let pages = 0
   let hasMore = false
   let firstErr: { status: number; body: string } | null = null
+  let firstData: AnyObj | null = null
 
   // LOOP: gom đủ TARGET clip (đã lọc maxSec) hoặc hết trang.
   while (out.length < TARGET && pages < MAX_PAGES) {
     const p = await cfg.page(key, q, platform === 'douyin' ? sort : sortName, cursor)
     pages++
     if (!p.ok || !p.data) { if (pages === 1) firstErr = { status: p.status, body: p.body }; break }
+    if (!firstData) firstData = p.data
     for (const c of cfg.map(p.data)) {
       if (seen.has(c.id)) continue
       if (maxSec && c.durationSec > 0 && c.durationSec > maxSec) continue
@@ -287,7 +305,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     cursor: String(cursor),
     hasMore,
     platform,
-    ...(debug ? { pages } : {}),
+    ...(debug ? { pages, topKeys: firstData ? Object.keys(firstData) : [], imgFields: (() => { const s: string[] = []; if (firstData) sampleImgFields(firstData, s, new Set()); return s })() } : {}),
     note: out.length ? undefined : `Không có clip ${platform} — đổi từ khóa${maxSec ? ' hoặc bỏ lọc <60s' : ''}`,
   })
 }
