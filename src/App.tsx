@@ -179,7 +179,7 @@ export default function App() {
   if (!user) return <AuthScreen />
 
   return (
-    <div className="flex h-[100dvh] w-screen flex-col overflow-hidden bg-app-base text-app-text antialiased">
+    <div className="fixed inset-0 flex flex-col overflow-hidden bg-app-base text-app-text antialiased">
       <TopNav activeApp={activeApp} onNavigate={openApp} />
       <main className="relative flex-1 overflow-hidden bg-app-card shadow-sm">
         {runningApps.map((appId) => {

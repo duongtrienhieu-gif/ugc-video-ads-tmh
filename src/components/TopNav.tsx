@@ -264,9 +264,13 @@ export default function TopNav({ activeApp, onNavigate }: TopNavProps) {
           </div>
         </div>
 
-        {/* ── Mobile drawer (in-flow so it adds height, no position:fixed) ── */}
+        {/* ── Mobile drawer — overlay phủ HẾT màn hình từ dưới navbar tới đáy.
+            Dùng fixed + inset để bg-app-surface lấp toàn bộ (kể cả vùng home
+            indicator) → không còn dải đen lòi dưới nút Đăng xuất. z-30 < header
+            navbar (z-40) nên nút X vẫn nổi trên cùng. top = safe-top + chiều
+            cao navbar (h-12=3rem mobile). pb chừa home indicator. ── */}
         {mobileOpen && (
-          <div className="max-h-[calc(100dvh-3rem)] overflow-y-auto border-t border-app-border bg-app-surface px-3 pb-4 pt-2 lg:hidden">
+          <div className="fixed inset-x-0 bottom-0 top-[calc(env(safe-area-inset-top)+3rem)] z-30 overflow-y-auto border-t border-app-border bg-app-surface px-3 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-2 lg:hidden">
             <button
               onClick={() => { onNavigate('home'); setMobileOpen(false) }}
               className={`mb-1 flex w-full items-center gap-2.5 rounded-lg px-3 py-3 text-sm font-bold ${
