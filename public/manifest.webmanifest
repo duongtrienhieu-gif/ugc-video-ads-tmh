@@ -1,0 +1,17 @@
+{
+  "name": "TMH AI BUSINESS",
+  "short_name": "TMH AI BUSINESS",
+  "description": "Bộ công cụ AI tạo quảng cáo UGC, video & nội dung bán hàng — TMH GROUP.",
+  "lang": "vi",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0B0C14",
+  "theme_color": "#0B0C14",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
