@@ -88,7 +88,7 @@ async function fetchCsv(id: string, sheet: string): Promise<string[][]> {
 }
 
 // ── parse từng nguồn ─────────────────────────────────────────────────────────
-interface Product { name: string; rmRevenue: number; cpqc: number; pctCpqc: number; pctHoan: number; c2: number }
+interface Product { name: string; rmRevenue: number; cpqc: number; pctCpqc: number; pctHoan: number; c2: number; pctChot: number }
 
 // TỔNG "SẢN PHẨM_TH" + override %hoàn (Cách A) từ QLHB "Tỉ lệ sản phẩm"
 function parseProducts(tongWb: XLSX.WorkBook, qlhbWb: XLSX.WorkBook | null): Product[] {
@@ -105,7 +105,7 @@ function parseProducts(tongWb: XLSX.WorkBook, qlhbWb: XLSX.WorkBook | null): Pro
     if (skip.has(name)) continue
     const rm = num(cell('C', r))
     if (rm <= 0) continue
-    products.push({ name, rmRevenue: rm, cpqc: num(cell('H', r)), pctCpqc: pct(cell('L', r)), pctHoan: pct(cell('O', r)), c2: num(cell('J', r)) })
+    products.push({ name, rmRevenue: rm, cpqc: num(cell('H', r)), pctCpqc: pct(cell('L', r)), pctHoan: pct(cell('O', r)), c2: num(cell('J', r)), pctChot: pct(cell('K', r)) })
   }
   // FIX %Hoàn: SẢN PHẨM_TH bỏ trống nhiều mã → lấy hoàn Cách A từ QLHB.
   if (qlhbWb) {

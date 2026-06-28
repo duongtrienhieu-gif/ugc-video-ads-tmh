@@ -7,7 +7,7 @@ export const PACK_FACTOR = (name: string) => (name.trim().toUpperCase() === 'KNE
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n))
 
 export type Tone = 'red' | 'amber' | 'green' | 'muted'
-export interface Prod { name: string; rmRevenue: number; cpqc: number; pctCpqc: number; pctHoan: number; c2: number }
+export interface Prod { name: string; rmRevenue: number; cpqc: number; pctCpqc: number; pctHoan: number; c2: number; pctChot: number }
 export interface InvItem { ten: string; ton: number; ban: number; giaVonRM: number; giaVonVnd: number }
 export interface ProfitRow {
   name: string; aov: number; adsPct: number; cogsPct: number; vonNetPct: number; hoanPct: number

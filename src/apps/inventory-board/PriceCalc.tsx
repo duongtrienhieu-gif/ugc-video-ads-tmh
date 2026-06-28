@@ -94,6 +94,7 @@ export default function PriceCalc({ products, priceVnd, inv, velocity }: { produ
     if (gv > 0) setGiaVonSp(Math.round(gv))
     const p = products.find((x) => x.name.trim().toUpperCase() === key)
     if (p && p.pctHoan > 0) setHoanPct(+p.pctHoan.toFixed(3))
+    if (p && p.pctChot > 0) setChotPct(+p.pctChot.toFixed(3)) // tỉ lệ chốt THẬT của SP (cột %C2)
   }
   function saveChannels() { localStorage.setItem(CH_KEY, JSON.stringify(channels)) }
 

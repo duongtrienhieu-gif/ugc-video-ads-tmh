@@ -42,7 +42,7 @@ const DEFAULT_SOURCES: Record<string, string> = {
 const STORAGE_KEY = 'inv_board_sources'
 
 // ── kiểu dữ liệu trả về từ endpoint ──────────────────────────────────────────
-interface Prod { name: string; rmRevenue: number; cpqc: number; pctCpqc: number; pctHoan: number; c2: number }
+interface Prod { name: string; rmRevenue: number; cpqc: number; pctCpqc: number; pctHoan: number; c2: number; pctChot: number }
 interface InvItem { ten: string; ton: number; ban: number; giaVonRM: number; giaVonVnd: number }
 interface Incoming { ma: string; qty: number; order: string; eta: string }
 interface BackorderItem { ma: string; donNo: number; spNo: number; ton: number; tonDuKien: number }
