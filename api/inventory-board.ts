@@ -14,7 +14,6 @@
 //   provinces[]: { ten, doanhSoRM, hoanRate }                         (QLHB Tỉ lệ tỉnh)
 // Logic parse port nguyên văn từ các route đã verify của bao-cao-cty.
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import * as XLSX from 'xlsx'
 
 export const config = { maxDuration: 60 }
 
@@ -116,17 +115,6 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 // = ~24.5s. Chạy SONG SONG (Promise.allSettled) → tổng ≈ file chậm nhất ≈ 24.5s < 60s
 // → LUÔN kịp trả JSON, KHÔNG bao giờ bị Vercel kill (→ hết lỗi "Unexpected token A").
 // Thiếu nguồn nào thì lớp CACHE (server + máy) bù — không cần ép Google cho đủ trong 1 lần.
-async function fetchXlsx(id: string, sheets: string[]): Promise<XLSX.WorkBook> {
-  let last: Error | null = null
-  for (let i = 0; i < 2; i++) {
-    try {
-      const res = await tfetch(`https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`, 12000)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return XLSX.read(Buffer.from(await res.arrayBuffer()), { type: 'buffer', sheets })
-    } catch (e) { last = e as Error; if (i < 1) await sleep(500) }
-  }
-  throw last ?? new Error('fetchXlsx failed')
-}
 async function fetchCsv(id: string, sheet: string): Promise<string[][]> {
   let last: Error | null = null
   for (let i = 0; i < 2; i++) {
@@ -161,26 +149,31 @@ async function fetchGviz(id: string, sheet: string): Promise<RawRow[]> {
 // đọc ô từ RawRow theo CHỈ SỐ CỘT 0-based (A=0,B=1,...). Số trả số; chuỗi → num().
 const gNum = (row: RawRow | undefined, idx: number): number => { const v = row?.[idx]; return typeof v === 'number' ? v : num(v) }
 const gStr = (row: RawRow | undefined, idx: number): string => String(row?.[idx] ?? '').trim()
+// gviz JSON trả ô NGÀY dạng "Date(2024,0,7)" (tháng 0-based) → ISO yyyy-mm-dd; số → serial cũ
+const gvizDate = (v: unknown): string => {
+  if (typeof v === 'number') return serialToISO(v)
+  const m = String(v ?? '').match(/Date\((\d+),(\d+),(\d+)/)
+  return m ? `${m[1]}-${String(+m[2] + 1).padStart(2, '0')}-${String(+m[3]).padStart(2, '0')}` : ''
+}
 
 // ── parse từng nguồn ─────────────────────────────────────────────────────────
 interface Product { name: string; rmRevenue: number; cpqc: number; pctCpqc: number; pctHoan: number; c2: number; pctChot: number }
 
-// TỔNG "SẢN PHẨM_TH" (xlsx, file nhẹ) + override %hoàn (Cách A) từ hoanMap (QLHB qua gviz)
-function parseProducts(tongWb: XLSX.WorkBook, hoanMap: Record<string, number> | null): Product[] {
-  const ws = tongWb.Sheets['SẢN PHẨM_TH']
-  if (!ws) throw new Error('Không thấy sheet SẢN PHẨM_TH')
-  const cell = (col: string, r: number) => ws[`${col}${r}`]?.v
+// TỔNG "SẢN PHẨM_TH" (gviz 1 sheet) + override %hoàn (Cách A) từ hoanMap (QLHB qua gviz)
+// A=tên(0) C=DT_RM(2) H=cpqc(7) J=c2(9) K=%chốt(10) L=%CPQC(11) O=%hoàn(14)
+function parseProducts(rows: RawRow[], hoanMap: Record<string, number> | null): Product[] {
   const skip = new Set(['', 'TEST', 'Product', 'Tổng tiền'])
   const products: Product[] = []
   let blanks = 0
-  for (let r = 5; r <= 200; r++) {
-    const name = String(cell('A', r) ?? '').trim()
+  for (let i = 4; i < rows.length && i < 200; i++) { // sheet dòng 5 → rows[4]
+    const row = rows[i]
+    const name = gStr(row, 0)
     if (!name) { if (++blanks > 6) break; continue }
     blanks = 0
     if (skip.has(name)) continue
-    const rm = num(cell('C', r))
+    const rm = gNum(row, 2)
     if (rm <= 0) continue
-    products.push({ name, rmRevenue: rm, cpqc: num(cell('H', r)), pctCpqc: pct(cell('L', r)), pctHoan: pct(cell('O', r)), c2: num(cell('J', r)), pctChot: pct(cell('K', r)) })
+    products.push({ name, rmRevenue: rm, cpqc: gNum(row, 7), pctCpqc: pct(row[11]), pctHoan: pct(row[14]), c2: gNum(row, 9), pctChot: pct(row[10]) })
   }
   // FIX %Hoàn: SẢN PHẨM_TH bỏ trống nhiều mã → đè bằng hoàn Cách A từ QLHB.
   if (hoanMap) for (const p of products) { const h = hoanMap[p.name.toUpperCase()]; if (h != null) p.pctHoan = h }
@@ -242,23 +235,21 @@ function parseVelocity(R: string[][]): { velocity: Record<string, number>; saleS
   return { velocity: vel, saleStats }
 }
 
-// NHẬP HÀNG "BÁO GIÁ VÀ THANH TOÁN" → đơn ĐANG VỀ + giá thực tế (cột E) đơn ĐÃ VỀ
-function parsePurchase(wb: XLSX.WorkBook) {
-  const ws = wb.Sheets['BÁO GIÁ VÀ THANH TOÁN']
-  if (!ws) throw new Error('Không thấy sheet BÁO GIÁ VÀ THANH TOÁN')
-  const cell = (col: string, r: number) => ws[`${col}${r}`]?.v
-  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:T1')
+// NHẬP HÀNG "BÁO GIÁ VÀ THANH TOÁN" (gviz 1 sheet) → đơn ĐANG VỀ + giá thực tế đơn ĐÃ VỀ
+// B=mã(1) E=giá thực tế(4) F=SL(5) H=ngày đặt(7) I=ngày về(8) J=trạng thái(9)
+function parsePurchase(rows: RawRow[]) {
   const incoming: { ma: string; qty: number; order: string; eta: string }[] = []
   const priceVnd: Record<string, number> = {}
-  for (let r = 2; r <= range.e.r + 1; r++) {
-    const ma = String(cell('B', r) ?? '').trim().toUpperCase()
+  for (let i = 1; i < rows.length; i++) { // sheet dòng 2 → rows[1]
+    const row = rows[i]
+    const ma = gStr(row, 1).toUpperCase()
     if (!ma || ma === 'MÃ SP') continue
-    const status = String(cell('J', r) ?? '').trim().toUpperCase()
+    const status = gStr(row, 9).toUpperCase()
     const chuaVe = status.includes('CHƯA') || status.includes('CHUA')
-    const giaThucTe = num(cell('E', r))
+    const giaThucTe = gNum(row, 4)
     if (giaThucTe > 0 && !chuaVe) priceVnd[ma] = giaThucTe // lặp xuống dưới → giữ giá MỚI NHẤT
-    const qty = num(cell('F', r))
-    if (qty > 0 && chuaVe) incoming.push({ ma, qty, order: serialToISO(cell('H', r)), eta: serialToISO(cell('I', r)) })
+    const qty = gNum(row, 5)
+    if (qty > 0 && chuaVe) incoming.push({ ma, qty, order: gvizDate(row[7]), eta: gvizDate(row[8]) })
   }
   return { incoming, priceVnd }
 }
@@ -303,33 +294,31 @@ function parseCashflow(rows: RawRow[]) {
   return { pendingDS, returnDS, returnedDS, deliveryDS, paidDS }
 }
 
-// File KẾ HOẠCH QUÀ — sheet "3. THỰC TRẠNG TỒN": SP → vai trò + ngách + tồn + vốn
+// File KẾ HOẠCH QUÀ — sheet "3. THỰC TRẠNG TỒN" (gviz): A=SP(0) B=vai trò(1) C=ngách(2) D=tồn(3) E=vốn/sp(4)
 interface GiftMaster { name: string; vaiTro: string; ngach: string; ton: number; vonSp: number }
-function parseGiftMaster(wb: XLSX.WorkBook): GiftMaster[] {
-  const ws = wb.Sheets['3. THỰC TRẠNG TỒN']
-  if (!ws) throw new Error('Không thấy sheet 3. THỰC TRẠNG TỒN')
+function parseGiftMaster(rows: RawRow[]): GiftMaster[] {
   const items: GiftMaster[] = []
   let blanks = 0
-  for (let r = 4; r <= 1000; r++) {
-    const name = String(ws[`A${r}`]?.v ?? '').trim()
+  for (let i = 3; i < rows.length && i < 1000; i++) { // sheet dòng 4 → rows[3]
+    const row = rows[i]
+    const name = gStr(row, 0)
     if (!name) { if (++blanks > 8) break; continue }
     blanks = 0
     if (name.startsWith('SHEET') || name === 'Sản phẩm') continue
-    items.push({ name, vaiTro: String(ws[`B${r}`]?.v ?? '').trim(), ngach: String(ws[`C${r}`]?.v ?? '').trim(), ton: num(ws[`D${r}`]?.v), vonSp: num(ws[`E${r}`]?.v) })
+    items.push({ name, vaiTro: gStr(row, 1), ngach: gStr(row, 2), ton: gNum(row, 3), vonSp: gNum(row, 4) })
   }
   return items
 }
-// sheet "4. KHO QUÀ & BÁN CHÉO": ngách → SP chính + quà chéo gợi ý + tồn quà + marketer
+// sheet "4. KHO QUÀ & BÁN CHÉO" (gviz): A=ngách(0) B=mã chính(1) C=quà gợi ý(2) E=vốn quà(4) F=tồn quà(5) G=marketer(6)
 interface GiftCat { ngach: string; maChinh: string; quaCheo: string; vonQua: number; tonQua: number; marketer: string }
-function parseGiftCatalog(wb: XLSX.WorkBook): GiftCat[] {
-  const ws = wb.Sheets['4. KHO QUÀ & BÁN CHÉO']
-  if (!ws) throw new Error('Không thấy sheet 4. KHO QUÀ & BÁN CHÉO')
+function parseGiftCatalog(rows: RawRow[]): GiftCat[] {
   const items: GiftCat[] = []
-  for (let r = 5; r <= 1001; r++) {
-    const ngach = String(ws[`A${r}`]?.v ?? '').trim()
-    const maChinh = String(ws[`B${r}`]?.v ?? '').trim()
+  for (let i = 4; i < rows.length && i < 1001; i++) { // sheet dòng 5 → rows[4]
+    const row = rows[i]
+    const ngach = gStr(row, 0)
+    const maChinh = gStr(row, 1)
     if (!maChinh || !ngach || ngach.includes('🔷') || ngach.startsWith('SHEET') || ngach === 'Ngách') continue
-    items.push({ ngach, maChinh, quaCheo: String(ws[`C${r}`]?.v ?? '').trim(), vonQua: num(ws[`E${r}`]?.v), tonQua: num(ws[`F${r}`]?.v), marketer: String(ws[`G${r}`]?.v ?? '').trim() })
+    items.push({ ngach, maChinh, quaCheo: gStr(row, 2), vonQua: gNum(row, 4), tonQua: gNum(row, 5), marketer: gStr(row, 6) })
   }
   return items
 }
@@ -339,15 +328,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const bodyLinks = (req.body && typeof req.body === 'object' ? (req.body as { links?: Record<string, string> }).links : undefined) || {}
   const id = (k: SrcKey) => { const v = bodyLinks[k]; return v ? extractId(v) : DEFAULTS[k] }
 
-  // ── Nhánh NHẸ: chỉ đọc file KẾ HOẠCH QUÀ (cho tab Ghép Quà). TÁCH khỏi load
-  // chính 6 file — thêm file thứ 7 vào batch song song làm Google throttle → timeout.
+  // ── Nhánh NHẸ: chỉ đọc file KẾ HOẠCH QUÀ (cho tab Ghép Quà). Kéo ĐÚNG 2 sheet
+  // cần qua gviz (không tải cả workbook), độc lập — 1 sheet rớt không kéo sheet kia.
   if (req.body && (req.body as { giftOnly?: boolean }).giftOnly) {
-    try {
-      const wb = await fetchXlsx(id('giftplan'), ['3. THỰC TRẠNG TỒN', '4. KHO QUÀ & BÁN CHÉO'])
-      return res.status(200).json({ ok: true, giftMaster: parseGiftMaster(wb), giftCatalog: parseGiftCatalog(wb) })
-    } catch (e) {
-      return res.status(200).json({ ok: false, giftMaster: [], giftCatalog: [], error: (e as Error).message })
-    }
+    const [tonR, quaR] = await Promise.allSettled([
+      fetchGviz(id('giftplan'), '3. THỰC TRẠNG TỒN'),
+      fetchGviz(id('giftplan'), '4. KHO QUÀ & BÁN CHÉO'),
+    ])
+    const giftMaster = tonR.status === 'fulfilled' ? parseGiftMaster(tonR.value) : []
+    const giftCatalog = quaR.status === 'fulfilled' ? parseGiftCatalog(quaR.value) : []
+    const err = [tonR, quaR].filter((x) => x.status === 'rejected').map((x) => (x as PromiseRejectedResult).reason?.message).join(' · ')
+    return res.status(200).json({ ok: giftMaster.length > 0 || giftCatalog.length > 0, giftMaster, giftCatalog, error: err || undefined })
   }
 
   const errors: string[] = []
@@ -355,12 +346,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // QLHB + KHO chỉ kéo ĐÚNG SHEET CẦN qua gviz (nhẹ) thay vì export cả workbook (nặng → timeout).
   // QLHB tách 2 sheet riêng → 1 sheet rớt không kéo theo sheet kia. Thiếu thì cache bù.
   const [tongR, qlhbSpR, qlhbTinhR, khoR, saleR, nhapR, notonR] = await Promise.allSettled([
-    fetchXlsx(id('tong'), ['SẢN PHẨM_TH']),
+    fetchGviz(id('tong'), 'SẢN PHẨM_TH'),
     fetchGviz(id('qlhb'), 'Tỉ lệ sản phẩm'),
     fetchGviz(id('qlhb'), 'Tỉ lệ tỉnh'),
     fetchGviz(id('kho'), 'RP_KHO_SL'),
     fetchCsv(id('sale'), 'Report_Product'),
-    fetchXlsx(id('nhaphang'), ['BÁO GIÁ VÀ THANH TOÁN']),
+    fetchGviz(id('nhaphang'), 'BÁO GIÁ VÀ THANH TOÁN'),
     fetchCsv(id('noton'), 'Tồn kho dự kiến'),
   ])
 
