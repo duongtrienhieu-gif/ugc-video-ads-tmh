@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react'
-import { ArrowLeft, RotateCcw, Loader2, Scissors, ArrowDownToLine, Trash2, ChevronUp, ChevronDown, Clapperboard, Film, Sparkles, Search, Play, RefreshCw, X, ImageIcon, Video, AlertTriangle, Plus, Star, Crosshair } from 'lucide-react'
+import { ArrowLeft, RotateCcw, Loader2, Scissors, ArrowDownToLine, Trash2, ChevronUp, ChevronDown, Clapperboard, Film, Sparkles, Search, Play, RefreshCw, X, ImageIcon, Video, AlertTriangle, Plus, Star, Crosshair, Package } from 'lucide-react'
 import type { Shot, ShotPlan, ShotBlock, ShotFill, ScriptLanguage, SourceClip, ShotClip, CtaRender } from '../types'
 import type { Product } from '../../../stores/types'
 import { estimateDuration, DEFAULT_FILL_BY_BLOCK } from '../services/splitIntoShots'
 import { renderCtaImage, renderCtaVideo, CTA_IMAGE_CREDITS, CTA_VIDEO_CREDITS } from '../services/renderCtaShot'
+import { exportCapcutBundle, type ExportProgress } from '../services/exportBundle'
 import { useSettingsStore } from '../../../stores/settingsStore'
 
 // ── Co-pilot scene-split table (Phase B / B2) ────────────────────────────
@@ -120,6 +121,25 @@ export default function ShotPlanPanel({
   const [onlyShort, setOnlyShort] = useState(true)
   const [preview, setPreview] = useState<PreviewState | null>(null)
   const previewVideoRef = useRef<HTMLVideoElement>(null)
+  const [exporting, setExporting] = useState<ExportProgress | null>(null)
+
+  // How many assets the export would bundle (picked source clips + rendered CTA).
+  const exportableCount = plan.shots.reduce(
+    (n, s) => n + (s.fill === 'ai-render' ? (s.ctaRender?.videoUrl ? 1 : 0) : (s.clips?.length ?? 0)),
+    0,
+  )
+
+  const handleExport = async () => {
+    if (exporting) return
+    setExporting({ done: 0, total: 0, label: 'Chuẩn bị…' })
+    try {
+      await exportCapcutBundle(plan, product, setExporting)
+      setTimeout(() => setExporting(null), 1800)
+    } catch (e) {
+      setExporting({ done: 0, total: 0, label: `Lỗi export: ${e instanceof Error ? e.message : String(e)}` })
+      setTimeout(() => setExporting(null), 4000)
+    }
+  }
 
   const lang = plan.language
   const primaryOf = (s: Shot) => (lang === 'my' ? s.my : s.vi)
@@ -283,6 +303,16 @@ export default function ShotPlanPanel({
             {isBuilding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
             Tách lại
           </button>
+          <button
+            onClick={handleExport}
+            disabled={isBuilding || exporting != null || exportableCount === 0}
+            className="ui-accent-soft flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold disabled:opacity-40"
+            title={exportableCount === 0 ? 'Chưa có clip/CTA nào để export' : `Đóng gói ${exportableCount} clip + phụ đề cho CapCut`}
+          >
+            {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Package className="h-3.5 w-3.5" />}
+            Export CapCut
+            {exportableCount > 0 && <span className="opacity-70">· {exportableCount}</span>}
+          </button>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-app-subtle">
           <span><b className="text-app-muted">{plan.shots.length}</b> cảnh</span>
@@ -347,6 +377,26 @@ export default function ShotPlanPanel({
                 onChangeCta={(r) => patchShot(s.id, { ctaRender: r })}
               />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Export progress toast */}
+      {exporting && (
+        <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center p-4">
+          <div className="flex items-center gap-3 rounded-2xl border border-app-border bg-app-card px-4 py-3 shadow-xl">
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" style={{ color: 'var(--color-accent)' }} />
+            <div className="min-w-[200px]">
+              <p className="text-xs font-bold text-app-text">{exporting.label}</p>
+              {exporting.total > 0 && (
+                <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-app-surface">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${Math.round((exporting.done / exporting.total) * 100)}%`, backgroundColor: 'var(--color-accent)' }}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

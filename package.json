@@ -18,6 +18,7 @@
     "@ffmpeg/util": "^0.12.2",
     "@supabase/supabase-js": "^2.105.4",
     "dotenv": "^17.4.2",
+    "jszip": "^3.10.1",
     "konva": "^10.3.0",
     "lucide-react": "^0.564.0",
     "react": "^19.2.0",
