@@ -179,7 +179,7 @@ export default function App() {
   if (!user) return <AuthScreen />
 
   return (
-    <div className="flex h-[100dvh] w-screen flex-col overflow-hidden bg-app-base text-app-text antialiased pb-[env(safe-area-inset-bottom)]">
+    <div className="flex h-[100dvh] w-screen flex-col overflow-hidden bg-app-base text-app-text antialiased">
       <TopNav activeApp={activeApp} onNavigate={openApp} />
       <main className="relative flex-1 overflow-hidden bg-app-card shadow-sm">
         {runningApps.map((appId) => {
@@ -192,7 +192,11 @@ export default function App() {
                 isActive ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
               }`}
             >
-              <div className="h-full overflow-y-auto">
+              {/* pb-[env(safe-area-inset-bottom)] — chừa home indicator iPhone.
+                  Đặt ở wrapper từng app (không phải root) để dải an toàn lấy
+                  màu bg-app-card của <main> → trùng màu footer app, liền mạch
+                  thay vì lòi ra dải bg-app-base đậm hơn. */}
+              <div className="h-full overflow-y-auto pb-[env(safe-area-inset-bottom)]">
                 {Component ? (
                   <ErrorBoundary
                     appName={APP_BOUNDARY_META[appId]?.name ?? appId}
