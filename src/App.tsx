@@ -1,4 +1,4 @@
-﻿import { useEffect } from 'react'
+﻿import { useEffect, useState } from 'react'
 import TopNav from './components/TopNav'
 import ToastContainer from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -212,6 +212,53 @@ export default function App() {
       </main>
       <ToastContainer />
       <RestoreSessionModal />
+      <DebugVP />
+    </div>
+  )
+}
+
+// ── TẠM THỜI: đo viewport thật trên máy user để fix safe-area chính xác.
+// Thanh đỏ này ghim ở bottom:0 — nếu còn dải đen DƯỚI nó nghĩa là vùng web
+// ngắn hơn màn vật lý. Gỡ sau khi đo xong.
+function DebugVP() {
+  const [info, setInfo] = useState('đang đo…')
+  useEffect(() => {
+    const probe = document.createElement('div')
+    probe.style.cssText =
+      'position:fixed;top:0;left:0;height:0;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none;'
+    document.body.appendChild(probe)
+    const read = () => {
+      const cs = getComputedStyle(probe)
+      const vv = window.visualViewport
+      const rootEl = document.querySelector('#root > div') as HTMLElement | null
+      const rb = rootEl ? Math.round(rootEl.getBoundingClientRect().bottom) : 0
+      setInfo(
+        `inner ${window.innerHeight} · vv ${vv ? Math.round(vv.height) : '-'} · ` +
+        `client ${document.documentElement.clientHeight} · screen ${window.screen.height} · ` +
+        `dpr ${window.devicePixelRatio} · safeT ${cs.paddingTop} · safeB ${cs.paddingBottom} · rootBot ${rb} · stand ${(window.navigator as unknown as { standalone?: boolean }).standalone ? 'Y' : 'N'}`,
+      )
+    }
+    read()
+    window.visualViewport?.addEventListener('resize', read)
+    window.addEventListener('resize', read)
+    const id = setInterval(read, 1000)
+    return () => {
+      window.visualViewport?.removeEventListener('resize', read)
+      window.removeEventListener('resize', read)
+      clearInterval(id)
+      probe.remove()
+    }
+  }, [])
+  return (
+    <div
+      style={{
+        position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 99999,
+        background: 'rgba(220,0,0,0.92)', color: '#fff', fontSize: 10,
+        fontFamily: 'monospace', padding: '5px 8px', lineHeight: 1.35,
+        pointerEvents: 'none', textAlign: 'center', wordBreak: 'break-all',
+      }}
+    >
+      {info}
     </div>
   )
 }
