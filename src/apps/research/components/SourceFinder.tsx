@@ -199,8 +199,11 @@ Trả JSON tiếng Việt:
 - "productGuessVi": đoán sản phẩm này là gì (ngắn gọn).
 - "productKeywords": từ khóa để tìm CHÍNH sản phẩm này (clip người cầm/demo SP) — zh=tiếng Trung (cho Douyin/Kuaishou), ms=tiếng Malay, en=tiếng Anh; mỗi mảng 3-5 từ khóa NGẮN.
 - "scenes": 6-9 cảnh B-roll minh hoạ TÌNH HUỐNG, phủ nhóm: "Vấn đề", "Cơ chế/thành phần", "Hành động/sử dụng", "Kết quả", "Cảm xúc", "3D/giải phẫu" (nếu hợp). Mỗi cảnh: group, emoji, idea (mô tả cảnh tiếng Việt), queries{zh,ms,en} (truy vấn search NGẮN 2-5 từ).
-  ⚠️ CỰC QUAN TRỌNG: cảnh B-roll **KHÔNG chứa sản phẩm, KHÔNG kèm tên/brand SP trong truy vấn** — chỉ mô tả VẤN ĐỀ / CẢM XÚC / HÀNH ĐỘNG / BỐI CẢNH chung để cắt làm nền.
-  Ví dụ SP "đai hỗ trợ đầu gối": Vấn đề → "đau đầu gối", "khó leo cầu thang", "đau chân người già" (KHÔNG có đai); Cảm xúc → "người già chạy nhảy vui vẻ", "ông bà tập thể dục"; Hành động → "đi bộ", "tập squat"; 3D → "giải phẫu khớp gối 3D".
+  ⚠️ CỰC QUAN TRỌNG: cảnh B-roll **KHÔNG chứa sản phẩm, KHÔNG kèm tên/brand SP trong truy vấn** — chỉ mô tả VẤN ĐỀ / CẢM XÚC / HÀNH ĐỘNG / BỐI CẢNH chung để cắt làm nền. Hãy SUY theo ĐÚNG sản phẩm ở trên (đừng bê nguyên ví dụ mẫu nếu SP khác).
+  Ví dụ tư duy (chỉ là MẪU cách nghĩ, áp cho mọi ngách):
+   • đai gối → Vấn đề:"đau đầu gối","khó leo cầu thang" · Cảm xúc:"người già tập thể dục vui vẻ" · Hành động:"đi bộ leo núi".
+   • kem trị mụn → Vấn đề:"mặt nhiều mụn","soi gương tự ti" · Cơ chế:"cận cảnh lỗ chân lông/da" · Kết quả:"da mặt mịn láng".
+   • collagen/đồ uống → Vấn đề:"da lão hóa nếp nhăn" · Hành động:"phụ nữ uống nước skincare" · Cảm xúc:"phụ nữ tự tin rạng rỡ".
 Cảnh phải THẬT/ĐỜI (kiểu UGC), không lung linh điện ảnh. CHỈ trả JSON.`
       let raw: string
       const inline = imageUrl ? await urlToInline(imageUrl) : null
