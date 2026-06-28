@@ -1,5 +1,6 @@
-import { ArrowLeft, RotateCcw, Loader2, Scissors, ArrowDownToLine, Trash2, ChevronUp, ChevronDown, Clapperboard, Film, Sparkles, Search } from 'lucide-react'
-import type { Shot, ShotPlan, ShotBlock, ShotFill, ScriptLanguage } from '../types'
+import { useState } from 'react'
+import { ArrowLeft, RotateCcw, Loader2, Scissors, ArrowDownToLine, Trash2, ChevronUp, ChevronDown, Clapperboard, Film, Sparkles, Search, Play, RefreshCw, X } from 'lucide-react'
+import type { Shot, ShotPlan, ShotBlock, ShotFill, ScriptLanguage, SourceClip } from '../types'
 import { estimateDuration, DEFAULT_FILL_BY_BLOCK } from '../services/splitIntoShots'
 
 // ── Co-pilot scene-split table (Phase B / B2) ────────────────────────────
@@ -41,6 +42,23 @@ const FILL_META: Record<ShotFill, { label: string; hint: string; cls: string }> 
 
 const fmtSec = (n: number) => `~${n}s`
 
+// ── Source clip plumbing (mirrors Research → SourceFinder) ───────────────
+type Platform = 'douyin' | 'xhs' | 'kuaishou'
+const PLATS: { id: Platform; label: string; emoji: string }[] = [
+  { id: 'douyin', label: 'Douyin', emoji: '🎵' },
+  { id: 'xhs', label: 'RED', emoji: '📕' },
+  { id: 'kuaishou', label: 'Kuaishou', emoji: '⚡' },
+]
+const platLabel = (p: string) => PLATS.find((x) => x.id === p)?.label ?? 'Douyin'
+const proxyInline = (url: string) => `/api/dl-video?url=${encodeURIComponent(url)}&inline=1`
+const proxyDownload = (url: string, name: string) => {
+  const href = `/api/dl-video?url=${encodeURIComponent(url)}&name=${encodeURIComponent(name)}`
+  const el = document.createElement('a'); el.href = href; el.download = name
+  document.body.appendChild(el); el.click(); el.remove()
+}
+const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : String(n))
+const safeName = (s: string) => (s || 'shot').replace(/[^\w]+/g, '-').slice(0, 24)
+
 // Native <select> popups render with the OS default (white) background, which
 // makes our light option text invisible on the dark theme. Force readable
 // colors on every <option> via theme tokens (works on both dark & studio).
@@ -61,6 +79,12 @@ const matchForFill = (fill: ShotFill): Shot['matchMode'] => (fill === 'source-pr
 export default function ShotPlanPanel({
   plan, productName, isBuilding, onChange, onRebuild, onLanguageChange, onBack,
 }: ShotPlanPanelProps) {
+  // Source-clip controls (panel-wide): which platform to search, length filter,
+  // and the full-screen video preview popup.
+  const [platform, setPlatform] = useState<Platform>('douyin')
+  const [onlyShort, setOnlyShort] = useState(true)
+  const [playClip, setPlayClip] = useState<SourceClip | null>(null)
+
   const lang = plan.language
   const primaryOf = (s: Shot) => (lang === 'my' ? s.my : s.vi)
   const glossOf   = (s: Shot) => (lang === 'my' ? s.vi : s.my)
@@ -185,6 +209,25 @@ export default function ShotPlanPanel({
           <span>· tổng <b className="text-app-muted">{fmtSec(plan.totalDurationSec)}</b></span>
           <span className="hidden sm:inline">· dòng <b>{primaryFlag}</b> = chính, <b>{glossFlag}</b> = phụ · từ khóa source = <b className="text-app-muted">tiếng Trung 🇨🇳</b></span>
         </div>
+
+        {/* Source-clip controls */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-bold text-app-subtle">Nguồn clip:</span>
+          <div className="flex items-center gap-0.5 rounded-lg border border-app-border bg-app-card-elevated p-0.5">
+            {PLATS.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setPlatform(p.id)}
+                className={`rounded px-2 py-0.5 text-[11px] font-bold ${platform === p.id ? 'ui-accent-soft' : 'text-app-muted hover:bg-app-card'}`}
+              >
+                {p.emoji} {p.label}
+              </button>
+            ))}
+          </div>
+          <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-app-muted" title="Chỉ lấy clip ngắn, hợp cắt ghép">
+            <input type="checkbox" checked={onlyShort} onChange={(e) => setOnlyShort(e.target.checked)} /> ⏱ Chỉ clip &lt;60s
+          </label>
+        </div>
       </div>
 
       {/* Building overlay */}
@@ -221,8 +264,47 @@ export default function ShotPlanPanel({
                 onMergeDown={() => mergeDown(i)}
                 onSplit={() => splitShot(i)}
                 onRemove={() => removeShot(s.id)}
+                platform={platform}
+                onlyShort={onlyShort}
+                onPlay={setPlayClip}
+                onPickClip={(c) => patchShot(s.id, { clip: c })}
+                onClearClip={() => patchShot(s.id, { clip: null })}
               />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Full-screen clip preview */}
+      {playClip && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setPlayClip(null)}
+        >
+          <div className="relative w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setPlayClip(null)}
+              className="absolute -top-10 right-0 flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/20"
+            >
+              <X className="h-3.5 w-3.5" /> Đóng
+            </button>
+            <video
+              src={proxyInline(playClip.videoUrl)}
+              poster={playClip.platform === 'douyin' ? playClip.cover : proxyInline(playClip.cover)}
+              controls
+              autoPlay
+              playsInline
+              className="max-h-[80vh] w-full rounded-2xl bg-black"
+            />
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <p className="line-clamp-1 flex-1 text-xs text-white/70">{playClip.desc || playClip.author}</p>
+              <button
+                onClick={() => proxyDownload(playClip.videoUrl, `${safeName(playClip.author)}-${playClip.id}.mp4`)}
+                className="flex shrink-0 items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/20"
+              >
+                <ArrowDownToLine className="h-3.5 w-3.5" /> Tải
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -251,6 +333,12 @@ interface ShotCardProps {
   onMergeDown: () => void
   onSplit: () => void
   onRemove: () => void
+  // Source-clip wiring (B3)
+  platform: Platform
+  onlyShort: boolean
+  onPlay: (c: SourceClip) => void
+  onPickClip: (c: SourceClip) => void
+  onClearClip: () => void
 }
 
 function ShotCard(p: ShotCardProps) {
@@ -382,6 +470,181 @@ function ShotCard(p: ShotCardProps) {
           <Scissors className="h-3 w-3" /> Tách đôi
         </button>
       </div>
+
+      {/* Source section */}
+      <div className="mt-2.5 border-t border-app-border pt-2.5">
+        {isAiRender ? (
+          <div className="flex items-center gap-2 rounded-lg border border-dashed bg-app-surface px-3 py-2 text-[11px] text-app-muted" style={{ borderColor: 'var(--color-accent)' }}>
+            <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-accent)' }} />
+            <span>Cảnh CTA — sẽ tạo bằng AI ở bước B4 (sản phẩm + ưu đãi + hộp quà). Không tìm source.</span>
+          </div>
+        ) : (
+          <ShotSourcePicker
+            shot={shot}
+            platform={p.platform}
+            onlyShort={p.onlyShort}
+            onPlay={p.onPlay}
+            onPickClip={p.onPickClip}
+            onClearClip={p.onClearClip}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Per-shot source picker (B3) ──────────────────────────────────────────
+// Queries /api/tikhub-search by the shot's CHINESE keyword (zhQuery) — the 3
+// source platforms are Chinese, so a Chinese query returns far better clips.
+// Falls back to visualIdea only if zhQuery is empty. Shows a results strip with
+// play / pick / download; once an operator picks a clip it's pinned on the shot.
+
+interface TikhubResponse {
+  clips: SourceClip[]
+  cursor?: number
+  hasMore?: boolean
+  error?: string
+  detail?: string
+  note?: string
+}
+
+interface ShotSourcePickerProps {
+  shot: Shot
+  platform: Platform
+  onlyShort: boolean
+  onPlay: (c: SourceClip) => void
+  onPickClip: (c: SourceClip) => void
+  onClearClip: () => void
+}
+
+function ShotSourcePicker(p: ShotSourcePickerProps) {
+  const { shot } = p
+  const [busy, setBusy] = useState(false)
+  const [clips, setClips] = useState<SourceClip[]>([])
+  const [err, setErr] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
+
+  const query = (shot.zhQuery || '').trim() || (shot.visualIdea || '').trim()
+
+  const search = async () => {
+    if (!query) { setErr('Chưa có từ khóa tiếng Trung để tìm.'); return }
+    setBusy(true); setErr(null); setOpen(true)
+    try {
+      const url = `/api/tikhub-search?q=${encodeURIComponent(query)}&platform=${p.platform}&sort=like&maxSec=${p.onlyShort ? 60 : 0}`
+      const res = await fetch(url)
+      const data = (await res.json()) as TikhubResponse
+      if (data.error) { setErr(data.detail || data.error); setClips([]) }
+      else setClips(Array.isArray(data.clips) ? data.clips : [])
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e)); setClips([])
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const picked = shot.clip ?? null
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Picked-clip summary */}
+      {picked && (
+        <div className="flex items-center gap-2 rounded-lg border bg-app-surface p-1.5" style={{ borderColor: 'var(--color-accent)' }}>
+          <button
+            onClick={() => p.onPlay(picked)}
+            className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md bg-black/40"
+            title="Xem clip"
+          >
+            <img
+              src={picked.platform === 'douyin' ? picked.cover : proxyInline(picked.cover)}
+              alt=""
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+            <span className="absolute inset-0 flex items-center justify-center"><Play className="h-4 w-4 text-white drop-shadow" /></span>
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="line-clamp-1 text-[11px] font-bold text-app-text">{picked.desc || picked.author || 'Clip đã chọn'}</p>
+            <p className="text-[10px] text-app-subtle">{platLabel(picked.platform)} · {fmtK(picked.likes)} ♥ · {Math.round(picked.durationSec)}s</p>
+          </div>
+          <button
+            onClick={() => proxyDownload(picked.videoUrl, `${safeName(shot.zhQuery || shot.visualIdea)}-${picked.id}.mp4`)}
+            className="shrink-0 rounded-md p-1.5 text-app-muted hover:bg-app-card-elevated"
+            title="Tải clip"
+          >
+            <ArrowDownToLine className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => { p.onClearClip(); }}
+            className="shrink-0 rounded-md p-1.5 text-app-muted hover:bg-rose-500/10 hover:text-rose-500"
+            title="Bỏ chọn"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Search trigger */}
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={search}
+          disabled={busy || !query}
+          className="ui-accent-soft flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold disabled:opacity-40"
+          title={query ? `Tìm trên ${platLabel(p.platform)}: ${query}` : 'Chưa có từ khóa'}
+        >
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : picked ? <RefreshCw className="h-3 w-3" /> : <Search className="h-3 w-3" />}
+          {picked ? 'Đổi clip' : 'Tìm clip'}
+        </button>
+        {query && (
+          <span className="line-clamp-1 text-[10px] text-app-subtle">🇨🇳 {query} · {platLabel(p.platform)}</span>
+        )}
+      </div>
+
+      {err && <p className="text-[10px] text-rose-500">{err}</p>}
+
+      {/* Results strip */}
+      {open && !busy && !err && clips.length === 0 && (
+        <p className="text-[10px] text-app-subtle">Không tìm thấy clip. Thử đổi từ khóa hoặc nền tảng.</p>
+      )}
+      {open && clips.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {clips.map((c) => {
+            const isPicked = picked?.id === c.id && picked?.platform === c.platform
+            return (
+              <div key={`${c.platform}_${c.id}`} className="w-28 shrink-0">
+                <button
+                  onClick={() => p.onPlay(c)}
+                  className="relative block aspect-[9/16] w-full overflow-hidden rounded-lg bg-black/40"
+                  title="Xem trước"
+                >
+                  <img
+                    src={c.platform === 'douyin' ? c.cover : proxyInline(c.cover)}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                  <span className="absolute inset-0 flex items-center justify-center"><Play className="h-5 w-5 text-white drop-shadow" /></span>
+                  <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[9px] font-bold text-white">{Math.round(c.durationSec)}s · {fmtK(c.likes)}♥</span>
+                </button>
+                <div className="mt-1 flex items-center gap-1">
+                  <button
+                    onClick={() => p.onPickClip(c)}
+                    className={`flex-1 rounded px-1.5 py-1 text-[10px] font-bold ${isPicked ? 'bg-emerald-500/15 text-emerald-500' : 'ui-accent-soft'}`}
+                  >
+                    {isPicked ? '✓ Đã chọn' : 'Chọn'}
+                  </button>
+                  <button
+                    onClick={() => proxyDownload(c.videoUrl, `${safeName(shot.zhQuery || shot.visualIdea)}-${c.id}.mp4`)}
+                    className="rounded p-1 text-app-muted hover:bg-app-card-elevated"
+                    title="Tải"
+                  >
+                    <ArrowDownToLine className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

@@ -97,6 +97,19 @@ export type ShotFill = 'source-broad' | 'source-product' | 'ai-render'
 /** Strictness when querying Source Finder (ignored when fill = ai-render). */
 export type ShotMatchMode = 'broad' | 'product-exact'
 
+/** A source clip returned by /api/tikhub-search (Douyin / RED / Kuaishou). */
+export interface SourceClip {
+  id: string
+  videoUrl: string
+  cover: string
+  desc: string
+  author: string
+  likes: number
+  durationSec: number
+  shareUrl: string
+  platform: string
+}
+
 export interface Shot {
   id: string
   /** Malay voice line — the MAIN line (MY is the primary market). */
@@ -117,6 +130,9 @@ export interface Shot {
   durationSec: number
   fill: ShotFill
   matchMode: ShotMatchMode
+  /** Operator-picked source clip for this shot (source-* fills only). The CTA
+   *  (ai-render) shot is generated in B4, not sourced, so it stays null. */
+  clip?: SourceClip | null
 }
 
 export interface ShotPlan {
