@@ -100,6 +100,8 @@ export default function Personified() {
   const [finalVideo, setFinalVideo] = useState<{ status: 'idle' | 'running' | 'done' | 'failed'; videoRef?: string; stage?: string; error?: string }>({ status: 'idle' })
   // Keyframe đang render dở lúc F5 → tự nối lại (chỉ keyframe, rẻ). idx gom khi restore.
   const kfResume = useRef<number[]>([])
+  // Clip i2v đang chạy lúc F5 → NỐI LẠI job đã trả tiền (poll taskId, 0 credit thêm).
+  const clipResume = useRef<{ idx: number; taskId: string }[]>([])
   // Xem to (lightbox) ảnh keyframe / video clip khi bấm thumbnail.
   const [zoom, setZoom] = useState<{ isVideo: boolean; ref: string } | null>(null)
 
@@ -155,18 +157,24 @@ export default function Personified() {
             // Sanitize trạng thái transient (đang render lúc F5) → trạng thái ổn định:
             //   kf đang chạy → idle (chưa có ảnh) hoặc kf_ready (đã có ảnh); clip đang chạy → kf_ready.
             const fixed: Record<number, SceneRender> = {}
-            const resume: number[] = []
+            const kfQ: number[] = []
+            const clipQ: { idx: number; taskId: string }[] = []
             for (const [k, v] of Object.entries(s.clips)) {
               let nv: SceneRender = v
-              if (v.status === 'kf' || v.status === 'clip') nv = { ...nv, status: v.keyframeRef ? 'kf_ready' : 'idle' }
-              // keyframe đang render dở (chưa có ảnh) lúc F5 → gom để TỰ NỐI LẠI (rẻ).
-              if (v.status === 'kf' && !v.keyframeRef) resume.push(+k)
-              // lipsync đang chạy lúc F5 → reset về done (đã có) / undefined (chưa) để bấm lại.
+              // keyframe đang render dở (chưa có ảnh) lúc F5 → 'idle' + gom để TỰ NỐI LẠI (rẻ).
+              if (v.status === 'kf') { nv = { ...nv, status: v.keyframeRef ? 'kf_ready' : 'idle' }; if (!v.keyframeRef) kfQ.push(+k) }
+              // clip i2v đang chạy: có taskId → giữ 'clip' + NỐI LẠI poll (0 credit); chưa có → về kf_ready.
+              else if (v.status === 'clip') {
+                if (v.taskId) clipQ.push({ idx: +k, taskId: v.taskId })
+                else nv = { ...nv, status: v.keyframeRef ? 'kf_ready' : 'idle' }
+              }
+              // lồng giọng đang chạy lúc F5 → reset về done (đã có) / undefined (chưa) để bấm lại.
               if (v.lipStatus === 'tts' || v.lipStatus === 'mux') nv = { ...nv, lipStatus: v.lipsyncRef ? 'done' : undefined }
               fixed[+k] = nv
             }
             setClips(fixed)
-            kfResume.current = resume
+            kfResume.current = kfQ
+            clipResume.current = clipQ
           }
           if (s.charBank) {
             // Sanitize: nhân vật đang render lúc F5 → idle (chưa có ảnh) hoặc done (đã có).
@@ -196,16 +204,26 @@ export default function Personified() {
     } catch { /* quota / serialization — non-fatal */ }
   }, [productId, market, problemHint, insight, config, script, variant, tier, clips, charBank, finalVideo.videoRef])
 
-  // F5-resume: tự render lại các keyframe đang dở lúc reload (chỉ keyframe — rẻ). Chạy 1
-  // lần khi đã có script + KIE key; consume hàng đợi để không lặp.
+  // F5-resume: nối lại render đang dở khi reload. Keyframe → render lại (rẻ). Clip i2v →
+  // POLL LẠI job đã trả tiền (resumeTaskId, 0 credit thêm). Chạy 1 lần khi có script + key.
   useEffect(() => {
-    if (!hydrated.current || !script || !kieKey || !kfResume.current.length) return
-    const ids = kfResume.current
-    kfResume.current = []
-    ids.forEach((idx) => {
-      const sc = script.scenes.find((s) => s.idx === idx)
-      if (sc && !clips[idx]?.keyframeRef) void handleRenderKeyframe(sc)
-    })
+    if (!hydrated.current || !script || !kieKey) return
+    if (kfResume.current.length) {
+      const ids = kfResume.current
+      kfResume.current = []
+      ids.forEach((idx) => {
+        const sc = script.scenes.find((s) => s.idx === idx)
+        if (sc && !clips[idx]?.keyframeRef) void handleRenderKeyframe(sc)
+      })
+    }
+    if (clipResume.current.length) {
+      const jobs = clipResume.current
+      clipResume.current = []
+      jobs.forEach(({ idx, taskId }) => {
+        const sc = script.scenes.find((s) => s.idx === idx)
+        if (sc && !clips[idx]?.clipRef) void handleRenderClip(sc, taskId)
+      })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [script, kieKey])
 
@@ -317,17 +335,19 @@ export default function Personified() {
     }
   }
 
-  // P2a — BƯỚC 2: i2v từ keyframe ĐÃ DUYỆT (tốn credit). Yêu cầu có keyframeRef.
-  async function handleRenderClip(scene: PersonifiedScene) {
+  // P2a — BƯỚC 2: i2v từ keyframe ĐÃ DUYỆT (tốn credit). resumeTaskId = nối lại job sau F5.
+  async function handleRenderClip(scene: PersonifiedScene, resumeTaskId?: string) {
     if (!script) return
     if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
     const cur = clips[scene.idx]
-    if (!cur?.keyframeRef) { setError('Cảnh này chưa có keyframe — tạo keyframe trước'); return }
-    if (cur.status === 'clip') return
+    if (!resumeTaskId && !cur?.keyframeRef) { setError('Cảnh này chưa có keyframe — tạo keyframe trước'); return }
+    if (!resumeTaskId && cur?.status === 'clip') return
     setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], status: 'clip' } }))
     try {
       const { clipRef, taskId } = await renderClipFromKeyframe({
-        apiKey: kieKey, scene, tier, keyframeRef: cur.keyframeRef,
+        apiKey: kieKey, scene, tier, keyframeRef: cur?.keyframeRef, resumeTaskId,
+        // Lưu taskId NGAY sau submit → F5 vẫn poll lại được (không trả tiền lần 2).
+        onSubmit: (tid) => setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], status: 'clip', taskId: tid } })),
       })
       setClips((p) => ({ ...p, [scene.idx]: { ...p[scene.idx], status: 'done', clipRef, taskId } }))
     } catch (e) {

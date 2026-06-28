@@ -213,39 +213,47 @@ export async function renderKeyframe(
   return { keyframeRef }
 }
 
-/** Bước 2 — i2v từ KEYFRAME ĐÃ DUYỆT (Seedance 480p no-audio) → { clipRef }. Tốn credit. */
+/** Bước 2 — i2v từ KEYFRAME ĐÃ DUYỆT (Seedance 480p no-audio) → { clipRef }. Tốn credit.
+ *  onSubmit: fire taskId NGAY SAU submit → caller lưu để RESUME khi F5 (0 credit thêm).
+ *  resumeTaskId: bỏ qua submit, poll thẳng job đã có (dùng khi nối lại sau reload). */
 export async function renderClipFromKeyframe(
-  p: Pick<RenderSceneParams, 'apiKey' | 'scene' | 'tier' | 'signal'> & { keyframeRef: string },
+  p: Pick<RenderSceneParams, 'apiKey' | 'scene' | 'tier' | 'signal'>
+    & { keyframeRef?: string; resumeTaskId?: string; onSubmit?: (taskId: string) => void },
 ): Promise<{ clipRef: string; taskId: string }> {
   if (!p.apiKey) throw new Error('Thiếu KIE API key (Cài đặt)')
-  if (!p.keyframeRef) throw new Error('Chưa có keyframe — tạo keyframe trước')
   if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
 
-  const kfPublic = await getUrl(p.keyframeRef)
-  if (!kfPublic) throw new Error('Không lấy được URL keyframe')
-  // Cảnh có thoại → để nhân vật DIỄN + mồm mấp máy như đang nói (voiceover sẽ đè lên,
-  // không cần khớp từng chữ). Không thoại → chuyển động hành động bình thường.
-  const talking = (p.scene.dialoguePrimary ?? '').trim()
-    ? ' The character is talking and gesturing expressively, mouth opening and moving naturally as if speaking.'
-    : ''
-  const i2vPrompt = ((p.scene.videoPromptEn ?? '').trim() || (p.scene.action ?? '').trim() || 'subtle natural motion') + talking
-  const sub = await generateVideoJob({
-    apiKey: p.apiKey,
-    jobModelId: tierToModel(p.tier),
-    prompt: i2vPrompt,
-    aspectRatio: '9:16',
-    resolution: tierToRes(p.tier),
-    duration: p.scene.clipDuration,
-    startFrameUrl: kfPublic,
-  })
+  let taskId = p.resumeTaskId
+  if (!taskId) {
+    if (!p.keyframeRef) throw new Error('Chưa có keyframe — tạo keyframe trước')
+    const kfPublic = await getUrl(p.keyframeRef)
+    if (!kfPublic) throw new Error('Không lấy được URL keyframe')
+    // Cảnh có thoại → để nhân vật DIỄN + mồm mấp máy như đang nói (voiceover sẽ đè lên,
+    // không cần khớp từng chữ). Không thoại → chuyển động hành động bình thường.
+    const talking = (p.scene.dialoguePrimary ?? '').trim()
+      ? ' The character is talking and gesturing expressively, mouth opening and moving naturally as if speaking.'
+      : ''
+    const i2vPrompt = ((p.scene.videoPromptEn ?? '').trim() || (p.scene.action ?? '').trim() || 'subtle natural motion') + talking
+    const sub = await generateVideoJob({
+      apiKey: p.apiKey,
+      jobModelId: tierToModel(p.tier),
+      prompt: i2vPrompt,
+      aspectRatio: '9:16',
+      resolution: tierToRes(p.tier),
+      duration: p.scene.clipDuration,
+      startFrameUrl: kfPublic,
+    })
+    taskId = sub.taskId
+    p.onSubmit?.(taskId)   // lưu taskId NGAY → F5 vẫn resume được job đã trả tiền
+  }
 
   const clipUrl = await pollVideoJobUntilDone({
-    apiKey: p.apiKey, taskId: sub.taskId, timeoutMs: 10 * 60 * 1000,
+    apiKey: p.apiKey, taskId, timeoutMs: 10 * 60 * 1000,
     logTag: `personified/${p.scene.sceneType}#${p.scene.idx}`,
   })
   const clipBlob = await fetch(clipUrl).then((r) => r.blob())
   const clipRef = await saveAsset(clipBlob, 'video/mp4')
-  return { clipRef, taskId: sub.taskId }
+  return { clipRef, taskId }
 }
 
 /** Render 1 cảnh end-to-end (keyframe → i2v) → { keyframeRef, clipRef }. Dùng cho dev helper /
