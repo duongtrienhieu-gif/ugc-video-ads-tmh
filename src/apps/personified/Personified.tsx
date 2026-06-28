@@ -18,6 +18,7 @@ import {
 import { analyzeInsight, generateScript } from './services/personifiedBrain'
 import { renderKeyframe, renderClipFromKeyframe, renderCharacterRef, addSceneVoiceover } from './services/personifiedRenderer'   // P2a/P2b/P2c (cũng đăng ký dev helper __testRenderScene)
 import { assemblePersonifiedVideo } from './services/personifiedAssembler'   // P2d
+import { type LibVideo, getLibraryLocal, syncLibrary, addToLibrary, removeFromLibrary } from './services/personifiedLibrary'   // P2e
 import { useAssetUrl } from '../../hooks/useAssetUrl'
 
 // P2a — trạng thái render 1 cảnh (persist cùng kịch bản).
@@ -104,6 +105,10 @@ export default function Personified() {
   const clipResume = useRef<{ idx: number; taskId: string }[]>([])
   // Xem to (lightbox) ảnh keyframe / video clip khi bấm thumbnail.
   const [zoom, setZoom] = useState<{ isVideo: boolean; ref: string } | null>(null)
+  // P2e — Thư viện video đã lưu.
+  const [library, setLibrary] = useState<LibVideo[]>(getLibraryLocal())
+  const [showLibrary, setShowLibrary] = useState(false)
+  const [savedToLib, setSavedToLib] = useState(false)
 
   const product = useMemo(() => products.find((p) => p.id === productId), [products, productId])
   // P2a — ảnh sản phẩm để khóa fidelity (cảnh hasProduct).
@@ -226,6 +231,9 @@ export default function Personified() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [script, kieKey])
+
+  // P2e — kéo thư viện từ cloud 1 lần khi mount (degrade về local nếu chưa login).
+  useEffect(() => { void syncLibrary().then(setLibrary) }, [])
 
   async function handleAnalyze() {
     if (!product || analyzing) return
@@ -421,9 +429,30 @@ export default function Personified() {
         onStage: (m) => setFinalVideo((p) => ({ ...p, status: 'running', stage: m })),
       })
       setFinalVideo({ status: 'done', videoRef: res.videoRef })
+      setSavedToLib(false)   // video mới → cho lưu lại
     } catch (e) {
       setFinalVideo({ status: 'failed', error: e instanceof Error ? e.message : String(e) })
     }
+  }
+
+  // P2e — lưu video cuối vào thư viện (local + cloud).
+  async function handleSaveToLibrary() {
+    if (!finalVideo.videoRef || !script || savedToLib) return
+    const stamp = new Date().toLocaleDateString('vi-VN')
+    const item: LibVideo = {
+      id: crypto.randomUUID(),
+      title: `${product?.productName || 'Video'} · ${market} · ${stamp}`,
+      videoRef: finalVideo.videoRef, market,
+      sceneCount: script.scenes.length, totalSec: script.totalSec, createdAt: Date.now(),
+    }
+    await addToLibrary(item)
+    setLibrary(getLibraryLocal())
+    setSavedToLib(true)
+  }
+
+  async function handleDeleteFromLib(id: string) {
+    await removeFromLibrary(id)
+    setLibrary(getLibraryLocal())
   }
 
   // P2a — i2v TẤT CẢ cảnh đã duyệt keyframe (status kf_ready). Cảnh chưa có keyframe → bỏ qua.
@@ -450,10 +479,27 @@ export default function Personified() {
           <h1 className="text-sm font-bold text-gray-900">Xưởng Nhân Vật Hoá 3D</h1>
           <p className="text-[11px] text-gray-500">Video nhân cách hóa vấn đề · simulator kịch bản (P1)</p>
         </div>
-        <span className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-          TEXT-ONLY · chưa render
-        </span>
+        <button onClick={() => setShowLibrary((v) => !v)}
+          className={`ml-auto flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${showLibrary ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+          📚 Thư viện{library.length > 0 && ` (${library.length})`}
+        </button>
       </div>
+
+      {/* P2e — Thư viện video đã lưu */}
+      {showLibrary && (
+        <div className="mx-6 mt-4 rounded-xl border border-violet-200 bg-white p-4 shadow-sm">
+          <div className="mb-2 flex items-center gap-2 text-sm font-bold text-gray-900">📚 Thư viện video ({library.length})</div>
+          {library.length === 0
+            ? <p className="text-xs text-gray-400">Chưa có video nào. Ghép xong 1 video → bấm "💾 Lưu vào thư viện".</p>
+            : <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {library.map((v) => (
+                  <div key={v.id} className="rounded-lg border border-black/10 bg-gray-50 p-2">
+                    <LibVideoCard item={v} onDelete={() => handleDeleteFromLib(v.id)} />
+                  </div>
+                ))}
+              </div>}
+        </div>
+      )}
 
       {noKey && (
         <div className="mx-6 mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-gray-800">
@@ -632,7 +678,13 @@ export default function Personified() {
                 {finalVideo.status === 'failed' && <div className="text-xs text-rose-600">⚠ Ghép lỗi: {finalVideo.error?.slice(0, 160)}</div>}
                 {finalVideo.status === 'done' && finalVideo.videoRef && (
                   <div className="space-y-2">
-                    <div className="text-xs font-bold text-emerald-700">✅ Video hoàn chỉnh (720p)</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-bold text-emerald-700">✅ Video hoàn chỉnh (720p)</span>
+                      <button onClick={handleSaveToLibrary} disabled={savedToLib}
+                        className="flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-violet-700 disabled:opacity-50">
+                        {savedToLib ? <>✅ Đã lưu thư viện</> : <>💾 Lưu vào thư viện</>}
+                      </button>
+                    </div>
                     <FinalVideoPreview videoRef={finalVideo.videoRef} />
                   </div>
                 )}
@@ -924,6 +976,24 @@ function KeyframePreview({ keyframeRef }: { keyframeRef: string }) {
   const url = useAssetUrl(keyframeRef)
   if (!url) return <span className="text-[10px] text-gray-400">đang tải keyframe…</span>
   return <img src={url} alt="keyframe" className="mt-1 w-full max-w-[220px] rounded-lg border border-violet-200" />
+}
+
+// P2e — thẻ video trong thư viện: preview + tiêu đề + tải + xoá.
+function LibVideoCard({ item, onDelete }: { item: LibVideo; onDelete: () => void }) {
+  const url = useAssetUrl(item.videoRef)
+  return (
+    <div className="space-y-1.5">
+      {url
+        ? <video src={url} controls playsInline muted className="w-full rounded border border-black/10" />
+        : <div className="flex h-32 w-full items-center justify-center rounded border border-black/10 bg-gray-100 text-[11px] text-gray-400">đang tải…</div>}
+      <div className="truncate text-[11px] font-semibold text-gray-800" title={item.title}>{item.title}</div>
+      <div className="text-[10px] text-gray-400">{item.sceneCount} cảnh · {item.totalSec}s · {new Date(item.createdAt).toLocaleDateString('vi-VN')}</div>
+      <div className="flex items-center gap-2">
+        {url && <a href={url} download="personified-video.mp4" className="rounded bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-emerald-700">⬇️ Tải</a>}
+        <button onClick={onDelete} className="rounded bg-rose-100 px-2 py-1 text-[10px] font-bold text-rose-700 hover:bg-rose-200">🗑️ Xoá</button>
+      </div>
+    </div>
+  )
 }
 
 // P2d — video cuối (ghép xong): preview lớn + nút tải về.

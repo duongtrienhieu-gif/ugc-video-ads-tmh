@@ -28,6 +28,7 @@ export type OutputKind =
   | 'video-translate-history'
   | 'brand-kit'
   | 'chat-bot-config'
+  | 'personified-video'
 
 /** Minimum required fields any output item must expose. The full body
  *  lives in `payload_json`; the row-level fields are for fast listing
