@@ -60,17 +60,31 @@ async function handleSearch(req: VercelRequest, res: VercelResponse, key: string
     }
   }
   let b64 = base64
-  if (!b64 && imageUrl) { const ir = await fetch(imageUrl); b64 = Buffer.from(await ir.arrayBuffer()).toString('base64') }
+  let srcType = ''
+  if (!b64 && imageUrl) {
+    const ir = await fetch(imageUrl)
+    srcType = ir.headers.get('content-type') || ''
+    b64 = Buffer.from(await ir.arrayBuffer()).toString('base64')
+  }
   b64 = b64.replace(/^data:[^,]+,/, '')
   if (!b64) return res.status(400).json({ error: 'Không đọc được ảnh' })
+  if (srcType && !/image\//i.test(srcType)) return res.status(502).json({ error: `Ảnh tải về không phải ảnh (content-type: ${srcType}) — link ảnh có thể bị chặn/cần đăng nhập`, b64head: b64.slice(0, 24) })
 
-  const up = await fetch(`https://${HOST}/1688/upload-image`, { method: 'POST', headers: { ...rapidHeaders(key), 'Content-Type': 'application/json' }, body: JSON.stringify({ base64: b64 }) })
-  const upText = await up.text()
-  let upd: AnyObj = {}
-  try { upd = JSON.parse(upText) as AnyObj } catch { /* */ }
-  if (!up.ok || upd.success === false) return res.status(502).json({ error: 'Upload ảnh lên 1688 lỗi', detail: upText.slice(0, 200) })
+  const mime = srcType && /image\//i.test(srcType) ? srcType : 'image/jpeg'
+  const tryUpload = async (payload: string) => {
+    const up = await fetch(`https://${HOST}/1688/upload-image`, { method: 'POST', headers: { ...rapidHeaders(key), 'Content-Type': 'application/json' }, body: JSON.stringify({ base64: payload }) })
+    const txt = await up.text()
+    let j: AnyObj = {}
+    try { j = JSON.parse(txt) as AnyObj } catch { /* */ }
+    return { ok: up.ok && j.success !== false, txt, j }
+  }
+  // Thử base64 thuần → nếu fail, thử dạng data-URI (một số provider yêu cầu).
+  let u = await tryUpload(b64)
+  if (!u.ok) u = await tryUpload(`data:${mime};base64,${b64}`)
+  if (!u.ok) return res.status(502).json({ error: 'Upload ảnh lên 1688 lỗi', detail: u.txt.slice(0, 160), srcType, b64len: b64.length, b64head: b64.slice(0, 28) })
+  const upd = u.j
   const imgId = deepFind(upd, /img.?id|image.?id|imageurl|^id$|pic/i)
-  if (!imgId) return res.status(502).json({ error: 'Upload không trả imgId', detail: upText.slice(0, 200), ...(debug ? { uploadKeys: Object.keys(upd) } : {}) })
+  if (!imgId) return res.status(502).json({ error: 'Upload không trả imgId', detail: u.txt.slice(0, 200), ...(debug ? { uploadKeys: Object.keys(upd) } : {}) })
 
   const q = /^https?:/i.test(imgId) ? `imgUrl=${encodeURIComponent(imgId)}` : `imgId=${encodeURIComponent(imgId)}`
   const r2 = await fetch(`https://${HOST}/1688/search-image?${q}&page=0`, { headers: rapidHeaders(key) })
