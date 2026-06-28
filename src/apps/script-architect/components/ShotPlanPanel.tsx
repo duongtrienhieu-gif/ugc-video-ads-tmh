@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { ArrowLeft, RotateCcw, Loader2, Scissors, ArrowDownToLine, Trash2, ChevronUp, ChevronDown, Clapperboard, Film, Sparkles, Search, Play, RefreshCw, X, ImageIcon, Video, AlertTriangle } from 'lucide-react'
-import type { Shot, ShotPlan, ShotBlock, ShotFill, ScriptLanguage, SourceClip, CtaRender } from '../types'
+import { useState, useRef } from 'react'
+import { ArrowLeft, RotateCcw, Loader2, Scissors, ArrowDownToLine, Trash2, ChevronUp, ChevronDown, Clapperboard, Film, Sparkles, Search, Play, RefreshCw, X, ImageIcon, Video, AlertTriangle, Plus, Star, Crosshair } from 'lucide-react'
+import type { Shot, ShotPlan, ShotBlock, ShotFill, ScriptLanguage, SourceClip, ShotClip, CtaRender } from '../types'
 import type { Product } from '../../../stores/types'
 import { estimateDuration, DEFAULT_FILL_BY_BLOCK } from '../services/splitIntoShots'
 import { renderCtaImage, renderCtaVideo, CTA_IMAGE_CREDITS, CTA_VIDEO_CREDITS } from '../services/renderCtaShot'
@@ -69,6 +69,31 @@ const proxyDownload = (url: string, name: string) => {
 const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : String(n))
 const safeName = (s: string) => (s || 'shot').replace(/[^\w]+/g, '-').slice(0, 24)
 
+// Stable identity for a clip across platforms (same id can exist on two platforms).
+const clipKey = (c: { id: string; platform: string }) => `${c.platform}_${c.id}`
+// seconds → m:ss.s (one decimal — fine enough for a manual CapCut cut hint).
+const mmss = (s: number) => {
+  const m = Math.floor(s / 60)
+  const sec = s - m * 60
+  return `${m}:${sec.toFixed(1).padStart(4, '0')}`
+}
+
+// Context passed to the preview popup when the clip is already PICKED — lets the
+// operator scrub and stamp an in-point (the 4-5s window out of a long spy clip).
+interface TrimCtx {
+  shotId: string
+  clipId: string
+  platform: string
+  shotDurationSec: number
+  inSec?: number
+  outSec?: number
+}
+interface PreviewState {
+  clip: SourceClip
+  /** Present only for picked clips → enables the in-point setter. */
+  trim?: TrimCtx
+}
+
 // Native <select> popups render with the OS default (white) background, which
 // makes our light option text invisible on the dark theme. Force readable
 // colors on every <option> via theme tokens (works on both dark & studio).
@@ -93,7 +118,8 @@ export default function ShotPlanPanel({
   // popup. Platform is no longer a single choice — every search hits all three
   // platforms and merges by priority (RED › Kuaishou › Douyin).
   const [onlyShort, setOnlyShort] = useState(true)
-  const [playClip, setPlayClip] = useState<SourceClip | null>(null)
+  const [preview, setPreview] = useState<PreviewState | null>(null)
+  const previewVideoRef = useRef<HTMLVideoElement>(null)
 
   const lang = plan.language
   const primaryOf = (s: Shot) => (lang === 'my' ? s.my : s.vi)
@@ -175,6 +201,50 @@ export default function ShotPlanPanel({
   }
 
   const removeShot = (id: string) => commit(plan.shots.filter((s) => s.id !== id))
+
+  // ── Multi-clip ops (B3 v3) — a shot can carry several picked clips ─────────
+  const clipsOf = (shotId: string) => plan.shots.find((s) => s.id === shotId)?.clips ?? []
+  const setClips = (shotId: string, clips: ShotClip[]) => patchShot(shotId, { clips })
+
+  // Add a search result to the shot. First pick = main, the rest = backup.
+  const addClip = (shotId: string, c: SourceClip) => {
+    const cur = clipsOf(shotId)
+    if (cur.some((x) => clipKey(x) === clipKey(c))) return // already picked
+    setClips(shotId, [...cur, { ...c, role: cur.length === 0 ? 'main' : 'backup' }])
+  }
+  const removeClip = (shotId: string, key: string) => {
+    let next = clipsOf(shotId).filter((x) => clipKey(x) !== key)
+    // Keep exactly one main when clips remain.
+    if (next.length && !next.some((x) => x.role === 'main')) {
+      next = next.map((x, i) => (i === 0 ? { ...x, role: 'main' } : x))
+    }
+    setClips(shotId, next)
+  }
+  const setMainClip = (shotId: string, key: string) =>
+    setClips(shotId, clipsOf(shotId).map((x) => ({ ...x, role: clipKey(x) === key ? 'main' : 'backup' })))
+  const toggleNeedsReplace = (shotId: string, key: string) =>
+    setClips(shotId, clipsOf(shotId).map((x) => (clipKey(x) === key ? { ...x, needsReplace: !x.needsReplace } : x)))
+  const setClipTrim = (shotId: string, key: string, inSec: number | undefined, outSec: number | undefined) =>
+    setClips(shotId, clipsOf(shotId).map((x) => (clipKey(x) === key ? { ...x, inSec, outSec } : x)))
+
+  // "Đặt điểm bắt đầu tại đây" — stamp the popup video's current time as in-point.
+  // out = in + the shot's spoken duration, capped at the clip length. Hint only.
+  const stampInPoint = () => {
+    if (!preview?.trim) return
+    const v = previewVideoRef.current
+    if (!v) return
+    const t = preview.trim
+    const inSec = Math.max(0, Math.round(v.currentTime * 10) / 10)
+    const outSec = Math.min(preview.clip.durationSec || inSec + t.shotDurationSec, inSec + t.shotDurationSec)
+    setClipTrim(t.shotId, clipKey({ id: t.clipId, platform: t.platform }), inSec, outSec)
+    setPreview({ ...preview, trim: { ...t, inSec, outSec } })
+  }
+  const clearInPoint = () => {
+    if (!preview?.trim) return
+    const t = preview.trim
+    setClipTrim(t.shotId, clipKey({ id: t.clipId, platform: t.platform }), undefined, undefined)
+    setPreview({ ...preview, trim: { ...t, inSec: undefined, outSec: undefined } })
+  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -267,9 +337,11 @@ export default function ShotPlanPanel({
                 onSplit={() => splitShot(i)}
                 onRemove={() => removeShot(s.id)}
                 onlyShort={onlyShort}
-                onPlay={setPlayClip}
-                onPickClip={(c) => patchShot(s.id, { clip: c })}
-                onClearClip={() => patchShot(s.id, { clip: null })}
+                onPlay={setPreview}
+                onAddClip={(c) => addClip(s.id, c)}
+                onRemoveClip={(key) => removeClip(s.id, key)}
+                onSetMainClip={(key) => setMainClip(s.id, key)}
+                onToggleNeedsReplace={(key) => toggleNeedsReplace(s.id, key)}
                 product={product}
                 lang={lang}
                 onChangeCta={(r) => patchShot(s.id, { ctaRender: r })}
@@ -279,31 +351,63 @@ export default function ShotPlanPanel({
         </div>
       )}
 
-      {/* Full-screen clip preview */}
-      {playClip && (
+      {/* Full-screen clip preview (+ in-point setter when the clip is picked) */}
+      {preview && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-          onClick={() => setPlayClip(null)}
+          onClick={() => setPreview(null)}
         >
           <div className="relative w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <button
-              onClick={() => setPlayClip(null)}
+              onClick={() => setPreview(null)}
               className="absolute -top-10 right-0 flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/20"
             >
               <X className="h-3.5 w-3.5" /> Đóng
             </button>
             <video
-              src={proxyInline(playClip.videoUrl)}
-              poster={playClip.platform === 'douyin' ? playClip.cover : proxyInline(playClip.cover)}
+              ref={previewVideoRef}
+              src={proxyInline(preview.clip.videoUrl)}
+              poster={preview.clip.platform === 'douyin' ? preview.clip.cover : proxyInline(preview.clip.cover)}
               controls
               autoPlay
               playsInline
-              className="max-h-[80vh] w-full rounded-2xl bg-black"
+              className="max-h-[72vh] w-full rounded-2xl bg-black"
             />
+
+            {/* In-point setter — only for already-picked clips (we know the shot) */}
+            {preview.trim && (
+              <div className="mt-2 rounded-xl border border-white/15 bg-white/5 p-2.5">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-white/80">
+                  <Crosshair className="h-3.5 w-3.5" /> Điểm cắt (chỉ là gợi ý — clip đầy đủ vẫn được tải về)
+                </div>
+                <p className="mt-1 text-[11px] text-white/70">
+                  {preview.trim.inSec != null
+                    ? <>Cắt từ <b className="text-white">{mmss(preview.trim.inSec)}</b> → <b className="text-white">{mmss(preview.trim.outSec ?? preview.trim.inSec + preview.trim.shotDurationSec)}</b> <span className="opacity-60">(~{preview.trim.shotDurationSec}s cho cảnh này)</span></>
+                    : <span className="opacity-70">Chưa đặt — tua tới khúc cần rồi bấm “Đặt điểm bắt đầu”.</span>}
+                </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <button
+                    onClick={stampInPoint}
+                    className="flex items-center gap-1 rounded-full bg-white/15 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-white/25"
+                  >
+                    <Crosshair className="h-3 w-3" /> Đặt điểm bắt đầu tại đây
+                  </button>
+                  {preview.trim.inSec != null && (
+                    <button
+                      onClick={clearInPoint}
+                      className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white/80 hover:bg-white/20"
+                    >
+                      <X className="h-3 w-3" /> Xóa điểm cắt
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="mt-2 flex items-center justify-between gap-2">
-              <p className="line-clamp-1 flex-1 text-xs text-white/70">{playClip.desc || playClip.author}</p>
+              <p className="line-clamp-1 flex-1 text-xs text-white/70">{preview.clip.desc || preview.clip.author}</p>
               <button
-                onClick={() => proxyDownload(playClip.videoUrl, `${safeName(playClip.author)}-${playClip.id}.mp4`)}
+                onClick={() => proxyDownload(preview.clip.videoUrl, `${safeName(preview.clip.author)}-${preview.clip.id}.mp4`)}
                 className="flex shrink-0 items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/20"
               >
                 <ArrowDownToLine className="h-3.5 w-3.5" /> Tải
@@ -337,11 +441,13 @@ interface ShotCardProps {
   onMergeDown: () => void
   onSplit: () => void
   onRemove: () => void
-  // Source-clip wiring (B3)
+  // Source-clip wiring (B3 v3 — multiple clips per shot)
   onlyShort: boolean
-  onPlay: (c: SourceClip) => void
-  onPickClip: (c: SourceClip) => void
-  onClearClip: () => void
+  onPlay: (p: PreviewState) => void
+  onAddClip: (c: SourceClip) => void
+  onRemoveClip: (key: string) => void
+  onSetMainClip: (key: string) => void
+  onToggleNeedsReplace: (key: string) => void
   // CTA AI render wiring (B4)
   product: Product | null
   lang: ScriptLanguage
@@ -493,8 +599,10 @@ function ShotCard(p: ShotCardProps) {
             shot={shot}
             onlyShort={p.onlyShort}
             onPlay={p.onPlay}
-            onPickClip={p.onPickClip}
-            onClearClip={p.onClearClip}
+            onAddClip={p.onAddClip}
+            onRemoveClip={p.onRemoveClip}
+            onSetMainClip={p.onSetMainClip}
+            onToggleNeedsReplace={p.onToggleNeedsReplace}
           />
         )}
       </div>
@@ -521,9 +629,11 @@ interface TikhubResponse {
 interface ShotSourcePickerProps {
   shot: Shot
   onlyShort: boolean
-  onPlay: (c: SourceClip) => void
-  onPickClip: (c: SourceClip) => void
-  onClearClip: () => void
+  onPlay: (p: PreviewState) => void
+  onAddClip: (c: SourceClip) => void
+  onRemoveClip: (key: string) => void
+  onSetMainClip: (key: string) => void
+  onToggleNeedsReplace: (key: string) => void
 }
 
 type PlatBuckets = Record<Platform, SourceClip[]>
@@ -615,44 +725,80 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
     else void ensureAndShow(false)
   }
 
-  const picked = shot.clip ?? null
+  const picked = shot.clips ?? []
+  const pickedKeys = new Set(picked.map(clipKey))
 
   return (
     <div className="flex flex-col gap-2">
-      {/* Picked-clip summary */}
-      {picked && (
-        <div className="flex items-center gap-2 rounded-lg border bg-app-surface p-1.5" style={{ borderColor: 'var(--color-accent)' }}>
-          <button
-            onClick={() => p.onPlay(picked)}
-            className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md bg-black/40"
-            title="Xem clip"
-          >
-            <img
-              src={picked.platform === 'douyin' ? picked.cover : proxyInline(picked.cover)}
-              alt=""
-              className="h-full w-full object-cover"
-              loading="lazy"
-            />
-            <span className="absolute inset-0 flex items-center justify-center"><Play className="h-4 w-4 text-white drop-shadow" /></span>
-          </button>
-          <div className="min-w-0 flex-1">
-            <p className="line-clamp-1 text-[11px] font-bold text-app-text">{picked.desc || picked.author || 'Clip đã chọn'}</p>
-            <p className="text-[10px] text-app-subtle">{platLabel(picked.platform)} · {fmtK(picked.likes)} ♥ · {Math.round(picked.durationSec)}s</p>
-          </div>
-          <button
-            onClick={() => proxyDownload(picked.videoUrl, `${safeName(shot.zhQuery || shot.visualIdea)}-${picked.id}.mp4`)}
-            className="shrink-0 rounded-md p-1.5 text-app-muted hover:bg-app-card-elevated"
-            title="Tải clip"
-          >
-            <ArrowDownToLine className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={() => { p.onClearClip(); }}
-            className="shrink-0 rounded-md p-1.5 text-app-muted hover:bg-rose-500/10 hover:text-rose-500"
-            title="Bỏ chọn"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+      {/* Picked clips — one row each. Multiple allowed; all ship to CapCut. */}
+      {picked.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          {picked.map((c) => {
+            const k = clipKey(c)
+            const isMain = c.role === 'main'
+            return (
+              <div
+                key={k}
+                className="flex items-center gap-2 rounded-lg border bg-app-surface p-1.5"
+                style={{ borderColor: c.needsReplace ? 'var(--color-amber-500, #f59e0b)' : isMain ? 'var(--color-accent)' : 'var(--color-border)' }}
+              >
+                <button
+                  onClick={() => p.onPlay({ clip: c, trim: { shotId: shot.id, clipId: c.id, platform: c.platform, shotDurationSec: shot.durationSec, inSec: c.inSec, outSec: c.outSec } })}
+                  className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md bg-black/40"
+                  title="Xem clip / đặt điểm cắt"
+                >
+                  <img
+                    src={c.platform === 'douyin' ? c.cover : proxyInline(c.cover)}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                  <span className="absolute inset-0 flex items-center justify-center"><Play className="h-4 w-4 text-white drop-shadow" /></span>
+                </button>
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-1 text-[11px] font-bold text-app-text">
+                    {isMain && <span style={{ color: 'var(--color-accent)' }}>★ </span>}
+                    {c.desc || c.author || 'Clip đã chọn'}
+                  </p>
+                  <p className="text-[10px] text-app-subtle">
+                    {platLabel(c.platform)} · {fmtK(c.likes)} ♥ · {Math.round(c.durationSec)}s
+                    {c.inSec != null && <span style={{ color: 'var(--color-accent)' }}> · ✂ {mmss(c.inSec)}→{mmss(c.outSec ?? c.inSec + shot.durationSec)}</span>}
+                    {c.needsReplace && <span className="text-amber-500"> · ⚠ cần thay</span>}
+                  </p>
+                </div>
+                {!isMain && (
+                  <button
+                    onClick={() => p.onSetMainClip(k)}
+                    className="shrink-0 rounded-md p-1.5 text-app-muted hover:bg-app-card-elevated"
+                    title="Đặt làm clip chính (★)"
+                  >
+                    <Star className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <button
+                  onClick={() => p.onToggleNeedsReplace(k)}
+                  className={`shrink-0 rounded-md p-1.5 hover:bg-app-card-elevated ${c.needsReplace ? 'text-amber-500' : 'text-app-muted'}`}
+                  title='Đánh dấu "cần thay" (pick tạm, cần clip tốt hơn)'
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => proxyDownload(c.videoUrl, `${safeName(shot.zhQuery || shot.visualIdea)}-${c.id}.mp4`)}
+                  className="shrink-0 rounded-md p-1.5 text-app-muted hover:bg-app-card-elevated"
+                  title="Tải clip"
+                >
+                  <ArrowDownToLine className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => p.onRemoveClip(k)}
+                  className="shrink-0 rounded-md p-1.5 text-app-muted hover:bg-rose-500/10 hover:text-rose-500"
+                  title="Bỏ clip này"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -664,8 +810,8 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
           className="ui-accent-soft flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold disabled:opacity-40"
           title={query ? `Tìm cả 3 nền (RED › Kuaishou › Douyin): ${query}` : 'Chưa có từ khóa'}
         >
-          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : picked ? <RefreshCw className="h-3 w-3" /> : <Search className="h-3 w-3" />}
-          {picked ? 'Đổi clip' : 'Tìm clip'}
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : picked.length ? <RefreshCw className="h-3 w-3" /> : <Search className="h-3 w-3" />}
+          {picked.length ? 'Tìm thêm clip' : 'Tìm clip'}
         </button>
         {query && (
           <span className="line-clamp-1 text-[10px] text-app-subtle">🇨🇳 {query} · cả 3 nền</span>
@@ -681,11 +827,11 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
       {open && visible.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1">
           {visible.map((c) => {
-            const isPicked = picked?.id === c.id && picked?.platform === c.platform
+            const isPicked = pickedKeys.has(clipKey(c))
             return (
               <div key={`${c.platform}_${c.id}`} className="w-28 shrink-0">
                 <button
-                  onClick={() => p.onPlay(c)}
+                  onClick={() => p.onPlay({ clip: c })}
                   className="relative block aspect-[9/16] w-full overflow-hidden rounded-lg bg-black/40"
                   title="Xem trước"
                 >
@@ -701,10 +847,10 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
                 </button>
                 <div className="mt-1 flex items-center gap-1">
                   <button
-                    onClick={() => p.onPickClip(c)}
-                    className={`flex-1 rounded px-1.5 py-1 text-[10px] font-bold ${isPicked ? 'bg-emerald-500/15 text-emerald-500' : 'ui-accent-soft'}`}
+                    onClick={() => (isPicked ? p.onRemoveClip(clipKey(c)) : p.onAddClip(c))}
+                    className={`flex flex-1 items-center justify-center gap-0.5 rounded px-1.5 py-1 text-[10px] font-bold ${isPicked ? 'bg-emerald-500/15 text-emerald-500' : 'ui-accent-soft'}`}
                   >
-                    {isPicked ? '✓ Đã chọn' : 'Chọn'}
+                    {isPicked ? '✓ Đã thêm' : <><Plus className="h-2.5 w-2.5" /> Thêm</>}
                   </button>
                   <button
                     onClick={() => proxyDownload(c.videoUrl, `${safeName(shot.zhQuery || shot.visualIdea)}-${c.id}.mp4`)}

@@ -5,7 +5,7 @@ import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
 import type {
   HookStrength, LengthSeconds, ScriptGenerationParams, ScriptGenerationResult, ToneModifier,
-  ShotPlan, ScriptLanguage,
+  ShotPlan, ScriptLanguage, Shot, SourceClip,
 } from './types'
 import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
@@ -37,6 +37,18 @@ interface ScriptSnapshot {
 const DEFAULT_PRESET_ID = 'problem-solution'
 const DEFAULT_LENGTH: LengthSeconds = 30
 const DEFAULT_HOOK: HookStrength = 'balanced'
+
+// Migrate pre-B3v3 snapshots: a shot used to hold a single `clip`; now it holds
+// `clips[]`. Promote any legacy single clip into a one-item list (role = main).
+const migrateShotPlan = (plan: ShotPlan): ShotPlan => ({
+  ...plan,
+  shots: plan.shots.map((s) => {
+    const legacy = (s as Shot & { clip?: SourceClip | null }).clip
+    if (s.clips || !legacy) return s
+    const { clip: _drop, ...rest } = s as Shot & { clip?: SourceClip | null }
+    return { ...rest, clips: [{ ...legacy, role: 'main' as const }] }
+  }),
+})
 
 export default function ScriptArchitect() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
@@ -93,7 +105,7 @@ export default function ScriptArchitect() {
       if (typeof data.educationalMode === 'boolean') setEducationalMode(data.educationalMode)
       if (data.result)              setResult(data.result)
       if (data.lastParams)          lastParamsRef.current = data.lastParams
-      if (data.shotPlan)            setShotPlan(data.shotPlan)
+      if (data.shotPlan)            setShotPlan(migrateShotPlan(data.shotPlan))
       if (data.shotLang === 'my' || data.shotLang === 'vi') setShotLang(data.shotLang)
       // Only restore the shots view if a plan actually came back with it.
       if (data.view === 'shots' && data.shotPlan) setView('shots')

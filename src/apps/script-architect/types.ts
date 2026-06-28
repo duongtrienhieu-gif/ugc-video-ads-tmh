@@ -110,6 +110,23 @@ export interface SourceClip {
   platform: string
 }
 
+/** An operator-attached source clip on a shot. Wraps a raw SourceClip with the
+ *  per-shot editing metadata the export needs:
+ *   - role: which clip leads this beat ('main') vs alternates also shipped ('backup').
+ *   - inSec/outSec: the cut window the operator actually wants (the 4-5s out of a
+ *     40-50s spy clip). EXPORTED AS A HINT ONLY — the full clip still ships so the
+ *     operator fine-trims in CapCut (decision: Hướng A, no server-side cutting).
+ *   - needsReplace: operator flagged this as a rough/"pick đại" choice to revisit. */
+export interface ShotClip extends SourceClip {
+  role: 'main' | 'backup'
+  /** Cut-in point, seconds. undefined = from the clip start (0). */
+  inSec?: number
+  /** Cut-out point, seconds. undefined = inSec + the shot's duration (computed at export). */
+  outSec?: number
+  /** True = operator picked it only roughly; still needs a better clip. */
+  needsReplace?: boolean
+}
+
 /** B4 — AI-rendered CTA assets (only the ai-render / CTA shot uses this). */
 export interface CtaRender {
   /** Offer / milestone text baked into the frame (e.g. "Beli 2 Percuma 1"). NO price. */
@@ -140,9 +157,11 @@ export interface Shot {
   durationSec: number
   fill: ShotFill
   matchMode: ShotMatchMode
-  /** Operator-picked source clip for this shot (source-* fills only). The CTA
-   *  (ai-render) shot is generated in B4, not sourced, so it stays null. */
-  clip?: SourceClip | null
+  /** Operator-picked source clips for this shot (source-* fills only). Multiple
+   *  allowed — one scene can carry 2-3 b-roll options that ALL ship to CapCut so
+   *  the operator cuts by hand ("bung cả"). The CTA (ai-render) shot is generated
+   *  in B4, not sourced, so it stays empty. */
+  clips?: ShotClip[]
   /** AI-rendered CTA assets (ai-render shot only; B4). null for source shots. */
   ctaRender?: CtaRender | null
 }
