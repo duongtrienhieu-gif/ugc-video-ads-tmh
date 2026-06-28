@@ -20,7 +20,7 @@ export const config = { maxDuration: 60 }
 
 const DEFAULTS = {
   tong: '19KaRjRgg0YhT8RBFfDbI25iF9wp7HKxaFZaqiS6ObfU',
-  qlhb: '1pUpdOh1mzJDtbaRRfQ55AciUJibqtRSYp1atRyW6_PM',
+  qlhb: '1i9InE4s_GAvP6aSUiXivPch8ME2mL7Vk4MszMw0Jvp0', // NG (file nhẹ) — QLHB giờ do /api/qlhb đọc
   kho: '1Bf5KPkPkM5VXs_W5xzjSpsri0YmdmxqguMbZZxkC9Fs',
   sale: '1vSy4LHxx6WeFysdMJNT0c7473RNmpo8bKuRZvMueqtE',
   nhaphang: '1amJrEI5Z279_4ALWIco3oZETrB4F77cpkD1zSXENrg8',

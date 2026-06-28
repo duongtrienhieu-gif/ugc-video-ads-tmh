@@ -8,7 +8,7 @@ import * as XLSX from 'xlsx'
 
 export const config = { maxDuration: 60 }
 
-const DEFAULT_QLHB = '1pUpdOh1mzJDtbaRRfQ55AciUJibqtRSYp1atRyW6_PM'
+const DEFAULT_QLHB = '1i9InE4s_GAvP6aSUiXivPch8ME2mL7Vk4MszMw0Jvp0' // NG (nhẹ hơn TMH; cột tự dò nên file nào cũng được)
 function extractId(s: string) { const m = s.match(/\/d\/([a-zA-Z0-9_-]{20,})/); return m ? m[1] : s.trim() }
 function num(v: unknown): number {
   if (typeof v === 'number') return v
@@ -45,40 +45,72 @@ async function cacheWrite(payload: Record<string, unknown>): Promise<void> {
   } catch { /* cache lỗi không phá response */ }
 }
 
-// QLHB "Tỉ lệ sản phẩm" → hoàn Cách A theo SP. B=tên H=pending J=return L=returned R=tổng
+// ── TỰ DÒ CỘT theo tiêu đề (Pending/Return/Returned/Delivery/Paid/Total) ─────────
+// File TMH và NG xếp cột lệch nhau (DS ở H,J,L,R vs G,I,K,Q) + hàng tiêu đề ở vị trí
+// khác → KHÔNG hardcode. Cột DS = cột-nhãn-trạng-thái + 1 (cặp [SL SP, DS], DS đứng sau).
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+interface DsCols { pend?: string; ret?: string; rted?: string; deliv?: string; paid?: string; tong?: string; headerRow: number }
+function locateCols(ws: XLSX.WorkSheet): DsCols {
+  const cellL = (c: string, r: number) => String(ws[`${c}${r}`]?.v ?? '').trim().toLowerCase()
+  let headerRow = -1
+  for (let hr = 1; hr <= 4; hr++) {
+    const labels = LETTERS.map((c) => cellL(c, hr))
+    if (labels.some((l) => l.includes('pending')) && labels.some((l) => l.includes('total') || l.includes('tổng'))) { headerRow = hr; break }
+  }
+  if (headerRow < 0) return { pend: 'H', ret: 'J', rted: 'L', tong: 'R', deliv: 'N', paid: 'P', headerRow: 4 } // fallback kiểu TMH
+  const dsAfter = (match: (l: string) => boolean): string | undefined => {
+    for (let i = 0; i < LETTERS.length - 1; i++) { if (match(cellL(LETTERS[i], headerRow))) return LETTERS[i + 1] }
+    return undefined
+  }
+  return {
+    pend: dsAfter((l) => l === 'pending'),
+    ret: dsAfter((l) => l === 'return'),
+    rted: dsAfter((l) => l === 'returned'),
+    deliv: dsAfter((l) => l === 'delivery'),
+    paid: dsAfter((l) => l === 'paid'),
+    tong: dsAfter((l) => l === 'total' || l === 'tổng' || l.includes('tổng') || l.includes('total')),
+    headerRow,
+  }
+}
+const SKIP_NAME = new Set(['', 'brand', 'product', 'province', 'tổng', 'total', 'sản phẩm', 'tỉnh'])
+
+// QLHB "Tỉ lệ sản phẩm" → hoàn Cách A theo SP. hoàn = (return+returned)/(total−pending) [DS]
 function buildHoanMap(ws: XLSX.WorkSheet): Record<string, number> {
-  const g = (col: string, r: number) => num(ws[`${col}${r}`]?.v)
+  const C = locateCols(ws)
+  const g = (col: string | undefined, r: number) => (col ? num(ws[`${col}${r}`]?.v) : 0)
   const map: Record<string, number> = {}
-  for (let r = 5; r <= 1100; r++) {
+  for (let r = C.headerRow + 1; r <= 1100; r++) {
     const nm = String(ws[`B${r}`]?.v ?? '').trim()
-    if (!nm) continue
-    const pend = g('H', r), ret = g('J', r), rted = g('L', r), tong = g('R', r)
-    const resolved = tong - pend
-    if (resolved > 0) map[nm.toUpperCase()] = (ret + rted) / resolved
+    if (!nm || SKIP_NAME.has(nm.toLowerCase())) continue
+    const resolved = g(C.tong, r) - g(C.pend, r)
+    if (resolved > 0) map[nm.toUpperCase()] = (g(C.ret, r) + g(C.rted, r)) / resolved
   }
   return map
 }
-// QLHB "Tỉ lệ sản phẩm" → tiền theo trạng thái đơn. H=pending J=return L=returned N=delivery P=paid
+// QLHB "Tỉ lệ sản phẩm" → tiền theo trạng thái đơn (cộng DS toàn bộ SP)
 function parseCashflow(ws: XLSX.WorkSheet) {
-  const g = (col: string, r: number) => num(ws[`${col}${r}`]?.v)
+  const C = locateCols(ws)
+  const g = (col: string | undefined, r: number) => (col ? num(ws[`${col}${r}`]?.v) : 0)
   let pendingDS = 0, returnDS = 0, returnedDS = 0, deliveryDS = 0, paidDS = 0, blanks = 0
-  for (let r = 5; r <= 1100; r++) {
+  for (let r = C.headerRow + 1; r <= 1100; r++) {
     const name = String(ws[`B${r}`]?.v ?? '').trim()
     if (!name) { if (++blanks > 8) break; continue }
     blanks = 0
-    pendingDS += g('H', r); returnDS += g('J', r); returnedDS += g('L', r); deliveryDS += g('N', r); paidDS += g('P', r)
+    if (SKIP_NAME.has(name.toLowerCase())) continue
+    pendingDS += g(C.pend, r); returnDS += g(C.ret, r); returnedDS += g(C.rted, r); deliveryDS += g(C.deliv, r); paidDS += g(C.paid, r)
   }
   return { pendingDS, returnDS, returnedDS, deliveryDS, paidDS }
 }
-// QLHB "Tỉ lệ tỉnh" → bom hàng theo tỉnh. B=tỉnh G=pending I=return K=returned Q=tổng
+// QLHB "Tỉ lệ tỉnh" → bom hàng theo tỉnh (B=tỉnh; DS cột tự dò như trên)
 function parseProvinces(ws: XLSX.WorkSheet) {
-  const g = (col: string, r: number) => num(ws[`${col}${r}`]?.v)
+  const C = locateCols(ws)
+  const g = (col: string | undefined, r: number) => (col ? num(ws[`${col}${r}`]?.v) : 0)
   const acc: Record<string, { pend: number; ret: number; rted: number; tong: number }> = {}
-  for (let r = 5; r <= 1100; r++) {
+  for (let r = C.headerRow + 1; r <= 1100; r++) {
     const p = String(ws[`B${r}`]?.v ?? '').trim()
-    if (!p || p === 'Province') continue
+    if (!p || SKIP_NAME.has(p.toLowerCase())) continue
     const o = acc[p] || (acc[p] = { pend: 0, ret: 0, rted: 0, tong: 0 })
-    o.pend += g('G', r); o.ret += g('I', r); o.rted += g('K', r); o.tong += g('Q', r)
+    o.pend += g(C.pend, r); o.ret += g(C.ret, r); o.rted += g(C.rted, r); o.tong += g(C.tong, r)
   }
   return Object.entries(acc)
     .map(([ten, o]) => { const resolved = o.tong - o.pend; return { ten, doanhSoRM: o.tong, hoanRate: resolved > 0 ? (o.ret + o.rted) / resolved : 0 } })
