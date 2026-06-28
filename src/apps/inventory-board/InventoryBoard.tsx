@@ -370,41 +370,6 @@ export default function InventoryBoard() {
           <div style={{ ...panelStyle, textAlign: 'center', color: C.muted, fontSize: 14 }}>● Đang tải dữ liệu kho từ Google Sheet...</div>
         )}
 
-        {/* ⚡ VIỆC CẦN LÀM GẤP */}
-        {feed.length > 0 && (
-          <div style={panelStyle}>
-            <div style={eyebrowStyle}>⚡ VIỆC CẦN LÀM GẤP · {feed.length}</div>
-            <div style={{ fontSize: 12, color: C.muted, margin: '6px 0 4px' }}>Nối kho × ads × lãi — xếp theo độ cháy túi.</div>
-            {feed.map((a, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '9px 0', borderTop: i ? `1px solid ${C.line2}` : 'none' }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', marginTop: 6, flexShrink: 0, background: a.tone === 'red' ? C.red : C.amber }} />
-                <div><div style={{ fontSize: 13.5, fontWeight: 500, color: C.text }}>{a.title}</div><div style={{ fontSize: 12.5, color: C.muted2 }}>{a.reason}</div></div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* 💰 BUỒNG LÁI VỐN */}
-        {(cockpit.vonNhap > 0 || cockpit.eDong > 0 || cashflow) && (
-          <div style={panelStyle}>
-            <div style={eyebrowStyle}>💰 BUỒNG LÁI VỐN</div>
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit,minmax(180px,1fr))', gap: 10, margin: '10px 0 0' }}>
-              {[
-                { l: 'Vốn CẦN nhập', v: fmtMoney(cockpit.vonNhap), c: C.gold, sub: 'để không đứt hàng' },
-                { l: 'Tiền COD đang KẸT', v: cashflow ? fmtMoney(cockpit.tienKet) : '—', c: C.amber, sub: cashflow ? `dự kiến thu ~${fmtMoney(cockpit.duKienThu)}` : 'chưa đọc được QLHB' },
-                { l: 'Vốn ĐỌNG ở hàng ế', v: fmtMoney(cockpit.eDong), c: C.muted2, sub: 'thanh lý để lấy vốn' },
-              ].map((k) => (
-                <div key={k.l} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '12px 14px', minWidth: 0 }}>
-                  <div style={{ fontSize: 10, letterSpacing: 1, color: C.muted, marginBottom: 5 }}>{k.l}</div>
-                  <div style={{ fontSize: 18, fontWeight: 600, color: k.c, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{k.v}</div>
-                  <div style={{ fontSize: 10, color: C.muted, marginTop: 3 }}>{k.sub}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>Cần nhập <b style={{ color: C.muted2 }}>{fmtMoney(cockpit.vonNhap)}</b>{cashflow ? <> · đang kẹt <b style={{ color: C.muted2 }}>{fmtMoney(cockpit.tienKet)}</b> ngoài đường</> : null} · đọng <b style={{ color: C.muted2 }}>{fmtMoney(cockpit.eDong)}</b> ở hàng ế. Mẹo: thanh lý hàng ế để có vốn nhập thay vì bơm thêm tiền.</div>
-          </div>
-        )}
-
         {/* ĐỀ XUẤT NHẬP HÀNG */}
         {restock.length > 0 && (
           <div style={panelStyle}>
@@ -440,7 +405,7 @@ export default function InventoryBoard() {
         )}
         </>)}
 
-        {tab === 'profit' && <ProfitTruth products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} />}
+        {tab === 'profit' && <ProfitTruth products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} feed={feed} cockpit={cockpit} hasCashflow={!!cashflow} />}
 
         {tab === 'calc' && <PriceCalc products={products} priceVnd={priceVnd} inv={inv} />}
       </div>
