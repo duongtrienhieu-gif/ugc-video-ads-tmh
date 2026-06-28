@@ -10,6 +10,7 @@ import {
 import { fetchFile } from '@ffmpeg/util'
 import { textToSpeech } from '../../../utils/elevenlabs'
 import { getFFmpeg } from '../../video-builder/v3/services/ffmpegLoader'
+import { renderCaptionPng } from './personifiedCaption'
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
 import type { PersonifiedScene, PersonifiedCharacter, VoiceProfile } from '../types'
 import { type RenderTier, CINEMATIC_STYLE, CHARACTER_SHEET_STYLE } from '../constants'
@@ -320,21 +321,27 @@ export async function addSceneVoiceover(p: VoiceoverSceneParams): Promise<Voiceo
   p.onStage?.('tts', { audioRef })
   if (p.signal?.aborted) throw new Error('CANCELLED — user hủy')
 
-  // ── 2. Ghép voiceover vào clip i2v (ffmpeg.wasm — 0 credit) ────────────────
+  // ── 2. Ghép voiceover + BURN caption thoại vào clip (ffmpeg.wasm — 0 credit) ──
   const clipUrl = isAssetRef(p.clipRef) ? await getUrl(p.clipRef) : p.clipRef
   if (!clipUrl) throw new Error('Không lấy được URL clip i2v')
   p.onStage?.('mux', { audioRef })
+  const capPng = await renderCaptionPng(text)   // caption thoại vàng + viền đen (lower-third)
   const ffmpeg = await getFFmpeg()
-  const vIn = 'vo_in.mp4', aIn = 'vo_in.mp3', out = 'vo_out.mp4'
+  const vIn = 'vo_in.mp4', aIn = 'vo_in.mp3', cIn = 'vo_cap.png', out = 'vo_out.mp4'
   await ffmpeg.writeFile(vIn, await fetchFile(clipUrl))
   await ffmpeg.writeFile(aIn, audioBytes)
-  // Giữ video (copy), thay audio = giọng; -shortest cắt theo clip (clip đã sized theo thoại).
+  await ffmpeg.writeFile(cIn, capPng)
+  // scale2ref: caption PNG co về đúng kích thước clip → overlay full-frame; thay audio = giọng.
+  // Overlay buộc re-encode video (không copy được). -shortest cắt theo clip (đã sized theo thoại).
   await ffmpeg.exec([
-    '-i', vIn, '-i', aIn,
-    '-map', '0:v:0', '-map', '1:a:0',
-    '-c:v', 'copy', '-c:a', 'aac', '-ar', '44100', '-ac', '2',
+    '-i', vIn, '-i', aIn, '-i', cIn,
+    '-filter_complex', '[2:v][0:v]scale2ref=iw:ih[cap][vid];[vid][cap]overlay=0:0[v]',
+    '-map', '[v]', '-map', '1:a:0',
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-ar', '44100', '-ac', '2',
     '-shortest', '-movflags', '+faststart', '-y', out,
   ])
+  await ffmpeg.deleteFile(cIn).catch(() => {})
   const data = await ffmpeg.readFile(out)
   const src = typeof data === 'string' ? new TextEncoder().encode(data) : data
   const outBytes = new Uint8Array(src.byteLength)   // copy khỏi SharedArrayBuffer (wasm)

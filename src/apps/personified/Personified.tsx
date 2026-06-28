@@ -730,16 +730,16 @@ export default function Personified() {
                                   <div className="flex flex-wrap items-center gap-2 border-t border-black/5 pt-1.5">
                                     <button onClick={() => handleVoiceoverScene(s)} disabled={lipBusy || renderingAll || !elevenKey}
                                       className="flex items-center gap-1 rounded bg-fuchsia-600 px-2 py-1 text-[11px] font-bold text-white transition-colors hover:bg-fuchsia-700 disabled:opacity-40"
-                                      title={!elevenKey ? 'Cần ElevenLabs key (giọng)' : 'TTS giọng nhân vật → ghép voiceover vào clip (0 credit KIE)'}>
+                                      title={!elevenKey ? 'Cần ElevenLabs key (giọng)' : 'TTS giọng + burn caption thoại (vàng) vào clip (0 credit KIE)'}>
                                       {lip === 'tts'
                                         ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang tạo giọng…</>
                                         : lip === 'mux'
-                                        ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang ghép giọng…</>
+                                        ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang ghép giọng+caption…</>
                                         : lip === 'done'
                                         ? <><RefreshCw className="h-3 w-3" /> Lồng giọng lại</>
-                                        : <>🎙️ Lồng giọng</>}
+                                        : <>🎙️ Lồng giọng + caption</>}
                                     </button>
-                                    {lip === 'done' && <span className="text-[10px] font-semibold text-fuchsia-600">✅ đã có giọng</span>}
+                                    {lip === 'done' && <span className="text-[10px] font-semibold text-fuchsia-600">✅ giọng + caption</span>}
                                     {lip === 'failed' && <span className="text-[10px] text-rose-600">⚠ {clips[s.idx]?.lipError?.slice(0, 80)}</span>}
                                     {!elevenKey && <span className="text-[10px] text-amber-600">cần key ElevenLabs</span>}
                                   </div>
