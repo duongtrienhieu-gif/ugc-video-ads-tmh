@@ -127,8 +127,10 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
       catch { body = imageUrl.startsWith('data:') ? { base64: imageUrl } : { imageUrl } }
       const d = await fetch('/api/rapid-1688?action=search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json())
       if (d.error) { setImgErr(d.error + (d.detail ? ` — ${String(d.detail).slice(0, 120)}` : '')); setImgBusy(false); return }
-      setImgProducts(Array.isArray(d.products) ? d.products : [])
-      if (!d.products?.length) setImgErr(d.note || 'Không tìm thấy SP khớp ảnh — thử ảnh nền sạch hơn')
+      const list: ImgProduct[] = Array.isArray(d.products) ? d.products : []
+      setImgProducts(list)
+      if (!list.length) setImgErr(d.note || 'Không tìm thấy SP khớp ảnh — thử ảnh nền sạch hơn')
+      else void findClips(list[0].title)   // upload → ra VIDEO luôn (clip của SP khớp #1)
     } catch (e) { setImgErr((e as Error).message) } finally { setImgBusy(false) }
   }
   const openDetail = async (itemId: string) => {
@@ -314,6 +316,20 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
                 <span className="text-xs font-semibold text-app-text">Clip Douyin: <b>{clipQuery}</b></span>
                 {clips ? <span className="text-[11px] text-app-muted">· {clips.length} clip</span> : null}
               </div>
+              {/* SP khớp ảnh: đổi SP nhanh hoặc xem ảnh/video gốc */}
+              {imgProducts && imgProducts.length > 0 && (
+                <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+                  {imgProducts.map((p) => (
+                    <div key={p.itemId} className={`flex shrink-0 items-center gap-1.5 rounded-lg border p-1 pr-2 ${clipQuery === p.title ? 'border-app-border-strong bg-app-card-elevated' : 'border-app-border bg-app-card'}`}>
+                      <button onClick={() => void findClips(p.title)} className="flex items-center gap-1.5" title="Xem clip SP này">
+                        <img src={p.image} alt="" className="h-9 w-9 rounded object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden' }} />
+                        <span className="text-[10px] text-app-muted">{p.sold ? `🔥${p.sold}` : ''}</span>
+                      </button>
+                      <button onClick={() => void openDetail(p.itemId)} className="rounded border border-app-border px-1 text-[10px] text-app-muted hover:bg-app-card" title="Ảnh/video gốc">🎬</button>
+                    </div>
+                  ))}
+                </div>
+              )}
               {clipsBusy && <div className="py-10 text-center text-sm text-app-muted">🤖 Đang lấy clip Douyin…</div>}
               {clipsErr && !clipsBusy && <p className="rounded-lg border border-app-border bg-app-card px-3 py-2 text-xs text-app-muted">{clipsErr}</p>}
               {clips && clips.length > 0 && (
