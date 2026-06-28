@@ -1,7 +1,7 @@
 // ── Lõi tính LÃI THẬT từng SP — dùng chung cho tab "Lãi thật/SP" + feed việc gấp ─
 // Công thức khớp máy tính giá: lãi% = 1 − ads% − vốn(trừ hoàn)% − ship − VH − hoàn%.
-// Tỷ giá 6500 (góc chủ — lãi thật về túi). Trả `tone` (không hex) để UI tự map màu.
-export const TY_GIA = 6500
+// Tỷ giá 5800 CỐ ĐỊNH (app cho nhân viên — doanh thu ×5800; dashboard là chuyện riêng).
+export const TY_GIA = 5800
 export const SHIP = 0.09, VH = 0.08, LN_TARGET = 0.10
 export const PACK_FACTOR = (name: string) => (name.trim().toUpperCase() === 'KNEE PAD' ? 2 : 1)
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n))

@@ -96,7 +96,7 @@ export default function ProfitTruth({ products, inv, velocity, priceVnd, feed, c
 
       <div style={panelStyle}>
         <div style={eyebrowStyle}>🔥 LÃI THẬT TỪNG SẢN PHẨM · {rows.length} mã</div>
-        <div style={{ fontSize: 12, color: C.muted, margin: '6px 0 10px' }}>Ghép giá vốn thật + %hoàn thật + %CPQC thật → lãi/đơn về túi (tỷ giá 6.500). Đèn suy ra tự động, không AI.</div>
+        <div style={{ fontSize: 12, color: C.muted, margin: '6px 0 10px' }}>Ghép giá vốn thật + %hoàn thật + %CPQC thật → lãi/đơn (tỷ giá 5.800). Đèn suy ra tự động, không AI.</div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 680 }}>
             <thead>

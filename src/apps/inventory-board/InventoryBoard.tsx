@@ -3,14 +3,14 @@
 // từ dashboard bao-cao-cty sang UGC Lab cho nhân viên xem. Read-only.
 // Dữ liệu lấy qua serverless /api/inventory-board (đọc 6 Google Sheet công khai).
 // Logic restock + invRows port nguyên văn từ dashboard.tsx (đã verify ~20 vòng).
-// Tỷ giá cố định 6500, giá vốn gốc file 5800 (BOOK_RATE) — bỏ 3 ô input của dashboard.
+// Tỷ giá cố định 5800 (app cho nhân viên — doanh thu ×5800; dashboard là chuyện riêng).
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import PriceCalc from './PriceCalc'
 import ProfitTruth from './ProfitTruth'
 import { computeProfit } from './profitCalc'
 
-const TY_GIA = 6500
+const TY_GIA = 5800
 const PACK_FACTOR = (name: string) => (name.trim().toUpperCase() === 'KNEE PAD' ? 2 : 1)
 
 const C = {
