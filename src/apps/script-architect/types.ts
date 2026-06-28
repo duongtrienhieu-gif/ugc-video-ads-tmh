@@ -110,6 +110,16 @@ export interface SourceClip {
   platform: string
 }
 
+/** B4 — AI-rendered CTA assets (only the ai-render / CTA shot uses this). */
+export interface CtaRender {
+  /** Offer / milestone text baked into the frame (e.g. "Beli 2 Percuma 1"). NO price. */
+  offer: string
+  /** gpt-4o-image result URL (KIE CDN) — the still closing frame. */
+  imageUrl?: string
+  /** Seedance i2v result URL (KIE CDN) — the animated clip. */
+  videoUrl?: string
+}
+
 export interface Shot {
   id: string
   /** Malay voice line — the MAIN line (MY is the primary market). */
@@ -133,6 +143,8 @@ export interface Shot {
   /** Operator-picked source clip for this shot (source-* fills only). The CTA
    *  (ai-render) shot is generated in B4, not sourced, so it stays null. */
   clip?: SourceClip | null
+  /** AI-rendered CTA assets (ai-render shot only; B4). null for source shots. */
+  ctaRender?: CtaRender | null
 }
 
 export interface ShotPlan {

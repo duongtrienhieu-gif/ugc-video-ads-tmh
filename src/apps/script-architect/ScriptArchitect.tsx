@@ -194,6 +194,7 @@ export default function ScriptArchitect() {
           <ShotPlanPanel
             plan={shotPlan}
             productName={selectedProduct?.productName ?? null}
+            product={selectedProduct}
             isBuilding={isBuildingShots}
             onChange={setShotPlan}
             onRebuild={() => void buildShotPlan(shotLang)}

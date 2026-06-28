@@ -1,7 +1,10 @@
 import { useState } from 'react'
-import { ArrowLeft, RotateCcw, Loader2, Scissors, ArrowDownToLine, Trash2, ChevronUp, ChevronDown, Clapperboard, Film, Sparkles, Search, Play, RefreshCw, X } from 'lucide-react'
-import type { Shot, ShotPlan, ShotBlock, ShotFill, ScriptLanguage, SourceClip } from '../types'
+import { ArrowLeft, RotateCcw, Loader2, Scissors, ArrowDownToLine, Trash2, ChevronUp, ChevronDown, Clapperboard, Film, Sparkles, Search, Play, RefreshCw, X, ImageIcon, Video, AlertTriangle } from 'lucide-react'
+import type { Shot, ShotPlan, ShotBlock, ShotFill, ScriptLanguage, SourceClip, CtaRender } from '../types'
+import type { Product } from '../../../stores/types'
 import { estimateDuration, DEFAULT_FILL_BY_BLOCK } from '../services/splitIntoShots'
+import { renderCtaImage, renderCtaVideo, CTA_IMAGE_CREDITS, CTA_VIDEO_CREDITS } from '../services/renderCtaShot'
+import { useSettingsStore } from '../../../stores/settingsStore'
 
 // ── Co-pilot scene-split table (Phase B / B2) ────────────────────────────
 // Controlled: parent owns the ShotPlan and re-persists on every onChange.
@@ -14,6 +17,8 @@ import { estimateDuration, DEFAULT_FILL_BY_BLOCK } from '../services/splitIntoSh
 interface ShotPlanPanelProps {
   plan: ShotPlan
   productName: string | null
+  /** Full product — needed by B4 CTA render (images + offer + visual brief). */
+  product: Product | null
   isBuilding: boolean
   onChange: (plan: ShotPlan) => void
   onRebuild: () => void
@@ -77,7 +82,7 @@ function genId(): string {
 const matchForFill = (fill: ShotFill): Shot['matchMode'] => (fill === 'source-product' ? 'product-exact' : 'broad')
 
 export default function ShotPlanPanel({
-  plan, productName, isBuilding, onChange, onRebuild, onLanguageChange, onBack,
+  plan, productName, product, isBuilding, onChange, onRebuild, onLanguageChange, onBack,
 }: ShotPlanPanelProps) {
   // Source-clip controls (panel-wide): which platform to search, length filter,
   // and the full-screen video preview popup.
@@ -269,6 +274,9 @@ export default function ShotPlanPanel({
                 onPlay={setPlayClip}
                 onPickClip={(c) => patchShot(s.id, { clip: c })}
                 onClearClip={() => patchShot(s.id, { clip: null })}
+                product={product}
+                lang={lang}
+                onChangeCta={(r) => patchShot(s.id, { ctaRender: r })}
               />
             ))}
           </div>
@@ -339,6 +347,10 @@ interface ShotCardProps {
   onPlay: (c: SourceClip) => void
   onPickClip: (c: SourceClip) => void
   onClearClip: () => void
+  // CTA AI render wiring (B4)
+  product: Product | null
+  lang: ScriptLanguage
+  onChangeCta: (r: CtaRender) => void
 }
 
 function ShotCard(p: ShotCardProps) {
@@ -474,10 +486,13 @@ function ShotCard(p: ShotCardProps) {
       {/* Source section */}
       <div className="mt-2.5 border-t border-app-border pt-2.5">
         {isAiRender ? (
-          <div className="flex items-center gap-2 rounded-lg border border-dashed bg-app-surface px-3 py-2 text-[11px] text-app-muted" style={{ borderColor: 'var(--color-accent)' }}>
-            <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-accent)' }} />
-            <span>Cảnh CTA — sẽ tạo bằng AI ở bước B4 (sản phẩm + ưu đãi + hộp quà). Không tìm source.</span>
-          </div>
+          <CtaRenderPanel
+            shot={shot}
+            product={p.product}
+            lang={p.lang}
+            ctaLine={p.primaryText}
+            onChangeCta={p.onChangeCta}
+          />
         ) : (
           <ShotSourcePicker
             shot={shot}
@@ -645,6 +660,159 @@ function ShotSourcePicker(p: ShotSourcePickerProps) {
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+// ── CTA AI render panel (B4) ──────────────────────────────────────────────
+// Only the single ai-render (CTA) shot uses this. Two-step, credit-aware:
+//   1) Tạo ảnh CTA  — gpt-4o-image still (product-locked + offer badge + closed
+//      mystery gift box, NO price). Operator approves the look.
+//   2) Làm động → video — Seedance i2v animates that still into a 9:16 clip.
+// The offer text defaults to the product's bank offer and is editable. Rendered
+// asset URLs are pinned on the shot (shot.ctaRender) so they persist + feed B5.
+
+interface CtaRenderPanelProps {
+  shot: Shot
+  product: Product | null
+  lang: ScriptLanguage
+  ctaLine: string
+  onChangeCta: (r: CtaRender) => void
+}
+
+function CtaRenderPanel(p: CtaRenderPanelProps) {
+  const hasKie = useSettingsStore((s) => s.hasApiKey())
+  const getKie = useSettingsStore((s) => s.getApiKey)
+
+  const existing = p.shot.ctaRender ?? null
+  const [offer, setOffer] = useState(existing?.offer ?? p.product?.offer ?? '')
+  const [busy, setBusy] = useState<null | 'image' | 'video'>(null)
+  const [stage, setStage] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+
+  const imageUrl = existing?.imageUrl
+  const videoUrl = existing?.videoUrl
+
+  const doImage = async () => {
+    if (!p.product) { setErr('Chưa chọn sản phẩm.'); return }
+    if (!hasKie) { setErr('Chưa có API key kie.ai trong Cài đặt.'); return }
+    setBusy('image'); setErr(null); setStage('Bắt đầu…')
+    try {
+      const url = await renderCtaImage({
+        kieApiKey: getKie(),
+        product: p.product,
+        lang: p.lang,
+        ctaLine: p.ctaLine,
+        offer,
+        onStatus: setStage,
+      })
+      // New image invalidates any previously rendered video.
+      p.onChangeCta({ offer, imageUrl: url, videoUrl: undefined })
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(null); setStage('')
+    }
+  }
+
+  const doVideo = async () => {
+    if (!imageUrl) return
+    if (!hasKie) { setErr('Chưa có API key kie.ai trong Cài đặt.'); return }
+    setBusy('video'); setErr(null); setStage('Bắt đầu…')
+    try {
+      const url = await renderCtaVideo({ kieApiKey: getKie(), imageUrl, onStatus: setStage })
+      p.onChangeCta({ offer, imageUrl, videoUrl: url })
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(null); setStage('')
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-1.5 text-[11px] font-bold text-app-muted">
+        <Sparkles className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} />
+        Cảnh CTA — tạo bằng AI (sản phẩm + ưu đãi + hộp quà bí mật, không giá)
+      </div>
+
+      {/* Offer input */}
+      <label className="flex items-center gap-1.5 rounded-lg border border-app-border bg-app-surface px-2 py-1" title="Ưu đãi / mốc khuyến mãi nướng vào ảnh — KHÔNG hiện giá">
+        <span className="shrink-0 text-[11px] text-app-subtle">Ưu đãi:</span>
+        <input
+          value={offer}
+          onChange={(e) => setOffer(e.target.value)}
+          placeholder="VD: Beli 2 Percuma 1 (không ghi giá)"
+          className="w-full bg-transparent text-[11px] text-app-text outline-none placeholder:text-app-faint"
+        />
+      </label>
+
+      {!hasKie && (
+        <div className="flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-600">
+          <AlertTriangle className="h-3 w-3 shrink-0" /> Cần API key kie.ai trong Cài đặt để render.
+        </div>
+      )}
+
+      {/* Render previews */}
+      {(imageUrl || videoUrl) && (
+        <div className="flex gap-2">
+          {imageUrl && (
+            <div className="w-28 shrink-0">
+              <div className="aspect-[9/16] w-full overflow-hidden rounded-lg bg-black/40">
+                <img src={imageUrl} alt="CTA" className="h-full w-full object-cover" loading="lazy" />
+              </div>
+              <button
+                onClick={() => proxyDownload(imageUrl, `cta-${safeName(p.product?.productName ?? 'sp')}.png`)}
+                className="mt-1 flex w-full items-center justify-center gap-1 rounded px-1.5 py-1 text-[10px] font-bold text-app-muted hover:bg-app-card-elevated"
+              >
+                <ArrowDownToLine className="h-3 w-3" /> Ảnh
+              </button>
+            </div>
+          )}
+          {videoUrl && (
+            <div className="min-w-0 flex-1">
+              <video src={proxyInline(videoUrl)} controls playsInline className="aspect-[9/16] max-h-64 rounded-lg bg-black" />
+              <button
+                onClick={() => proxyDownload(videoUrl, `cta-${safeName(p.product?.productName ?? 'sp')}.mp4`)}
+                className="mt-1 flex items-center gap-1 rounded px-1.5 py-1 text-[10px] font-bold text-app-muted hover:bg-app-card-elevated"
+              >
+                <ArrowDownToLine className="h-3 w-3" /> Tải video
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          onClick={doImage}
+          disabled={!!busy || !p.product || !hasKie}
+          className="ui-accent-soft flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold disabled:opacity-40"
+        >
+          {busy === 'image' ? <Loader2 className="h-3 w-3 animate-spin" /> : imageUrl ? <RefreshCw className="h-3 w-3" /> : <ImageIcon className="h-3 w-3" />}
+          {imageUrl ? 'Tạo lại ảnh' : 'Tạo ảnh CTA'}
+          <span className="opacity-70">· {CTA_IMAGE_CREDITS} cr</span>
+        </button>
+        {imageUrl && (
+          <button
+            onClick={doVideo}
+            disabled={!!busy || !hasKie}
+            className="flex items-center gap-1.5 rounded-lg border border-app-border bg-app-card px-2.5 py-1 text-[11px] font-bold text-app-text hover:bg-app-card-elevated disabled:opacity-40"
+          >
+            {busy === 'video' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Video className="h-3 w-3" />}
+            {videoUrl ? 'Làm động lại' : 'Làm động → video'}
+            <span className="opacity-70">· {CTA_VIDEO_CREDITS} cr</span>
+          </button>
+        )}
+      </div>
+
+      {busy && stage && (
+        <p className="flex items-center gap-1.5 text-[10px] text-app-subtle">
+          <Loader2 className="h-3 w-3 animate-spin" /> {stage}
+        </p>
+      )}
+      {err && <p className="text-[10px] text-rose-500">{err}</p>}
     </div>
   )
 }
