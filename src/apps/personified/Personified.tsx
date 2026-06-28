@@ -265,6 +265,11 @@ export default function Personified() {
     if (!script) return 0
     return script.scenes.filter((s) => clips[s.idx]?.clipRef && (s.dialoguePrimary ?? '').trim() && clips[s.idx]?.lipStatus !== 'done').length
   }, [script, clips])
+  // Số cảnh ĐÃ lồng giọng rồi (để bật nút "Lồng LẠI tất cả" khi đổi giọng sau khi lỡ chạy).
+  const voicedDoneCount = useMemo(() => {
+    if (!script) return 0
+    return script.scenes.filter((s) => clips[s.idx]?.lipStatus === 'done').length
+  }, [script, clips])
   // P2d — số cảnh đã có clip (để ghép). Bằng tổng cảnh = đủ; ít hơn = ghép phần đã render.
   const clipCount = useMemo(() => script ? script.scenes.filter((s) => clips[s.idx]?.clipRef).length : 0, [script, clips])
   // Độ dài THẬT dự kiến của video cuối = tổng giọng (cảnh đã lồng giọng) + render-length cảnh
@@ -771,15 +776,17 @@ export default function Personified() {
     }
   }
 
-  // P2c — lồng giọng TẤT CẢ cảnh có clip + có thoại + chưa lồng.
-  async function handleVoiceoverAll() {
+  // P2c — lồng giọng TẤT CẢ cảnh có clip + có thoại. force=true → lồng LẠI cả cảnh đã xong
+  //   (dùng khi đổi giọng sau khi lỡ chạy — TTS + ghép lại bằng giọng MỚI, 0 credit KIE).
+  async function handleVoiceoverAll(force = false) {
     if (!script || renderingAll) return
     if (!elevenKey) { setError('Thiếu ElevenLabs API key (giọng) trong Cài đặt'); return }
+    if (force && !window.confirm('Lồng LẠI giọng cho TẤT CẢ cảnh bằng giọng đang chọn hiện tại? (0 credit KIE, chỉ tốn ElevenLabs + thời gian ghép)')) return
     setRenderingAll(true)
     try {
       const todo = script.scenes.filter((s) => {
         const c = clips[s.idx]
-        return c?.clipRef && (s.dialoguePrimary ?? '').trim() && c.lipStatus !== 'done'
+        return c?.clipRef && (s.dialoguePrimary ?? '').trim() && (force || c.lipStatus !== 'done')
       })
       await runPool(todo, 3, (s) => handleVoiceoverScene(s))
     } finally { setRenderingAll(false) }
@@ -1022,11 +1029,19 @@ export default function Personified() {
                 {renderingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang chạy…</> : <>🎬 Clip + giọng tất cả{kfReadyCount > 0 && ` (${kfReadyCount})`}</>}
               </button>
               {/* P2c — lồng giọng tất cả cảnh có clip + thoại (TTS + ghép ffmpeg, 0 credit KIE) */}
-              <button onClick={handleVoiceoverAll} disabled={renderingAll || !elevenKey || lipReadyCount === 0}
+              <button onClick={() => handleVoiceoverAll(false)} disabled={renderingAll || !elevenKey || lipReadyCount === 0}
                 className="flex items-center gap-1 rounded-lg bg-fuchsia-600 px-3 py-1.5 font-bold text-white transition-colors hover:bg-fuchsia-700 disabled:opacity-40"
                 title={!elevenKey ? 'Cần ElevenLabs key (giọng) trong Cài đặt' : lipReadyCount > 0 ? `Lồng giọng ${lipReadyCount} cảnh (TTS, 0 credit KIE)` : 'Render clip i2v trước'}>
                 {renderingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang chạy…</> : <>🎙️ Lồng giọng tất cả{lipReadyCount > 0 && ` (${lipReadyCount})`}</>}
               </button>
+              {/* Lồng LẠI tất cả (ép) — dùng khi đổi giọng SAU KHI đã chạy (vd lỡ ra giọng nữ). 0 credit KIE. */}
+              {voicedDoneCount > 0 && (
+                <button onClick={() => handleVoiceoverAll(true)} disabled={renderingAll || !elevenKey}
+                  className="flex items-center gap-1 rounded-lg border border-fuchsia-400 bg-fuchsia-50 px-3 py-1.5 font-bold text-fuchsia-700 transition-colors hover:bg-fuchsia-100 disabled:opacity-40"
+                  title="Lồng LẠI giọng cho mọi cảnh bằng giọng đang chọn hiện tại (sau khi đổi giọng). 0 credit KIE.">
+                  {renderingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang chạy…</> : <>🔁 Lồng lại tất cả</>}
+                </button>
+              )}
               {/* P2d — ghép video cuối (nối clip + upscale 720p) */}
               <button onClick={handleAssemble} disabled={finalVideo.status === 'running' || clipCount === 0}
                 className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 font-bold text-white transition-colors hover:bg-emerald-700 disabled:opacity-40"
