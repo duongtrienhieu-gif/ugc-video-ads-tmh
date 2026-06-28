@@ -409,6 +409,7 @@ export default function Personified() {
     try {
       const sc = await generateScript(product, market, config, insight, geminiKey, nextVariant)
       setScript(sc); setVariant(nextVariant); setClips({}); setCharBank({}); setFinalVideo({ status: 'idle' })   // kịch bản mới → bỏ clip + bank + video cũ
+      bankRefs.current = {}; bankInflight.current = {}; kfInflight.current = {}   // xóa cache tiến trình render cũ
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Tạo kịch bản lỗi')
     } finally {
@@ -561,37 +562,48 @@ export default function Personified() {
   }
 
   // P2b — render bank cho TẤT CẢ nhân vật chưa có (pool 3 song song). Làm trước khi render cảnh.
+  //   Gọi cho MỌI nhân vật: đã xong → bỏ qua tức thì, đang chạy → ĐỢI (không submit lại).
   async function handleRenderAllChars() {
     if (!script || bankRunning) return
     if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
     setBankRunning(true)
     try {
-      const missing = script.characters.filter((c) => charBank[c.name]?.status !== 'done')
-      await runPool(missing, 3, (c) => handleRenderCharacterRef(c))
+      await runPool(script.characters, 3, (c) => handleRenderCharacterRef(c))
     } finally { setBankRunning(false) }
   }
 
   // P2a — BƯỚC 1: render keyframe (ảnh tĩnh, rẻ) để DUYỆT trước i2v. → status 'kf_ready'.
-  //   Nếu nhân vật đã có ảnh trong Character Bank → truyền làm ref khóa diện mạo (P2b).
-  async function handleRenderKeyframe(scene: PersonifiedScene, bankOverride?: Record<string, string>) {
+  //   #2 — khóa diện mạo theo NHÂN VẬT XUẤT HIỆN (pickSceneVisuals), KHÔNG theo speaker →
+  //   cảnh sản phẩm dùng ảnh bank HERO; cảnh đối đầu khóa cả 2. force = bấm "Đổi keyframe".
+  async function handleRenderKeyframe(scene: PersonifiedScene, bankOverride?: Record<string, string>, force = false) {
     if (!script) return
     if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
-    if (clips[scene.idx]?.status === 'kf' || clips[scene.idx]?.status === 'clip') return
-    const character = script.characters.find((c) => c.name === scene.speaker || c.role === scene.speaker) ?? script.characters[0]
-    // Ưu tiên ref bank vừa render (bankOverride) → tránh stale state trong chuỗi bank→keyframe.
-    const charRef = character ? (bankOverride?.[character.name] ?? charBank[character.name]?.refImage) : undefined
+    // #1 — đang render dở → ĐỢI chính nó (không submit lại). Đã có KF mà không force → bỏ qua.
+    const inflight = kfInflight.current[scene.idx]
+    if (inflight) return inflight
+    const st = clips[scene.idx]?.status
+    if (!force && (st === 'kf' || st === 'clip')) return
+    const refOf = (name?: string) => name ? (bankOverride?.[name] ?? bankRefs.current[name] ?? charBank[name]?.refImage) : undefined
+    const { main, extra } = pickSceneVisuals(scene, script.characters)
     setClips((p) => ({ ...p, [scene.idx]: { status: 'kf' } }))
-    try {
-      const { keyframeRef } = await renderKeyframe({
-        apiKey: kieKey, scene, character,
-        characterRef: charRef,
-        productRefs: scene.hasProduct ? productRefs : [],
-        worldEnv: script.worldEnv,
-      })
-      setClips((p) => ({ ...p, [scene.idx]: { status: 'kf_ready', keyframeRef } }))
-    } catch (e) {
-      setClips((p) => ({ ...p, [scene.idx]: { status: 'failed', error: e instanceof Error ? e.message : String(e) } }))
-    }
+    const task = (async () => {
+      try {
+        const { keyframeRef } = await renderKeyframe({
+          apiKey: kieKey, scene, character: main,
+          characterRef: refOf(main?.name),
+          extraCharacter: extra, extraCharacterRef: refOf(extra?.name),
+          productRefs: scene.hasProduct ? productRefs : [],
+          worldEnv: script.worldEnv,
+        })
+        setClips((p) => ({ ...p, [scene.idx]: { status: 'kf_ready', keyframeRef } }))
+      } catch (e) {
+        setClips((p) => ({ ...p, [scene.idx]: { status: 'failed', error: e instanceof Error ? e.message : String(e) } }))
+      } finally {
+        delete kfInflight.current[scene.idx]
+      }
+    })()
+    kfInflight.current[scene.idx] = task
+    return task
   }
 
   // P2a — BƯỚC 2: i2v từ keyframe ĐÃ DUYỆT (tốn credit). resumeTaskId = nối lại job sau F5.
@@ -656,22 +668,23 @@ export default function Personified() {
     }
   }
 
-  // P2a — STORYBOARD: RÀNG BUỘC — render Character Bank (khóa nhân vật) XONG TRƯỚC, rồi mới
-  //   keyframe (dùng ảnh bank → nhất quán, không sinh nhân vật tự do). Bỏ qua cảnh đã có KF.
+  // P2a — STORYBOARD: RÀNG BUỘC — Character Bank (khóa nhân vật) XONG TRƯỚC, rồi mới keyframe.
+  //   #1 — NỐI TIẾP từ tiến trình hiện có: cái đang render (manual/all) thì ĐỢI, cái xong thì
+  //   BỎ QUA, chỉ chạy cái thiếu/lỗi — KHÔNG chạy lại từ đầu. (Không guard cứng bankRunning nữa.)
   async function handleRenderAllKeyframes() {
-    if (!script || renderingAll || bankRunning) return
+    if (!script || renderingAll) return
     if (!kieKey) { setError('Thiếu KIE API key trong Cài đặt'); return }
     setRenderingAll(true)
     try {
-      // BƯỚC 1: đảm bảo MỌI nhân vật có ảnh bank (pool 3) → gom map ref TƯƠI.
-      const bankMap: Record<string, string> = {}
-      for (const [n, b] of Object.entries(charBank)) if (b.refImage) bankMap[n] = b.refImage
+      // BƯỚC 1: đảm bảo MỌI nhân vật có ảnh bank (pool 3). handleRenderCharacterRef idempotent:
+      // xong → trả ngay · đang chạy → ĐỢI chính nó · thiếu/lỗi → render. Gom map ref TƯƠI.
+      const bankMap: Record<string, string> = { ...bankRefs.current }
       setBankRunning(true)
       try {
-        const missing = script.characters.filter((c) => !bankMap[c.name])
-        await runPool(missing, 3, async (c) => { const ref = await handleRenderCharacterRef(c); if (ref) bankMap[c.name] = ref })
+        await runPool(script.characters, 3, async (c) => { const ref = await handleRenderCharacterRef(c); if (ref) bankMap[c.name] = ref })
       } finally { setBankRunning(false) }
-      // BƯỚC 2: keyframe storyboard (pool 3) — truyền bankMap để chắc chắn dùng ảnh bank vừa render.
+      // BƯỚC 2: keyframe storyboard (pool 3). Bỏ cảnh đã có KF (kf_ready/done); cảnh ĐANG render
+      // (kf) vẫn đưa vào để handleRenderKeyframe ĐỢI promise đang chạy (không submit lại).
       const todo = script.scenes.filter((s) => {
         const st = clips[s.idx]?.status
         return !(st === 'kf_ready' || st === 'clip' || st === 'done')
@@ -1046,7 +1059,13 @@ export default function Personified() {
                         title={clips[s.idx]?.voiceSec ? `Render ${s.clipDuration}s · ghép còn ${clips[s.idx]!.voiceSec!.toFixed(1)}s theo giọng` : `Render ${s.clipDuration}s`}>
                         {clips[s.idx]?.voiceSec ? `${clips[s.idx]!.voiceSec!.toFixed(1)}s` : `${s.clipDuration}s`}
                       </span>
-                      <span className="w-20 shrink-0 truncate text-[11px] text-gray-400">{s.speaker}</span>
+                      {/* #2 — hiện NHÂN VẬT TRONG KHUNG (main + phụ) chứ không phải người nói → thấy rõ
+                          hero xuất hiện ở cảnh sản phẩm. Tooltip ghi cả giọng (speaker). */}
+                      {(() => {
+                        const v = pickSceneVisuals(s, script.characters)
+                        const names = [v.main?.name, v.extra?.name].filter(Boolean).join(' + ')
+                        return <span className="w-20 shrink-0 truncate text-[11px] text-gray-400" title={`Trong khung: ${names || '—'} · 🎙️ Giọng: ${s.speaker}`}>{names || s.speaker}</span>
+                      })()}
                       <span className="flex-1 truncate text-xs text-gray-900">"{s.dialoguePrimary}"</span>
                       <span className="w-6 shrink-0 text-center text-[11px]" title={`${clips[s.idx]?.status ?? ''}${clips[s.idx]?.lipStatus ? ' · lip:' + clips[s.idx]?.lipStatus : ''}`}>
                         {clips[s.idx]?.lipStatus === 'tts' || clips[s.idx]?.lipStatus === 'mux' ? '🎙️'
@@ -1084,14 +1103,16 @@ export default function Personified() {
                         {(() => {
                           const st = clips[s.idx]?.status
                           const busy = st === 'kf' || st === 'clip'
-                          const sceneChar = script.characters.find((c) => c.name === s.speaker || c.role === s.speaker)
-                          const charLocked = !!(sceneChar && charBank[sceneChar.name]?.refImage)
+                          // #2 — nhân vật khóa diện mạo = nhân vật TRONG KHUNG (main + phụ), không phải speaker.
+                          const { main, extra } = pickSceneVisuals(s, script.characters)
+                          const visChars = [main, extra].filter((c): c is PersonifiedCharacter => !!c)
+                          const unlocked = visChars.filter((c) => !charBank[c.name]?.refImage)
                           return (
                             <div className="space-y-1.5 pt-1">
-                              {sceneChar && (
-                                charLocked
-                                  ? <div className="text-[10px] font-semibold text-emerald-600">🎭 Khóa diện mạo "{sceneChar.name}" từ bank</div>
-                                  : <div className="text-[10px] text-amber-600">🎭 "{sceneChar.name}" chưa có ảnh bank → mặt có thể lệch giữa các cảnh. Tạo bank ở tab Nhân vật trước.</div>
+                              {visChars.length > 0 && (
+                                unlocked.length === 0
+                                  ? <div className="text-[10px] font-semibold text-emerald-600">🎭 Khóa diện mạo từ bank: {visChars.map((c) => `"${c.name}"`).join(' + ')}</div>
+                                  : <div className="text-[10px] text-amber-600">🎭 {unlocked.map((c) => `"${c.name}"`).join(', ')} chưa có ảnh bank → mặt có thể lệch giữa các cảnh. Tạo bank ở tab Nhân vật trước.</div>
                               )}
                               <div className="flex flex-wrap items-center gap-2">
                                 {/* Bước 1 — keyframe (luôn có; khi đã có ảnh thì là "Đổi keyframe" / re-roll) */}
