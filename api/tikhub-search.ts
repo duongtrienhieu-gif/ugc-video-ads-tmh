@@ -102,18 +102,15 @@ function pickRenderableCover(node: unknown): string {
   const any = urls.filter((u) => !junk(u))
   return any[0] || ''
 }
-// DEBUG ONLY: gom các string URL ảnh (kèm tên field) để soi field cover thật của Kuaishou/XHS.
-function sampleImgFields(node: unknown, out: string[], seen: Set<unknown>, depth = 0) {
-  if (!node || typeof node !== 'object' || depth > 9 || seen.has(node) || out.length >= 30) return
-  seen.add(node)
-  if (Array.isArray(node)) { for (const x of node) sampleImgFields(x, out, seen, depth + 1); return }
-  const o = node as AnyObj
-  for (const k in o) {
-    const v = o[k]
-    if (typeof v === 'string' && /^https?:/i.test(v) && /\.(jpe?g|png|webp|kvif|heic|avif|gif)(\?|$)/i.test(v)) {
-      if (out.length < 30) out.push(`${k} = ${v.slice(0, 80)}`)
-    } else if (v && typeof v === 'object') sampleImgFields(v, out, seen, depth + 1)
+// thời lượng "M:SS"/"H:MM:SS" (XHS App V2) hoặc số (giây/ms) → giây
+function durFromAny(v: unknown): number {
+  if (typeof v === 'number') return durSec(v)
+  if (typeof v === 'string') {
+    const m = v.trim().match(/^(?:(\d+):)?(\d{1,2}):(\d{2})$/)
+    if (m) return (Number(m[1] || 0) * 3600) + (Number(m[2]) * 60) + Number(m[3])
+    const n = Number(v); if (!Number.isNaN(n)) return durSec(n)
   }
+  return 0
 }
 // gom node theo điều kiện (không đệ quy vào node đã khớp → tránh trùng lồng nhau)
 function collectBy(node: unknown, pred: (o: AnyObj) => boolean, out: AnyObj[], seen: Set<unknown>, depth = 0) {
@@ -196,21 +193,25 @@ async function tikGet(key: string, url: string): Promise<PageResult> {
 // ── XIAOHONGSHU / RED (小红书) — search notes, chỉ note video ──
 function mapXhs(data: AnyObj): Clip[] {
   const items: AnyObj[] = []
-  collectBy(data, (o) => (o.note_card != null && typeof o.note_card === 'object') || (o.note_id != null && (o.display_title != null || o.desc != null)), items, new Set())
+  // App V2: data.items[].note (note.id/type/desc/images_list/video_info_v2). Phòng thủ shape web cũ note_card.
+  collectBy(data, (o) => (o.note != null && typeof o.note === 'object') || (o.note_card != null && typeof o.note_card === 'object'), items, new Set())
   return items.map((w) => {
-    const nc = (typeof w.note_card === 'object' && w.note_card ? w.note_card : w) as AnyObj
+    const nc = (typeof w.note === 'object' && w.note ? w.note : typeof w.note_card === 'object' && w.note_card ? w.note_card : w) as AnyObj
     const user = (nc.user as AnyObj) || {}
     const interact = (nc.interact_info as AnyObj) || {}
-    const id = String(w.id ?? w.note_id ?? nc.note_id ?? nc.id ?? '')
-    const videoUrl = deepVideoUrl(nc)
-    const cover = asUrl(nc.cover) || asUrl(nc.image_list) || asUrl(nc.images_list) || deepImageUrl(nc)
-    const tok = w.xsec_token ? `?xsec_token=${String(w.xsec_token)}&xsec_source=pc_search` : ''
+    const id = String(nc.id ?? nc.note_id ?? w.id ?? w.note_id ?? '')
+    const videoUrl = deepVideoUrl(nc)   // mp4 nằm trong video_info_v2 — deep-scan ra
+    const imgs = nc.images_list ?? nc.image_list
+    const firstImg = Array.isArray(imgs) && imgs[0] ? (imgs[0] as AnyObj) : null
+    const cover = asUrl(firstImg ? firstImg.url ?? firstImg.url_size_large : '') || asUrl(nc.cover) || asUrl(imgs) || deepImageUrl(nc)
+    const token = String(w.xsec_token ?? nc.xsec_token ?? '')
+    const tok = token ? `?xsec_token=${token}&xsec_source=pc_search` : ''
     return {
       id, videoUrl, cover,
       desc: String(nc.display_title ?? nc.title ?? nc.desc ?? '').slice(0, 160),
       author: String(user.nickname ?? user.nick_name ?? user.name ?? ''),
-      likes: parseCount(interact.liked_count ?? interact.liked ?? nc.likes),
-      durationSec: durSec(deepVal(nc, /duration/i)),
+      likes: parseCount(nc.liked_count ?? nc.nice_count ?? interact.liked_count ?? interact.liked ?? nc.likes),
+      durationSec: durFromAny(nc.video_duration ?? deepVal(nc, /duration/i)),
       shareUrl: id ? `https://www.xiaohongshu.com/explore/${id}${tok}` : '',
       platform: 'xhs',
     }
@@ -328,24 +329,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     cursor: String(cursor),
     hasMore,
     platform,
-    ...(debug ? (() => {
-      const dbg: AnyObj = { pages, topKeys: firstData ? Object.keys(firstData) : [] }
-      // tìm note đầu tiên + dump field video/keys để biết có url phát được không
-      if (firstData) {
-        const notes: AnyObj[] = []
-        collectBy(firstData, (o) => o.note != null && typeof o.note === 'object', notes, new Set())
-        const n0 = (notes[0]?.note ?? notes[0]) as AnyObj | undefined
-        if (n0) {
-          dbg.noteKeys = Object.keys(n0)
-          dbg.noteVideo = JSON.stringify(n0.video ?? {}).slice(0, 2500)
-          dbg.deepVid = deepVideoUrl(n0)
-        }
-        const vids: AnyObj[] = []
-        collectBy(firstData, (o) => typeof o.url === 'string' && /\.(mp4|m3u8)/i.test(String(o.url)), vids, new Set())
-        dbg.anyMp4 = JSON.stringify(vids.map((o) => String(o.url)).slice(0, 3)).slice(0, 400)
-      }
-      return dbg
-    })() : {}),
+    ...(debug ? { pages, topKeys: firstData ? Object.keys(firstData) : [] } : {}),
     note: out.length ? undefined : `Không có clip ${platform} — đổi từ khóa${maxSec ? ' hoặc bỏ lọc <60s' : ''}`,
   })
 }
