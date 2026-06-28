@@ -185,7 +185,9 @@ function nextDouyin(data: AnyObj, cursor: string): NextCursor {
   const next = deepVal(data, /^cursor$/i)
   const hm = deepVal(data, /has_more|hasmore/i)
   if (next == null || String(next) === cursor) return { cursor: null, hasMore: false }
-  return { cursor: String(next), hasMore: truthy(hm) }
+  // has_more vắng mặt (Douyin nhiều lúc không trả) → còn cursor kế thì coi như còn trang
+  // (giống quy ước RED). Chỉ ẩn nút khi TikHub báo has_more=false rõ ràng.
+  return { cursor: String(next), hasMore: hm === undefined ? true : truthy(hm) }
 }
 
 // ── TIKTOK (thị trường MY/global) — APP V3 search video, offset-based, GET ──
@@ -212,10 +214,12 @@ function nextTiktok(data: AnyObj, cursor: string): NextCursor {
   const cur = Number(cursor) || 0
   const next = deepVal(data, /^cursor$/i)
   const hm = deepVal(data, /has_more|hasmore/i)
-  // TikTok web trả cursor (offset kế). Thiếu cursor → tự cộng offset 20 nếu has_more.
-  if (next == null) return { cursor: String(cur + 20), hasMore: truthy(hm) }
+  // App V3 nhiều lúc KHÔNG trả has_more → mặc định còn (giống RED), chỉ ẩn nút khi báo false rõ.
+  const more = hm === undefined ? true : truthy(hm)
+  // TikTok web trả cursor (offset kế). Thiếu cursor → tự cộng offset 20.
+  if (next == null) return { cursor: String(cur + 20), hasMore: more }
   if (String(next) === cursor) return { cursor: null, hasMore: false }
-  return { cursor: String(next), hasMore: truthy(hm) }
+  return { cursor: String(next), hasMore: more }
 }
 
 // ── GET chung cho XHS/Kuaishou ──
