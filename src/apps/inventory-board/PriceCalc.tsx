@@ -132,6 +132,16 @@ export default function PriceCalc({ products, priceVnd, inv, velocity }: { produ
     }
   }, [combos, tyGia, giaVonSp, chotPct, hoanPct, shipPct, vanHanhPct, lnTargetPct, cpaLead, soDon])
 
+  // số ĐÍCH thực tế của SP đang pick (AOV RM + upsell) — để dò combo cho khớp
+  const realRef = useMemo(() => {
+    if (!fromProd) return null
+    const key = fromProd.trim().toUpperCase()
+    const p = products.find((x) => x.name.trim().toUpperCase() === key)
+    const it = inv.find((x) => x.ten.trim().toUpperCase() === key)
+    if (!p || p.c2 <= 0) return null
+    return { name: p.name, aovRM: p.rmRevenue / p.c2, upsell: it && it.ban > 0 ? it.ban / p.c2 : 0 }
+  }, [fromProd, products, inv])
+
   const pnlRows: { label: string; val: string; c?: string; bold?: boolean; hi?: boolean }[] = [
     { label: 'Doanh số chốt đơn', val: '100%' },
     { label: '🎯 Quảng cáo (%CPQC)', val: fmtPct(r.adsPct), c: r.adsPct > r.cpqcTarget ? C.red : C.green, hi: true },
@@ -184,6 +194,11 @@ export default function PriceCalc({ products, priceVnd, inv, velocity }: { produ
       {/* ② COMBO */}
       <div style={{ ...panelStyle, marginBottom: 0 }}>
         <div style={eyebrowStyle}>② COMBO — SP giao (gồm tặng) · Giá khách trả (RM) · % đơn</div>
+        {realRef && (
+          <div style={{ fontSize: 12, color: C.muted2, background: 'rgba(245,196,81,0.07)', border: '1px solid #3a3414', borderRadius: 8, padding: '8px 11px', margin: '8px 0 2px', lineHeight: 1.5 }}>
+            📦 Đích thực tế của <b style={{ color: C.gold }}>{realRef.name}</b>: AOV <b style={{ color: C.text }}>{realRef.aovRM.toFixed(1)} RM/đơn</b>{realRef.upsell > 0 ? <> · upsell <b style={{ color: C.text }}>{realRef.upsell.toFixed(2)} SP/đơn</b></> : null} — chỉnh % combo tới khi 2 ô dưới khớp số này (data không tách sẵn % từng gói nên phải tự dò).
+          </div>
+        )}
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 460 }}>
             <thead>
@@ -219,14 +234,15 @@ export default function PriceCalc({ products, priceVnd, inv, velocity }: { produ
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginTop: 14 }}>
           {[
-            { l: 'AOV thực tế (RM/đơn)', v: fmtRM(r.aovRM) },
-            { l: 'AOV = Doanh số chốt/đơn', v: fmtMoney(r.aovVnd), gold: true },
-            { l: 'Upsell thực tế (SP/đơn)', v: r.upsell.toFixed(2) },
-            { l: 'Giá vốn thực tế / đơn', v: fmtMoney(r.giaVonDon) },
+            { l: 'AOV thực tế (RM/đơn)', v: fmtRM(r.aovRM), gold: false, dich: realRef ? `đích ${realRef.aovRM.toFixed(1)}` : '', ok: realRef ? Math.abs(r.aovRM - realRef.aovRM) <= Math.max(2, realRef.aovRM * 0.05) : false },
+            { l: 'AOV = Doanh số chốt/đơn', v: fmtMoney(r.aovVnd), gold: true, dich: '', ok: false },
+            { l: 'Upsell thực tế (SP/đơn)', v: r.upsell.toFixed(2), gold: false, dich: realRef && realRef.upsell > 0 ? `đích ${realRef.upsell.toFixed(2)}` : '', ok: realRef && realRef.upsell > 0 ? Math.abs(r.upsell - realRef.upsell) <= 0.25 : false },
+            { l: 'Giá vốn thực tế / đơn', v: fmtMoney(r.giaVonDon), gold: false, dich: '', ok: false },
           ].map((k) => (
             <div key={k.l} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px' }}>
               <div style={{ fontSize: 10, letterSpacing: 1, color: C.muted, marginBottom: 5 }}>{k.l}</div>
               <div style={{ fontSize: 17, fontWeight: 600, color: k.gold ? C.gold : C.text }}>{k.v}</div>
+              {k.dich && <div style={{ fontSize: 10, marginTop: 3, color: k.ok ? C.green : C.amber }}>{k.ok ? '✓ khớp · ' : '🎯 '}{k.dich}</div>}
             </div>
           ))}
         </div>
