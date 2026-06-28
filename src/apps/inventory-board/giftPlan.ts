@@ -76,8 +76,8 @@ export function computePlan(cat: GiftCat, master: GiftMaster[], live: Live | und
   const cpqcTarget = 1 - LN_TARGET - (aovW > 0 ? vonNetW / aovW : 0) - SHIP - VH - hoan
   const quaTB = tc.reduce((s, t) => s + t.pctDon * t.quaCheo, 0) / sumP
   const chinhTB = tc.reduce((s, t) => s + t.pctDon * (t.mua + t.tangChinh), 0) / sumP
-  const soDonMaxQua = gift && quaTB > 0 ? Math.floor(gift.ton / quaTB) : Infinity
-  const soDonMaxChinh = chinhTB > 0 ? Math.floor(mainTon / chinhTB) : Infinity
+  const soDonMaxQua = gift && quaTB > 0 ? Math.max(0, Math.floor(gift.ton / quaTB)) : Infinity
+  const soDonMaxChinh = chinhTB > 0 ? Math.max(0, Math.floor(mainTon / chinhTB)) : Infinity // tồn chính ≤ 0 (nợ) → 0 đơn
   const soDonMax = Math.min(soDonMaxQua, soDonMaxChinh)
 
   return {
