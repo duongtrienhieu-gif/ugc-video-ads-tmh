@@ -2,7 +2,7 @@
 // Mỗi card = 1 SP đang test. Nút mở thẳng Spy / Kịch bản / Video / Ladipage.
 // Dùng chung cả đội (Supabase test_products). Web = 4 cột; mobile = pill + list dọc.
 import { useEffect, useMemo, useState } from 'react'
-import { useWarStore, type TestProduct } from './store'
+import { useWarStore, memberEmails, type TestProduct } from './store'
 import { useAppStore } from '../../stores/appStore'
 
 const C = {
@@ -49,13 +49,20 @@ export default function TestPipeline({ isCEO, userEmail }: { isCEO: boolean; use
   const [name, setName] = useState(''); const [niche, setNiche] = useState(''); const [owner, setOwner] = useState(''); const [spy, setSpy] = useState('')
   useEffect(() => { const f = () => setMob(window.innerWidth < 760); f(); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) }, [])
 
+  const myMember = members.find((m) => memberEmails(m).includes(userEmail.trim().toLowerCase()))
+  const myId = myMember?.id ?? null
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.name ?? '—'
-  const filtered = useMemo(() => (ownerFilter === 'all' ? tests : tests.filter((t) => t.owner_id === ownerFilter)), [tests, ownerFilter])
+  // Nhân viên CHỈ thấy SP test của CHÍNH MÌNH; CEO thấy hết (+ lọc theo người).
+  const filtered = useMemo(() => {
+    if (!isCEO) return tests.filter((t) => t.owner_id === myId)
+    return ownerFilter === 'all' ? tests : tests.filter((t) => t.owner_id === ownerFilter)
+  }, [tests, ownerFilter, isCEO, myId])
   const byStage = (st: string) => filtered.filter((t) => t.stage === st)
 
   const add = () => {
     if (!name.trim()) return
-    void addTest({ name: name.trim(), niche: niche.trim() || null, stage: 'idea', outcome: null, owner_id: owner || null, spy_link: spy.trim() || null, note: null, data: null, cpa: null, chot: null, hoan: null, created_by: userEmail })
+    const ownerId = isCEO ? (owner || null) : myId // nhân viên TỰ sở hữu SP test, không giao ai khác
+    void addTest({ name: name.trim(), niche: niche.trim() || null, stage: 'idea', outcome: null, owner_id: ownerId, spy_link: spy.trim() || null, note: null, data: null, cpa: null, chot: null, hoan: null, created_by: userEmail })
     setName(''); setNiche(''); setSpy('')
   }
 
@@ -72,12 +79,16 @@ export default function TestPipeline({ isCEO, userEmail }: { isCEO: boolean; use
           <button onClick={() => void deleteTest(t.id)} title="xoá" style={{ background: 'transparent', color: C.muted, border: 'none', fontSize: 14, cursor: 'pointer' }}>✕</button>
         </div>
 
-        {/* người phụ trách + link spy */}
+        {/* người phụ trách (CEO đổi được; nhân viên khoá vào mình) + link spy */}
         <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-          <select value={t.owner_id ?? ''} onChange={(e) => void updateTest(t.id, { owner_id: e.target.value || null })} style={{ ...inp, fontSize: 11, padding: '5px 7px', flex: 1, minWidth: 110 }}>
-            <option value="">— giao ai —</option>
-            {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
+          {isCEO ? (
+            <select value={t.owner_id ?? ''} onChange={(e) => void updateTest(t.id, { owner_id: e.target.value || null })} style={{ ...inp, fontSize: 11, padding: '5px 7px', flex: 1, minWidth: 110 }}>
+              <option value="">— giao ai —</option>
+              {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          ) : (
+            <span style={{ ...inp, fontSize: 11, padding: '5px 9px', color: C.muted2, flex: 1, minWidth: 110 }}>👤 {nameOf(t.owner_id)}</span>
+          )}
           {t.spy_link
             ? <a href={t.spy_link} target="_blank" rel="noreferrer" style={{ ...inp, fontSize: 11, padding: '5px 9px', color: C.gold, textDecoration: 'none' }}>↗ link</a>
             : null}
@@ -152,16 +163,18 @@ export default function TestPipeline({ isCEO, userEmail }: { isCEO: boolean; use
       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14, paddingBottom: 14, borderBottom: `1px solid ${C.line2}` }}>
         <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add() }} placeholder="Tên SP test..." style={{ ...inp, width: 150 }} />
         <input value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="ngách" style={{ ...inp, width: 110 }} />
-        <select value={owner} onChange={(e) => setOwner(e.target.value)} style={{ ...inp, fontSize: 12 }}><option value="">— giao ai —</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
+        {isCEO && <select value={owner} onChange={(e) => setOwner(e.target.value)} style={{ ...inp, fontSize: 12 }}><option value="">— giao ai —</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}
         <input value={spy} onChange={(e) => setSpy(e.target.value)} placeholder="link spy (tuỳ chọn)" style={{ ...inp, flex: 1, minWidth: 150 }} />
         <button onClick={add} style={{ background: C.gold, color: '#1a1405', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ Thêm SP</button>
-        <select value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)} style={{ ...inp, fontSize: 12 }}>
-          <option value="all">Lọc: tất cả</option>
-          {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
+        {isCEO && (
+          <select value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)} style={{ ...inp, fontSize: 12 }}>
+            <option value="all">Lọc: tất cả</option>
+            {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        )}
       </div>
 
-      {!isCEO && <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>Bảng dùng chung cả đội — ai cũng thêm/sửa được SP test của mình.</div>}
+      {!isCEO && <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>🔒 Đây là SP test của <b style={{ color: C.muted2 }}>{myMember?.name ?? 'bạn'}</b> — chỉ bạn thấy & quản, CEO theo dõi cùng. Bạn không giao/soi được SP của người khác.</div>}
 
       {mob ? (
         <>
