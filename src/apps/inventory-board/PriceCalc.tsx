@@ -176,8 +176,10 @@ export default function PriceCalc({ products, priceVnd, inv }: { products: ProdL
         </div>
       </div>
 
+      {/* ②③ combo + lợi nhuận chung 1 hàng cho gọn */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.25fr 1fr', gap: 14, marginBottom: 14, alignItems: 'start' }}>
       {/* ② COMBO */}
-      <div style={panelStyle}>
+      <div style={{ ...panelStyle, marginBottom: 0 }}>
         <div style={eyebrowStyle}>② COMBO — SP giao (gồm tặng) · Giá khách trả (RM) · % đơn</div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 460 }}>
@@ -229,7 +231,7 @@ export default function PriceCalc({ products, priceVnd, inv }: { products: ProdL
       </div>
 
       {/* ③ BẢNG LỢI NHUẬN */}
-      <div style={panelStyle}>
+      <div style={{ ...panelStyle, marginBottom: 0 }}>
         <div style={eyebrowStyle}>③ ⭐ BẢNG LỢI NHUẬN DỰ KIẾN (% trên doanh số chốt)</div>
         {pnlRows.map((row, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderTop: i ? `1px solid ${C.line2}` : 'none', fontSize: row.bold ? 15 : 13.5 }}>
@@ -237,6 +239,7 @@ export default function PriceCalc({ products, priceVnd, inv }: { products: ProdL
             <span style={{ color: row.c ?? C.text, fontWeight: row.bold ? 700 : 500 }}>{row.val}</span>
           </div>
         ))}
+      </div>
       </div>
 
       {/* ④ THAM CHIẾU — care ads */}
