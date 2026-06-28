@@ -118,6 +118,7 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
   const [clipsCursor, setClipsCursor] = useState<string | null>(null)
   const [clipsHasMore, setClipsHasMore] = useState(false)
   const [moreBusy, setMoreBusy] = useState(false)
+  const [onlyShort, setOnlyShort] = useState(true)   // chỉ clip <60s (hợp cắt B-roll)
   // Popup phát video + popup ảnh/video gốc 1688
   const [playVid, setPlayVid] = useState<PlayVid | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -127,10 +128,11 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
   const copy = (t: string) => { navigator.clipboard?.writeText(t); addToast('Đã copy', 'success') }
   const safe = (s: string) => (s || 'sp').replace(/[^\w]+/g, '-').slice(0, 24)
 
-  const findClips = async (query: string, kind: 'product' | 'scene', key: string) => {
+  const findClips = async (query: string, kind: 'product' | 'scene', key: string, shortOverride?: boolean) => {
+    const short = shortOverride ?? onlyShort
     setClipFor({ kind, key, query }); setClips(null); setClipsErr(null); setClipsBusy(true); setClipsCursor(null); setClipsHasMore(false)
     try {
-      const d = await fetch(`/api/tikhub-search?q=${encodeURIComponent(query)}&sort=like`).then((r) => r.json())
+      const d = await fetch(`/api/tikhub-search?q=${encodeURIComponent(query)}&sort=like&maxSec=${short ? 60 : 0}`).then((r) => r.json())
       if (d.error) { setClipsErr(d.error + (d.detail ? ` — ${String(d.detail).slice(0, 160)}` : '')); setClipsBusy(false); return }
       setClips(Array.isArray(d.clips) ? d.clips : [])
       setClipsCursor(d.cursor ?? null); setClipsHasMore(!!d.hasMore)
@@ -141,7 +143,7 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
     if (!clipFor || !clipsCursor || moreBusy) return
     setMoreBusy(true)
     try {
-      const d = await fetch(`/api/tikhub-search?q=${encodeURIComponent(clipFor.query)}&sort=like&cursor=${encodeURIComponent(clipsCursor)}`).then((r) => r.json())
+      const d = await fetch(`/api/tikhub-search?q=${encodeURIComponent(clipFor.query)}&sort=like&maxSec=${onlyShort ? 60 : 0}&cursor=${encodeURIComponent(clipsCursor)}`).then((r) => r.json())
       const more: Clip[] = Array.isArray(d.clips) ? d.clips : []
       setClips((prev) => { const seen = new Set((prev || []).map((c) => c.id)); return [...(prev || []), ...more.filter((c) => !seen.has(c.id))] })
       setClipsCursor(d.cursor ?? null); setClipsHasMore(!!d.hasMore)
@@ -196,8 +198,10 @@ Mục tiêu: giúp marketer tìm NGUYÊN LIỆU VIDEO NGẮN để cắt ghép q
 Trả JSON tiếng Việt:
 - "productGuessVi": đoán sản phẩm này là gì (ngắn gọn).
 - "productKeywords": từ khóa để tìm CHÍNH sản phẩm này (clip người cầm/demo SP) — zh=tiếng Trung (cho Douyin/Kuaishou), ms=tiếng Malay, en=tiếng Anh; mỗi mảng 3-5 từ khóa NGẮN.
-- "scenes": 6-9 cảnh B-roll LIÊN QUAN, phủ các nhóm: "Vấn đề", "Cơ chế/thành phần", "Hành động/sử dụng", "Kết quả", "Cảm xúc", "3D/giải phẫu" (nếu hợp). Mỗi cảnh: group, emoji, idea (mô tả cảnh tiếng Việt), queries{zh,ms,en} (truy vấn search NGẮN 2-5 từ cho từng nền tảng).
-Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh. CHỈ trả JSON.`
+- "scenes": 6-9 cảnh B-roll minh hoạ TÌNH HUỐNG, phủ nhóm: "Vấn đề", "Cơ chế/thành phần", "Hành động/sử dụng", "Kết quả", "Cảm xúc", "3D/giải phẫu" (nếu hợp). Mỗi cảnh: group, emoji, idea (mô tả cảnh tiếng Việt), queries{zh,ms,en} (truy vấn search NGẮN 2-5 từ).
+  ⚠️ CỰC QUAN TRỌNG: cảnh B-roll **KHÔNG chứa sản phẩm, KHÔNG kèm tên/brand SP trong truy vấn** — chỉ mô tả VẤN ĐỀ / CẢM XÚC / HÀNH ĐỘNG / BỐI CẢNH chung để cắt làm nền.
+  Ví dụ SP "đai hỗ trợ đầu gối": Vấn đề → "đau đầu gối", "khó leo cầu thang", "đau chân người già" (KHÔNG có đai); Cảm xúc → "người già chạy nhảy vui vẻ", "ông bà tập thể dục"; Hành động → "đi bộ", "tập squat"; 3D → "giải phẫu khớp gối 3D".
+Cảnh phải THẬT/ĐỜI (kiểu UGC), không lung linh điện ảnh. CHỈ trả JSON.`
       let raw: string
       const inline = imageUrl ? await urlToInline(imageUrl) : null
       if (inline) {
@@ -304,6 +308,9 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không cảnh điện ảnh lung linh.
         <div className="flex shrink-0 items-center gap-2 border-b border-app-border bg-app-card px-4 py-2">
           <button onClick={() => setTab('product')} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'product' ? 'ui-accent-soft' : 'text-app-muted'}`}><Film className="h-3.5 w-3.5" /> Clip có SP</button>
           <button onClick={() => setTab('scenes')} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'scenes' ? 'ui-accent-soft' : 'text-app-muted'}`}><Clapperboard className="h-3.5 w-3.5" /> Cảnh B-roll liên quan</button>
+          <label className="ml-auto flex items-center gap-1.5 text-[11px] font-medium text-app-muted" title="Chỉ lấy clip ngắn để cắt B-roll">
+            <input type="checkbox" checked={onlyShort} onChange={(e) => { setOnlyShort(e.target.checked); if (clipFor) void findClips(clipFor.query, clipFor.kind, clipFor.key, e.target.checked) }} /> ⏱ Chỉ clip &lt;60s
+          </label>
         </div>
 
         {/* Body */}
