@@ -1,7 +1,7 @@
 // Spy Ads — creative QUẢNG CÁO video đối thủ từ Facebook Ad Library (ScrapeCreators).
 // Khác "Video win" (organic): đây là ad MKT đối thủ đang chạy → tải về dựng lại cho FB ads.
 // Win signal: đang ACTIVE + chạy lâu + advertiser nhiều ad. AI dịch VO + bóc kịch bản cắt ghép.
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Megaphone, Search, Play, Download, ExternalLink, X, Sparkles, Link2, FileText, PenLine, Target, Flame } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useBankStore } from '../../stores/bankStore'
@@ -13,9 +13,20 @@ interface FbAd {
   linkUrl: string; country: string; isActive: boolean; daysRunning: number
   advertiserAds: number; libraryUrl: string; likes?: number; ctr?: string
   variations?: number; cta?: string; platforms?: string[]; format?: string
-  reach?: number; spend?: string; currency?: string
+  reach?: number; spend?: string; currency?: string; durationSec?: number
 }
 const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : String(n))
+const fmtDur = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`
+const MAX_AD_SEC = 180   // CẤM video dài: chỉ giữ ad < 3 phút
+
+// Chặn bọn phim ngắn / ad cài app (mọi thị trường) — bắt theo tên page + link đích.
+// Cách 1: chỉ chặn ad CÀI APP (link store/web2app + CTA Install), KHÔNG giết chữ "app" trong text COD.
+const SPAM_RE = /short\s?(tv|max|drama)|drama\s?box|reel\s?short|good\s?short|net\s?short|flex\s?tv|mobo\s?reels|quick\s?short|shortty|shorttv|play\.google\.com|apps\.apple\.com|playstore|w2a\.|web2app|fbweb/i
+function isSpamAd(a: { page?: string; text?: string; linkUrl?: string; cta?: string }): boolean {
+  if (SPAM_RE.test(`${a.page || ''} ${a.text || ''} ${a.linkUrl || ''}`)) return true
+  if (/\binstall\b/i.test(a.cta || '')) return true   // CTA cài app
+  return false
+}
 interface AdRead { transcript: string; structure: string }
 interface LadiRead { headline: string; offer: string; structure: string; cta: string; steal: string }
 interface AdaptScript { hook: string; script: string; shots: string; caption: string }
@@ -116,6 +127,7 @@ export default function SpyAds() {
   const [hasMore, setHasMore] = useState(false)
   const [moreLoading, setMoreLoading] = useState(false)
   const [credits, setCredits] = useState<number | null>(null)
+  const [durMap, setDurMap] = useState<Record<string, number>>({}) // thời lượng FB đo ở client (id→giây)
 
   const [playAd, setPlayAd] = useState<FbAd | null>(null)
   const [readBusy, setReadBusy] = useState(false)
@@ -205,6 +217,16 @@ export default function SpyAds() {
       if (!list.length) setRadarErr('Không thấy SP — đổi ngách/nước')
     } catch (e) { setRadarErr((e as Error).message) } finally { setRadarLoading(false) }
   }
+
+  // Đổi quốc gia → BẮT BUỘC trả đúng nước đó: xoá cache 2 tab + tự tìm lại theo nước mới.
+  const firstCountry = useRef(true)
+  useEffect(() => {
+    if (firstCountry.current) { firstCountry.current = false; return }
+    adCache.current = { fb: { ads: null, cursor: null, hasMore: false, q: '' }, tiktok: { ads: null, cursor: null, hasMore: false, q: '' } }
+    if (mode === 'ads' && q.trim()) void search()
+    else if (mode === 'radar' && niche.trim()) void radarSearch()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [country])
 
   // Bước 2 — bắc cầu: từ 1 SP win → rút lõi từ khóa → spy ad của SP đó (luồng cũ).
   const spyProduct = (p: WinProduct) => {
@@ -355,6 +377,12 @@ CHỈ trả JSON.`
   // Lọc + sắp xếp: ladipage + bộ lọc nâng cao (ngày chạy / nền tảng / CTA) + sort.
   const shownAds = (() => {
     let r = ads || []
+    // Chặn phim ngắn / ad cài app (mọi nước, luôn bật).
+    r = r.filter((a) => !isSpamAd(a))
+    // CẤM video dài: bỏ ad >3 phút. TikTok có durationSec sẵn; FB đo ở client (durMap). Chưa đo xong → tạm hiện.
+    r = r.filter((a) => { const d = a.durationSec ?? durMap[a.id]; return d == null || d <= MAX_AD_SEC })
+    // Ép đúng quốc gia đã chọn (≠ALL): chỉ giữ ad đúng nước.
+    if (country !== 'ALL') r = r.filter((a) => !a.country || a.country.toUpperCase() === country)
     if (ladiOnly && platform === 'fb') r = r.filter((a) => !!a.linkUrl && linkKind(cleanLink(a.linkUrl)).web)
     if (platform === 'fb') {
       if (minDays > 0) r = r.filter((a) => (a.daysRunning || 0) >= minDays)
@@ -709,7 +737,13 @@ CHỈ trả JSON.`
                     {a.cover ? <img src={a.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
                     <Play className="absolute h-10 w-10 text-white/90 drop-shadow" />
                     {a.isActive && <span className="absolute left-1.5 top-1.5 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">● ĐANG CHẠY</span>}
+                    {(() => { const d = a.durationSec ?? durMap[a.id]; return d ? <span className="absolute bottom-1.5 right-1.5 rounded bg-black/75 px-1.5 py-0.5 text-[10px] font-bold text-white">⏱ {fmtDur(d)}</span> : null })()}
                   </button>
+                  {/* Probe đo thời lượng FB (API không trả) — ẩn, load metadata rồi tự rớt nếu >3 phút. */}
+                  {platform === 'fb' && a.videoUrl && a.durationSec == null && durMap[a.id] == null && (
+                    <video src={a.videoUrl} preload="metadata" muted className="pointer-events-none absolute h-px w-px opacity-0"
+                      onLoadedMetadata={(e) => { const s = e.currentTarget.duration; if (isFinite(s) && s > 0) setDurMap((m) => ({ ...m, [a.id]: Math.round(s) })) }} />
+                  )}
                   <div className="flex flex-1 flex-col gap-1 p-2.5">
                     <p className="line-clamp-1 text-xs font-semibold text-slate-700">{a.page || '(advertiser)'}</p>
                     <p className="line-clamp-2 text-[11px] text-slate-500">{a.text}</p>

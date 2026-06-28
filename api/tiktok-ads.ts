@@ -7,6 +7,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 const VALID_REGION = new Set(['MY', 'ID', 'TH', 'VN', 'PH', 'SG'])
 type AnyObj = Record<string, unknown>
+const MAX_AD_SEC = 180   // CẤM video dài: chỉ giữ ad < 3 phút
+// Chặn phim ngắn / ad cài app (mọi thị trường) — bắt theo tên brand + tiêu đề.
+const SPAM_RE = /short\s?(tv|max|drama)|drama\s?box|reel\s?short|good\s?short|net\s?short|flex\s?tv|mobo\s?reels|quick\s?short|shortty|shorttv|play\.google\.com|apps\.apple\.com|playstore|w2a\.|web2app|fbweb/i
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const key = process.env.SC_KEY
@@ -62,6 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           page: brand,
           text: String(a.ad_title ?? '').slice(0, 300),
           videoUrl: String(videoUrl),
+          durationSec: Number(vi.duration) || 0,
           cover: String(vi.cover ?? ''),
           linkUrl: '',                                   // Creative Center không có link đích
           country: region,
@@ -75,6 +79,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
       .filter((a) => {
         if (!a.id || !a.videoUrl || seenV.has(a.videoUrl)) return false
+        if (a.durationSec > MAX_AD_SEC) return false                  // CẤM video dài >3 phút
+        if (SPAM_RE.test(`${a.page} ${a.text}`)) return false         // chặn phim ngắn / cài app
         seenV.add(a.videoUrl); return true
       })
       .sort((x, y) => y.likes - x.likes)                 // top theo lượt thích = winner

@@ -6,6 +6,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 const VALID_COUNTRY = new Set(['MY', 'ID', 'TH', 'VN', 'PH', 'SG', 'ALL'])
+// Chặn phim ngắn / ad cài app (mọi thị trường) — bắt theo tên page + nội dung + link đích.
+const SPAM_RE = /short\s?(tv|max|drama)|drama\s?box|reel\s?short|good\s?short|net\s?short|flex\s?tv|mobo\s?reels|quick\s?short|shortty|shorttv|play\.google\.com|apps\.apple\.com|playstore|w2a\.|web2app|fbweb/i
 
 interface Snapshot {
   body?: { text?: string }
@@ -142,6 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       })
       .filter((a) => a.id && a.videoUrl)   // chỉ giữ AD CÓ VIDEO
+      .filter((a) => !SPAM_RE.test(`${a.page} ${a.text} ${a.linkUrl}`) && !/\binstall\b/i.test(a.cta))   // chặn phim ngắn / cài app
       // WIN: active + chạy lâu + advertiser nhiều ad + nhiều biến thể (đang scale). Điểm xếp hạng.
       .map((a) => ({
         ...a,
