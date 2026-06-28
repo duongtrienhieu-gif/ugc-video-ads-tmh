@@ -407,7 +407,7 @@ export default function InventoryBoard() {
 
         {tab === 'profit' && <ProfitTruth products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} feed={feed} cockpit={cockpit} hasCashflow={!!cashflow} />}
 
-        {tab === 'calc' && <PriceCalc products={products} priceVnd={priceVnd} inv={inv} />}
+        {tab === 'calc' && <PriceCalc products={products} priceVnd={priceVnd} inv={inv} velocity={velocity} />}
       </div>
     </div>
   )

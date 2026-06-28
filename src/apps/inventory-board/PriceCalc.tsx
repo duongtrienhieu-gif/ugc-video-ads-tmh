@@ -4,6 +4,8 @@
 // giá vốn trừ hoàn = upsell×giá vốn×(1−hoàn); LN% = 100% − ads − vốn − ship − VH − hoàn.
 // Có nối data kho (chọn SP tự điền giá vốn + %hoàn) + mục Nâng cao (giá bán tối thiểu).
 import { useEffect, useMemo, useState } from 'react'
+import ProfitSim from './ProfitSim'
+import { type Prod, type InvItem } from './profitCalc'
 
 const C = {
   bg: '#070a12', panel: '#0c111c', panel2: '#0a0f19', line: '#1b2233', line2: '#161d2c',
@@ -33,9 +35,7 @@ const DEFAULT_COMBOS: Combo[] = [
 ]
 const CH_KEY = 'inv_calc_channels'
 
-// data kho truyền từ board sang để auto-fill
-interface ProdLite { name: string; pctHoan: number }
-interface InvLite { ten: string; giaVonRM: number; giaVonVnd: number }
+// dữ liệu kho (Prod/InvItem từ profitCalc) truyền từ board — auto-fill + giả lập
 
 function NumField({ label, value, onChange, suffix, step = 1, tint }: { label: string; value: number; onChange: (n: number) => void; suffix?: string; step?: number; tint?: boolean }) {
   return (
@@ -50,7 +50,7 @@ function NumField({ label, value, onChange, suffix, step = 1, tint }: { label: s
   )
 }
 
-export default function PriceCalc({ products, priceVnd, inv }: { products: ProdLite[]; priceVnd: Record<string, number>; inv: InvLite[] }) {
+export default function PriceCalc({ products, priceVnd, inv, velocity }: { products: Prod[]; priceVnd: Record<string, number>; inv: InvItem[]; velocity: Record<string, number> }) {
   const [isMobile, setIsMobile] = useState(false)
   useEffect(() => {
     const f = () => setIsMobile(window.innerWidth < 700)
@@ -174,6 +174,9 @@ export default function PriceCalc({ products, priceVnd, inv }: { products: ProdL
           <NumField label="⭐ CPA / 1 data-lead (VNĐ)" value={cpaLead} onChange={setCpaLead} step={5000} tint />
         </div>
       </div>
+
+      {/* 🎛 giả lập trên SP thật — nằm giữa ① nhập liệu và ② combo */}
+      <ProfitSim products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} />
 
       {/* ②③④⑤ lưới 2×2 — ô cùng hàng tự cao bằng nhau cho gọn */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.25fr 1fr', gap: 14, marginBottom: 14, alignItems: 'stretch' }}>

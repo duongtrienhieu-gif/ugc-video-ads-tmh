@@ -2,7 +2,7 @@
 // Bảng lãi thật/đơn + lãi/ngày + đèn Scale/Giữ/Sửa/Cắt cho từng SP + ô giả lập.
 // Lõi tính ở profitCalc.ts (dùng chung với feed việc gấp ở tab Kho).
 import { useEffect, useMemo, useState } from 'react'
-import { computeProfit, SHIP, VH, LN_TARGET, type Prod, type InvItem, type Tone } from './profitCalc'
+import { computeProfit, LN_TARGET, type Prod, type InvItem, type Tone } from './profitCalc'
 
 const C = {
   panel: '#0c111c', panel2: '#0a0f19', line: '#1b2233', line2: '#161d2c',
@@ -37,15 +37,6 @@ export default function ProfitTruth({ products, inv, velocity, priceVnd, feed, c
     scale: rows.filter((r) => r.den.t === 'Scale').length,
     sua: rows.filter((r) => r.den.t === 'Sửa' || r.den.t === 'Cắt').length,
   }), [rows])
-
-  // ── giả lập trên 1 SP (nền số thật, kéo %CPQC) ─────────────────────────────
-  const [pick, setPick] = useState('')
-  const sel = rows.find((r) => r.name === pick) || rows[0]
-  const [adsSim, setAdsSim] = useState<number | null>(null)
-  const simAds = adsSim ?? (sel ? sel.adsPct : 0)
-  const simLaiPct = sel ? 1 - simAds - sel.vonNetPct - SHIP - VH - sel.hoanPct : 0
-  const simLaiDon = sel ? simLaiPct * sel.aov : 0
-  const simSt = simLaiPct < 0 ? { t: 'Lỗ — sửa', c: C.red } : sel && simAds > sel.cpqcTarget ? { t: 'Lãi, dưới mục tiêu', c: C.amber } : { t: 'Đạt mục tiêu', c: C.green }
 
   const cell: React.CSSProperties = { padding: '11px 8px', textAlign: 'right' }
   if (!rows.length) {
@@ -136,39 +127,6 @@ export default function ProfitTruth({ products, inv, velocity, priceVnd, feed, c
         </div>
         <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>🟢 Scale = lãi tốt &amp; hoàn thấp &amp; ads còn dư địa · ⚪ Giữ = ổn định · 🟡 Sửa = ads vượt ngưỡng hoặc hoàn cao · 🔴 Cắt = lỗ hoặc hoàn &gt;45%. NGƯỠNG = %CPQC tối đa để còn đạt lãi mục tiêu {fmtPct(LN_TARGET)}. <span style={{ color: C.amber }}>*</span> = chưa có giá vốn thật, tạm ước 25%.</div>
       </div>
-
-      {sel && (
-        <div style={panelStyle}>
-          <div style={eyebrowStyle}>🎛 GIẢ LẬP — kéo %CPQC trên nền số THẬT</div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', margin: '10px 0 14px' }}>
-            <select value={sel.name} onChange={(e) => { setPick(e.target.value); setAdsSim(null) }}
-              style={{ background: C.panel2, border: `1px solid ${C.gold}`, color: C.gold, borderRadius: 8, padding: '9px 11px', fontSize: 14, minWidth: 200, fontWeight: 600 }}>
-              {rows.map((r) => <option key={r.name} value={r.name}>{r.name}</option>)}
-            </select>
-            <div style={{ flex: 1, minWidth: 220, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 13, color: C.muted, whiteSpace: 'nowrap' }}>%CPQC</span>
-              <input type="range" min={5} max={70} step={1} value={+(simAds * 100).toFixed(0)} onChange={(e) => setAdsSim(+e.target.value / 100)} style={{ flex: 1 }} />
-              <span style={{ fontSize: 14, fontWeight: 600, minWidth: 52, textAlign: 'right', color: sel && simAds > sel.cpqcTarget ? C.red : C.green }}>{fmtPct(simAds)}</span>
-            </div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
-            {[
-              { l: 'Lãi thật / đơn', v: fmtMoney(simLaiDon), c: simLaiDon < 0 ? C.red : C.green },
-              { l: '% Lợi nhuận', v: fmtPct(simLaiPct), c: simLaiPct < 0 ? C.red : C.green },
-              { l: '%CPQC ngưỡng (đạt mục tiêu)', v: fmtPct(Math.max(0, sel.cpqcTarget)), c: C.gold },
-              { l: 'Trạng thái', v: simSt.t, c: simSt.c },
-            ].map((k) => (
-              <div key={k.l} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '11px 13px', minWidth: 0 }}>
-                <div style={{ fontSize: 10, letterSpacing: 0.5, color: C.muted, marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{k.l}</div>
-                <div style={{ fontSize: 17, fontWeight: 600, color: k.c }}>{k.v}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>
-            Giá vốn / %hoàn / AOV ({fmtPlain(sel.aov)}/đơn) lấy từ số THẬT của mã; chỉ kéo %CPQC để thấy lãi/đơn đổi. Hạ %CPQC xuống dưới ngưỡng {fmtPct(Math.max(0, sel.cpqcTarget))} là đạt lãi mục tiêu {fmtPct(LN_TARGET)}.
-          </div>
-        </div>
-      )}
     </div>
   )
 }
