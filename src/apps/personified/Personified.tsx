@@ -641,11 +641,15 @@ export default function Personified() {
                     <button onClick={() => setExpandedScene(expandedScene === s.idx ? null : s.idx)}
                       className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-violet-50/40">
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[10px] font-bold text-violet-700">{s.idx}</span>
-                      {/* Thumbnail keyframe — luôn hiện sau khi render → duyệt cả storyboard 1 phát */}
-                      <span className="h-12 w-10 shrink-0 overflow-hidden rounded border border-black/10 bg-gray-100">
-                        {clips[s.idx]?.keyframeRef
-                          ? <RowThumb assetRef={clips[s.idx]!.keyframeRef!} />
-                          : <span className="flex h-full w-full items-center justify-center text-[14px] text-gray-300">{clips[s.idx]?.status === 'kf' ? '⏳' : '🖼️'}</span>}
+                      {/* Thumbnail: có clip → video auto-loop; chưa có → keyframe ảnh. Duyệt storyboard 1 phát */}
+                      <span className="h-14 w-[3.25rem] shrink-0 overflow-hidden rounded border border-black/10 bg-gray-100">
+                        {(() => {
+                          const vid = clips[s.idx]?.lipsyncRef ?? clips[s.idx]?.clipRef
+                          const ref = vid ?? clips[s.idx]?.keyframeRef
+                          return ref
+                            ? <RowThumb assetRef={ref} isVideo={!!vid} />
+                            : <span className="flex h-full w-full items-center justify-center text-[14px] text-gray-300">{clips[s.idx]?.status === 'kf' ? '⏳' : '🖼️'}</span>
+                        })()}
                       </span>
                       <span className="w-28 shrink-0 truncate text-[11px] font-semibold text-gray-600">{SCENE_TYPE_LABEL[s.sceneType]}{s.hasProduct && ' 📦'}</span>
                       <span className="w-9 shrink-0 text-[11px] font-bold text-amber-700">{s.clipDuration}s</span>
@@ -846,11 +850,15 @@ function Section({ step, title, children }: { step: number; title: string; child
   )
 }
 
-// P2a — thumbnail nhỏ trên dòng bảng cảnh (storyboard) — duyệt nhanh không cần bung dòng.
-function RowThumb({ assetRef }: { assetRef: string }) {
+// P2a — thumbnail nhỏ trên dòng bảng cảnh (storyboard). Có clip → VIDEO auto-loop câm
+// (thấy ngay storyboard động); chưa có clip → ảnh keyframe. pointer-events-none để click
+// dòng vẫn bung chi tiết bình thường.
+function RowThumb({ assetRef, isVideo }: { assetRef: string; isVideo?: boolean }) {
   const url = useAssetUrl(assetRef)
   if (!url) return <span className="flex h-full w-full items-center justify-center text-[10px] text-gray-300">…</span>
-  return <img src={url} alt="" className="h-full w-full object-cover" />
+  return isVideo
+    ? <video src={url} autoPlay muted loop playsInline className="pointer-events-none h-full w-full object-cover" />
+    : <img src={url} alt="" className="h-full w-full object-cover" />
 }
 
 // P2b — ảnh chân dung nhân vật trong Character Bank.
@@ -884,7 +892,7 @@ function FinalVideoPreview({ videoRef }: { videoRef: string }) {
 function ClipPreview({ clipRef }: { clipRef: string }) {
   const url = useAssetUrl(clipRef)
   if (!url) return <span className="text-[10px] text-gray-400">đang tải clip…</span>
-  return <video src={url} controls playsInline muted className="mt-1 w-full max-w-[220px] rounded-lg border border-black/10" />
+  return <video src={url} controls autoPlay loop playsInline muted className="mt-1 w-full max-w-[240px] rounded-lg border border-black/10" />
 }
 
 function InsightRow({ label, value }: { label: string; value: string }) {
