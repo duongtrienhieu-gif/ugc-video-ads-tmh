@@ -176,8 +176,8 @@ export default function PriceCalc({ products, priceVnd, inv }: { products: ProdL
         </div>
       </div>
 
-      {/* ②③ combo + lợi nhuận chung 1 hàng cho gọn */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.25fr 1fr', gap: 14, marginBottom: 14, alignItems: 'start' }}>
+      {/* ②③④⑤ lưới 2×2 — ô cùng hàng tự cao bằng nhau cho gọn */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.25fr 1fr', gap: 14, marginBottom: 14, alignItems: 'stretch' }}>
       {/* ② COMBO */}
       <div style={{ ...panelStyle, marginBottom: 0 }}>
         <div style={eyebrowStyle}>② COMBO — SP giao (gồm tặng) · Giá khách trả (RM) · % đơn</div>
@@ -230,8 +230,6 @@ export default function PriceCalc({ products, priceVnd, inv }: { products: ProdL
         {Math.abs(r.tongPct - 1) >= 0.001 && <div style={{ fontSize: 12, color: C.red, marginTop: 10 }}>⚠ Tổng % đơn đang là {(r.tongPct * 100).toFixed(0)}% — chỉnh cho đủ 100% thì số mới chuẩn.</div>}
       </div>
 
-      {/* cột phải: ③ lợi nhuận + ④ tham chiếu xếp dọc cho gọn */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* ③ BẢNG LỢI NHUẬN */}
       <div style={{ ...panelStyle, marginBottom: 0 }}>
         <div style={eyebrowStyle}>③ ⭐ BẢNG LỢI NHUẬN DỰ KIẾN (% trên doanh số chốt)</div>
@@ -278,11 +276,9 @@ export default function PriceCalc({ products, priceVnd, inv }: { products: ProdL
         )}
         <div style={{ fontSize: 11, color: C.muted, marginTop: 12, lineHeight: 1.5 }}>%CPQC = tiền ads ÷ doanh số chốt (gross). Giá vốn ĐÃ trừ hoàn về kho (chỉ mất vốn trên đơn giao thành công). Ship &amp; Vận hành cố định theo %. Đổi giá combo / CPA / giá vốn → mọi số tự cập nhật.</div>
       </div>
-      </div>
-      </div>
 
       {/* ⑤ TỔNG */}
-      <div style={panelStyle}>
+      <div style={{ ...panelStyle, marginBottom: 0 }}>
         <div style={eyebrowStyle}>⑤ TỔNG — nhập số đơn</div>
         <div style={{ maxWidth: 240, marginBottom: 14 }}>
           <NumField label="Số đơn chốt dự kiến" value={soDon} onChange={setSoDon} step={100} tint />
@@ -299,6 +295,7 @@ export default function PriceCalc({ products, priceVnd, inv }: { products: ProdL
             </div>
           ))}
         </div>
+      </div>
       </div>
 
       {/* ⑥ CÀI ĐẶT KÊNH */}
