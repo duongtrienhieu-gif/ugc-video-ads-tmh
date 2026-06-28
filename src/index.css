@@ -120,6 +120,22 @@ html {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+ * MOBILE BASE-FONT SCALE-DOWN (Phase 1 — responsive audit)
+ *
+ * Vấn đề: base 20px (×1.25 so với 16px) làm mọi rem-based padding/gap/
+ * width/text phồng lên 25%. Trên desktop rộng thì ổn, nhưng dưới `lg`
+ * (1024px) — nơi hầu hết app đã chuyển sang layout xếp dọc — nó khiến
+ * mọi thứ tràn & chật ("tùm lum"). Hạ base theo đúng dải mobile/tablet
+ * để rem co lại tương ứng; desktop (≥1024px) GIỮ NGUYÊN 20px.
+ *
+ * Lưu ý: chỉ đổi gốc rem, KHÔNG đụng layout/logic app nào. Các px cứng
+ * (icon lucide h-/w-, ảnh) không bị ảnh hưởng.
+ * ─────────────────────────────────────────────────────────────────── */
+@media (max-width: 1023px) { html { font-size: 18px; } }   /* tablet / landscape phone */
+@media (max-width: 640px)  { html { font-size: 16px; } }   /* phone (Tailwind < sm) */
+@media (max-width: 380px)  { html { font-size: 15px; } }   /* máy nhỏ / iPhone mini */
+
+/* ─────────────────────────────────────────────────────────────────────
  * ACCENT UTILITIES — theme-following primary surfaces. Apps use these
  * instead of hardcoded blue/violet so active chips + primary buttons
  * follow the brand accent (violet in light/dark, gold in studio).
