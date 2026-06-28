@@ -119,6 +119,75 @@ function genId(): string {
 
 const matchForFill = (fill: ShotFill): Shot['matchMode'] => (fill === 'source-product' ? 'product-exact' : 'broad')
 
+// ── Hướng dẫn sử dụng (cầm tay chỉ việc) ─────────────────────────────────
+// Hiển thị ở cột trái (desktop) / bảng xổ trên đầu (mobile). Nội dung bám đúng
+// luồng thật: khóa SP → soát cảnh → từ khóa → chọn clip → (chấm cắt) → export →
+// lên CapCut. Gói ZIP gồm clips/ + cutlist.csv + subtitles_*.srt + HUONG_DAN.txt
+// (xem services/exportBundle.ts) nên phần "Trong gói ZIP" phải khớp file đó.
+const GUIDE_STEPS: { t: string; d: string }[] = [
+  { t: '🔒 Khóa SP nguồn', d: 'Bấm “Khóa SP nguồn” (trên cùng) → app đẩy ảnh SP lên 1688 → chọn đúng SP. Sau đó mọi cảnh “Source SP” tự tìm đúng clip sản phẩm.' },
+  { t: '📝 Soát từng cảnh', d: 'Mỗi thẻ = 1 cảnh. Sửa lời thoại (dòng to = chính, dòng nhỏ = bản dịch) và ô “Ý hình” (quay gì). Chọn Block + kiểu lấy clip: Source rộng / Source SP / Source thành phần / CTA (AI).' },
+  { t: '🔎 Thêm từ khóa', d: 'Cảnh Source rộng/thành phần: gõ tiếng Việt (vd “đau đầu gối”) → “Dịch & thêm” → ra từ khóa tiếng Trung. Cảnh Source SP khỏi cần (đã khóa SP).' },
+  { t: '🎬 Tìm & chọn clip', d: 'Trong cảnh, chọn nền tảng 📕 RED / ⚡ Kuaishou / 🎵 Douyin / 🎶 TikTok → app tự tìm. Bấm ▶ để xem, bấm “+ Thêm” để ghim clip vào cảnh (clip đầu = chính, sau = dự phòng). Đổi nền tảng KHÔNG mất kết quả. “Tải thêm” để xem thêm.' },
+  { t: '✂️ (Tùy chọn) Chấm điểm cắt', d: 'Bấm ▶ clip ĐÃ chọn → tua tới khúc cần → “Đặt điểm bắt đầu tại đây” để đánh dấu đoạn ~4-5s. Chỉ là gợi ý, clip vẫn tải đầy đủ.' },
+  { t: '🎁 Cảnh CTA', d: 'Cảnh CTA là AI render — bấm tạo ảnh/video SP + ưu đãi (không hiển thị giá).' },
+  { t: '⚙️ Tùy chọn (nút trên cùng)', d: 'Bật “Chỉ clip <60s”; bật “Cắt sẵn khúc đã chọn khi export” nếu muốn app cắt sẵn (NẶNG — nên làm trên máy tính, tránh điện thoại).' },
+  { t: '📦 Export CapCut', d: 'Bấm “Export CapCut” → app tải clip + tạo phụ đề rồi tải về 1 file ZIP.' },
+]
+
+function GuideContent() {
+  return (
+    <div className="text-app-text">
+      <div className="flex items-center gap-1.5">
+        <span className="text-base">📖</span>
+        <h3 className="text-sm font-bold">Hướng dẫn sử dụng</h3>
+      </div>
+      <p className="mt-0.5 text-[11px] text-app-subtle">Làm lần lượt từ trên xuống — soát cảnh, chọn clip, export, đưa lên CapCut.</p>
+
+      <ol className="mt-2.5 flex flex-col gap-2">
+        {GUIDE_STEPS.map((s, i) => (
+          <li key={i} className="flex gap-2">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold" style={{ backgroundColor: 'var(--color-accent-dim)', color: 'var(--color-accent)' }}>{i + 1}</span>
+            <div className="min-w-0">
+              <p className="text-[12px] font-bold leading-snug">{s.t}</p>
+              <p className="text-[11px] leading-snug text-app-muted">{s.d}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <div className="my-3 border-t border-app-border" />
+      <p className="text-[12px] font-bold">📂 Trong gói ZIP có gì</p>
+      <ul className="mt-1 flex flex-col gap-1 text-[11px] text-app-muted">
+        <li><b className="text-app-text">clips/</b> — clip nguồn + video CTA, đặt tên theo thứ tự 01, 02… (cùng cảnh nhiều clip = 01a, 01b — chính trước, dự phòng sau).</li>
+        <li><b className="text-app-text">cutlist.csv</b> — bảng dựng: cảnh, mốc thời gian, KHÚC CẦN CẮT, cờ “cần thay”, thoại.</li>
+        <li><b className="text-app-text">subtitles_my.srt / _vi.srt</b> — phụ đề, mỗi cảnh 1 dòng.</li>
+        <li><b className="text-app-text">HUONG_DAN.txt</b> — hướng dẫn dựng chi tiết kèm trong gói.</li>
+      </ul>
+
+      <div className="my-3 border-t border-app-border" />
+      <p className="text-[12px] font-bold">🎞 Đưa lên CapCut</p>
+      <ol className="mt-1 flex list-decimal flex-col gap-1 pl-4 text-[11px] text-app-muted">
+        <li>Tạo project mới, khung dọc 9:16.</li>
+        <li>Kéo cả thư mục <b className="text-app-text">clips/</b> vào — CapCut tự xếp 01 → 02 → 03.</li>
+        <li>Mở <b className="text-app-text">cutlist.csv</b>, xem cột “Cắt từ → Cắt đến”, cắt đúng khúc ~4-5s. (Nếu đã bật cắt sẵn, file tên “dacat_…” dùng luôn.)</li>
+        <li>Cảnh có 01b/01c = clip dự phòng → chọn cái ưng, xóa cái thừa.</li>
+        <li>Dòng ghi “CẦN THAY” = clip pick tạm → nên tìm clip tốt hơn thay vào.</li>
+        <li>Import <b className="text-app-text">subtitles_my.srt</b> (hoặc _vi) làm phụ đề, chỉnh khớp sau khi cắt hình.</li>
+        <li>Thu/ghép giọng đọc theo thoại trong cutlist (app chưa kèm file giọng).</li>
+      </ol>
+
+      <div className="my-3 border-t border-app-border" />
+      <p className="text-[12px] font-bold">⚠️ Lưu ý</p>
+      <ul className="mt-1 flex flex-col gap-1 text-[11px] text-app-muted">
+        <li>Clip nguồn chỉ để tham khảo/ghép dựng — tự chịu trách nhiệm bản quyền khi dùng.</li>
+        <li>Clip nguồn có thể hết hạn: nếu trong ZIP thấy file <b className="text-app-text">.LOI.txt</b> → mở app, tìm/chọn clip mới rồi export lại.</li>
+        <li>Đổi “MY chính / VN chính” sẽ TÁCH LẠI toàn bộ cảnh theo ngôn ngữ đó.</li>
+      </ul>
+    </div>
+  )
+}
+
 export default function ShotPlanPanel({
   plan, productName, product, isBuilding, onChange, onRebuild, onLanguageChange, onBack,
 }: ShotPlanPanelProps) {
@@ -463,11 +532,28 @@ export default function ShotPlanPanel({
         </div>
       )}
 
-      {/* Shot list */}
+      {/* Shot list (+ hướng dẫn: cột trái trên desktop, bảng xổ trên mobile) */}
       {!isBuilding && (
-        <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
-          <div className="mx-auto flex max-w-3xl flex-col gap-2.5">
-            {plan.shots.map((s, i) => (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto flex max-w-6xl gap-4 px-3 py-3 sm:px-4 sm:py-4">
+            {/* Hướng dẫn — cột trái cố định (chỉ desktop) */}
+            <aside className="hidden w-[300px] shrink-0 lg:block">
+              <div className="sticky top-0 max-h-[calc(100vh-9rem)] overflow-y-auto rounded-2xl border border-app-border bg-app-card p-3.5">
+                <GuideContent />
+              </div>
+            </aside>
+
+            <div className="min-w-0 flex-1">
+              {/* Hướng dẫn — bảng xổ trên đầu (chỉ mobile/tablet) */}
+              <details className="mb-3 rounded-2xl border border-app-border bg-app-card p-3 lg:hidden">
+                <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-bold text-app-text">
+                  📖 Hướng dẫn sử dụng <span className="text-[11px] font-normal text-app-subtle">(bấm để mở)</span>
+                </summary>
+                <div className="mt-2.5 border-t border-app-border pt-2.5"><GuideContent /></div>
+              </details>
+
+              <div className="mx-auto flex max-w-3xl flex-col gap-2.5">
+                {plan.shots.map((s, i) => (
               <ShotCard
                 key={s.id}
                 index={i}
@@ -502,6 +588,8 @@ export default function ShotPlanPanel({
                 onRequestLock={() => void openLock()}
               />
             ))}
+              </div>
+            </div>
           </div>
         </div>
       )}
