@@ -86,9 +86,15 @@ async function tfetch(url: string, ms = 20000): Promise<Response> {
   finally { clearTimeout(t) }
 }
 async function fetchXlsx(id: string, sheets: string[]): Promise<XLSX.WorkBook> {
-  const res = await tfetch(`https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return XLSX.read(Buffer.from(await res.arrayBuffer()), { type: 'buffer', sheets })
+  let last: Error | null = null
+  for (let i = 0; i < 2; i++) { // thử lại 1 lần — Google hay throttle → trả HTML lỗi (hoàn/QLHB rớt)
+    try {
+      const res = await tfetch(`https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`, 15000)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return XLSX.read(Buffer.from(await res.arrayBuffer()), { type: 'buffer', sheets })
+    } catch (e) { last = e as Error }
+  }
+  throw last ?? new Error('fetchXlsx failed')
 }
 async function fetchCsv(id: string, sheet: string): Promise<string[][]> {
   const res = await tfetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}`)

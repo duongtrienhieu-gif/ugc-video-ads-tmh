@@ -38,10 +38,12 @@ export default function WarRoom() {
   const [profit, setProfit] = useState<SpProfit[]>([])
   const [mktSp, setMktSp] = useState<Record<string, string[]>>({})
 
+  const reloadStats = () => fetchSpStats().then((r) => { setStats(r.stats); setProfit(r.profit) }).catch(() => {})
   useEffect(() => { void load() }, [load])
   useEffect(() => {
-    void fetchSpStats().then((r) => { setStats(r.stats); setProfit(r.profit) }).catch(() => {})
+    void reloadStats()
     void fetchMarketerSp().then(setMktSp).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const myMember = members.find((m) => m.email.trim().toLowerCase() === userEmail.trim().toLowerCase())
@@ -77,7 +79,7 @@ export default function WarRoom() {
       </div>
 
       {tab === 'nhansu' && <NhanSu {...{ members, isCEO, mktSp, addMember, updateMember, deleteMember }} />}
-      {tab === 'target' && <TargetTab {...{ members, targets, stats, isCEO, setTarget }} />}
+      {tab === 'target' && <TargetTab {...{ members, targets, stats, isCEO, setTarget, reloadStats }} />}
       {tab === 'viec' && <ViecTab {...{ members, tasks, profit, spOwner, userEmail, addTask, updateTask, deleteTask }} />}
     </Shell>
   )
@@ -135,9 +137,21 @@ function NhanSu({ members, isCEO, mktSp, addMember, updateMember, deleteMember }
 }
 
 // ── TARGET ───────────────────────────────────────────────────────────────────
-function TargetTab({ members, targets, stats, isCEO, setTarget }: {
+// ô nhập có DẤU CHẤM ngăn nghìn (300.000.000) cho dễ đọc; % thì để số trơn
+function TargetInput({ value, money, disabled, onSave }: { value: number | undefined; money: boolean; disabled: boolean; onSave: (v: number) => void }) {
+  const fmt = (n: number) => (money ? n.toLocaleString('vi-VN') : String(n))
+  const [txt, setTxt] = useState(value != null ? fmt(value) : '')
+  useEffect(() => { setTxt(value != null ? fmt(value) : '') }, [value, money])
+  return (
+    <input value={txt} disabled={disabled} placeholder="—" inputMode="numeric"
+      onChange={(e) => { const d = e.target.value.replace(/[^\d]/g, ''); setTxt(d === '' ? '' : money ? parseInt(d, 10).toLocaleString('vi-VN') : d) }}
+      onBlur={(e) => { const v = parseInt(e.target.value.replace(/[^\d]/g, ''), 10) || 0; if (e.target.value.trim() !== '' && v !== (value ?? -1)) void onSave(v) }}
+      style={{ ...inp, width: money ? 150 : 90, textAlign: 'right', color: C.gold }} />
+  )
+}
+function TargetTab({ members, targets, stats, isCEO, setTarget, reloadStats }: {
   members: Member[]; targets: { member_id: string; period: string; metric: string; value: number }[]
-  stats: Record<string, SpStat>; isCEO: boolean; setTarget: (m: string, p: string, k: string, v: number) => Promise<void>
+  stats: Record<string, SpStat>; isCEO: boolean; setTarget: (m: string, p: string, k: string, v: number) => Promise<void>; reloadStats: () => Promise<void>
 }) {
   const [period, setPeriod] = useState('month')
   const [memberId, setMemberId] = useState('')
@@ -156,6 +170,7 @@ function TargetTab({ members, targets, stats, isCEO, setTarget }: {
           {members.map((m) => <option key={m.id} value={m.id}>{m.name} · {roleLabel(m.role)}</option>)}
         </select>
         {PERIODS.map(([v, l]) => <button key={v} onClick={() => setPeriod(v)} style={{ background: period === v ? C.gold : 'transparent', color: period === v ? '#0a0a0a' : C.muted2, border: `1px solid ${period === v ? C.gold : C.line}`, borderRadius: 8, padding: '7px 13px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{l}</button>)}
+        <button onClick={() => void reloadStats()} title="tải lại số thực tế (nếu %hoàn đang —)" style={{ marginLeft: 'auto', background: 'transparent', color: C.muted2, border: `1px solid ${C.line}`, borderRadius: 8, padding: '7px 12px', fontSize: 12.5, cursor: 'pointer' }}>⟳ Tải lại số</button>
       </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead><tr style={{ color: C.muted, fontSize: 10, letterSpacing: 1 }}>
@@ -167,17 +182,16 @@ function TargetTab({ members, targets, stats, isCEO, setTarget }: {
         <tbody>
           {METRICS.map((mt) => {
             const tgt = targetOf(mt.key); const actual = actualOf(mt.key)
-            const ok = tgt == null ? null : mt.lowerBetter ? actual <= tgt : actual >= tgt
+            const missing = act.dt === 0 || (mt.key === 'hoan' && act.hoan === 0) // hoàn=0 = QLHB chưa tải, không phải thật
+            const ok = tgt == null || missing ? null : mt.lowerBetter ? actual <= tgt : actual >= tgt
             const show = (v: number) => (mt.money ? fmtMoney(v) : fmtPct(v))
             return (
               <tr key={mt.key} style={{ borderTop: `1px solid ${C.line2}` }}>
                 <td style={{ padding: '10px 0', color: C.muted2 }}>{mt.label}</td>
                 <td style={{ padding: '10px 8px', textAlign: 'right' }}>
-                  <input type="number" defaultValue={tgt ?? ''} disabled={!isCEO} placeholder="—"
-                    onBlur={(e) => { const v = +e.target.value; if (e.target.value !== '' && v !== tgt) void setTarget(sel.id, period, mt.key, v) }}
-                    style={{ ...inp, width: 120, textAlign: 'right', color: C.gold }} />
+                  <TargetInput value={tgt} money={mt.money} disabled={!isCEO} onSave={(v) => void setTarget(sel.id, period, mt.key, v)} />
                 </td>
-                <td style={{ padding: '10px 8px', textAlign: 'right', color: act.dt > 0 ? C.text : C.muted }}>{act.dt > 0 ? show(actual) : '—'}</td>
+                <td style={{ padding: '10px 8px', textAlign: 'right', color: missing ? C.muted : C.text }}>{missing ? '—' : show(actual)}</td>
                 <td style={{ padding: '10px 0', textAlign: 'center' }}>{ok == null ? <span style={{ color: C.muted }}>—</span> : <span style={{ color: ok ? C.green : C.red }}>{ok ? '✓ đạt' : '✗ trượt'}</span>}</td>
               </tr>
             )
@@ -186,7 +200,8 @@ function TargetTab({ members, targets, stats, isCEO, setTarget }: {
       </table>
       <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>
         Target {isCEO ? '— CEO gõ rồi rời ô là lưu' : '(chỉ CEO sửa)'}. THỰC TẾ = gộp số thật các mã marketer phụ trách (lũy kế tháng) — gán mã ở tab Nhân sự. %CPQC/%hoàn nhập theo số (vd 30 = 30%). Chi tiết ngày/tuần sẽ thêm sau.
-        {act.dt === 0 && <span style={{ color: C.amber }}> · {sel.name} chưa gán mã SP nào → chưa có số thực tế.</span>}
+        {act.dt === 0 && <span style={{ color: C.amber }}> · {sel.name} chưa gán mã SP → bấm 🪄 ở tab Nhân sự.</span>}
+        {act.dt > 0 && act.hoan === 0 && <span style={{ color: C.amber }}> · %Hoàn đang "—" = QLHB chưa tải (Google chặn) → bấm ⟳ Tải lại số vài lần.</span>}
       </div>
     </div>
   )
