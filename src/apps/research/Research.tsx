@@ -33,6 +33,9 @@ export default function Research() {
   const removeWatch = useWatchlistStore((s) => s.remove)
   const updateWatch = useWatchlistStore((s) => s.update)
   const [view, setView] = useState<'products' | 'shops'>('products')
+  // Mobile: dưới lg, body xếp dọc → 1 tab hiện tại 1 lúc (Lọc / Kết quả).
+  // Mặc định 'result' để mở app thấy ngay lưới SP. Desktop (lg+) bỏ qua, hiện cả 2.
+  const [mobileTab, setMobileTab] = useState<'filter' | 'result'>('result')
   const [showWatch, setShowWatch] = useState(false)
   const [showSource, setShowSource] = useState(() => { try { return localStorage.getItem('source-finder-open-v1') === '1' } catch { return false } })
   const [sourceInit, setSourceInit] = useState<{ name: string; imageUrl?: string } | null>(null)
@@ -78,8 +81,8 @@ ${list}`
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#EEEEF2]">
       {/* Header */}
       <header className="flex shrink-0 flex-col gap-3 border-b border-black/10 bg-white px-5 py-3">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-          <div className="flex min-w-0 items-center gap-3">
+        <div className="flex flex-col gap-2 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 lg:gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100">
               <Search className="h-4 w-4 text-violet-600" />
             </div>
@@ -197,11 +200,33 @@ ${list}`
         )}
       </header>
 
-      {/* Body */}
-      <div className="flex min-h-0 flex-1">
-        <FilterPanel />
+      {/* Tab bar — chỉ mobile (<lg): chuyển giữa Bộ lọc và Kết quả vì body xếp dọc */}
+      <div className="flex shrink-0 items-center gap-1 border-b border-black/10 bg-white px-3 py-2 lg:hidden">
+        <button
+          onClick={() => setMobileTab('filter')}
+          className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+            mobileTab === 'filter' ? 'bg-violet-100 text-violet-700' : 'text-slate-500'
+          }`}
+        >
+          🎛 Bộ lọc
+        </button>
+        <button
+          onClick={() => setMobileTab('result')}
+          className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+            mobileTab === 'result' ? 'bg-violet-100 text-violet-700' : 'text-slate-500'
+          }`}
+        >
+          📋 Kết quả ({scored.length})
+        </button>
+      </div>
 
-        <main className="flex-1 overflow-y-auto p-5">
+      {/* Body — mobile xếp dọc (1 tab/lúc), desktop (lg+) split ngang cố định */}
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        <div className={`${mobileTab === 'filter' ? 'flex' : 'hidden'} min-h-0 flex-1 shrink-0 lg:flex lg:flex-none`}>
+          <FilterPanel />
+        </div>
+
+        <main className={`${mobileTab === 'result' ? 'block' : 'hidden'} min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 lg:block`}>
           {(crossData || crossLoading) && (
             <CrossMarketPanel rows={crossData} query={crossQuery} loading={crossLoading} onClose={clearCross} />
           )}

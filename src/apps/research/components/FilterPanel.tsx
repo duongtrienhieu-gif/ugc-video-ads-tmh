@@ -26,7 +26,7 @@ export default function FilterPanel() {
   // chỉ giữ Sắp xếp (theo số bán) + Ẩn SKU nhiều biến thể.
   if (isLive) {
     return (
-      <aside className="flex w-56 shrink-0 flex-col gap-3 overflow-y-auto border-r border-black/10 bg-[#FAFAFA] p-3">
+      <aside className="flex w-full lg:w-56 shrink-0 flex-col gap-3 overflow-y-auto border-b lg:border-b-0 lg:border-r border-black/10 bg-[#FAFAFA] p-3">
         <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Bộ lọc (live)</span>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
           Sắp xếp theo
