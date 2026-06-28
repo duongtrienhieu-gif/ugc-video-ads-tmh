@@ -100,6 +100,8 @@ export default function Personified() {
   const [finalVideo, setFinalVideo] = useState<{ status: 'idle' | 'running' | 'done' | 'failed'; videoRef?: string; stage?: string; error?: string }>({ status: 'idle' })
   // Keyframe đang render dở lúc F5 → tự nối lại (chỉ keyframe, rẻ). idx gom khi restore.
   const kfResume = useRef<number[]>([])
+  // Xem to (lightbox) ảnh keyframe / video clip khi bấm thumbnail.
+  const [zoom, setZoom] = useState<{ isVideo: boolean; ref: string } | null>(null)
 
   const product = useMemo(() => products.find((p) => p.id === productId), [products, productId])
   // P2a — ảnh sản phẩm để khóa fidelity (cảnh hasProduct).
@@ -641,16 +643,21 @@ export default function Personified() {
                     <button onClick={() => setExpandedScene(expandedScene === s.idx ? null : s.idx)}
                       className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-violet-50/40">
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[10px] font-bold text-violet-700">{s.idx}</span>
-                      {/* Thumbnail: có clip → video auto-loop; chưa có → keyframe ảnh. Duyệt storyboard 1 phát */}
-                      <span className="h-14 w-[3.25rem] shrink-0 overflow-hidden rounded border border-black/10 bg-gray-100">
-                        {(() => {
-                          const vid = clips[s.idx]?.lipsyncRef ?? clips[s.idx]?.clipRef
-                          const ref = vid ?? clips[s.idx]?.keyframeRef
-                          return ref
-                            ? <RowThumb assetRef={ref} isVideo={!!vid} />
-                            : <span className="flex h-full w-full items-center justify-center text-[14px] text-gray-300">{clips[s.idx]?.status === 'kf' ? '⏳' : '🖼️'}</span>
-                        })()}
-                      </span>
+                      {/* Thumbnail: có clip → video auto-loop; chưa có → keyframe ảnh. Bấm = xem TO. */}
+                      {(() => {
+                        const vid = clips[s.idx]?.lipsyncRef ?? clips[s.idx]?.clipRef
+                        const ref = vid ?? clips[s.idx]?.keyframeRef
+                        return (
+                          <span
+                            onClick={ref ? (e) => { e.stopPropagation(); setZoom({ isVideo: !!vid, ref }) } : undefined}
+                            title={ref ? 'Bấm để xem to' : undefined}
+                            className={`relative h-14 w-[3.25rem] shrink-0 overflow-hidden rounded border border-black/10 bg-gray-100 ${ref ? 'cursor-zoom-in' : ''}`}>
+                            {ref
+                              ? <><RowThumb assetRef={ref} isVideo={!!vid} /><span className="pointer-events-none absolute bottom-0 right-0 bg-black/55 px-1 text-[8px] text-white">🔍</span></>
+                              : <span className="flex h-full w-full items-center justify-center text-[14px] text-gray-300">{clips[s.idx]?.status === 'kf' ? '⏳' : '🖼️'}</span>}
+                          </span>
+                        )
+                      })()}
                       <span className="w-28 shrink-0 truncate text-[11px] font-semibold text-gray-600">{SCENE_TYPE_LABEL[s.sceneType]}{s.hasProduct && ' 📦'}</span>
                       <span className="w-9 shrink-0 text-[11px] font-bold text-amber-700">{s.clipDuration}s</span>
                       <span className="w-20 shrink-0 truncate text-[11px] text-gray-400">{s.speaker}</span>
@@ -833,8 +840,32 @@ export default function Personified() {
           </Section>
         )}
       </div>
+
+      {/* Lightbox xem TO ảnh/video — bấm nền hoặc nút ✕ để đóng */}
+      {zoom && (
+        <div onClick={() => setZoom(null)}
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4">
+          <button onClick={() => setZoom(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/15 px-3 py-1.5 text-sm font-bold text-white hover:bg-white/25">✕ Đóng</button>
+          {zoom.isVideo
+            ? <ZoomVideo refId={zoom.ref} />
+            : <ZoomImage refId={zoom.ref} />}
+        </div>
+      )}
     </div>
   )
+}
+
+// Xem to trong lightbox — dùng useAssetUrl ở component con (hook ở top-level an toàn).
+function ZoomImage({ refId }: { refId: string }) {
+  const url = useAssetUrl(refId)
+  if (!url) return <span className="text-sm text-white/70">đang tải…</span>
+  return <img src={url} alt="" onClick={(e) => e.stopPropagation()} className="max-h-[88vh] max-w-[92vw] rounded-lg object-contain shadow-2xl" />
+}
+function ZoomVideo({ refId }: { refId: string }) {
+  const url = useAssetUrl(refId)
+  if (!url) return <span className="text-sm text-white/70">đang tải…</span>
+  return <video src={url} controls autoPlay loop playsInline onClick={(e) => e.stopPropagation()} className="max-h-[88vh] max-w-[92vw] rounded-lg shadow-2xl" />
 }
 
 // ── small UI helpers ─────────────────────────────────────────────────────────
