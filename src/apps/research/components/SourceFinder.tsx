@@ -2,7 +2,7 @@
 // Tab 1 "Clip có SP": ảnh SP → reverse-image 1688 (khớp hình) → SP khớp → clip Douyin theo tên thật + ảnh/video gốc.
 // Tab 2 "Cảnh B-roll": Scene Brief (Gemini) → mỗi cảnh "Lấy clip" → clip Douyin riêng cho cảnh đó (inline).
 // Xem video: popup phát tại chỗ (qua proxy inline). Tải thêm: phân trang cursor. Theme token app (dark/studio).
-import { useState, type ChangeEvent } from 'react'
+import { useState, useEffect, type ChangeEvent } from 'react'
 import { X, Sparkles, Copy, ExternalLink, Image as ImageIcon, Film, Clapperboard, Download, Play } from 'lucide-react'
 import { useBankStore } from '../../../stores/bankStore'
 import { useAppStore } from '../../../stores/appStore'
@@ -93,38 +93,57 @@ const proxyDownload = (url: string, name: string) => {
   document.body.appendChild(el); el.click(); el.remove()
 }
 
+// ── Lưu state để F5 không mất (localStorage) ──
+const SAVE_KEY = 'source-finder-state-v1'
+interface Saved { name?: string; imageUrl?: string; pickId?: string; tab?: 'product' | 'scenes'; brief?: Brief | null; imgProducts?: ImgProduct[] | null; clipFor?: ClipFor | null; clips?: Clip[] | null; clipsCursor?: string | null; clipsHasMore?: boolean; onlyShort?: boolean }
+function readSaved(): Saved | null { try { return JSON.parse(localStorage.getItem(SAVE_KEY) || 'null') as Saved | null } catch { return null } }
+function clearSaved() { try { localStorage.removeItem(SAVE_KEY) } catch { /* */ } }
+
+// ── Cache reverse-image trong phiên → tra lại cùng ảnh KHÔNG tốn quota RapidAPI ──
+const imgCache = new Map<string, ImgProduct[]>()
+const hashStr = (s: string) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return String(h) }
+
 export default function SourceFinder({ initial, onClose }: { initial?: { name: string; imageUrl?: string } | null; onClose: () => void }) {
   const products = useBankStore((s) => s.products)
   const addToast = useAppStore((s) => s.addToast)
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
 
-  const [name, setName] = useState(initial?.name ?? '')
-  const [imageUrl, setImageUrl] = useState(initial?.imageUrl ?? '')
-  const [pickId, setPickId] = useState('')
+  const [saved] = useState(() => readSaved())
+  const [name, setName] = useState(saved?.name ?? initial?.name ?? '')
+  const [imageUrl, setImageUrl] = useState(saved?.imageUrl ?? initial?.imageUrl ?? '')
+  const [pickId, setPickId] = useState(saved?.pickId ?? '')
   const [pickOpen, setPickOpen] = useState(false)
-  const [tab, setTab] = useState<'product' | 'scenes'>('product')
+  const [tab, setTab] = useState<'product' | 'scenes'>(saved?.tab ?? 'product')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [brief, setBrief] = useState<Brief | null>(null)
+  const [brief, setBrief] = useState<Brief | null>(saved?.brief ?? null)
   // Reverse-image 1688 (Tab 1)
-  const [imgProducts, setImgProducts] = useState<ImgProduct[] | null>(null)
+  const [imgProducts, setImgProducts] = useState<ImgProduct[] | null>(saved?.imgProducts ?? null)
   const [imgBusy, setImgBusy] = useState(false)
   const [imgErr, setImgErr] = useState<string | null>(null)
   // Clip Douyin (gắn ngữ cảnh: product/scene) — render inline đúng chỗ
-  const [clipFor, setClipFor] = useState<ClipFor | null>(null)
-  const [clips, setClips] = useState<Clip[] | null>(null)
+  const [clipFor, setClipFor] = useState<ClipFor | null>(saved?.clipFor ?? null)
+  const [clips, setClips] = useState<Clip[] | null>(saved?.clips ?? null)
   const [clipsBusy, setClipsBusy] = useState(false)
   const [clipsErr, setClipsErr] = useState<string | null>(null)
-  const [clipsCursor, setClipsCursor] = useState<string | null>(null)
-  const [clipsHasMore, setClipsHasMore] = useState(false)
+  const [clipsCursor, setClipsCursor] = useState<string | null>(saved?.clipsCursor ?? null)
+  const [clipsHasMore, setClipsHasMore] = useState(saved?.clipsHasMore ?? false)
   const [moreBusy, setMoreBusy] = useState(false)
-  const [onlyShort, setOnlyShort] = useState(true)   // chỉ clip <60s (hợp cắt B-roll)
+  const [onlyShort, setOnlyShort] = useState(saved?.onlyShort ?? true)   // chỉ clip <60s (hợp cắt B-roll)
   // Popup phát video + popup ảnh/video gốc 1688
   const [playVid, setPlayVid] = useState<PlayVid | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detail, setDetail] = useState<Detail | null>(null)
   const [detailBusy, setDetailBusy] = useState(false)
 
+  // Lưu state để F5 không mất (bỏ qua nếu quá quota localStorage → bỏ ảnh data URL nặng).
+  useEffect(() => {
+    const snap: Saved = { name, imageUrl, pickId, tab, brief, imgProducts, clipFor, clips, clipsCursor, clipsHasMore, onlyShort }
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(snap)) }
+    catch { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ ...snap, imageUrl: imageUrl.startsWith('data:') ? '' : imageUrl })) } catch { /* */ } }
+  }, [name, imageUrl, pickId, tab, brief, imgProducts, clipFor, clips, clipsCursor, clipsHasMore, onlyShort])
+
+  const close = () => { clearSaved(); onClose() }
   const copy = (t: string) => { navigator.clipboard?.writeText(t); addToast('Đã copy', 'success') }
   const safe = (s: string) => (s || 'sp').replace(/[^\w]+/g, '-').slice(0, 24)
 
@@ -152,6 +171,10 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
 
   const findByImage = async () => {
     if (!imageUrl) { setImgErr('Cần ảnh SP (chọn từ Kho hoặc 📁 Tải ảnh) để khớp hình'); return }
+    // Cache: cùng ảnh đã tra → dùng lại, KHỎI tốn quota RapidAPI.
+    const ckey = hashStr(imageUrl)
+    const cached = imgCache.get(ckey)
+    if (cached) { setImgProducts(cached); if (cached.length) void findClips(cached[0].title, 'product', cached[0].itemId); return }
     setImgBusy(true); setImgErr(null); setImgProducts(null)
     try {
       let body: { base64?: string; imageUrl?: string }
@@ -160,6 +183,7 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
       const d = await fetch('/api/rapid-1688?action=search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json())
       if (d.error) { setImgErr(d.error + (d.detail ? ` — ${String(d.detail).slice(0, 120)}` : '')); setImgBusy(false); return }
       const list: ImgProduct[] = Array.isArray(d.products) ? d.products : []
+      if (list.length) imgCache.set(ckey, list)
       setImgProducts(list)
       if (!list.length) setImgErr(d.note || 'Không tìm thấy SP khớp ảnh — thử ảnh nền sạch hơn')
       else void findClips(list[0].title, 'product', list[0].itemId)   // khớp ảnh → ra VIDEO luôn
@@ -272,7 +296,7 @@ Cảnh phải THẬT/ĐỜI (kiểu UGC), không lung linh điện ảnh. CHỈ 
             <h2 className="text-sm font-bold text-app-text">Tìm Source — nguyên liệu video cho SP</h2>
             <p className="truncate text-[11px] text-app-muted">Clip có sản phẩm + cảnh B-roll liên quan (Douyin) — xem & tải trực tiếp để cắt ghép</p>
           </div>
-          <button onClick={onClose} className="ml-auto rounded-full p-1 text-app-muted hover:bg-app-card-elevated"><X className="h-5 w-5" /></button>
+          <button onClick={close} className="ml-auto rounded-full p-1 text-app-muted hover:bg-app-card-elevated"><X className="h-5 w-5" /></button>
         </div>
 
         {/* Chọn SP */}

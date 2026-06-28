@@ -34,9 +34,15 @@ export default function Research() {
   const updateWatch = useWatchlistStore((s) => s.update)
   const [view, setView] = useState<'products' | 'shops'>('products')
   const [showWatch, setShowWatch] = useState(false)
-  const [showSource, setShowSource] = useState(false)
+  const [showSource, setShowSource] = useState(() => { try { return localStorage.getItem('source-finder-open-v1') === '1' } catch { return false } })
   const [sourceInit, setSourceInit] = useState<{ name: string; imageUrl?: string } | null>(null)
-  const openSource = (p?: ScoredProduct) => { setSourceInit(p ? { name: p.title, imageUrl: p.imageUrl } : null); setShowSource(true) }
+  const openSource = (p?: ScoredProduct) => {
+    if (p) { try { localStorage.removeItem('source-finder-state-v1') } catch { /* */ } } // mở SP mới → bỏ phiên cũ
+    setSourceInit(p ? { name: p.title, imageUrl: p.imageUrl } : null)
+    setShowSource(true)
+    try { localStorage.setItem('source-finder-open-v1', '1') } catch { /* */ }
+  }
+  const closeSource = () => { setShowSource(false); try { localStorage.removeItem('source-finder-open-v1') } catch { /* */ } }
   const activeNichePreset = NICHE_PRESETS.find((n) => n.label === scanNiche)
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const scored = getScored()
@@ -278,7 +284,7 @@ ${list}`
       </div>
 
       {selected && selectedId && <ProductDetail product={selected} onClose={() => select(null)} onFindSource={openSource} />}
-      {showSource && <SourceFinder initial={sourceInit} onClose={() => setShowSource(false)} />}
+      {showSource && <SourceFinder initial={sourceInit} onClose={closeSource} />}
     </div>
   )
 }
