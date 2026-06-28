@@ -141,6 +141,35 @@ function voiceMatchesMarket(v: ElevenLabsVoice, market: TargetMarket): boolean {
   return lang === 'ms' || lang === 'id' || /malay|melayu|indones|bahasa/.test(hay)
 }
 
+/** Giới tính giọng từ ElevenLabs (label trước, rồi tên/mô tả). KHÔNG match bare "nam" (dễ
+ *  nhầm "Miền Nam" = vùng miền) — chỉ "giọng nam"/"male". Trả undefined nếu không rõ. */
+function voiceGender(v: ElevenLabsVoice): 'male' | 'female' | undefined {
+  const lab = (v.labels?.gender ?? '').toLowerCase()
+  if (/female|woman|nữ/.test(lab)) return 'female'
+  if (/male|man/.test(lab)) return 'male'
+  const hay = `${v.name} ${v.description ?? ''}`.toLowerCase()
+  if (/\bnữ\b|giọng nữ|female|woman|\bcô\b|\bchị\b|\bbà\b/.test(hay)) return 'female'
+  if (/giọng nam|\bmale\b|\bman\b|\banh\b|\bchú\b|\bông\b/.test(hay)) return 'male'
+  return undefined
+}
+/** Giới tính mong muốn của nhân vật (voice.gioiTinh 'nam'|'nu'). */
+function charWantGender(ch: PersonifiedCharacter): 'male' | 'female' {
+  return /nu|nữ|nu+/.test((ch.voice?.gioiTinh ?? '').toLowerCase()) ? 'female' : 'male'
+}
+/** Điểm khớp 1 giọng cho 1 nhân vật: GIỚI TÍNH ưu tiên cứng (sai giới = phạt nặng), TUỔI bonus nhẹ. */
+function scoreVoiceForChar(v: ElevenLabsVoice, ch: PersonifiedCharacter): number {
+  let s = 0
+  const g = voiceGender(v)
+  const want = charWantGender(ch)
+  if (g === want) s += 100
+  else if (g) s -= 100              // biết chắc lệch giới → tránh (chỉ dùng khi hết giọng đúng giới)
+  const age = `${v.labels?.age ?? ''} ${v.name}`.toLowerCase()
+  const tuoi = (ch.voice?.tuoi ?? '').toLowerCase()
+  if (/già|lão|cao tuổi/.test(tuoi) && /old|senior|elder|mature|già|lão/.test(age)) s += 10
+  if (/trẻ|teen|thanh niên|gen ?z/.test(tuoi) && /young|teen|trẻ/.test(age)) s += 10
+  return s
+}
+
 // Persist toàn bộ input + kết quả vào localStorage → chuyển tab mode (unmount) /
 // F5 không mất việc. KHÔNG lưu cờ loading (analyzing/generating) — chúng là transient.
 const CACHE_KEY = 'personified-state-v1'
@@ -377,15 +406,18 @@ export default function Personified() {
       const matched = myVoices.filter((v) => voiceMatchesMarket(v, market))
       if (!matched.length) return next
       const used = new Set(Object.values(next).filter(Boolean))
-      let mi = 0
+      // Mỗi nhân vật: chọn giọng hợp ngôn ngữ + KHỚP GIỚI TÍNH (điểm cao nhất) chưa dùng.
+      // Sai giới bị phạt -100 nên chỉ dùng khi HẾT giọng đúng giới. → hết cảnh ông già giọng nữ.
       for (const ch of script.characters) {
         if (next[ch.name] !== undefined) continue   // user/auto đã đụng → tôn trọng
-        while (mi < matched.length && used.has(matched[mi].voice_id)) mi++
-        if (mi >= matched.length) break
-        next[ch.name] = matched[mi].voice_id
-        used.add(matched[mi].voice_id)
+        const avail = matched.filter((v) => !used.has(v.voice_id))
+        if (!avail.length) break
+        const pick = avail
+          .map((v) => ({ v, s: scoreVoiceForChar(v, ch) }))
+          .sort((a, b) => b.s - a.s)[0].v
+        next[ch.name] = pick.voice_id
+        used.add(pick.voice_id)
         autoVoiced.current.add(ch.name)
-        mi++
       }
       return next
     })
@@ -1306,11 +1338,24 @@ export default function Personified() {
                                     {previewingVoice === ch.name ? '⏳ đang phát…' : '🔊 Thử'}</button>
                                 )}
                               </div>
-                              {elevenKey && charVoices[ch.name] && (
-                                myVoices.find((v) => v.voice_id === charVoices[ch.name] && voiceMatchesMarket(v, market))
-                                  ? <span className="mt-0.5 block text-[10px] font-semibold text-emerald-600">⭐ Giọng hợp {isVN ? 'Việt Nam' : 'Malaysia'}{autoVoiced.current.has(ch.name) ? ' (AI gợi ý)' : ''}</span>
-                                  : <span className="mt-0.5 block text-[10px] text-amber-600">⚠ Giọng này có thể không phải tiếng {isVN ? 'Việt' : 'Mã'}</span>
-                              )}
+                              {elevenKey && charVoices[ch.name] && (() => {
+                                const sv = myVoices.find((v) => v.voice_id === charVoices[ch.name])
+                                if (!sv) return null
+                                const langOk = voiceMatchesMarket(sv, market)
+                                const g = voiceGender(sv)
+                                const want = charWantGender(ch)
+                                const genderBad = g && g !== want   // biết chắc lệch giới
+                                return (
+                                  <div className="mt-0.5 space-y-0.5">
+                                    {langOk
+                                      ? <span className="block text-[10px] font-semibold text-emerald-600">⭐ Giọng hợp {isVN ? 'Việt Nam' : 'Malaysia'}{autoVoiced.current.has(ch.name) ? ' (AI gợi ý)' : ''}</span>
+                                      : <span className="block text-[10px] text-amber-600">⚠ Giọng này có thể không phải tiếng {isVN ? 'Việt' : 'Mã'}</span>}
+                                    {genderBad && (
+                                      <span className="block text-[10px] font-semibold text-rose-600">⚠ Lệch giới tính: giọng {g === 'female' ? 'NỮ' : 'NAM'} nhưng nhân vật là {want === 'female' ? 'NỮ' : 'NAM'} — đổi giọng cho khớp</span>
+                                    )}
+                                  </div>
+                                )
+                              })()}
                               {elevenKey && myVoices.length > 0 && !myVoices.some((v) => voiceMatchesMarket(v, market)) &&
                                 <span className="mt-0.5 block text-[10px] text-amber-600">Thư viện chưa có giọng {isVN ? 'Việt' : 'Mã'} → bấm 📚 Thư viện thêm</span>}
                               {!elevenKey && <span className="text-[10px] text-amber-600">cần ElevenLabs key trong Cài đặt</span>}
