@@ -71,7 +71,7 @@ export default function PriceCalc({ products, priceVnd, inv }: { products: ProdL
   const [vanHanhPct, setVanHanhPct] = useState(0.08)
   const [lnTargetPct, setLnTargetPct] = useState(0.10)
   const [cpaLead, setCpaLead] = useState(100000)
-  const [tyGia, setTyGia] = useState(5800)
+  const tyGia = 5800 // tỷ giá RM→VNĐ cố định (khớp file Excel)
   const [combos, setCombos] = useState<Combo[]>(DEFAULT_COMBOS)
   const [soDon, setSoDon] = useState(1000)
   const [showAdv, setShowAdv] = useState(false)
@@ -172,7 +172,6 @@ export default function PriceCalc({ products, priceVnd, inv }: { products: ProdL
           <NumField label="% Vận hành (cố định)" value={+(vanHanhPct * 100).toFixed(1)} onChange={(n) => setVanHanhPct(n / 100)} suffix="%" step={0.5} />
           <NumField label="Lợi nhuận MỤC TIÊU (%)" value={+(lnTargetPct * 100).toFixed(1)} onChange={(n) => setLnTargetPct(n / 100)} suffix="%" step={1} tint />
           <NumField label="⭐ CPA / 1 data-lead (VNĐ)" value={cpaLead} onChange={setCpaLead} step={5000} tint />
-          <NumField label="Tỷ giá RM → VNĐ" value={tyGia} onChange={setTyGia} step={100} />
         </div>
       </div>
 
