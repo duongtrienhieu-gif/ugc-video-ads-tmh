@@ -36,7 +36,6 @@ export default function Research() {
   // Mobile: dưới lg, body xếp dọc → 1 tab hiện tại 1 lúc (Lọc / Kết quả).
   // Mặc định 'result' để mở app thấy ngay lưới SP. Desktop (lg+) bỏ qua, hiện cả 2.
   const [mobileTab, setMobileTab] = useState<'filter' | 'result'>('result')
-  void mobileTab; void setMobileTab // [deploy-unblock] WIP mobile-tab chưa wire vào JSX — né unused chặn build (xoá khi đã dùng)
   const [showWatch, setShowWatch] = useState(false)
   const [showSource, setShowSource] = useState(() => { try { return localStorage.getItem('source-finder-open-v1') === '1' } catch { return false } })
   const [sourceInit, setSourceInit] = useState<{ name: string; imageUrl?: string } | null>(null)
