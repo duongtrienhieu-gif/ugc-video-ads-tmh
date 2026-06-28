@@ -10,6 +10,7 @@ import PriceCalc from './PriceCalc'
 import ProfitTruth from './ProfitTruth'
 import { computeProfit } from './profitCalc'
 import GiftCombo from './GiftCombo'
+import { useAppStore } from '../../stores/appStore'
 
 const TY_GIA = 5800
 const PACK_FACTOR = (name: string) => (name.trim().toUpperCase() === 'KNEE PAD' ? 2 : 1)
@@ -186,6 +187,17 @@ export default function InventoryBoard() {
     void load(s)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Deep-link: app khác (nút Ghép quà / Máy tính giá ở Tác Chiến) đặt localStorage 'inv_board_tab'
+  // rồi mở app này. Theo dõi activeApp để mở đúng tab KỂ CẢ khi app đã mount sẵn (shell giữ app sống).
+  const activeApp = useAppStore((s) => s.activeApp)
+  useEffect(() => {
+    if (activeApp !== 'inventory-board') return
+    try {
+      const t = localStorage.getItem('inv_board_tab')
+      if (t && ['kho', 'calc', 'profit', 'gift'].includes(t)) { setTab(t as 'kho' | 'calc' | 'profit' | 'gift'); localStorage.removeItem('inv_board_tab') }
+    } catch { /* ignore */ }
+  }, [activeApp])
 
   // tự làm mới mỗi 5 phút
   useEffect(() => {

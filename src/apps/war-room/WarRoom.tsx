@@ -169,14 +169,14 @@ function MyBoard({ members, targets, tasks, stats, profit, isCEO, myMember, user
   const A = {
     spy: { app: 'spy-ads', label: '🔍 Mở Spy' }, script: { app: 'script-architect', label: '📝 Viết script' },
     video: { app: 'video-builder', label: '🎥 Làm video' }, ladi: { app: 'super-ladipage', label: '📄 Ladipage' },
-    gia: { app: 'inventory-board', label: '🧮 Máy tính giá' }, tinh: { app: 'inventory-board', label: '📦 Tỉnh bom' },
+    gia: { app: 'inventory-board', label: '🧮 Máy tính giá', tab: 'calc' }, qua: { app: 'inventory-board', label: '🎁 Ghép quà', tab: 'gift' },
   }
-  type Sugg = { tone: string; tag: string; title: string; sub: string; apps: { app: string; label: string }[] }
+  type Sugg = { tone: string; tag: string; title: string; sub: string; apps: { app: string; label: string; tab?: string }[] }
   const suggestions: Sugg[] = []
   for (const { code, prof, laiDon } of myProfit) {
     const h = (prof.hoanPct * 100).toFixed(0)
-    if (prof.den === 'Cắt') suggestions.push({ tone: C.red, tag: 'GẤP', title: `Cắt / sửa gấp ${code}`, sub: prof.hoanPct > 0.45 ? `hoàn ${h}% — chặn COD tỉnh bom / ép cọc, ĐỪNG đổ thêm ads` : `lỗ ${fmtMoney(laiDon)}/đơn — sửa giá·combo hoặc cắt`, apps: [A.gia, A.tinh] })
-    else if (prof.hoanPct > 0.45) suggestions.push({ tone: C.amber, tag: 'HOÀN', title: `Giảm hoàn ${code} ${h}%`, sub: `khách bom nặng — chặn tỉnh bom / ép cọc lead`, apps: [A.tinh] })
+    if (prof.den === 'Cắt') suggestions.push({ tone: C.red, tag: 'GẤP', title: `Cắt / sửa gấp ${code}`, sub: prof.hoanPct > 0.45 ? `hoàn ${h}% — ghép quà tăng giá trị / ép cọc, ĐỪNG đổ thêm ads` : `lỗ ${fmtMoney(laiDon)}/đơn — sửa giá·combo·ghép quà hoặc cắt`, apps: [A.gia, A.qua] })
+    else if (prof.hoanPct > 0.45) suggestions.push({ tone: C.amber, tag: 'HOÀN', title: `Giảm hoàn ${code} ${h}%`, sub: `khách bom nặng — ghép quà·ép cọc để khách giữ đơn`, apps: [A.qua] })
     else if (prof.den === 'Scale') suggestions.push({ tone: C.green, tag: 'SCALE', title: `Đẩy mạnh ${code}`, sub: `lãi tốt, CPQC còn rẻ — tăng ads + ra thêm content`, apps: [A.video, A.spy, A.ladi] })
     else if (prof.den === 'Sửa') suggestions.push({ tone: C.amber, tag: 'SỬA', title: `Ghìm ${code}`, sub: `ads/hoàn hơi cao — ghìm CPQC, soi lại nhắm mục tiêu`, apps: [A.spy] })
   }
@@ -331,7 +331,7 @@ function MyBoard({ members, targets, tasks, stats, profit, isCEO, myMember, user
               </div>
               <div style={{ fontSize: 12, color: C.muted2, margin: '4px 0 7px 15px' }}>{s.sub}</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 15 }}>
-                {s.apps.map((a) => <button key={a.label} onClick={() => openApp(a.app)} style={{ background: 'transparent', color: C.muted2, border: `1px solid ${C.line}`, borderRadius: 7, padding: '4px 10px', fontSize: 11.5, cursor: 'pointer' }}>{a.label} ↗</button>)}
+                {s.apps.map((a) => <button key={a.label} onClick={() => { if (a.tab) { try { localStorage.setItem('inv_board_tab', a.tab) } catch { /* quota */ } } openApp(a.app) }} style={{ background: 'transparent', color: C.muted2, border: `1px solid ${C.line}`, borderRadius: 7, padding: '4px 10px', fontSize: 11.5, cursor: 'pointer' }}>{a.label} ↗</button>)}
               </div>
             </div>
           ))}
