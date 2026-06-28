@@ -9,12 +9,27 @@ interface BoardResp {
   products?: Prod[]; inv?: InvItem[]; velocity?: Record<string, number>; priceVnd?: Record<string, number>
 }
 
-// Tải 1 lần số kho → map theo TÊN SP (UPPER): doanh thu · lãi · %CPQC · %hoàn + bảng đèn
-export async function fetchSpStats(): Promise<{ stats: Record<string, SpStat>; profit: SpProfit[] }> {
-  const r = await fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ links: {} }), cache: 'no-store' })
-  const j = (await r.json()) as BoardResp
-  const products = j.products ?? []
-  const rows = computeProfit(products, j.inv ?? [], j.velocity ?? {}, j.priceVnd ?? {})
+// Cache "số tốt gần nhất" trên máy: nếu lần load sau bị Google chặn (hoàn/aov rớt),
+// vẫn hiện số cũ thay vì để trống — nhân viên/CEO luôn có gì đó để theo dõi.
+const CACHE_KEY = 'war_spstats_v1'
+export interface SpStatsResult { stats: Record<string, SpStat>; profit: SpProfit[]; stale: boolean; at: number }
+// "Tốt" = có sản phẩm + có ÍT NHẤT 1 mã ra %hoàn (QLHB tải được) + 1 mã ra AOV (SALE tải được)
+function isGood(stats: Record<string, SpStat>, profit: SpProfit[]): boolean {
+  if (!profit.length) return false
+  const v = Object.values(stats)
+  return v.some((s) => s.hoan > 0) && v.some((s) => s.aov > 0)
+}
+
+// Tải 1 lần số kho → map theo TÊN SP (UPPER): doanh thu · lãi · %CPQC · %hoàn · AOV · chốt + bảng đèn
+export async function fetchSpStats(): Promise<SpStatsResult> {
+  let products: Prod[] = [], inv: InvItem[] = [], velocity: Record<string, number> = {}, priceVnd: Record<string, number> = {}
+  try {
+    const r = await fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ links: {} }), cache: 'no-store' })
+    const j = (await r.json()) as BoardResp
+    products = j.products ?? []; inv = j.inv ?? []; velocity = j.velocity ?? {}; priceVnd = j.priceVnd ?? {}
+  } catch { /* mạng lỗi → rơi xuống cache bên dưới */ }
+
+  const rows = computeProfit(products, inv, velocity, priceVnd)
   const laiPctByName: Record<string, number> = {}
   const aovByName: Record<string, number> = {}
   const profit: SpProfit[] = rows.map((row) => {
@@ -29,7 +44,21 @@ export async function fetchSpStats(): Promise<{ stats: Record<string, SpStat>; p
     const dt = p.rmRevenue * RATE
     stats[key] = { dt, lai: (laiPctByName[key] ?? 0) * dt, cpqc: p.pctCpqc, hoan: p.pctHoan, aov: aovByName[key] ?? 0, chot: p.pctChot }
   }
-  return { stats, profit }
+
+  if (isGood(stats, profit)) {
+    const fresh: SpStatsResult = { stats, profit, stale: false, at: Date.now() }
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ stats, profit, at: fresh.at })) } catch { /* quota */ }
+    return fresh
+  }
+  // Load này thiếu (Google chặn) → dùng số tốt đã cache nếu có
+  try {
+    const c = localStorage.getItem(CACHE_KEY)
+    if (c) {
+      const cached = JSON.parse(c) as { stats: Record<string, SpStat>; profit: SpProfit[]; at: number }
+      if (cached.profit?.length) return { stats: cached.stats, profit: cached.profit, stale: true, at: cached.at }
+    }
+  } catch { /* parse lỗi */ }
+  return { stats, profit, stale: false, at: Date.now() } // chưa từng có cache → trả số hiện có (có thể thiếu)
 }
 
 // Map marketer → các mã SP họ phụ trách (từ file Ghép quà sheet 4 cột marketer) → để TỰ GÁN

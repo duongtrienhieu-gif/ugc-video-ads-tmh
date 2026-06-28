@@ -79,27 +79,49 @@ function serialToISO(v: unknown): string {
 }
 // fetch có TIMEOUT — 1 request Google treo KHÔNG được giết cả function (→ Vercel
 // trả HTML "An error occurred" thay JSON → vỡ board). Quá hạn thì abort → soft error.
-async function tfetch(url: string, ms = 20000): Promise<Response> {
+async function tfetch(url: string, ms = 25000): Promise<Response> {
   const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), ms)
   try { return await fetch(url, { cache: 'no-store', signal: ctrl.signal }) }
   finally { clearTimeout(t) }
 }
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+// Chạy các tác vụ với GIỚI HẠN SONG SONG (mặc định 2). Google throttle khi 1 IP bắn
+// nhiều /export cùng lúc → 6 file song song = treo → abort. 2-một-đợt thì ổn định.
+async function pool<T>(tasks: (() => Promise<T>)[], limit = 2): Promise<PromiseSettledResult<T>[]> {
+  const results = new Array(tasks.length) as PromiseSettledResult<T>[]
+  let next = 0
+  async function worker() {
+    while (next < tasks.length) {
+      const i = next++
+      try { results[i] = { status: 'fulfilled', value: await tasks[i]() } }
+      catch (reason) { results[i] = { status: 'rejected', reason } as PromiseRejectedResult }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker))
+  return results
+}
 async function fetchXlsx(id: string, sheets: string[]): Promise<XLSX.WorkBook> {
   let last: Error | null = null
-  for (let i = 0; i < 2; i++) { // thử lại 1 lần — Google hay throttle → trả HTML lỗi (hoàn/QLHB rớt)
+  for (let i = 0; i < 3; i++) { // 3 lần, giãn cách tăng dần — Google throttle hay trả HTML/timeout
     try {
-      const res = await tfetch(`https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`, 15000)
+      const res = await tfetch(`https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`, 25000)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return XLSX.read(Buffer.from(await res.arrayBuffer()), { type: 'buffer', sheets })
-    } catch (e) { last = e as Error }
+    } catch (e) { last = e as Error; if (i < 2) await sleep(700 * (i + 1)) }
   }
   throw last ?? new Error('fetchXlsx failed')
 }
 async function fetchCsv(id: string, sheet: string): Promise<string[][]> {
-  const res = await tfetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return parseCSV(await res.text())
+  let last: Error | null = null
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await tfetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}`, 25000)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return parseCSV(await res.text())
+    } catch (e) { last = e as Error; if (i < 2) await sleep(700 * (i + 1)) }
+  }
+  throw last ?? new Error('fetchCsv failed')
 }
 
 // ── parse từng nguồn ─────────────────────────────────────────────────────────
@@ -301,15 +323,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const errors: string[] = []
-  // Tải song song; mỗi nguồn độc lập, lỗi 1 nguồn không phá cả khối.
-  const [tongR, qlhbR, khoR, saleR, nhapR, notonR] = await Promise.allSettled([
-    fetchXlsx(id('tong'), ['SẢN PHẨM_TH']),
-    fetchXlsx(id('qlhb'), ['Tỉ lệ sản phẩm', 'Tỉ lệ tỉnh']),
-    fetchXlsx(id('kho'), ['RP_KHO_SL']),
-    fetchCsv(id('sale'), 'Report_Product'),
-    fetchXlsx(id('nhaphang'), ['BÁO GIÁ VÀ THANH TOÁN']),
-    fetchCsv(id('noton'), 'Tồn kho dự kiến'),
-  ])
+  // Tải GIỚI HẠN 2-một-đợt (không phải 6 cùng lúc) để né Google throttle; mỗi nguồn
+  // độc lập, lỗi 1 nguồn không phá cả khối. QLHB (hoàn) + TỔNG đứng đầu để chạy trước.
+  const [tongR, qlhbR, khoR, saleR, nhapR, notonR] = await pool([
+    () => fetchXlsx(id('tong'), ['SẢN PHẨM_TH']),
+    () => fetchXlsx(id('qlhb'), ['Tỉ lệ sản phẩm', 'Tỉ lệ tỉnh']),
+    () => fetchXlsx(id('kho'), ['RP_KHO_SL']),
+    () => fetchCsv(id('sale'), 'Report_Product'),
+    () => fetchXlsx(id('nhaphang'), ['BÁO GIÁ VÀ THANH TOÁN']),
+    () => fetchCsv(id('noton'), 'Tồn kho dự kiến'),
+  ], 2) as [
+    PromiseSettledResult<XLSX.WorkBook>, PromiseSettledResult<XLSX.WorkBook>, PromiseSettledResult<XLSX.WorkBook>,
+    PromiseSettledResult<string[][]>, PromiseSettledResult<XLSX.WorkBook>, PromiseSettledResult<string[][]>,
+  ]
 
   const qlhbWb = qlhbR.status === 'fulfilled' ? qlhbR.value : null
   if (qlhbR.status === 'rejected') errors.push('QLHB: ' + (qlhbR.reason?.message || 'lỗi tải'))

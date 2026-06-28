@@ -43,6 +43,7 @@ const DEFAULT_SOURCES: Record<string, string> = {
   giftplan: 'https://docs.google.com/spreadsheets/d/1NiCESFek8BYyycTHUMvcMhxpuNDsCI7KplpIxERhOW8/edit',
 }
 const STORAGE_KEY = 'inv_board_sources'
+const GOOD_KEY = 'inv_board_lastgood' // cache "số tốt gần nhất" để load lỗi vẫn hiện đủ số
 
 // ── kiểu dữ liệu trả về từ endpoint ──────────────────────────────────────────
 interface Prod { name: string; rmRevenue: number; cpqc: number; pctCpqc: number; pctHoan: number; c2: number; pctChot: number }
@@ -129,6 +130,15 @@ export default function InventoryBoard() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'live' | 'error'>('idle')
   const [errMsg, setErrMsg] = useState('')
   const [lastUpdate, setLastUpdate] = useState('')
+  const [boardStale, setBoardStale] = useState(false) // đang hiện số cache (load mới bị chặn)
+
+  // "Tốt" = TỔNG + KHO + QLHB(dòng tiền) đều về → đủ hoàn/tỉnh/dòng tiền
+  function isGoodBoard(j: BoardData) { return (j.products?.length ?? 0) > 0 && (j.inv?.length ?? 0) > 0 && !!j.cashflow }
+  function readGood(): { data: BoardData; at: string } | null {
+    try { const c = localStorage.getItem(GOOD_KEY); if (c) { const p = JSON.parse(c); if (p?.data?.products?.length) return p } } catch { /* ignore */ }
+    return null
+  }
+  const nowHM = () => new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
 
   async function load(s: Record<string, string>) {
     setStatus('loading'); setErrMsg('')
@@ -138,11 +148,22 @@ export default function InventoryBoard() {
         body: JSON.stringify({ links: s }), cache: 'no-store',
       })
       const j: BoardData = await r.json()
-      if (!j.ok && !j.products?.length && !j.inv?.length) throw new Error(j.errors?.join(' · ') || 'Không tải được dữ liệu')
-      setData(j)
-      setStatus('live')
-      setLastUpdate(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }))
+      if (isGoodBoard(j)) {
+        // load đẹp → dùng + lưu làm "số tốt gần nhất"
+        const at = nowHM()
+        setData(j); setBoardStale(false); setStatus('live'); setLastUpdate(at)
+        try { localStorage.setItem(GOOD_KEY, JSON.stringify({ data: j, at })) } catch { /* quota */ }
+        return
+      }
+      // load thiếu (Google chặn 1 phần) → ưu tiên hiện số tốt đã cache cho ĐỦ
+      const cached = readGood()
+      if (cached) { setData(cached.data); setBoardStale(true); setStatus('live'); setLastUpdate(cached.at); return }
+      // chưa từng có cache → hiện những gì lấy được, còn không thì báo lỗi
+      if ((j.products?.length ?? 0) > 0 || (j.inv?.length ?? 0) > 0) { setData(j); setBoardStale(false); setStatus('live'); setLastUpdate(nowHM()) }
+      else throw new Error(j.errors?.join(' · ') || 'Không tải được dữ liệu')
     } catch (e) {
+      const cached = readGood()
+      if (cached) { setData(cached.data); setBoardStale(true); setStatus('live'); setLastUpdate(cached.at); return }
       setErrMsg(e instanceof Error ? e.message : 'Lỗi tải dữ liệu')
       setStatus('error')
     }
@@ -332,8 +353,12 @@ export default function InventoryBoard() {
         {/* nguồn dữ liệu + cấu hình */}
         <div style={{ ...panelStyle, padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, letterSpacing: 1.5, color: C.muted }}>NGUỒN DỮ LIỆU</span>
-          <span style={{ flex: 1, minWidth: 160, fontSize: 12, color: status === 'live' ? C.green : status === 'error' ? C.red : C.muted }}>
-            {status === 'live' ? `● Số thật · cập nhật ${lastUpdate} · tự làm mới mỗi 5'` : status === 'loading' ? '● Đang tải...' : status === 'error' ? `● ${errMsg}` : '● Đang tải...'}
+          <span style={{ flex: 1, minWidth: 160, fontSize: 12, color: status === 'error' ? C.red : boardStale ? C.amber : status === 'live' ? C.green : C.muted }}>
+            {status === 'loading' ? '● Đang tải...'
+              : status === 'error' ? `● ${errMsg}`
+              : boardStale ? `● Số tốt gần nhất (lúc ${lastUpdate}) · lần tải mới bị Google chặn — bấm ⟳ thử lại`
+              : status === 'live' ? `● Số thật · cập nhật ${lastUpdate} · tự làm mới mỗi 5'`
+              : '● Đang tải...'}
           </span>
           <button onClick={() => void load(sources)} disabled={status === 'loading'}
             style={{ background: 'transparent', color: C.muted2, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer' }}>
@@ -365,9 +390,9 @@ export default function InventoryBoard() {
           </div>
         )}
 
-        {data?.errors && data.errors.length > 0 && (
+        {!boardStale && data?.errors && data.errors.length > 0 && (
           <div style={{ ...panelStyle, borderColor: '#3a3414', padding: '10px 16px', fontSize: 12.5, color: C.amber }}>
-            ⚠ Một vài nguồn chưa đọc được: {data.errors.join(' · ')}. Kiểm tra link đã công khai chưa ở ⚙ Cấu hình.
+            ⚠ Một vài nguồn chưa đọc được: {data.errors.join(' · ')}. Thử bấm ⟳ Tải lại vài lần (Google hay chặn lúc cao điểm); nếu vẫn thiếu, kiểm tra link đã công khai chưa ở ⚙ Cấu hình.
           </div>
         )}
 

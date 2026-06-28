@@ -38,8 +38,9 @@ export default function WarRoom() {
   const [stats, setStats] = useState<Record<string, SpStat>>({})
   const [profit, setProfit] = useState<SpProfit[]>([])
   const [mktSp, setMktSp] = useState<Record<string, string[]>>({})
+  const [stale, setStale] = useState(false)
 
-  const reloadStats = () => fetchSpStats().then((r) => { setStats(r.stats); setProfit(r.profit) }).catch(() => {})
+  const reloadStats = () => fetchSpStats().then((r) => { setStats(r.stats); setProfit(r.profit); setStale(r.stale) }).catch(() => {})
   useEffect(() => { void load() }, [load])
   useEffect(() => {
     void reloadStats()
@@ -81,7 +82,7 @@ export default function WarRoom() {
         </div>
       )}
 
-      {tab === 'me' && <MyBoard {...{ members, targets, tasks, stats, isCEO, myMember, userEmail, updateTask, reloadStats }} />}
+      {tab === 'me' && <MyBoard {...{ members, targets, tasks, stats, isCEO, myMember, userEmail, updateTask, reloadStats, stale }} />}
       {tab === 'nhansu' && <NhanSu {...{ members, isCEO, mktSp, addMember, updateMember, deleteMember }} />}
       {tab === 'target' && <TargetTab {...{ members, targets, stats, isCEO, setTarget, reloadStats }} />}
       {tab === 'viec' && <ViecTab {...{ members, tasks, profit, spOwner, userEmail, addTask, updateTask, deleteTask }} />}
@@ -98,12 +99,12 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 // ── BẢNG CỦA TÔI — buồng lái cá nhân: con số hôm nay · KPI tháng · việc của tôi ─
 // CEO chọn được từng nhân viên để soi dashboard của đứa đó. Tất cả ×5800 (qua aggregate/computeProfit), KHÔNG 6500.
-function MyBoard({ members, targets, tasks, stats, isCEO, myMember, userEmail, updateTask, reloadStats }: {
+function MyBoard({ members, targets, tasks, stats, isCEO, myMember, userEmail, updateTask, reloadStats, stale }: {
   members: Member[]; targets: { member_id: string; period: string; metric: string; value: number }[]
   tasks: ReturnType<typeof useWarStore.getState>['tasks']; stats: Record<string, SpStat>
   isCEO: boolean; myMember: Member | undefined; userEmail: string
   updateTask: (id: string, p: Partial<ReturnType<typeof useWarStore.getState>['tasks'][number]>) => Promise<void>
-  reloadStats: () => Promise<void>
+  reloadStats: () => Promise<void>; stale: boolean
 }) {
   const [viewId, setViewId] = useState('')
   // CEO xem được mọi người; nhân viên khoá vào chính mình
@@ -184,6 +185,7 @@ function MyBoard({ members, targets, tasks, stats, isCEO, myMember, userEmail, u
         )}
         <button onClick={() => void reloadStats()} title="tải lại số thực tế" style={{ background: 'transparent', color: C.muted2, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 12px', fontSize: 12.5, cursor: 'pointer' }}>⟳ Tải lại</button>
       </div>
+      {stale && <div style={{ marginTop: -6, marginBottom: 14, fontSize: 11.5, color: C.amber }}>● Đang hiện <b>số tốt gần nhất</b> (lần tải này bị Google chặn) — bấm ⟳ Tải lại để lấy số mới.</div>}
 
       {/* CON SỐ HÔM NAY */}
       <div style={{ ...panelStyle, borderColor: '#3a3414' }}>
