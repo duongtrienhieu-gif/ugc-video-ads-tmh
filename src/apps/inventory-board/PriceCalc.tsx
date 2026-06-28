@@ -230,6 +230,8 @@ export default function PriceCalc({ products, priceVnd, inv }: { products: ProdL
         {Math.abs(r.tongPct - 1) >= 0.001 && <div style={{ fontSize: 12, color: C.red, marginTop: 10 }}>⚠ Tổng % đơn đang là {(r.tongPct * 100).toFixed(0)}% — chỉnh cho đủ 100% thì số mới chuẩn.</div>}
       </div>
 
+      {/* cột phải: ③ lợi nhuận + ④ tham chiếu xếp dọc cho gọn */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* ③ BẢNG LỢI NHUẬN */}
       <div style={{ ...panelStyle, marginBottom: 0 }}>
         <div style={eyebrowStyle}>③ ⭐ BẢNG LỢI NHUẬN DỰ KIẾN (% trên doanh số chốt)</div>
@@ -240,10 +242,9 @@ export default function PriceCalc({ products, priceVnd, inv }: { products: ProdL
           </div>
         ))}
       </div>
-      </div>
 
       {/* ④ THAM CHIẾU — care ads */}
-      <div style={panelStyle}>
+      <div style={{ ...panelStyle, marginBottom: 0 }}>
         <div style={eyebrowStyle}>④ THAM CHIẾU — care ads</div>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '12px 16px' }}>
@@ -276,6 +277,8 @@ export default function PriceCalc({ products, priceVnd, inv }: { products: ProdL
           </div>
         )}
         <div style={{ fontSize: 11, color: C.muted, marginTop: 12, lineHeight: 1.5 }}>%CPQC = tiền ads ÷ doanh số chốt (gross). Giá vốn ĐÃ trừ hoàn về kho (chỉ mất vốn trên đơn giao thành công). Ship &amp; Vận hành cố định theo %. Đổi giá combo / CPA / giá vốn → mọi số tự cập nhật.</div>
+      </div>
+      </div>
       </div>
 
       {/* ⑤ TỔNG */}
