@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import PriceCalc from './PriceCalc'
+import ProfitTruth from './ProfitTruth'
 
 const TY_GIA = 6500
 const PACK_FACTOR = (name: string) => (name.trim().toUpperCase() === 'KNEE PAD' ? 2 : 1)
@@ -114,7 +115,7 @@ export default function InventoryBoard() {
     return () => window.removeEventListener('resize', f)
   }, [])
 
-  const [tab, setTab] = useState<'kho' | 'calc'>('kho')
+  const [tab, setTab] = useState<'kho' | 'calc' | 'profit'>('kho')
   const [sources, setSources] = useState<Record<string, string>>({})
   const [showCfg, setShowCfg] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -278,7 +279,7 @@ export default function InventoryBoard() {
 
         {/* tab switcher */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-          {([['kho', '📦 Kho & Nhập hàng'], ['calc', '🧮 Máy tính giá']] as const).map(([k, lbl]) => (
+          {([['kho', '📦 Kho & Nhập hàng'], ['profit', '🔥 Lãi thật/SP'], ['calc', '🧮 Máy tính giá']] as const).map(([k, lbl]) => (
             <button key={k} onClick={() => setTab(k)} style={{ background: tab === k ? C.gold : 'transparent', color: tab === k ? '#0a0a0a' : C.muted2, border: `1px solid ${tab === k ? C.gold : C.line}`, borderRadius: 10, padding: '9px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{lbl}</button>
           ))}
         </div>
@@ -364,6 +365,8 @@ export default function InventoryBoard() {
           <div style={{ ...panelStyle, textAlign: 'center', color: C.muted, fontSize: 14 }}>Chưa có dữ liệu hiển thị. Kiểm tra link nguồn ở ⚙ Cấu hình.</div>
         )}
         </>)}
+
+        {tab === 'profit' && <ProfitTruth products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} />}
 
         {tab === 'calc' && <PriceCalc products={products} priceVnd={priceVnd} inv={inv} />}
       </div>
