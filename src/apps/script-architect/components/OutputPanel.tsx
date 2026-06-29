@@ -27,12 +27,16 @@ export default function OutputPanel({
   const [draftTitle, setDraftTitle] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
+  // Bản Malay sửa được — khởi từ result.malay, đồng bộ lại mỗi khi tạo/tạo-lại kịch bản.
+  const [editedMalay, setEditedMalay] = useState('')
+  useEffect(() => { setEditedMalay(result?.malay ?? '') }, [result])
+
   const addScript = useBankStore((s) => s.addScript)
   const addToast  = useAppStore((s) => s.addToast)
 
   const handleCopy = async (which: 'vietnamese' | 'malay') => {
     if (!result) return
-    const text = which === 'vietnamese' ? result.vietnamese : result.malay
+    const text = which === 'vietnamese' ? result.vietnamese : editedMalay
     try {
       await navigator.clipboard.writeText(text)
       setCopied(which)
@@ -59,7 +63,7 @@ export default function OutputPanel({
       // anytime by regenerating from the same product + preset.
       await addScript({
         title,
-        scriptText: result.malay,
+        scriptText: editedMalay,
         linkedProductId: productId,
         source: 'script-architect',
       })
@@ -199,9 +203,11 @@ export default function OutputPanel({
         <ScriptBox
           flag="🇲🇾"
           label="Bahasa Melayu"
-          sub="bản chính · sẽ lưu"
+          sub="bản chính · sửa được · sẽ lưu"
           primary
-          text={result.malay}
+          text={editedMalay}
+          editable
+          onChange={(v) => { setEditedMalay(v); if (saved) setSaved(false) }}
           copied={copied === 'malay'}
           onCopy={() => handleCopy('malay')}
         />
@@ -252,7 +258,7 @@ export default function OutputPanel({
           presetLabel={result.presetLabel}
           lengthSec={result.lengthSec}
           hookStrength={result.hookStrength}
-          previewText={result.malay.slice(0, 140)}
+          previewText={editedMalay.slice(0, 140)}
         />
       )}
     </div>
@@ -371,7 +377,7 @@ function SaveScriptModal({
 // ── Sub-components ──────────────────────────────────────────────────────
 
 function ScriptBox({
-  flag, label, sub, text, copied, onCopy, primary = false,
+  flag, label, sub, text, copied, onCopy, primary = false, editable = false, onChange,
 }: {
   flag: string
   label: string
@@ -380,6 +386,8 @@ function ScriptBox({
   copied: boolean
   onCopy: () => void
   primary?: boolean
+  editable?: boolean
+  onChange?: (s: string) => void
 }) {
   return (
     <div
@@ -406,9 +414,19 @@ function ScriptBox({
           {copied ? 'Đã chép' : 'Sao chép'}
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto p-4">
-        <p className="whitespace-pre-wrap text-sm leading-relaxed text-app-text">{text}</p>
-      </div>
+      {editable ? (
+        <textarea
+          value={text}
+          onChange={(e) => onChange?.(e.target.value)}
+          spellCheck={false}
+          placeholder="Sửa kịch bản Bahasa Melayu tại đây rồi bấm Lưu…"
+          className="min-h-0 flex-1 resize-none whitespace-pre-wrap bg-transparent p-4 text-sm leading-relaxed text-app-text outline-none placeholder-app-faint"
+        />
+      ) : (
+        <div className="flex-1 overflow-y-auto p-4">
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-app-text">{text}</p>
+        </div>
+      )}
     </div>
   )
 }
