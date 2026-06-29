@@ -113,7 +113,7 @@ export async function deepDive(c: SpCandidate, geminiApiKey?: string): Promise<D
   adsResults.forEach((r, idx) => {
     if (r.status !== 'fulfilled') return
     const platform: 'fb' | 'tiktok' = idx % 2 === 0 ? 'fb' : 'tiktok'
-    const list = (r.value.ads as { id?: string; page?: string; cover?: string; videoUrl?: string; text?: string; daysRunning?: number; advertiserAds?: number }[] | undefined) ?? []
+    const list = (r.value.ads as { id?: string; page?: string; pageId?: string; cover?: string; videoUrl?: string; text?: string; daysRunning?: number; advertiserAds?: number }[] | undefined) ?? []
     for (const a of list) {
       const id = String(a.id ?? '')
       if (!id) continue
@@ -123,7 +123,7 @@ export async function deepDive(c: SpCandidate, geminiApiKey?: string): Promise<D
       const scale = Number(a.advertiserAds) || 0
       const prev = adMap.get(id)
       if (prev) { prev.days = Math.max(prev.days, days); prev.scale = Math.max(prev.scale, scale) }
-      else adMap.set(id, { id, platform, cover: String(a.cover ?? ''), videoUrl: String(a.videoUrl ?? ''), text: String(a.text ?? ''), days, scale })
+      else adMap.set(id, { id, platform, pageId: a.pageId ? String(a.pageId) : undefined, page: a.page ? String(a.page) : undefined, cover: String(a.cover ?? ''), videoUrl: String(a.videoUrl ?? ''), text: String(a.text ?? ''), days, scale })
     }
   })
   const adCount = adMap.size

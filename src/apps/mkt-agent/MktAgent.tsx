@@ -9,7 +9,7 @@ import { classifyBranding } from './services/brandingFilter'
 import { buildVerifyLinks, deepDive, searchKeyword } from './services/enrichStage'
 import { computeWinScore, type WinScore } from './services/winScore'
 import { judgeSp } from './services/judge'
-import { filterExactSpy } from './services/matchSpy'
+import { harvestExactSpy } from './services/harvestSpy'
 
 const MODE_OPTS: { key: CheckpointMode; label: string }[] = [
   { key: 'every', label: '🔴 Duyệt mọi bước (debug)' },
@@ -111,8 +111,8 @@ export default function MktAgent() {
     if (!c.deep || !c.imageUrl || !geminiApiKey || !c.deep.rawAds?.length) return
     patchCandidate(c.productId, { filtering: true })
     try {
-      const exact = await filterExactSpy(geminiApiKey, c.imageUrl, c.deep.rawAds)
-      patchCandidate(c.productId, { filtering: false, deep: { ...c.deep, exactCount: exact.length, exactChecked: true } })
+      const exact = await harvestExactSpy(geminiApiKey, c.imageUrl, c.deep.rawAds, 5)
+      patchCandidate(c.productId, { filtering: false, deep: { ...c.deep, exactCount: exact.length, exactChecked: true, exactAds: exact.slice(0, 10) } })
     } catch {
       patchCandidate(c.productId, { filtering: false })
     }
@@ -248,7 +248,22 @@ export default function MktAgent() {
                       <div className="text-[11px] text-zinc-300 bg-zinc-900 rounded-md px-2 py-1.5 space-y-0.5">
                         <div>🎬 {p.deep.videoCount} video{p.deep.maxViews > 0 ? ` · ${compact(p.deep.maxViews)} view` : ''}</div>
                         {p.deep.exactChecked && (
-                          <div className="text-emerald-300 font-medium">🎯 {p.deep.exactCount} spy ĐÚNG SP (ảnh khớp ≥75 + có video){(p.deep.exactCount ?? 0) === 0 ? ' — harvest bù bằng app' : ''}</div>
+                          <>
+                            <div className="text-emerald-300 font-medium">
+                              🎯 {p.deep.exactCount} ad đối thủ ĐÚNG SP (đã đào advertiser)
+                              {(p.deep.exactCount ?? 0) >= 5 ? ' ✓ đủ 5' : (p.deep.exactCount ?? 0) === 0 ? ' — gần như không có đối thủ COD, cân nhắc bỏ' : ' — chưa đủ 5'}
+                            </div>
+                            {p.deep.exactAds && p.deep.exactAds.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-0.5">
+                                {p.deep.exactAds.slice(0, 5).map((a) => (
+                                  <a key={a.id} href={a.videoUrl} target="_blank" rel="noopener noreferrer" title={`${a.platform} · chạy ${a.days}d — mở video`}
+                                    className="block w-9 h-9 rounded overflow-hidden border border-emerald-500/40 bg-zinc-800">
+                                    {a.cover ? <img src={a.cover} alt="" className="w-full h-full object-cover" loading="lazy" /> : <span className="text-[8px] grid place-items-center w-full h-full">▶</span>}
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </>
                         )}
                         <div className="text-zinc-500">📣 {p.deep.adCount} ads (FB+TikTok) · cầu danh mục (đã bỏ clinic/dịch vụ){p.deep.adTopDays > 0 ? ` · chạy ${p.deep.adTopDays}d` : ''}{p.deep.adTopScale > 1 ? ` · x${p.deep.adTopScale}` : ''}</div>
                         {!p.deep.exactChecked && p.deep.rawAds && p.deep.rawAds.length > 0 && geminiApiKey && p.imageUrl ? (

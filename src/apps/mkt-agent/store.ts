@@ -16,6 +16,8 @@ export type AgentStage =
 export interface SpyAd {
   id: string
   platform: 'fb' | 'tiktok'
+  pageId?: string   // FB advertiser → đào hết ad của họ (pageId mode)
+  page?: string
   cover: string
   videoUrl: string
   text: string
@@ -38,8 +40,9 @@ export interface DeepDive {
   link1688: string
   terms?: string[]       // rổ từ khóa đã bung (Gemini) — search FB+TikTok đa góc
   rawAds?: SpyAd[]       // ad thật gom được (cầu danh mục) — nguồn lọc + harvest
-  exactCount?: number    // # spy ĐÚNG SP (sau lọc ảnh ≥75 + có video)
+  exactCount?: number    // # spy ĐÚNG SP (sau lọc ảnh ≥75 + đào advertiser)
   exactChecked?: boolean
+  exactAds?: SpyAd[]     // danh sách ad ĐÚNG SP (tải về được) — harvest output
 }
 
 // Giám khảo Gemini — phân tích sâu tổng hợp hồ sơ SP.
