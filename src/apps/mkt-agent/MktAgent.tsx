@@ -101,8 +101,10 @@ export default function MktAgent() {
         <label className="flex items-center gap-2 text-[13px] text-zinc-400">
           Chế độ duyệt
           <select value={checkpointMode} onChange={(e) => setCheckpointMode(e.target.value as CheckpointMode)}
-            className="bg-zinc-900 border border-zinc-700 rounded-md px-2.5 py-1.5 text-zinc-100 text-[13px]">
-            {MODE_OPTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+            className="bg-zinc-900 border border-amber-500/50 rounded-md px-2.5 py-1.5 text-amber-300 text-[13px]">
+            {MODE_OPTS.map((o) => (
+              <option key={o.key} value={o.key} style={{ background: '#0a0a0a', color: '#fcd34d' }}>{o.label}</option>
+            ))}
           </select>
         </label>
       </div>
@@ -127,7 +129,7 @@ export default function MktAgent() {
               className="mt-1 w-24 bg-zinc-950 border border-zinc-700 rounded-md px-3 py-2 text-zinc-100 text-sm" />
           </label>
           <button onClick={scan} disabled={scanning || classifying}
-            className="h-[42px] px-5 rounded-md font-medium bg-amber-500 text-zinc-950 hover:bg-amber-400 disabled:opacity-50">
+            className="h-[42px] px-5 rounded-md font-medium bg-amber-500 text-zinc-950 hover:bg-amber-400 disabled:bg-amber-500 disabled:cursor-wait">
             {scanning ? 'Đang quét…' : classifying ? 'Đang lọc…' : '⚡ Quét MY'}
           </button>
         </div>
