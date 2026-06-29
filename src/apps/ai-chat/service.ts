@@ -90,15 +90,16 @@ const extractOpenAi = (j: unknown): string =>
   (j as { choices?: { delta?: { content?: string } }[] }).choices?.[0]?.delta?.content ?? ''
 
 // ── Gemini streaming (đa lượt, ảnh + video) ──
-export async function geminiChatStream(apiKey: string, history: ChatMessage[], onDelta: (s: string) => void): Promise<string> {
+export async function geminiChatStream(apiKey: string, history: ChatMessage[], onDelta: (s: string) => void, userData = ''): Promise<string> {
   const contents = buildGeminiContents(history)
+  const sys = userData ? `${GEMINI_SYS}\n\n${userData}` : GEMINI_SYS
   const models = ['gemini-2.5-flash', 'gemini-2.0-flash']
   let lastErr = ''
   for (const model of models) {
     try {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents, systemInstruction: { parts: [{ text: GEMINI_SYS }] }, generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } }),
+        body: JSON.stringify({ contents, systemInstruction: { parts: [{ text: sys }] }, generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } }),
       })
       if (!res.ok) {
         lastErr = `Gemini ${res.status}: ${(await res.text().catch(() => '')).slice(0, 150)}`
@@ -114,8 +115,9 @@ export async function geminiChatStream(apiKey: string, history: ChatMessage[], o
 }
 
 // ── GPT streaming (nhận ảnh, KHÔNG video) ──
-export async function openaiChatStream(apiKey: string, model: GptModel, history: ChatMessage[], onDelta: (s: string) => void): Promise<string> {
-  const messages = [{ role: 'system', content: GPT_SYS }, ...buildOpenAiMessages(history)]
+export async function openaiChatStream(apiKey: string, model: GptModel, history: ChatMessage[], onDelta: (s: string) => void, userData = ''): Promise<string> {
+  const sys = userData ? `${GPT_SYS}\n\n${userData}` : GPT_SYS
+  const messages = [{ role: 'system', content: sys }, ...buildOpenAiMessages(history)]
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },

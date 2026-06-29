@@ -6,6 +6,10 @@ import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { geminiChatStream, openaiChatStream, genImage, type ChatMessage, type Attachment, type GptModel } from './service'
 import { fetchSharedOpenAiKey, saveSharedOpenAiKey, fetchConvos, upsertConvo, deleteConvoCloud } from './cloud'
+import { loadMyDataBlock } from './myData'
+
+// Chỉ gắn DỮ LIỆU THẬT (doanh thu/mã SP…) khi câu hỏi liên quan — riêng tư + không lậm + đỡ token.
+const DATA_RE = /doanh thu|doanhthu|lãi|lợi nhuận|ho[àa]n|cpqc|ch[ốo]t|aov|\bđơn\b|của tôi|của mình|của em|mã sp|mã của|target|chỉ tiêu|kpi|ngân sách|bán được|số liệu|báo cáo|\bkho\b|tồn|team|nhân viên/i
 
 // Lịch sử RIÊNG theo email: nhiều cuộc trò chuyện, tự lưu; mở "Trò chuyện mới" thì cuộc cũ vào lịch sử.
 interface Convo { id: string; title: string; messages: ChatMessage[]; updatedAt: number }
@@ -37,6 +41,7 @@ export default function AiChat() {
   const [convos, setConvos] = useState<Convo[]>([])
   const [activeId, setActiveId] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [myData, setMyData] = useState('')   // dữ liệu thật theo mail (doanh thu/mã SP) — Mức B
 
   const fileRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -47,6 +52,8 @@ export default function AiChat() {
     setOpenaiKey(localStorage.getItem(OPENAI_LS) || '')
     fetchSharedOpenAiKey().then((k) => { if (k) setOpenaiKey(k) })
   }, [])
+  // Dữ liệu thật theo mail đăng nhập (Mức B) — load nền, best-effort.
+  useEffect(() => { loadMyDataBlock(email).then(setMyData).catch(() => setMyData('')) }, [email])
   // Nạp lịch sử: local trước (hiện ngay), rồi Supabase (nguồn chuẩn xuyên máy) ghi đè nếu có.
   useEffect(() => {
     let localList: Convo[] = []
@@ -145,14 +152,15 @@ export default function AiChat() {
     const asstId = crypto.randomUUID()
     setMessages((m) => [...m, { id: asstId, role: 'assistant', text: '', atts: [], imageUrls: [], model: model === 'gpt' ? 'gpt' : 'gemini' }])
     const onDelta = (chunk: string) => setMessages((m) => m.map((x) => (x.id === asstId ? { ...x, text: x.text + chunk } : x)))
+    const ctx = DATA_RE.test(text) ? myData : ''   // chỉ gắn dữ liệu thật khi câu hỏi liên quan tiền/SP
     try {
       let full = ''
       if (model === 'gpt') {
         if (userMsg.atts.some((a) => a.kind === 'video')) addToast('GPT bỏ qua video — dùng Gemini cho video', 'error')
-        full = await openaiChatStream(openaiKey, gptModel, next, onDelta)
+        full = await openaiChatStream(openaiKey, gptModel, next, onDelta, ctx)
       } else {
         if (!geminiApiKey) throw new Error('Cần Gemini API key trong Cài đặt')
-        full = await geminiChatStream(geminiApiKey, next, onDelta)
+        full = await geminiChatStream(geminiApiKey, next, onDelta, ctx)
       }
       setMessages((m) => m.map((x) => (x.id === asstId ? { ...x, text: full || x.text || '(không có nội dung)' } : x)))
     } catch (e) {
