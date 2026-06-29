@@ -293,20 +293,14 @@ const MKT_FILES: { token: string; id: string }[] = [
   { token: 'ANH', id: '1gUG9JgO0cC-zYkvTePXfcFYIlS2CXzMUL4n0o8mmDbA' },
   { token: 'HÀ', id: '18c_BtFLdGB7EBaN06rWKJiFLiZogdDNS_O_0xVccV6s' },
 ]
-// Gom SP đầy đủ từ log giao dịch: cột "Mặt hàng" — dò CHÍNH XÁC "Mặt hàng" (break ngay match
-// đầu, KHÔNG để dòng sau ghi đè nhầm cột số); default D=3. SP = ô có tiền (cột kế) > 0.
+// Sheet TỔNG HỢP "BÁO CÁO SẢN PHẨM" (server đọc qua gviz csv): cột B(1) = TÊN SP,
+// cột D(3) = doanh thu RM. Lấy SP có doanh thu > 0. (Verify cả 5 file qua fetch y hệt server.)
 function parseMarketerSp(rows: string[][]): string[] {
-  let pc = 3
-  outer: for (let r = 0; r < Math.min(8, rows.length); r++) {
-    for (let c = 0; c < (rows[r]?.length ?? 0); c++) {
-      if (/^\s*mặt hàng\s*$/i.test(String(rows[r][c] ?? '').trim())) { pc = c; break outer }
-    }
-  }
   const set = new Set<string>()
   for (const row of rows) {
-    const prod = String(row[pc] ?? '').trim()
-    if (!prod || /mặt hàng|sản phẩm|^product$|^tổng/i.test(prod)) continue
-    if (viNum(row[pc + 1]) > 0) set.add(prod.toUpperCase())
+    const prod = String(row[1] ?? '').trim()
+    if (!prod || /^product$|mặt hàng|sản phẩm|^tổng/i.test(prod)) continue
+    if (viNum(row[3]) > 0) set.add(prod.toUpperCase())
   }
   return [...set]
 }
