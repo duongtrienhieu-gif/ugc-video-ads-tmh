@@ -256,13 +256,17 @@ export default function SourceFinder({ initial, onClose }: { initial?: { name: s
         return
       }
       const incoming: Clip[] = Array.isArray(d.clips) ? d.clips : []
-      setLanes((L) => {
-        const prev = append ? (L[id]?.clips ?? []) : []
-        const seen = new Set(prev.map((c) => c.id))
-        const merged = [...prev, ...incoming.filter((c) => !seen.has(c.id))]
-        return { ...L, [id]: { clips: merged, cursor: d.cursor ?? null, hasMore: !!d.hasMore } }
-      })
+      const prevClips = append ? (lanes[id]?.clips ?? []) : []
+      const seen = new Set(prevClips.map((c) => c.id))
+      const fresh = incoming.filter((c) => !seen.has(c.id))
+      const merged = [...prevClips, ...fresh]
+      // Nút "Tải thêm": KHÔNG lệ thuộc cờ has_more (TikHub hay thiếu/sai ở Douyin·Kuaishou) →
+      // fetch đầu ra clip thì HIỆN nút (lạc quan); "Tải thêm" mà KHÔNG ra clip mới thì ẩn.
+      // → mọi nền tảng đều có nút khi còn clip; bấm hết thì tự ẩn (1 lần xác nhận).
+      const more = append ? fresh.length > 0 : merged.length > 0
+      setLanes((L) => ({ ...L, [id]: { clips: merged, cursor: d.cursor ?? null, hasMore: more } }))
       if (!append && incoming.length === 0) setClipsErr(d.note || 'Không có clip — đổi từ khóa hoặc nền tảng khác')
+      else if (append && fresh.length === 0) setClipsErr('Đã hết clip cho nền tảng này')
     } catch (e) { setClipsErr((e as Error).message) } finally { setClipsBusy(false); setMoreBusy(false) }
   }
 
