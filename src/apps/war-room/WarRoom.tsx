@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useWarStore, memberEmails, type Member } from './store'
 import { useAuthStore } from '../../stores/authStore'
 import { useAppStore } from '../../stores/appStore'
-import { fetchSpStats, fetchMarketerSp, aggregate, type SpStat, type SpProfit } from './actuals'
+import { fetchSpStats, fetchMarketerSp, readCachedSpStats, aggregate, type SpStat, type SpProfit } from './actuals'
 import TestPipeline from './TestPipeline'
 import DailyLog from './DailyLog'
 
@@ -53,7 +53,9 @@ export default function WarRoom() {
   const reloadStats = () => fetchSpStats().then((r) => { setStats(r.stats); setProfit(r.profit); setStale(r.stale) }).catch(() => {})
   useEffect(() => { void load() }, [load])
   useEffect(() => {
-    void reloadStats()
+    const cached = readCachedSpStats()
+    if (cached) { setStats(cached.stats); setProfit(cached.profit); setStale(true) } // F5 → hiện NGAY số đã cache
+    void reloadStats() // rồi tải mới ngầm, không chặn màn hình
     void fetchMarketerSp().then(setMktSp).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

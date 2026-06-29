@@ -184,6 +184,9 @@ export default function InventoryBoard() {
     try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') } catch { /* ignore */ }
     const s = { ...DEFAULT_SOURCES, ...saved }
     setSources(s)
+    // F5 / mở lại → hiện NGAY số tốt đã cache (khỏi chờ ~1 phút), rồi tải mới ngầm.
+    const cached = readGood()
+    if (cached) { setData(cached.data); setBoardStale(true); setStatus('live'); setLastUpdate(cached.at) }
     void load(s)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

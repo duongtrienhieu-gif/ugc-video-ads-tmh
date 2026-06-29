@@ -66,6 +66,15 @@ export async function fetchSpStats(): Promise<SpStatsResult> {
   return { stats, profit, stale: false, at: Date.now() } // chưa từng có cache → trả số hiện có (có thể thiếu)
 }
 
+// Đọc NGAY cache trên máy (đồng bộ) — để F5/mở lại hiện số liền, khỏi chờ ~1 phút tải Google.
+export function readCachedSpStats(): SpStatsResult | null {
+  try {
+    const c = localStorage.getItem(CACHE_KEY)
+    if (c) { const cached = JSON.parse(c) as { stats: Record<string, SpStat>; profit: SpProfit[]; at: number }; if (cached.profit?.length) return { stats: cached.stats, profit: cached.profit, stale: true, at: cached.at } }
+  } catch { /* ignore */ }
+  return null
+}
+
 // Map marketer → các mã SP họ phụ trách (từ file Ghép quà sheet 4 cột marketer) → để TỰ GÁN
 export async function fetchMarketerSp(): Promise<Record<string, string[]>> {
   const r = await fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ giftOnly: true }), cache: 'no-store' })
