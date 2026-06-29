@@ -7,6 +7,8 @@ import { useMktAgentStore, type CheckpointMode, type SpCandidate } from './store
 import { scanWinningProducts } from './services/researchStage'
 import { classifyBranding } from './services/brandingFilter'
 import { buildVerifyLinks, deepDive, searchKeyword } from './services/enrichStage'
+import { computeWinScore, type WinScore } from './services/winScore'
+import { judgeSp } from './services/judge'
 
 const MODE_OPTS: { key: CheckpointMode; label: string }[] = [
   { key: 'every', label: '🔴 Duyệt mọi bước (debug)' },
@@ -45,6 +47,16 @@ function LinkBtn({ href, label, title }: { href: string; label: string; title: s
   )
 }
 
+function WinChip({ win }: { win: WinScore }) {
+  const cls = win.tier === 'strong' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+    : win.tier === 'good' ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+    : win.tier === 'reject' ? 'bg-rose-500/20 text-rose-300 border-rose-500/50'
+    : 'bg-zinc-700/40 text-zinc-300 border-zinc-600/50'
+  const label = win.tier === 'reject' ? 'WIN —' : win.full ? `WIN ${win.score}` : `WIN ~${win.score} (Soi sâu để chấm đủ)`
+  return <span className={`px-2 py-0.5 rounded border text-[11px] ${cls}`}
+    title="Điểm WIN: generic + 1688 sourceable + đối thủ scale ads + biên lời − rủi ro hoàn">{label}</span>
+}
+
 export default function MktAgent() {
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const sendToApp = useAppStore((s) => s.sendToApp)
@@ -81,7 +93,14 @@ export default function MktAgent() {
     patchCandidate(c.productId, { diving: true, deepError: undefined })
     try {
       const deep = await deepDive(c)
-      patchCandidate(c.productId, { deep, diving: false })
+      patchCandidate(c.productId, { deep })
+      if (geminiApiKey) {
+        try {
+          const judge = await judgeSp(geminiApiKey, { ...c, deep })
+          patchCandidate(c.productId, { judge })
+        } catch { /* giám khảo lỗi → vẫn giữ số Soi sâu */ }
+      }
+      patchCandidate(c.productId, { diving: false })
     } catch (e) {
       patchCandidate(c.productId, { diving: false, deepError: (e as Error).message })
     }
@@ -155,6 +174,7 @@ export default function MktAgent() {
             <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
               {shown.map((p) => {
                 const v = verdictOf(p)
+                const win = computeWinScore(p)
                 const ship = shipHint(p.shipFrom)
                 const picked = selectedSp?.productId === p.productId
                 const links = buildVerifyLinks(p)
@@ -173,14 +193,22 @@ export default function MktAgent() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-[12px]">
+                    <div className="flex items-center justify-between text-[12px] gap-1.5">
                       <span className={`px-2 py-0.5 rounded ${v.cls}`}>{v.label}</span>
-                      {ship && <span className={`text-[11px] ${ship.cls}`}>{ship.label}</span>}
+                      <WinChip win={win} />
                     </div>
                     <div className="flex items-center justify-between text-[12px] text-zinc-400">
                       <span>{fmt(p.sale)} bán{p.rating ? ` · ⭐${p.rating.toFixed(1)}` : ''}</span>
                       <span>{p.price > 0 ? `RM${fmt(p.price)}` : 'giá —'}{p.revenue > 0 ? ` · DT RM${fmt(p.revenue)}` : ''}</span>
                     </div>
+                    {ship && <div className={`text-[11px] ${ship.cls}`}>{ship.label}</div>}
+                    {win.risks.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {win.risks.map((r, i) => (
+                          <span key={i} className="text-[10px] text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded px-1.5 py-0.5">⚠ {r}</span>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Link kiểm chứng (free) */}
                     <div className="flex flex-wrap gap-1.5">
@@ -213,6 +241,13 @@ export default function MktAgent() {
                             ? <>✓ {p.deep.count1688} khớp{p.deep.cost1688 ? ` · từ ¥${p.deep.cost1688}` : ''}{p.deep.link1688 ? <> · <a href={p.deep.link1688} target="_blank" rel="noopener noreferrer" className="text-sky-400 underline">xem</a></> : ''}</>
                             : <span className="text-amber-400">✗ không khớp ảnh</span>}
                         </div>
+                        {p.judge && (
+                          <div className="mt-1 pt-1 border-t border-zinc-800">
+                            <div className="text-[11px] font-medium text-amber-300">🧠 Gemini: {p.judge.verdict}{p.judge.score ? ` (${p.judge.score})` : ''}</div>
+                            {p.judge.reasons.map((r, i) => <div key={`r${i}`} className="text-[10px] text-zinc-400">+ {r}</div>)}
+                            {p.judge.risks.map((r, i) => <div key={`k${i}`} className="text-[10px] text-rose-300">⚠ {r}</div>)}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <button onClick={() => runDeep(p)} disabled={p.diving}

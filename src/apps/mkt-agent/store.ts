@@ -25,6 +25,14 @@ export interface DeepDive {
   link1688: string
 }
 
+// Giám khảo Gemini — phân tích sâu tổng hợp hồ sơ SP.
+export interface JudgeResult {
+  verdict: string        // NÊN TEST | CÂN NHẮC | BỎ
+  score: number          // 0-100 (Gemini tự chấm)
+  reasons: string[]
+  risks: string[]
+}
+
 export interface SpCandidate {
   productId: string
   title: string
@@ -42,6 +50,7 @@ export interface SpCandidate {
   brand?: string
   diving?: boolean       // đang Soi sâu
   deep?: DeepDive        // kết quả Soi sâu
+  judge?: JudgeResult    // giám khảo Gemini (sau Soi sâu)
   deepError?: string
 }
 
