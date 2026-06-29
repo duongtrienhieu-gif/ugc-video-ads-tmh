@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LayoutGrid, User, Mic, PenLine, Settings, FlaskConical, RefreshCw, LogOut, Activity, Sparkles, Package, Megaphone, FolderOpen, Rocket, History as HistoryIcon, Palette, ShoppingBag, TrendingUp, MessageCircle, Images } from 'lucide-react'
+import { Bot, LayoutGrid, User, Mic, PenLine, Settings, FlaskConical, RefreshCw, LogOut, Activity, Sparkles, Package, Megaphone, FolderOpen, Rocket, History as HistoryIcon, Palette, ShoppingBag, TrendingUp, MessageCircle, Images } from 'lucide-react'
 import SettingsModal from './SettingsModal'
 import Diagnostic from './Diagnostic'
 import DraftsPanel from './DraftsPanel'
@@ -35,6 +35,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: '',
     items: [
+      { id: 'mkt-agent',         label: 'MKT Agent',      icon: Bot },
       { id: 'finder',            label: 'Project',        icon: LayoutGrid },
       { id: 'history',           label: 'History',        icon: HistoryIcon },
       { id: 'products-shortcut', label: 'Sản phẩm',       icon: Package },

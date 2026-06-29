@@ -42,6 +42,7 @@ import ChatBot from './apps/chat-bot/ChatBot'
 import ImageStudio from './apps/image-studio/ImageStudio'
 import InventoryBoard from './apps/inventory-board/InventoryBoard'
 import WarRoom from './apps/war-room/WarRoom'
+import MktAgent from './apps/mkt-agent/MktAgent'
 
 const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'home': Home,
@@ -70,6 +71,7 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'image-studio': ImageStudio,
   'inventory-board': InventoryBoard,
   'war-room': WarRoom,
+  'mkt-agent': MktAgent,
 }
 
 /** VN label + cache keys used by the per-app ErrorBoundary fallback so the
@@ -99,6 +101,7 @@ const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> =
   'image-studio':      { name: 'Xưởng Ảnh',        resetKeys: ['gift-studio-draft-v1', 'form-bg-studio-draft-v1', 'rebrand-studio-draft-v1', 'image-studio-mode-v1'] },
   'inventory-board':   { name: 'Kho & Nhập hàng',  resetKeys: ['inv_board_sources'] },
   'war-room':          { name: 'Tác Chiến',         resetKeys: [] },
+  'mkt-agent':         { name: 'MKT Agent',         resetKeys: [] },
 }
 
 export default function App() {
