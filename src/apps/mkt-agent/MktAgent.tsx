@@ -2,10 +2,11 @@
 // Stage 0: Research tìm SP win GENERIC sourceable (MY) + lọc branded/generic +
 // link kiểm chứng (free) + Soi sâu (video/ads/1688). Xem MKT_AGENT_SPEC.md.
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useAppStore } from '../../stores/appStore'
 import { useMktAgentStore, type CheckpointMode, type SpCandidate } from './store'
 import { scanWinningProducts } from './services/researchStage'
 import { classifyBranding } from './services/brandingFilter'
-import { buildVerifyLinks, deepDive } from './services/enrichStage'
+import { buildVerifyLinks, deepDive, searchKeyword } from './services/enrichStage'
 
 const MODE_OPTS: { key: CheckpointMode; label: string }[] = [
   { key: 'every', label: '🔴 Duyệt mọi bước (debug)' },
@@ -46,6 +47,7 @@ function LinkBtn({ href, label, title }: { href: string; label: string; title: s
 
 export default function MktAgent() {
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
+  const sendToApp = useAppStore((s) => s.sendToApp)
   const {
     checkpointMode, niches, amount, scanning, classifying, error, candidates, onlyGeneric, selectedSp,
     setCheckpointMode, setNiches, setAmount, setScanning, setClassifying, setError,
@@ -186,6 +188,19 @@ export default function MktAgent() {
                       <LinkBtn href={links.googleLens} label="🔍 Lens" title="Google Lens reverse-image (1688/web/branding)" />
                       <LinkBtn href={links.fbAds} label="📣 FB Ads" title="FB Ad Library — đối thủ chạy ads?" />
                       <LinkBtn href={links.tiktokVideo} label="🎬 Video" title="Search video TikTok" />
+                    </div>
+
+                    {/* Mở app NỘI BỘ + tự điền SP */}
+                    <div className="flex flex-wrap gap-1.5">
+                      <button title="Mở Spy Ads + tự search ad đối thủ"
+                        onClick={() => sendToApp({ targetApp: 'spy-ads', targetField: 'query', data: searchKeyword(p.title) })}
+                        className="px-2 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 text-[11px] text-sky-300 border border-sky-500/40">📣 Spy Ads</button>
+                      <button title="Mở Tìm nguồn 1688 + tự điền ảnh SP"
+                        onClick={() => sendToApp({ targetApp: 'research', targetField: 'source', data: { name: p.title, imageUrl: p.imageUrl } })}
+                        className="px-2 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 text-[11px] text-sky-300 border border-sky-500/40">🏭 Tìm nguồn</button>
+                      <button title="Mở Research + quét ngách SP này"
+                        onClick={() => sendToApp({ targetApp: 'research', targetField: 'niche', data: searchKeyword(p.title) })}
+                        className="px-2 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 text-[11px] text-sky-300 border border-sky-500/40">📊 Research</button>
                     </div>
 
                     {/* Soi sâu */}

@@ -240,6 +240,19 @@ export default function SpyAds() {
     } catch (e) { setError((e as Error).message) } finally { setLoading(false) }
   }
 
+  // Nhận SP từ MKT Agent → tự chuyển chế độ "tìm ad" (FB) + search keyword.
+  const interAppPayload = useAppStore((s) => s.interAppPayload)
+  const consumePayload = useAppStore((s) => s.consumePayload)
+  useEffect(() => {
+    if (!interAppPayload || interAppPayload.targetApp !== 'spy-ads') return
+    if (interAppPayload.targetField === 'query' && typeof interAppPayload.data === 'string') {
+      setMode('ads'); setPlatform('fb')
+      void search(interAppPayload.data)
+    }
+    consumePayload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interAppPayload])
+
   const loadMore = async () => {
     if (!cursor || moreLoading) return
     setMoreLoading(true)

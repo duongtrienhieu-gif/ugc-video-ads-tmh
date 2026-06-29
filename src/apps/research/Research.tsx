@@ -14,6 +14,7 @@ import ShopList from './components/ShopList'
 import CrossMarketPanel from './components/CrossMarketPanel'
 import WatchlistPanel from './components/WatchlistPanel'
 import SourceFinder from './components/SourceFinder'
+import { useAppStore } from '../../stores/appStore'
 import type { Market, ScoredProduct } from './types'
 
 const MARKET_LANG: Record<string, string> = { MY: 'Malay', ID: 'Indonesia', VN: 'Việt', TH: 'Thái', PH: 'English/Tagalog' }
@@ -76,6 +77,25 @@ ${list}`
   }
 
   useEffect(() => { void loadWatch() }, [loadWatch])
+
+  // Nhận SP từ MKT Agent: 'niche' → quét ngách; 'source' → mở SourceFinder với ảnh SP.
+  const interAppPayload = useAppStore((s) => s.interAppPayload)
+  const consumePayload = useAppStore((s) => s.consumePayload)
+  useEffect(() => {
+    if (!interAppPayload || interAppPayload.targetApp !== 'research') return
+    const { targetField, data } = interAppPayload
+    if (targetField === 'niche' && typeof data === 'string') {
+      setScanKeywords(data); void scanLive()
+    } else if (targetField === 'source' && data && typeof data === 'object') {
+      const d = data as { name?: string; imageUrl?: string }
+      try { localStorage.removeItem('source-finder-state-v3') } catch { /* */ } // bỏ phiên cũ → SP mới hiện
+      setSourceInit({ name: d.name ?? '', imageUrl: d.imageUrl })
+      setShowSource(true)
+      try { localStorage.setItem('source-finder-open-v1', '1') } catch { /* */ }
+    }
+    consumePayload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interAppPayload])
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#EEEEF2]">
