@@ -164,6 +164,12 @@ export default function SpyAds() {
   const [linkErr, setLinkErr] = useState<string | null>(null)
   const [onlyWeb, setOnlyWeb] = useState(true)
   const [onlyMatched, setOnlyMatched] = useState(false)
+  const [linkHasMore, setLinkHasMore] = useState(false)
+  const [linkMoreBusy, setLinkMoreBusy] = useState(false)
+  // Cursor phân trang theo nền tảng cho Link Finder: undefined=chưa bắt đầu, string=cursor kế, null=hết.
+  const linkCursorRef = useRef<{ fb: string | null | undefined; tiktok: string | null | undefined }>({ fb: undefined, tiktok: undefined })
+  const linkSeenRef = useRef<Set<string>>(new Set())   // dedup link xuyên các lần "tải thêm"
+  const linkQueryRef = useRef('')                       // từ khóa đã dùng (để tải thêm đúng query)
 
   // Cache kết quả RIÊNG theo platform → đổi tab FB↔TikTok không mất kết quả cũ.
   type AdCache = { ads: FbAd[] | null; cursor: string | null; hasMore: boolean; q: string }
@@ -271,10 +277,26 @@ export default function SpyAds() {
   }, [country])
 
   // Bước 2 — bắc cầu: từ 1 SP win → rút lõi từ khóa → spy ad của SP đó (luồng cũ).
-  const spyProduct = (p: WinProduct) => {
+  const spyProduct = async (p: WinProduct) => {
     setSpyingFor(p.title)
     setMode('ads')
-    void search(coreTerms(p.title))
+    setLoading(true)
+    // Tên SP TikTok Shop thường DÀI → FB Ad Library (keyword_unordered = phải chứa MỌI từ)
+    // tìm 0 kết quả. Rút về 1-2 từ khóa NGẮN: ưu tiên AI, fallback ngách đã search, rồi 2 token đầu.
+    let kw = ''
+    if (geminiApiKey) {
+      try {
+        const raw = await directGeminiText({
+          apiKey: geminiApiKey,
+          prompt: `Tên sản phẩm bán chạy trên TikTok Shop: "${p.title}" (ngách: ${p.niche || niche || '—'}). Rút 1-2 TỪ KHÓA NGẮN bằng tiếng Malay hoặc English để tìm quảng cáo Facebook cùng loại sản phẩm/ngách này (vd "sakit lutut", "collagen", "jam tangan"). CHỈ trả từ khóa, không giải thích, không ngoặc kép.`,
+          temperature: 0.3, maxOutputTokens: 30,
+        })
+        kw = raw.replace(/["\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)
+      } catch { /* fallback bên dưới */ }
+    }
+    if (!kw) kw = (p.niche || niche || '').trim()
+    if (!kw) kw = coreTerms(p.title).split(/\s+/).slice(0, 2).join(' ')
+    void search(kw)
   }
 
   // Phase 2a — xem TẤT CẢ ad đang chạy của 1 advertiser (company/ads theo pageId).
@@ -510,29 +532,25 @@ CHỈ trả JSON.`
     }
     await Promise.all([worker(), worker(), worker(), worker()])
   }
-  const runLinkFinder = async () => {
-    let query = linkQ.trim()
-    if (linkBankId) { const p = products.find((x) => x.id === linkBankId); if (p) query = coreTerms(p.productName) || p.productName }
-    if (linkImg) {
-      if (!geminiApiKey) { setLinkErr('Cần Gemini API key trong Cài đặt để đọc ảnh'); return }
-      setLinkBusy(true); setLinkErr('🔍 AI đang đọc ảnh ra từ khóa…')
-      try { query = await visionToKeyword(linkImg) } catch { /* dùng linkQ nếu lỗi */ }
-      if (query) setLinkQ(query)
-    }
-    if (!query) { setLinkBusy(false); setLinkErr('Nhập từ khóa, chọn SP từ Kho, hoặc tải ảnh SP'); return }
-    setLinkBusy(true); setLinkErr(null); setLinks([])
-    const seen = new Set<string>()
-    const collected: FoundLink[] = []
-    try {
-      const plats: ('fb' | 'tiktok')[] = linkPlat === 'both' ? ['fb', 'tiktok'] : [linkPlat]
+  // Gom thêm link đến khi đủ ≥10 link MỚI (hoặc hết trang). Dùng chung cho tìm mới + tải thêm;
+  // cursor & dedup lưu ở ref nên "Tải thêm trang" tiếp tục đúng chỗ, không lặp lại link cũ.
+  const fetchLinkBatch = async (query: string): Promise<FoundLink[]> => {
+    const plats: ('fb' | 'tiktok')[] = linkPlat === 'both' ? ['fb', 'tiktok'] : [linkPlat]
+    const batch: FoundLink[] = []
+    let rounds = 0
+    while (batch.length < 10 && rounds < 12) {
+      rounds++
+      let progressed = false
       for (const plat of plats) {
+        const cstate = linkCursorRef.current[plat]
+        if (cstate === null) continue   // nền tảng này đã hết trang
+        progressed = true
         const base = plat === 'fb' ? '/api/fb-ads' : '/api/tiktok-ads'
-        let cur: string | null = null
-        for (let pg = 0; pg < 2; pg++) {
-          const st = plat === 'fb' ? '&status=ALL' : ''   // ALL: bắt cả salepage từ ad đã tắt
-          const curP = cur ? `&cursor=${encodeURIComponent(cur)}` : ''
+        const st = plat === 'fb' ? '&status=ALL' : ''   // ALL: bắt cả salepage từ ad đã tắt
+        const curP = (typeof cstate === 'string' && cstate) ? `&cursor=${encodeURIComponent(cstate)}` : ''
+        try {
           const d = (await fetch(`${base}?q=${encodeURIComponent(query)}&country=${country}${st}${curP}`).then((r) => r.json())) as { error?: string; ads?: FbAd[]; cursor?: string | number | null; hasMore?: boolean; credits?: number | null }
-          if (d.error) { if (pg === 0 && plats.length === 1) setLinkErr(d.error); break }
+          if (d.error) { linkCursorRef.current[plat] = null; continue }
           const adsArr: FbAd[] = Array.isArray(d.ads) ? d.ads : []
           for (const a of adsArr) {
             const cands: string[] = []
@@ -543,21 +561,58 @@ CHỈ trả JSON.`
               const dest = cleanLink(rawu)
               if (!/^https?:\/\//i.test(dest)) continue
               const key = normUrl(dest)
-              if (seen.has(key)) continue
-              seen.add(key)
+              if (linkSeenRef.current.has(key)) continue
+              linkSeenRef.current.add(key)
               const k = linkKind(dest)
-              collected.push({ url: dest, domain: domainOf(dest), kindLabel: k.label, kindEmoji: k.emoji, web: k.web, page: a.page || '', adText: a.text || '', platform: plat })
+              batch.push({ url: dest, domain: domainOf(dest), kindLabel: k.label, kindEmoji: k.emoji, web: k.web, page: a.page || '', adText: a.text || '', platform: plat })
             }
           }
           if (d.credits != null) setCredits(d.credits)
-          cur = d.cursor != null && d.hasMore ? String(d.cursor) : null
-          if (!cur) break
-        }
+          linkCursorRef.current[plat] = d.cursor != null && d.hasMore ? String(d.cursor) : null
+        } catch { linkCursorRef.current[plat] = null }
       }
-      setLinks(collected)
-      if (!collected.length) { setLinkErr('Không tìm thấy link nào — đổi từ khóa/nước (FB là nguồn chính; TikTok thường ẩn link đích)'); return }
-      void verifyLinks(collected, query)
+      if (!progressed) break   // mọi nền tảng đã hết trang
+    }
+    return batch
+  }
+  const linkHasMoreNow = () => {
+    const plats: ('fb' | 'tiktok')[] = linkPlat === 'both' ? ['fb', 'tiktok'] : [linkPlat]
+    return plats.some((p) => linkCursorRef.current[p] !== null)
+  }
+  const runLinkFinder = async () => {
+    let query = linkQ.trim()
+    if (linkBankId) { const p = products.find((x) => x.id === linkBankId); if (p) query = coreTerms(p.productName) || p.productName }
+    if (linkImg) {
+      if (!geminiApiKey) { setLinkErr('Cần Gemini API key trong Cài đặt để đọc ảnh'); return }
+      setLinkBusy(true); setLinkErr('🔍 AI đang đọc ảnh ra từ khóa…')
+      try { query = await visionToKeyword(linkImg) } catch { /* dùng linkQ nếu lỗi */ }
+      if (query) setLinkQ(query)
+    }
+    if (!query) { setLinkBusy(false); setLinkErr('Nhập từ khóa, chọn SP từ Kho, hoặc tải ảnh SP'); return }
+    setLinkBusy(true); setLinkErr(null); setLinks([]); setLinkHasMore(false)
+    linkSeenRef.current = new Set()
+    linkQueryRef.current = query
+    const plats: ('fb' | 'tiktok')[] = linkPlat === 'both' ? ['fb', 'tiktok'] : [linkPlat]
+    linkCursorRef.current = { fb: plats.includes('fb') ? undefined : null, tiktok: plats.includes('tiktok') ? undefined : null }
+    try {
+      const batch = await fetchLinkBatch(query)
+      setLinks(batch)
+      setLinkHasMore(linkHasMoreNow())
+      if (!batch.length) { setLinkErr('Không tìm thấy link nào — đổi từ khóa/nước (FB là nguồn chính; TikTok thường ẩn link đích)'); return }
+      void verifyLinks(batch, query)
     } catch (e) { setLinkErr((e as Error).message) } finally { setLinkBusy(false) }
+  }
+  const loadMoreLinks = async () => {
+    if (linkMoreBusy || linkBusy) return
+    setLinkMoreBusy(true)
+    const query = linkQueryRef.current
+    try {
+      const batch = await fetchLinkBatch(query)
+      if (batch.length) setLinks((prev) => [...(prev || []), ...batch])
+      setLinkHasMore(linkHasMoreNow())
+      if (!batch.length) addToast('Đã hết trang cho từ khóa này', 'success')
+      else void verifyLinks(batch, query)
+    } catch (e) { addToast('Tải thêm lỗi: ' + ((e as Error).message || '').slice(0, 60), 'error') } finally { setLinkMoreBusy(false) }
   }
   const shownLinks = (links || []).filter((l) => (!onlyWeb || l.web) && (!onlyMatched || l.contains === true))
 
@@ -801,7 +856,7 @@ CHỈ trả JSON.`
                           {p.seller && <span className="line-clamp-1">🏪 {p.seller}</span>}
                         </div>
                         <div className="mt-auto flex gap-1.5 pt-1.5">
-                          <button onClick={() => spyProduct(p)}
+                          <button onClick={() => void spyProduct(p)}
                             className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-rose-600 py-1.5 text-[11px] font-semibold text-white hover:bg-rose-700">
                             <Target className="h-3 w-3" /> Spy ad SP này
                           </button>
@@ -975,6 +1030,12 @@ CHỈ trả JSON.`
                   <p className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
                     Tất cả link bị lọc — bỏ tick "Chỉ Web/Ladipage" hoặc "Chỉ link đã khớp" để xem thêm.
                   </p>
+                )}
+                {linkHasMore && (
+                  <button onClick={() => void loadMoreLinks()} disabled={linkMoreBusy}
+                    className="mt-3 w-full rounded-xl border border-rose-300 bg-white py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">
+                    {linkMoreBusy ? 'Đang tải thêm trang…' : '↻ Tải thêm trang (≥10 link mới)'}
+                  </button>
                 )}
               </>
             )}
