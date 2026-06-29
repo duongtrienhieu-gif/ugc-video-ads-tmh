@@ -59,6 +59,17 @@ function MoneyInput({ value, onSave, placeholder, style }: { value: number | nul
   useEffect(() => { setTxt(value != null ? value.toLocaleString('vi-VN') : '') }, [value])
   return <input value={txt} inputMode="numeric" placeholder={placeholder} onChange={(e) => setTxt(fmtThousands(e.target.value))} onBlur={() => onSave(parseThousands(txt))} style={style} />
 }
+const fmtMoney = (n: number) => Math.round(n).toLocaleString('vi-VN') + 'đ'
+// Tổng kết 1 nhóm SP test: ngân sách dự kiến vs đã chi (data×CPA) + kết quả + ROI.
+function summarize(list: TestProduct[]) {
+  const planned = list.reduce((s, t) => s + (t.budget ?? 0), 0)
+  const spent = list.reduce((s, t) => s + (t.data ?? 0) * (t.cpa ?? 0), 0) // tiền ads đã đốt ≈ data × CPA
+  const win = list.filter((t) => t.outcome === 'win').length
+  const keep = list.filter((t) => t.outcome === 'keep').length
+  const kill = list.filter((t) => t.outcome === 'kill').length
+  const running = list.filter((t) => !t.outcome).length
+  return { count: list.length, planned, spent, win, keep, kill, running, over: planned > 0 && spent > planned }
+}
 
 export default function TestPipeline({ isCEO, userEmail }: { isCEO: boolean; userEmail: string }) {
   const { members, tests, error, addTest, updateTest, deleteTest } = useWarStore()
@@ -80,6 +91,18 @@ export default function TestPipeline({ isCEO, userEmail }: { isCEO: boolean; use
   }, [tests, ownerFilter, isCEO, myId])
   const byStage = (st: string) => filtered.filter((t) => t.stage === st)
   const overdue = useMemo(() => filtered.filter((t) => { const d = deadlineStatus(t); return !!d && d.tone === C.red }).length, [filtered])
+
+  // ── Tổng kết THÁNG: CEO soi cả đội (chi/ROI), nhân viên thấy của mình ──
+  const now = new Date()
+  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const monthTests = useMemo(() => tests.filter((t) => (t.created_at ?? '').slice(0, 7) === month), [tests, month])
+  const mySum = summarize(isCEO ? monthTests : monthTests.filter((t) => t.owner_id === myId))
+  const byMkt = useMemo(() => {
+    if (!isCEO) return []
+    const map: Record<string, TestProduct[]> = {}
+    for (const t of monthTests) { const k = t.owner_id ?? 'none'; (map[k] ??= []).push(t) }
+    return Object.entries(map).map(([oid, list]) => ({ oid, name: oid === 'none' ? '— chưa giao —' : nameOf(oid), ...summarize(list) })).sort((a, b) => b.spent - a.spent)
+  }, [monthTests, isCEO]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const add = () => {
     if (!name.trim()) return
@@ -192,6 +215,51 @@ export default function TestPipeline({ isCEO, userEmail }: { isCEO: boolean; use
 
       {error && <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 8, border: `1px solid ${C.red}`, background: 'rgba(255,77,94,0.07)', fontSize: 12.5, color: C.red }}>⚠ Lỗi lưu: {error}. {/relation|does not exist|column/i.test(error) ? 'Bảng test_products chưa tạo / thiếu cột — CEO chạy SQL (kèm trong chat).' : 'Thử lại; nếu vẫn lỗi báo CEO.'}</div>}
       {overdue > 0 && <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 8, border: `1px solid #4a1d22`, background: 'rgba(255,77,94,0.05)', fontSize: 12.5, color: C.red }}>⚠ <b>{overdue}</b> SP test TRỄ deadline — cần xử lý / dời hạn.</div>}
+
+      {/* 📊 TỔNG KẾT THÁNG — chi phí test + ROI (CEO soi cả đội; nhân viên thấy của mình) */}
+      <div style={{ marginBottom: 14, padding: '14px 16px', borderRadius: 12, border: `1px solid ${C.line}`, background: C.panel2 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: C.gold, marginBottom: 10 }}>📊 TỔNG KẾT TEST SP · THÁNG {month.slice(5)}/{month.slice(0, 4)} {isCEO ? '— cả đội' : '— của bạn'}</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {[
+            { l: 'ĐÃ CHI TEST', v: fmtMoney(mySum.spent), tone: C.amber, sub: `dự kiến ${fmtMoney(mySum.planned)}` },
+            { l: 'WINNER', v: String(mySum.win), tone: C.green, sub: `${mySum.kill} kill · ${mySum.running} đang` },
+            { l: 'ĐỐT / 1 WINNER', v: mySum.win > 0 ? fmtMoney(mySum.spent / mySum.win) : '—', tone: C.text, sub: 'ROI test (càng thấp càng ngon)' },
+            { l: 'SP TEST THÁNG', v: String(mySum.count), tone: C.text, sub: `${mySum.win} win · ${mySum.keep} giữ` },
+          ].map((s) => (
+            <div key={s.l} style={{ flex: '1 1 140px', minWidth: 120, background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px' }}>
+              <div style={{ fontSize: 10, letterSpacing: 1, color: C.muted, marginBottom: 5 }}>{s.l}</div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: s.tone }}>{s.v}</div>
+              <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>{s.sub}</div>
+            </div>
+          ))}
+        </div>
+        {isCEO && byMkt.length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, marginTop: 12 }}>
+            <thead><tr style={{ color: C.muted, fontSize: 10, letterSpacing: 1 }}>
+              <th style={{ textAlign: 'left', padding: '6px 0', fontWeight: 400 }}>MARKETER</th>
+              <th style={{ textAlign: 'center', fontWeight: 400 }}>SP</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 400 }}>NS DỰ KIẾN</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 400 }}>ĐÃ CHI</th>
+              <th style={{ textAlign: 'center', fontWeight: 400 }}>W / G / K</th>
+              <th style={{ textAlign: 'center', fontWeight: 400 }}>ĐANG</th>
+            </tr></thead>
+            <tbody>
+              {byMkt.map((r) => (
+                <tr key={r.oid} style={{ borderTop: `1px solid ${C.line2}` }}>
+                  <td style={{ padding: '8px 0', fontWeight: 600 }}>{r.name}</td>
+                  <td style={{ textAlign: 'center', color: C.muted2 }}>{r.count}</td>
+                  <td style={{ textAlign: 'right', padding: '8px', color: C.muted2 }}>{fmtMoney(r.planned)}</td>
+                  <td style={{ textAlign: 'right', padding: '8px', color: r.over ? C.red : C.text, fontWeight: 600 }}>{fmtMoney(r.spent)}{r.over ? ' ⚠' : ''}</td>
+                  <td style={{ textAlign: 'center', color: C.muted2 }}>{r.win}/{r.keep}/{r.kill}</td>
+                  <td style={{ textAlign: 'center', color: C.muted2 }}>{r.running}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {isCEO && byMkt.some((r) => r.over) && <div style={{ fontSize: 11, color: C.red, marginTop: 8 }}>⚠ MKT có dấu ⚠ = đã chi (≈ data×CPA) vượt ngân sách dự kiến → soi lại.</div>}
+        {mySum.count === 0 && <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>Chưa có SP test tháng này. Thêm bên dưới.</div>}
+      </div>
 
       {/* thêm SP + lọc người */}
       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14, paddingBottom: 14, borderBottom: `1px solid ${C.line2}` }}>

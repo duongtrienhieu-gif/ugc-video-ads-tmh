@@ -17,7 +17,7 @@ export interface TestProduct {
   id: string; name: string; niche: string | null; stage: string; outcome: string | null
   owner_id: string | null; spy_link: string | null; note: string | null
   data: number | null; cpa: number | null; chot: number | null; hoan: number | null
-  deadline: string | null; budget: number | null; created_by: string | null
+  deadline: string | null; budget: number | null; created_by: string | null; created_at?: string | null
 }
 
 // Nhật ký ngày: kế hoạch sáng (checklist) + báo cáo tối (số nhập tay) — 1 dòng / người / ngày
