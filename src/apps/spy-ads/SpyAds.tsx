@@ -531,29 +531,56 @@ CHỈ trả JSON.`
     const f = e.target.files?.[0]; if (!f) return
     const rd = new FileReader(); rd.onload = () => setLinkImg(String(rd.result || '')); rd.readAsDataURL(f)
   }
-  // Sinh từ khóa đa-góc từ: ảnh SP (vision) | SP Kho (mô tả) | keyword tay. Fallback nếu lỗi/không key.
-  const genAngles = async (): Promise<string[]> => {
-    const base = (): string => {
-      if (linkBankId) { const p = products.find((x) => x.id === linkBankId); return p ? (coreTerms(p.productName) || p.productName) : '' }
-      return linkQ.trim()
+  // Từ khóa NGẮN suy heuristic từ tên SP khi AI lỗi/không có key (brand + cụm 2-3 từ đầu),
+  // KHÔNG dùng nguyên tên dài (FB keyword_unordered đòi đủ mọi từ → 0 kết quả).
+  const heuristicAngles = (name: string): string[] => {
+    const toks = (coreTerms(name) || name).split(/\s+/).filter(Boolean)
+    const out: string[] = []
+    const push = (s: string) => { const v = s.trim(); if (v && !out.some((x) => x.toLowerCase() === v.toLowerCase())) out.push(v) }
+    if (toks[0]) push(toks[0])                       // brand / token đặc thù
+    if (toks.length >= 2) push(toks.slice(0, 2).join(' '))
+    if (toks.length >= 3) push(toks.slice(0, 3).join(' '))
+    if (!out.length && name.trim()) push(name.trim().slice(0, 40))
+    return out.slice(0, 4)
+  }
+  // Sinh từ khóa đa-góc từ: ảnh SP (vision) | SP Kho (mô tả) | keyword tay.
+  // thinkingBudget:0 + token 512 → tránh 2.5-flash tiêu token vào "thinking" rồi trả RỖNG.
+  // Trả kèm err để hiện nguyên nhân (vd hết quota Gemini) thay vì im lặng.
+  const genAngles = async (): Promise<{ angles: string[]; err?: string }> => {
+    const bankProduct = linkBankId ? products.find((x) => x.id === linkBankId) : null
+    if (!geminiApiKey) {
+      if (linkImg) return { angles: [], err: 'Cần Gemini API key trong Cài đặt để đọc ảnh ra từ khóa' }
+      if (bankProduct) return { angles: heuristicAngles(bankProduct.productName) }
+      return { angles: linkQ.trim() ? [linkQ.trim()] : [] }
     }
-    if (!geminiApiKey) { const b = base(); return b ? [b] : [] }
     try {
+      let raw = ''
       if (linkImg) {
-        const m = linkImg.match(/^data:([^;]+);base64,(.+)$/); if (!m) { const b = base(); return b ? [b] : [] }
-        const raw = await directGeminiVision({
+        const m = linkImg.match(/^data:([^;]+);base64,(.+)$/)
+        if (!m) return { angles: [], err: 'Ảnh không hợp lệ — thử ảnh khác' }
+        raw = await directGeminiVision({
           apiKey: geminiApiKey,
           parts: [{ inlineData: { mimeType: m[1], data: m[2] } }, { text: ANGLE_VISION_PROMPT }],
-          responseMimeType: 'application/json', temperature: 0.3, maxOutputTokens: 220,
+          responseMimeType: 'application/json', temperature: 0.3, maxOutputTokens: 512, thinkingBudget: 0,
         })
-        const a = parseAngles(raw); return a.length ? a : (base() ? [base()] : [])
+      } else {
+        const ctx = bankProduct
+          ? `Tên: ${bankProduct.productName}. Mô tả: ${bankProduct.productDescription || ''}. Lợi ích: ${bankProduct.benefits || ''}. Nỗi đau: ${bankProduct.painPoints || ''}`
+          : `Từ khóa: ${linkQ.trim()}`
+        raw = await directGeminiText({ apiKey: geminiApiKey, prompt: ANGLE_TEXT_PROMPT(ctx), responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 512, thinkingBudget: 0 })
       }
-      let ctx = ''
-      if (linkBankId) { const p = products.find((x) => x.id === linkBankId); if (p) ctx = `Tên: ${p.productName}. Mô tả: ${p.productDescription || ''}. Lợi ích: ${p.benefits || ''}. Nỗi đau: ${p.painPoints || ''}` }
-      if (!ctx) ctx = `Từ khóa: ${linkQ.trim()}`
-      const raw = await directGeminiText({ apiKey: geminiApiKey, prompt: ANGLE_TEXT_PROMPT(ctx), responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 220 })
-      const a = parseAngles(raw); return a.length ? a : (base() ? [base()] : [])
-    } catch { const b = base(); return b ? [b] : [] }
+      const a = parseAngles(raw)
+      if (a.length) return { angles: a }
+      // AI trả rỗng → fallback ngắn (bank/keyword); ảnh thì báo lỗi rõ.
+      if (bankProduct) return { angles: heuristicAngles(bankProduct.productName), err: 'AI trả rỗng — đang dùng từ khóa rút gọn' }
+      if (linkQ.trim()) return { angles: [linkQ.trim()] }
+      return { angles: [], err: 'AI không tạo được từ khóa từ ảnh — thử ảnh rõ hơn hoặc nhập tay' }
+    } catch (e) {
+      const msg = ((e as Error).message || 'lỗi').slice(0, 120)
+      if (bankProduct) return { angles: heuristicAngles(bankProduct.productName), err: `AI lỗi (${msg}) — dùng từ khóa rút gọn` }
+      if (linkQ.trim()) return { angles: [linkQ.trim()], err: `AI lỗi (${msg})` }
+      return { angles: [], err: `AI lỗi: ${msg}` }
+    }
   }
   const verifyLinks = async (list: FoundLink[]) => {
     const q = linkQueryRef.current
@@ -638,11 +665,9 @@ CHỈ trả JSON.`
     if (!linkBankId && !linkImg && !linkQ.trim()) { setLinkErr('Nhập từ khóa, chọn SP từ Kho, hoặc tải ảnh SP'); return }
     setLinkBusy(true); setLinks([]); setLinkHasMore(false); setLinkAngles([])
     setLinkErr(linkImg ? '🔍 AI đang đọc ảnh + tạo từ khóa…' : '🧠 AI đang tạo từ khóa đa góc…')
-    let angles: string[] = []
-    try { angles = await genAngles() } catch { /* fallback dưới */ }
-    if (!angles.length && linkQ.trim()) angles = [linkQ.trim()]
-    if (!angles.length) { setLinkBusy(false); setLinkErr('Không tạo được từ khóa — thử nhập tay'); return }
-    setLinkAngles(angles); setLinkErr(null)
+    const { angles, err } = await genAngles()
+    if (!angles.length) { setLinkBusy(false); setLinkErr(err || 'Không tạo được từ khóa — thử nhập tay'); return }
+    setLinkAngles(angles); setLinkErr(err ?? null)   // err có thể là cảnh báo non-fatal (fallback)
     linkSeenRef.current = new Set()
     linkQueryRef.current = angles.join(' ')
     const plats: ('fb' | 'tiktok')[] = linkPlat === 'both' ? ['fb', 'tiktok'] : [linkPlat]
@@ -651,7 +676,7 @@ CHỈ trả JSON.`
       const batch = await fetchLinkBatch()
       setLinks(batch)
       setLinkHasMore(linkHasMoreNow())
-      if (!batch.length) { setLinkErr('Không tìm thấy link salepage — thử SP/ảnh/nước khác (FB là nguồn chính)'); return }
+      if (!batch.length) { setLinkErr('Không tìm thấy link salepage — thử SP/ảnh/nước khác (FB là nguồn chính)' + (err ? ` · ${err}` : '')); return }
       void verifyLinks(batch)
       if (imgMatch && linkImg) void verifyImageMatch(batch)
     } catch (e) { setLinkErr((e as Error).message) } finally { setLinkBusy(false) }
