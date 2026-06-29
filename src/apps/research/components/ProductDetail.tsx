@@ -707,11 +707,11 @@ CHỈ trả JSON.`
                   <Sparkles className="h-4 w-4" /> AI điền + Viết content
                 </button>
                 <button
-                  onClick={() => void aiFillAndGo({ app: 'super-ladipage', label: 'Dựng Ladi' })}
+                  onClick={() => void aiFillAndGo({ app: 'script-architect', label: 'Kịch bản' })}
                   disabled={aiBusy}
                   className="flex items-center justify-center gap-2 rounded-xl border border-violet-300 bg-white py-2.5 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:opacity-50"
                 >
-                  <Sparkles className="h-4 w-4" /> AI điền + Dựng Ladi
+                  <Sparkles className="h-4 w-4" /> AI điền + Viết kịch bản
                 </button>
               </div>
               <button
