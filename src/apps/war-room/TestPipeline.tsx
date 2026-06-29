@@ -49,6 +49,16 @@ function deadlineStatus(t: TestProduct): { txt: string; tone: string } | null {
   if (diff <= 2) return { txt: `⏰ còn ${diff} ngày`, tone: C.amber }
   return { txt: `📅 ${t.deadline.slice(5)}`, tone: C.muted2 }
 }
+// ô tiền có DẤU CHẤM ngăn nghìn (3.000.000) cho dễ đọc
+const fmtThousands = (s: string) => { const d = s.replace(/[^\d]/g, ''); return d === '' ? '' : parseInt(d, 10).toLocaleString('vi-VN') }
+const parseThousands = (s: string): number | null => { const d = s.replace(/[^\d]/g, ''); return d === '' ? null : parseInt(d, 10) }
+// deadline mặc định = hôm nay + N ngày (ISO yyyy-mm-dd) cho ô thêm SP
+const plusDaysISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+function MoneyInput({ value, onSave, placeholder, style }: { value: number | null; onSave: (v: number | null) => void; placeholder?: string; style: React.CSSProperties }) {
+  const [txt, setTxt] = useState(value != null ? value.toLocaleString('vi-VN') : '')
+  useEffect(() => { setTxt(value != null ? value.toLocaleString('vi-VN') : '') }, [value])
+  return <input value={txt} inputMode="numeric" placeholder={placeholder} onChange={(e) => setTxt(fmtThousands(e.target.value))} onBlur={() => onSave(parseThousands(txt))} style={style} />
+}
 
 export default function TestPipeline({ isCEO, userEmail }: { isCEO: boolean; userEmail: string }) {
   const { members, tests, error, addTest, updateTest, deleteTest } = useWarStore()
@@ -57,7 +67,7 @@ export default function TestPipeline({ isCEO, userEmail }: { isCEO: boolean; use
   const [activeStage, setActiveStage] = useState('idea')
   const [ownerFilter, setOwnerFilter] = useState('all')
   const [name, setName] = useState(''); const [niche, setNiche] = useState(''); const [owner, setOwner] = useState(''); const [spy, setSpy] = useState('')
-  const [deadline, setDeadline] = useState(''); const [budget, setBudget] = useState('')
+  const [deadline, setDeadline] = useState(plusDaysISO(3)); const [budget, setBudget] = useState('') // deadline mặc định 3 ngày
   useEffect(() => { const f = () => setMob(window.innerWidth < 760); f(); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) }, [])
 
   const myMember = members.find((m) => memberEmails(m).includes(userEmail.trim().toLowerCase()))
@@ -74,8 +84,8 @@ export default function TestPipeline({ isCEO, userEmail }: { isCEO: boolean; use
   const add = () => {
     if (!name.trim()) return
     const ownerId = isCEO ? (owner || null) : myId // nhân viên TỰ sở hữu SP test, không giao ai khác
-    void addTest({ name: name.trim(), niche: niche.trim() || null, stage: 'idea', outcome: null, owner_id: ownerId, spy_link: spy.trim() || null, note: null, data: null, cpa: null, chot: null, hoan: null, deadline: deadline || null, budget: budget ? parseFloat(budget.replace(/[^\d.]/g, '')) || null : null, created_by: userEmail })
-    setName(''); setNiche(''); setSpy(''); setDeadline(''); setBudget('')
+    void addTest({ name: name.trim(), niche: niche.trim() || null, stage: 'idea', outcome: null, owner_id: ownerId, spy_link: spy.trim() || null, note: null, data: null, cpa: null, chot: null, hoan: null, deadline: deadline || null, budget: parseThousands(budget), created_by: userEmail })
+    setName(''); setNiche(''); setSpy(''); setDeadline(plusDaysISO(3)); setBudget('')
   }
 
   const Card = ({ t }: { t: TestProduct }) => {
@@ -97,7 +107,7 @@ export default function TestPipeline({ isCEO, userEmail }: { isCEO: boolean; use
         {/* deadline (hạn hoàn thành) + ngân sách test — sửa được để CEO theo dõi */}
         <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
           <input type="date" value={t.deadline ?? ''} onChange={(e) => void updateTest(t.id, { deadline: e.target.value || null })} title="hạn hoàn thành" style={{ ...inp, fontSize: 11, padding: '5px 7px' }} />
-          <input defaultValue={t.budget ?? ''} placeholder="ngân sách đ" inputMode="numeric" onBlur={(e) => { const raw = e.target.value.replace(/[^\d.]/g, ''); const val = raw === '' ? null : parseFloat(raw); if (val !== (t.budget ?? null)) void updateTest(t.id, { budget: val }) }} style={{ ...inp, fontSize: 11, padding: '5px 7px', width: 96 }} />
+          <MoneyInput value={t.budget} placeholder="ngân sách đ" onSave={(v) => { if (v !== (t.budget ?? null)) void updateTest(t.id, { budget: v }) }} style={{ ...inp, fontSize: 11, padding: '5px 7px', width: 110 }} />
         </div>
 
         {/* người phụ trách (CEO đổi được; nhân viên khoá vào mình) + link spy */}
@@ -190,7 +200,7 @@ export default function TestPipeline({ isCEO, userEmail }: { isCEO: boolean; use
         {isCEO && <select value={owner} onChange={(e) => setOwner(e.target.value)} style={{ ...inp, fontSize: 12 }}><option value="">— giao ai —</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}
         <input value={spy} onChange={(e) => setSpy(e.target.value)} placeholder="link spy (tuỳ chọn)" style={{ ...inp, flex: 1, minWidth: 130 }} />
         <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} title="hạn hoàn thành (deadline)" style={{ ...inp, fontSize: 12, width: 150 }} />
-        <input value={budget} onChange={(e) => setBudget(e.target.value)} inputMode="numeric" placeholder="ngân sách test (đ)" style={{ ...inp, width: 150 }} />
+        <input value={budget} onChange={(e) => setBudget(fmtThousands(e.target.value))} inputMode="numeric" placeholder="ngân sách test (đ)" style={{ ...inp, width: 150 }} />
         <button onClick={add} style={{ background: C.gold, color: '#1a1405', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ Thêm SP</button>
         {isCEO && (
           <select value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)} style={{ ...inp, fontSize: 12 }}>
