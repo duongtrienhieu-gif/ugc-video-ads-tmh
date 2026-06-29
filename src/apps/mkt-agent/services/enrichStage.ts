@@ -3,7 +3,7 @@
 // Tầng 2 (Soi sâu, tốn credit, on-demand/SP): kéo số thật cho người + bot chấm:
 //   research-videos (# video + view) · fb-ads (# ads đối thủ + scale) ·
 //   rapid-1688 (khớp 1688 + giá vốn). Tất cả allSettled → 1 nguồn lỗi không vỡ.
-import type { SpCandidate, DeepDive } from '../store'
+import type { SpCandidate, DeepDive, SpyAd } from '../store'
 import { expandSearchTerms } from './expandTerms'
 
 // Từ khóa search ad: ƯU TIÊN NGÁCH khớp ("minyak urut") — generic, FB/TikTok ra
@@ -74,23 +74,28 @@ export async function deepDive(c: SpCandidate, geminiApiKey?: string): Promise<D
     maxViews = list.reduce((m, v) => Math.max(m, Number(v.views) || 0), 0)
   }
 
-  // Gộp ads từ FB + TikTok × các từ khóa → khử trùng theo id.
-  const adMap = new Map<string, { days: number; scale: number }>()
-  for (const r of adsResults) {
-    if (r.status !== 'fulfilled') continue
-    const list = (r.value.ads as { id?: string; daysRunning?: number; advertiserAds?: number }[] | undefined) ?? []
+  // Gộp ads FB + TikTok × các từ → khử trùng theo id, GIỮ ad-list thật (nguồn lọc).
+  // adsResults thứ tự: [fb(t0), tiktok(t0), fb(t1), tiktok(t1)...] → chẵn=fb, lẻ=tiktok.
+  const adMap = new Map<string, SpyAd>()
+  adsResults.forEach((r, idx) => {
+    if (r.status !== 'fulfilled') return
+    const platform: 'fb' | 'tiktok' = idx % 2 === 0 ? 'fb' : 'tiktok'
+    const list = (r.value.ads as { id?: string; cover?: string; videoUrl?: string; text?: string; daysRunning?: number; advertiserAds?: number }[] | undefined) ?? []
     for (const a of list) {
       const id = String(a.id ?? '')
       if (!id) continue
       const days = Number(a.daysRunning) || 0
       const scale = Number(a.advertiserAds) || 0
       const prev = adMap.get(id)
-      adMap.set(id, { days: Math.max(days, prev?.days ?? 0), scale: Math.max(scale, prev?.scale ?? 0) })
+      if (prev) { prev.days = Math.max(prev.days, days); prev.scale = Math.max(prev.scale, scale) }
+      else adMap.set(id, { id, platform, cover: String(a.cover ?? ''), videoUrl: String(a.videoUrl ?? ''), text: String(a.text ?? ''), days, scale })
     }
-  }
+  })
   const adCount = adMap.size
   let adTopDays = 0, adTopScale = 0
   for (const v of adMap.values()) { adTopDays = Math.max(adTopDays, v.days); adTopScale = Math.max(adTopScale, v.scale) }
+  // Chỉ giữ ad có cover + video (để lọc ảnh + tải sau), cap 30.
+  const rawAds = [...adMap.values()].filter((a) => a.cover && a.videoUrl).slice(0, 30)
 
   let on1688 = false, count1688 = 0, cost1688 = '', link1688 = ''
   if (s1688.status === 'fulfilled') {
@@ -103,5 +108,5 @@ export async function deepDive(c: SpCandidate, geminiApiKey?: string): Promise<D
     if (first?.itemId) link1688 = `https://detail.1688.com/offer/${first.itemId}.html`
   }
 
-  return { videoCount, maxViews, adCount, adTopDays, adTopScale, on1688, count1688, cost1688, link1688, terms }
+  return { videoCount, maxViews, adCount, adTopDays, adTopScale, on1688, count1688, cost1688, link1688, terms, rawAds }
 }

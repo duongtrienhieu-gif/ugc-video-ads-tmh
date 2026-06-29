@@ -9,6 +9,7 @@ import { classifyBranding } from './services/brandingFilter'
 import { buildVerifyLinks, deepDive, searchKeyword } from './services/enrichStage'
 import { computeWinScore, type WinScore } from './services/winScore'
 import { judgeSp } from './services/judge'
+import { filterExactSpy } from './services/matchSpy'
 
 const MODE_OPTS: { key: CheckpointMode; label: string }[] = [
   { key: 'every', label: '🔴 Duyệt mọi bước (debug)' },
@@ -103,6 +104,17 @@ export default function MktAgent() {
       patchCandidate(c.productId, { diving: false })
     } catch (e) {
       patchCandidate(c.productId, { diving: false, deepError: (e as Error).message })
+    }
+  }
+
+  const runExactFilter = async (c: SpCandidate) => {
+    if (!c.deep || !c.imageUrl || !geminiApiKey || !c.deep.rawAds?.length) return
+    patchCandidate(c.productId, { filtering: true })
+    try {
+      const exact = await filterExactSpy(geminiApiKey, c.imageUrl, c.deep.rawAds)
+      patchCandidate(c.productId, { filtering: false, deep: { ...c.deep, exactCount: exact.length, exactChecked: true } })
+    } catch {
+      patchCandidate(c.productId, { filtering: false })
     }
   }
 
@@ -235,7 +247,15 @@ export default function MktAgent() {
                     {p.deep ? (
                       <div className="text-[11px] text-zinc-300 bg-zinc-900 rounded-md px-2 py-1.5 space-y-0.5">
                         <div>🎬 {p.deep.videoCount} video{p.deep.maxViews > 0 ? ` · ${compact(p.deep.maxViews)} view` : ''}</div>
-                        <div>📣 {p.deep.adCount} ads (FB+TikTok){p.deep.adTopDays > 0 ? ` · chạy ${p.deep.adTopDays}d` : ''}{p.deep.adTopScale > 1 ? ` · x${p.deep.adTopScale}` : ''}</div>
+                        <div>📣 {p.deep.adCount} ads (FB+TikTok) · cầu danh mục{p.deep.adTopDays > 0 ? ` · chạy ${p.deep.adTopDays}d` : ''}{p.deep.adTopScale > 1 ? ` · x${p.deep.adTopScale}` : ''}</div>
+                        {p.deep.exactChecked ? (
+                          <div className="text-emerald-300">🎯 {p.deep.exactCount} spy ĐÚNG SP (ảnh khớp ≥75 + có video)</div>
+                        ) : (p.deep.rawAds && p.deep.rawAds.length > 0 && geminiApiKey && p.imageUrl) ? (
+                          <button onClick={() => runExactFilter(p)} disabled={p.filtering}
+                            className="text-[10px] text-sky-300 underline disabled:opacity-50 text-left">
+                            {p.filtering ? 'Đang lọc ảnh…' : `🎯 Lọc spy chính xác (${p.deep.rawAds.length} ad → so ảnh)`}
+                          </button>
+                        ) : null}
                         <div>
                           🏭 1688: {p.deep.on1688
                             ? <>✓ {p.deep.count1688} khớp{p.deep.cost1688 ? ` · từ ¥${p.deep.cost1688}` : ''}{p.deep.link1688 ? <> · <a href={p.deep.link1688} target="_blank" rel="noopener noreferrer" className="text-sky-400 underline">xem</a></> : ''}</>

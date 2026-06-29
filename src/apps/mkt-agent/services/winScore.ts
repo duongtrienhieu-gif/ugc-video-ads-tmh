@@ -40,6 +40,7 @@ export function computeWinScore(c: SpCandidate): WinScore {
     ad += (Math.min(d.adTopScale, 10) / 10) * 10 // advertiser nhiều ad = đang scale
     score += Math.round(ad)
     if (d.adCount === 0) risks.push('Không thấy đối thủ chạy ads COD — cầu paid chưa chứng minh')
+    if (d.exactChecked && (d.exactCount ?? 0) < 3) risks.push(`Spy đúng SP ít (${d.exactCount ?? 0}) — harvest bù bằng app`)
 
     // Sourceable 1688 (0-12)
     if (d.on1688) score += 12

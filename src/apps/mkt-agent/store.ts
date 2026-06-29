@@ -12,6 +12,19 @@ export type AgentStage =
 
 // Ứng viên SP — tiêu chí "test được" = generic (không brand) + có trên 1688 (ready)
 // + có cầu (số bán / ads). Nguồn: tiktok (TikTok Shop) + fb (FB Ad Library).
+// 1 ad spy thật gom được — nguồn để lọc chính xác SP + harvest tải video.
+export interface SpyAd {
+  id: string
+  platform: 'fb' | 'tiktok'
+  cover: string
+  videoUrl: string
+  text: string
+  days: number
+  scale: number
+  match?: boolean   // sau lọc ảnh: đúng SP?
+  score?: number
+}
+
 // Số liệu kiểm chứng kéo on-demand ("Soi sâu") — feed cho cả người + bot.
 export interface DeepDive {
   videoCount: number     // # video TikTok đang đẩy SP
@@ -24,6 +37,9 @@ export interface DeepDive {
   cost1688: string       // giá thấp nhất trên 1688 (¥ CNY)
   link1688: string
   terms?: string[]       // rổ từ khóa đã bung (Gemini) — search FB+TikTok đa góc
+  rawAds?: SpyAd[]       // ad thật gom được (cầu danh mục) — nguồn lọc + harvest
+  exactCount?: number    // # spy ĐÚNG SP (sau lọc ảnh ≥75 + có video)
+  exactChecked?: boolean
 }
 
 // Giám khảo Gemini — phân tích sâu tổng hợp hồ sơ SP.
@@ -50,6 +66,7 @@ export interface SpCandidate {
   isBranded?: boolean    // undefined = chưa lọc
   brand?: string
   diving?: boolean       // đang Soi sâu
+  filtering?: boolean    // đang lọc spy chính xác (vision)
   deep?: DeepDive        // kết quả Soi sâu
   judge?: JudgeResult    // giám khảo Gemini (sau Soi sâu)
   deepError?: string
