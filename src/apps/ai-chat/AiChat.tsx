@@ -52,8 +52,11 @@ export default function AiChat() {
     setOpenaiKey(localStorage.getItem(OPENAI_LS) || '')
     fetchSharedOpenAiKey().then((k) => { if (k) setOpenaiKey(k) })
   }, [])
-  // Dữ liệu thật theo mail đăng nhập (Mức B) — load nền, best-effort.
-  useEffect(() => { loadMyDataBlock(email).then(setMyData).catch(() => setMyData('')) }, [email])
+  // Dữ liệu thật theo mail đăng nhập (Mức B) — 2 pha: danh tính nhanh → số đầy đủ.
+  useEffect(() => {
+    setMyData('')
+    loadMyDataBlock(email, setMyData).then((full) => { if (full) setMyData(full) }).catch(() => {})
+  }, [email])
   // Nạp lịch sử: local trước (hiện ngay), rồi Supabase (nguồn chuẩn xuyên máy) ghi đè nếu có.
   useEffect(() => {
     let localList: Convo[] = []
