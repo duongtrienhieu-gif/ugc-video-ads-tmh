@@ -285,6 +285,32 @@ function parseGiftCatalog(wb: XLSX.WorkBook): GiftCat[] {
   return items
 }
 
+// File riêng từng marketer (sheet "BÁO CÁO SẢN PHẨM" = log giao dịch). Token = tên war-room.
+const MKT_FILES: { token: string; id: string }[] = [
+  { token: 'KHÁNH', id: '1vHiLS3V85wL6rWvnmCOZB8bfR5lu_sw0ZAuy8xUczSA' },
+  { token: 'DUY', id: '1LRsxCJ4JVxlN9yBIdAVtndxggfAem9wf58BE2iMdAKM' },
+  { token: 'TUẤN', id: '1cKMfUPJ67Q6b1TGynqjyCZm5GTupbQ_sNO1J4eDxl9I' },
+  { token: 'ANH', id: '1gUG9JgO0cC-zYkvTePXfcFYIlS2CXzMUL4n0o8mmDbA' },
+  { token: 'HÀ', id: '18c_BtFLdGB7EBaN06rWKJiFLiZogdDNS_O_0xVccV6s' },
+]
+// Gom SP đầy đủ từ log giao dịch: cột "Mặt hàng" — dò CHÍNH XÁC "Mặt hàng" (break ngay match
+// đầu, KHÔNG để dòng sau ghi đè nhầm cột số); default D=3. SP = ô có tiền (cột kế) > 0.
+function parseMarketerSp(rows: string[][]): string[] {
+  let pc = 3
+  outer: for (let r = 0; r < Math.min(8, rows.length); r++) {
+    for (let c = 0; c < (rows[r]?.length ?? 0); c++) {
+      if (/^\s*mặt hàng\s*$/i.test(String(rows[r][c] ?? '').trim())) { pc = c; break outer }
+    }
+  }
+  const set = new Set<string>()
+  for (const row of rows) {
+    const prod = String(row[pc] ?? '').trim()
+    if (!prod || /mặt hàng|sản phẩm|^product$|^tổng/i.test(prod)) continue
+    if (viNum(row[pc + 1]) > 0) set.add(prod.toUpperCase())
+  }
+  return [...set]
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed' })
   const bodyLinks = (req.body && typeof req.body === 'object' ? (req.body as { links?: Record<string, string> }).links : undefined) || {}
@@ -299,6 +325,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch (e) {
       return res.status(200).json({ ok: false, giftMaster: [], giftCatalog: [], error: (e as Error).message })
     }
+  }
+
+  // ── Nhánh: SP đầy đủ theo marketer (đọc 5 file riêng) → token → [mã SP] cho 🪄 Tự gán ──
+  if (req.body && (req.body as { marketerSp?: boolean }).marketerSp) {
+    const rs = await Promise.allSettled(MKT_FILES.map((f) => fetchCsv(f.id, 'BÁO CÁO SẢN PHẨM')))
+    const marketerSp: Record<string, string[]> = {}
+    rs.forEach((r, i) => { if (r.status === 'fulfilled') { const sps = parseMarketerSp(r.value); if (sps.length) marketerSp[MKT_FILES[i].token] = sps } })
+    return res.status(200).json({ ok: Object.keys(marketerSp).length > 0, marketerSp })
   }
 
   const errors: string[] = []
