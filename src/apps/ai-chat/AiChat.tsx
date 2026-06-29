@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
-import { Bot, Plus, Send, Sparkles, X, Loader2, MessageSquarePlus, KeyRound, Download, Film } from 'lucide-react'
+import { Bot, Plus, Send, Sparkles, X, Loader2, MessageSquarePlus, KeyRound, Download, Film, History, Trash2 } from 'lucide-react'
 import AppHeader from '../../components/shell/AppHeader'
 import { useAppStore } from '../../stores/appStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { geminiChatStream, openaiChatStream, genImage, type ChatMessage, type Attachment, type GptModel } from './service'
 
-const threadKey = (email: string) => `ai-chat:thread:${email}`
+// Lịch sử RIÊNG theo email: nhiều cuộc trò chuyện, tự lưu; mở "Trò chuyện mới" thì cuộc cũ vào lịch sử.
+interface Convo { id: string; title: string; messages: ChatMessage[]; updatedAt: number }
+const convosKey = (email: string) => `ai-chat:convos:${email}`
+const activeKey = (email: string) => `ai-chat:active:${email}`
 const OPENAI_LS = 'ai-chat:openai-key'
 
 // Lưu lịch sử: bỏ dataUrl nặng của file user upload (chỉ giữ ảnh AI tạo = URL remote) để khỏi tràn localStorage.
@@ -29,21 +32,46 @@ export default function AiChat() {
   const [busy, setBusy] = useState(false)
   const [openaiKey, setOpenaiKey] = useState('')
   const [keyModalOpen, setKeyModalOpen] = useState(false)
+  const [convos, setConvos] = useState<Convo[]>([])
+  const [activeId, setActiveId] = useState('')
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const fileRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // OpenAI key (local, riêng app này — không vào settings chung)
   useEffect(() => { setOpenaiKey(localStorage.getItem(OPENAI_LS) || '') }, [])
-  // Lịch sử riêng theo email đăng nhập
+  // Nạp lịch sử theo email → cuộc đang mở (hoặc cuộc mới nếu chưa có).
   useEffect(() => {
-    try { const raw = localStorage.getItem(threadKey(email)); setMessages(raw ? (JSON.parse(raw) as ChatMessage[]) : []) }
-    catch { setMessages([]) }
+    try {
+      const cs = JSON.parse(localStorage.getItem(convosKey(email)) || '[]') as Convo[]
+      const list = Array.isArray(cs) ? cs : []
+      setConvos(list)
+      const act = list.find((c) => c.id === localStorage.getItem(activeKey(email)))
+      if (act) { setActiveId(act.id); setMessages(act.messages) }
+      else { setActiveId(crypto.randomUUID()); setMessages([]) }
+    } catch { setConvos([]); setActiveId(crypto.randomUUID()); setMessages([]) }
   }, [email])
+  // Đồng bộ cuộc đang mở vào danh sách (bỏ cuộc rỗng) — auto-save liên tục.
   useEffect(() => {
-    try { localStorage.setItem(threadKey(email), JSON.stringify(stripForStore(messages))) } catch { /* quota */ }
-  }, [messages, email])
+    if (!activeId) return
+    setConvos((prev) => {
+      const others = prev.filter((c) => c.id !== activeId)
+      if (messages.length === 0) return others
+      const title = (messages.find((m) => m.role === 'user')?.text || 'Cuộc trò chuyện').slice(0, 50)
+      return [{ id: activeId, title, messages: stripForStore(messages), updatedAt: Date.now() }, ...others]
+    })
+  }, [messages, activeId])
+  useEffect(() => { try { localStorage.setItem(convosKey(email), JSON.stringify(convos)) } catch { /* quota */ } }, [convos, email])
+  useEffect(() => { if (activeId) localStorage.setItem(activeKey(email), activeId) }, [activeId, email])
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }) }, [messages, busy])
+
+  const openConvo = (c: Convo) => { setActiveId(c.id); setMessages(c.messages); setHistoryOpen(false) }
+  const deleteConvo = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setConvos((prev) => prev.filter((c) => c.id !== id))
+    if (id === activeId) { setActiveId(crypto.randomUUID()); setMessages([]) }
+  }
 
   const onFiles = (files: FileList | null) => {
     if (!files) return
@@ -60,7 +88,7 @@ export default function AiChat() {
     }
   }
 
-  const newChat = () => { setMessages([]); setInput(''); setPending([]); localStorage.removeItem(threadKey(email)) }
+  const newChat = () => { setActiveId(crypto.randomUUID()); setMessages([]); setInput(''); setPending([]); setHistoryOpen(false) }
 
   const send = async () => {
     const text = input.trim()
@@ -111,6 +139,10 @@ export default function AiChat() {
 
       {/* Toolbar: chọn model + trò chuyện mới */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-app-border px-4 py-2">
+        <button onClick={() => setHistoryOpen(true)} title="Lịch sử trò chuyện"
+          className="flex items-center gap-1.5 rounded-lg border border-app-border bg-app-card px-3 py-1.5 text-xs font-bold text-app-muted hover:text-app-text">
+          <History className="h-3.5 w-3.5" /> Lịch sử{convos.length > 0 ? ` (${convos.length})` : ''}
+        </button>
         <div className="inline-flex rounded-xl border border-app-border bg-app-card p-0.5">
           {(['gemini', 'gpt'] as const).map((mm) => (
             <button key={mm} onClick={() => setModel(mm)}
@@ -207,6 +239,37 @@ export default function AiChat() {
           </p>
         </div>
       </div>
+
+      {historyOpen && (
+        <div className="fixed inset-0 z-[110] flex bg-black/30" onClick={() => setHistoryOpen(false)}>
+          <div className="flex h-full w-72 max-w-[82vw] flex-col border-r border-app-border bg-app-card shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-app-border px-3 py-2.5">
+              <span className="truncate text-sm font-bold text-app-text">🕘 Lịch sử</span>
+              <button onClick={() => setHistoryOpen(false)} className="text-app-muted hover:text-app-text"><X className="h-4 w-4" /></button>
+            </div>
+            <button onClick={newChat} className="ui-accent-soft m-2 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold">
+              <MessageSquarePlus className="h-3.5 w-3.5" /> Trò chuyện mới
+            </button>
+            <p className="px-3 pb-1 text-[10px] text-app-faint">Của {email}</p>
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+              {convos.length === 0 ? (
+                <p className="px-1 py-6 text-center text-xs text-app-subtle">Chưa có cuộc trò chuyện nào.</p>
+              ) : (
+                <div className="flex flex-col gap-0.5">
+                  {convos.map((c) => (
+                    <div key={c.id} onClick={() => openConvo(c)}
+                      className={`group flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 ${c.id === activeId ? 'ui-accent-soft' : 'hover:bg-app-card-elevated'}`}>
+                      <span className="min-w-0 flex-1 truncate text-xs text-app-text">{c.title || 'Cuộc trò chuyện'}</span>
+                      <button onClick={(e) => deleteConvo(c.id, e)} title="Xóa"
+                        className="shrink-0 text-app-faint opacity-0 transition-opacity hover:text-rose-500 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {keyModalOpen && <OpenAiKeyModal current={openaiKey} onSave={saveOpenaiKey} onClose={() => setKeyModalOpen(false)} />}
     </div>
