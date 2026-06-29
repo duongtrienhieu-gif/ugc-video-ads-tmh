@@ -65,12 +65,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const status = req.query.status === 'ALL' ? 'ALL' : 'ACTIVE'   // mặc định chỉ ad đang chạy = winner
   const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : ''
   const searchType = req.query.exact === '1' ? 'keyword_exact_phrase' : 'keyword_unordered'
+  // links=1 → chế độ TÌM SALEPAGE: lấy MỌI loại ad (kể cả ảnh/carousel) và giữ ad CÓ LINK ĐÍCH
+  // (salepage/ladipage phần lớn ở ad ảnh — media_type=VIDEO mặc định bỏ sót gần hết).
+  const linksMode = req.query.links === '1'
+  const mediaType = linksMode ? 'ALL' : 'VIDEO'
 
   try {
     // 2 chế độ: pageId → company/ads (tất cả ad 1 advertiser) ; q → search/ads (theo từ khóa).
     const baseUrl = pageId
-      ? `https://api.scrapecreators.com/v1/facebook/adLibrary/company/ads?pageId=${encodeURIComponent(pageId)}&country=${country}&status=${status}&media_type=VIDEO`
-      : `https://api.scrapecreators.com/v1/facebook/adLibrary/search/ads?query=${encodeURIComponent(q)}&country=${country}&status=${status}&media_type=VIDEO&ad_type=all&search_type=${searchType}`
+      ? `https://api.scrapecreators.com/v1/facebook/adLibrary/company/ads?pageId=${encodeURIComponent(pageId)}&country=${country}&status=${status}&media_type=${mediaType}`
+      : `https://api.scrapecreators.com/v1/facebook/adLibrary/search/ads?query=${encodeURIComponent(q)}&country=${country}&status=${status}&media_type=${mediaType}&ad_type=all&search_type=${searchType}`
     // Mỗi trang SC chỉ trả ~5 ad → GOM tới 5 trang/lần để trả ~24 ad, đỡ bấm "Tải thêm" nhiều.
     const allRaw: FbAd[] = []
     const seen = new Set<string>()
@@ -143,7 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           libraryUrl: a.ad_archive_id ? `https://www.facebook.com/ads/library/?id=${a.ad_archive_id}` : '',
         }
       })
-      .filter((a) => a.id && a.videoUrl)   // chỉ giữ AD CÓ VIDEO
+      .filter((a) => a.id && (linksMode ? a.linkUrl : a.videoUrl))   // links mode: giữ ad CÓ LINK ĐÍCH; thường: AD CÓ VIDEO
       .filter((a) => !SPAM_RE.test(`${a.page} ${a.text} ${a.linkUrl}`) && !/\binstall\b/i.test(a.cta))   // chặn phim ngắn / cài app
       // WIN: active + chạy lâu + advertiser nhiều ad + nhiều biến thể (đang scale). Điểm xếp hạng.
       .map((a) => ({

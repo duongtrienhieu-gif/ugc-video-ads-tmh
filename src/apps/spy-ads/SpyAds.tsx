@@ -37,6 +37,7 @@ interface FoundLink {
   url: string; domain: string; kindLabel: string; kindEmoji: string; web: boolean
   page: string; adText: string; platform: 'fb' | 'tiktok'
   cms?: string; contains?: boolean | null; verifying?: boolean
+  matchSku?: boolean | null; matchBusy?: boolean   // đối chiếu ảnh: cùng mã hàng không
 }
 
 // Rút LÕI từ khóa từ tên SP (bỏ [..], (..), đơn vị, từ marketing) để mồi ô tìm ad sạch.
@@ -51,6 +52,32 @@ function coreTerms(title: string): string {
   if (core.length >= 2) return core
   return title.replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean).slice(0, 5).join(' ').trim()
 }
+
+// ── Tìm Salepage: sinh TỪ KHÓA ĐA GÓC (brand + đặc điểm/lợi ích/dạng) để bắt cả
+//    đối thủ rebrand cùng 1 mã hàng dưới brand khác. Output JSON {brand, angles[]}. ──
+const ANGLE_VISION_PROMPT = `Đây là ảnh 1 sản phẩm COD. Tạo TỪ KHÓA để tìm quảng cáo Facebook tại Malaysia bán CHÍNH sản phẩm này — kể cả khi các seller đặt TÊN BRAND KHÁC NHAU cho cùng 1 mã hàng. Trả JSON:
+{"brand":"tên thương hiệu IN TRÊN BAO BÌ nếu đọc rõ, không thì rỗng","angles":["4-6 từ khóa NGẮN tiếng Malay mô tả LOẠI sản phẩm + công năng + bộ phận/đối tượng + dạng — KHÔNG phải tên brand, để bắt mọi seller rebrand; mỗi cái 1-4 từ"]}
+CHỈ JSON.`
+const ANGLE_TEXT_PROMPT = (ctx: string): string => `Sản phẩm COD (mô tả tiếng Việt):
+${ctx}
+Tạo TỪ KHÓA tìm quảng cáo Facebook tại Malaysia bán sản phẩm này — kể cả khi seller đặt TÊN BRAND KHÁC cho cùng mã hàng. Trả JSON:
+{"brand":"tên thương hiệu rút từ tên SP nếu có, không thì rỗng","angles":["4-6 từ khóa NGẮN tiếng Malay: loại SP + công năng + bộ phận/đối tượng + dạng — KHÔNG phải brand; mỗi cái 1-4 từ"]}
+CHỈ JSON.`
+function parseAngles(raw: string): string[] {
+  let obj: { brand?: string; angles?: string[] } = {}
+  try { obj = JSON.parse(raw) } catch {
+    const m = raw.match(/\{[\s\S]*\}/)
+    if (m) { try { obj = JSON.parse(m[0]) } catch { /* giữ {} */ } }
+  }
+  const out: string[] = []
+  const push = (s?: string) => {
+    const v = (s || '').replace(/["\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)
+    if (v && !out.some((x) => x.toLowerCase() === v.toLowerCase())) out.push(v)
+  }
+  push(obj.brand)
+  for (const a of Array.isArray(obj.angles) ? obj.angles : []) push(a)
+  return out.slice(0, 6)
+}
 // Ngách COD phổ biến để bấm dò nhanh (Bước 1).
 const NICHE_CHIPS = ['kurus', 'collagen', 'sakit lutut', 'sakit sendi', 'jerawat', 'gugur rambut', 'kencing manis', 'buasir', 'gastrik', 'detox', 'pemutih', 'tenaga batin']
 
@@ -64,11 +91,8 @@ function cleanLink(u: string): string {
   } catch { /* giữ nguyên */ }
   return u
 }
-// Domain gọn (bỏ www) + khoá dedup (host+path) cho danh sách link.
+// Domain gọn (bỏ www) — dùng làm khoá dedup (1 salepage / seller) cho danh sách link.
 function domainOf(u: string): string { try { return new URL(u).hostname.replace(/^www\./, '') } catch { return u } }
-function normUrl(u: string): string {
-  try { const x = new URL(u); return (x.hostname.replace(/^www\./, '') + x.pathname).replace(/\/$/, '').toLowerCase() } catch { return u.toLowerCase() }
-}
 // Nhận loại link đích — nhiều ad COD MY đẩy về WhatsApp/Shopee chứ không phải ladipage.
 function linkKind(u: string): { label: string; emoji: string; web: boolean } {
   const s = u.toLowerCase()
@@ -163,13 +187,16 @@ export default function SpyAds() {
   const [linkBusy, setLinkBusy] = useState(false)
   const [linkErr, setLinkErr] = useState<string | null>(null)
   const [onlyWeb, setOnlyWeb] = useState(true)
-  const [onlyMatched, setOnlyMatched] = useState(false)
+  const [onlyMatched, setOnlyMatched] = useState(true)   // ẩn link xác minh KHÔNG khớp (mặc định BẬT cho sạch)
+  const [onlySku, setOnlySku] = useState(false)          // chỉ link "cùng SP" (theo đối chiếu ảnh)
+  const [imgMatch, setImgMatch] = useState(true)         // chạy đối chiếu ảnh khi có ảnh SP
+  const [linkAngles, setLinkAngles] = useState<string[]>([])   // từ khóa đa-góc AI đã dùng (hiển thị)
   const [linkHasMore, setLinkHasMore] = useState(false)
   const [linkMoreBusy, setLinkMoreBusy] = useState(false)
-  // Cursor phân trang theo nền tảng cho Link Finder: undefined=chưa bắt đầu, string=cursor kế, null=hết.
-  const linkCursorRef = useRef<{ fb: string | null | undefined; tiktok: string | null | undefined }>({ fb: undefined, tiktok: undefined })
-  const linkSeenRef = useRef<Set<string>>(new Set())   // dedup link xuyên các lần "tải thêm"
-  const linkQueryRef = useRef('')                       // từ khóa đã dùng (để tải thêm đúng query)
+  // Phân trang theo từng NGUỒN (góc từ khóa × nền tảng): cursor undefined=chưa bắt đầu, string=kế, null=hết.
+  const linkSourcesRef = useRef<{ q: string; plat: 'fb' | 'tiktok'; cursor: string | null | undefined }[]>([])
+  const linkSeenRef = useRef<Set<string>>(new Set())   // dedup theo DOMAIN xuyên các lần "tải thêm"
+  const linkQueryRef = useRef('')                       // chuỗi từ khóa (để verify contains)
 
   // Cache kết quả RIÊNG theo platform → đổi tab FB↔TikTok không mất kết quả cũ.
   type AdCache = { ads: FbAd[] | null; cursor: string | null; hasMore: boolean; q: string }
@@ -504,26 +531,39 @@ CHỈ trả JSON.`
     const f = e.target.files?.[0]; if (!f) return
     const rd = new FileReader(); rd.onload = () => setLinkImg(String(rd.result || '')); rd.readAsDataURL(f)
   }
-  const visionToKeyword = async (dataUrl: string): Promise<string> => {
-    const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/); if (!m) return ''
-    const raw = await directGeminiVision({
-      apiKey: geminiApiKey,
-      parts: [
-        { inlineData: { mimeType: m[1], data: m[2] } },
-        { text: 'Đây là ảnh 1 sản phẩm COD/affiliate. Trả DUY NHẤT 2-4 từ khóa NGẮN bằng tiếng Malay (ưu tiên) hoặc English để tìm quảng cáo + landing page bán sản phẩm này tại Malaysia. CHỈ trả từ khóa, không giải thích, không ngoặc kép.' },
-      ],
-      temperature: 0.3, maxOutputTokens: 60,
-    })
-    return raw.replace(/["\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60)
+  // Sinh từ khóa đa-góc từ: ảnh SP (vision) | SP Kho (mô tả) | keyword tay. Fallback nếu lỗi/không key.
+  const genAngles = async (): Promise<string[]> => {
+    const base = (): string => {
+      if (linkBankId) { const p = products.find((x) => x.id === linkBankId); return p ? (coreTerms(p.productName) || p.productName) : '' }
+      return linkQ.trim()
+    }
+    if (!geminiApiKey) { const b = base(); return b ? [b] : [] }
+    try {
+      if (linkImg) {
+        const m = linkImg.match(/^data:([^;]+);base64,(.+)$/); if (!m) { const b = base(); return b ? [b] : [] }
+        const raw = await directGeminiVision({
+          apiKey: geminiApiKey,
+          parts: [{ inlineData: { mimeType: m[1], data: m[2] } }, { text: ANGLE_VISION_PROMPT }],
+          responseMimeType: 'application/json', temperature: 0.3, maxOutputTokens: 220,
+        })
+        const a = parseAngles(raw); return a.length ? a : (base() ? [base()] : [])
+      }
+      let ctx = ''
+      if (linkBankId) { const p = products.find((x) => x.id === linkBankId); if (p) ctx = `Tên: ${p.productName}. Mô tả: ${p.productDescription || ''}. Lợi ích: ${p.benefits || ''}. Nỗi đau: ${p.painPoints || ''}` }
+      if (!ctx) ctx = `Từ khóa: ${linkQ.trim()}`
+      const raw = await directGeminiText({ apiKey: geminiApiKey, prompt: ANGLE_TEXT_PROMPT(ctx), responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 220 })
+      const a = parseAngles(raw); return a.length ? a : (base() ? [base()] : [])
+    } catch { const b = base(); return b ? [b] : [] }
   }
-  const verifyLinks = async (list: FoundLink[], query: string) => {
+  const verifyLinks = async (list: FoundLink[]) => {
+    const q = linkQueryRef.current
     const queue = list.filter((l) => l.web)
     const worker = async () => {
       for (;;) {
         const l = queue.shift(); if (!l) break
         setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, verifying: true } : x))
         try {
-          const d = (await fetch(`/api/detect-cms?url=${encodeURIComponent(l.url)}&q=${encodeURIComponent(query)}`).then((r) => r.json())) as { cms?: string; contains?: boolean | null }
+          const d = (await fetch(`/api/detect-cms?url=${encodeURIComponent(l.url)}&q=${encodeURIComponent(q)}`).then((r) => r.json())) as { cms?: string; contains?: boolean | null }
           setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, verifying: false, cms: d.cms, contains: d.contains ?? null } : x))
         } catch {
           setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, verifying: false, contains: null } : x))
@@ -532,89 +572,106 @@ CHỈ trả JSON.`
     }
     await Promise.all([worker(), worker(), worker(), worker()])
   }
-  // Gom thêm link đến khi đủ ≥10 link MỚI (hoặc hết trang). Dùng chung cho tìm mới + tải thêm;
-  // cursor & dedup lưu ở ref nên "Tải thêm trang" tiếp tục đúng chỗ, không lặp lại link cũ.
-  const fetchLinkBatch = async (query: string): Promise<FoundLink[]> => {
-    const plats: ('fb' | 'tiktok')[] = linkPlat === 'both' ? ['fb', 'tiktok'] : [linkPlat]
+  // Đối chiếu ẢNH: server fetch ảnh hero salepage (jina-html) → Gemini so với ảnh SP user upload.
+  const verifyImageMatch = async (list: FoundLink[]) => {
+    if (!linkImg || !geminiApiKey) return
+    const q = linkQueryRef.current
+    const queue = list.filter((l) => l.web)
+    const worker = async () => {
+      for (;;) {
+        const l = queue.shift(); if (!l) break
+        setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, matchBusy: true } : x))
+        try {
+          const d = (await fetch('/api/detect-cms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: l.url, refImage: linkImg, apiKey: geminiApiKey, q }) }).then((r) => r.json())) as { match?: boolean | null; cms?: string; contains?: boolean | null }
+          setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, matchBusy: false, matchSku: d.match ?? null, cms: x.cms ?? d.cms, contains: x.contains ?? (d.contains ?? null) } : x))
+        } catch {
+          setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, matchBusy: false, matchSku: null } : x))
+        }
+      }
+    }
+    await Promise.all([worker(), worker()])
+  }
+  // Gom ≥10 link MỚI (hoặc hết) qua TẤT CẢ nguồn (góc từ khóa × nền tảng). Cursor + dedup ở ref
+  // nên "Tải thêm" tiếp đúng chỗ. Dedup theo DOMAIN: 1 salepage / seller. Ưu tiên linkUrl (CTA).
+  const fetchLinkBatch = async (): Promise<FoundLink[]> => {
     const batch: FoundLink[] = []
     let rounds = 0
-    while (batch.length < 10 && rounds < 12) {
+    const srcs = linkSourcesRef.current
+    while (batch.length < 10 && rounds < 16) {
       rounds++
       let progressed = false
-      for (const plat of plats) {
-        const cstate = linkCursorRef.current[plat]
-        if (cstate === null) continue   // nền tảng này đã hết trang
+      for (const s of srcs) {
+        if (s.cursor === null) continue   // nguồn này đã hết
         progressed = true
-        const base = plat === 'fb' ? '/api/fb-ads' : '/api/tiktok-ads'
-        const st = plat === 'fb' ? '&status=ALL' : ''   // ALL: bắt cả salepage từ ad đã tắt
-        const curP = (typeof cstate === 'string' && cstate) ? `&cursor=${encodeURIComponent(cstate)}` : ''
+        const base = s.plat === 'fb' ? '/api/fb-ads' : '/api/tiktok-ads'
+        const st = s.plat === 'fb' ? '&status=ALL&links=1' : ''   // links=1: lấy cả ad ảnh/carousel có link đích
+        const curP = (typeof s.cursor === 'string' && s.cursor) ? `&cursor=${encodeURIComponent(s.cursor)}` : ''
         try {
-          const d = (await fetch(`${base}?q=${encodeURIComponent(query)}&country=${country}${st}${curP}`).then((r) => r.json())) as { error?: string; ads?: FbAd[]; cursor?: string | number | null; hasMore?: boolean; credits?: number | null }
-          if (d.error) { linkCursorRef.current[plat] = null; continue }
+          const d = (await fetch(`${base}?q=${encodeURIComponent(s.q)}&country=${country}${st}${curP}`).then((r) => r.json())) as { error?: string; ads?: FbAd[]; cursor?: string | number | null; hasMore?: boolean; credits?: number | null }
+          if (d.error) { s.cursor = null; continue }
           const adsArr: FbAd[] = Array.isArray(d.ads) ? d.ads : []
           for (const a of adsArr) {
             const cands: string[] = []
-            if (a.linkUrl) cands.push(a.linkUrl)
-            const inText = String(a.text || '').match(/https?:\/\/[^\s)"']+/gi) || []   // TikTok: link gõ trong caption
-            cands.push(...inText)
+            if (a.linkUrl) cands.push(a.linkUrl)                                                  // ưu tiên link đích (CTA)
+            else cands.push(...(String(a.text || '').match(/https?:\/\/[^\s)"']+/gi) || []))       // không có → quét caption
             for (const rawu of cands) {
               const dest = cleanLink(rawu)
               if (!/^https?:\/\//i.test(dest)) continue
-              const key = normUrl(dest)
-              if (linkSeenRef.current.has(key)) continue
-              linkSeenRef.current.add(key)
+              const dom = domainOf(dest)
+              if (linkSeenRef.current.has(dom)) continue   // dedup theo DOMAIN
+              linkSeenRef.current.add(dom)
               const k = linkKind(dest)
-              batch.push({ url: dest, domain: domainOf(dest), kindLabel: k.label, kindEmoji: k.emoji, web: k.web, page: a.page || '', adText: a.text || '', platform: plat })
+              batch.push({ url: dest, domain: dom, kindLabel: k.label, kindEmoji: k.emoji, web: k.web, page: a.page || '', adText: a.text || '', platform: s.plat })
             }
           }
           if (d.credits != null) setCredits(d.credits)
-          linkCursorRef.current[plat] = d.cursor != null && d.hasMore ? String(d.cursor) : null
-        } catch { linkCursorRef.current[plat] = null }
+          s.cursor = d.cursor != null && d.hasMore ? String(d.cursor) : null
+        } catch { s.cursor = null }
+        if (batch.length >= 10) break
       }
-      if (!progressed) break   // mọi nền tảng đã hết trang
+      if (!progressed) break   // mọi nguồn đã hết
     }
     return batch
   }
-  const linkHasMoreNow = () => {
-    const plats: ('fb' | 'tiktok')[] = linkPlat === 'both' ? ['fb', 'tiktok'] : [linkPlat]
-    return plats.some((p) => linkCursorRef.current[p] !== null)
-  }
+  const linkHasMoreNow = () => linkSourcesRef.current.some((s) => s.cursor !== null)
   const runLinkFinder = async () => {
-    let query = linkQ.trim()
-    if (linkBankId) { const p = products.find((x) => x.id === linkBankId); if (p) query = coreTerms(p.productName) || p.productName }
-    if (linkImg) {
-      if (!geminiApiKey) { setLinkErr('Cần Gemini API key trong Cài đặt để đọc ảnh'); return }
-      setLinkBusy(true); setLinkErr('🔍 AI đang đọc ảnh ra từ khóa…')
-      try { query = await visionToKeyword(linkImg) } catch { /* dùng linkQ nếu lỗi */ }
-      if (query) setLinkQ(query)
-    }
-    if (!query) { setLinkBusy(false); setLinkErr('Nhập từ khóa, chọn SP từ Kho, hoặc tải ảnh SP'); return }
-    setLinkBusy(true); setLinkErr(null); setLinks([]); setLinkHasMore(false)
+    if (!linkBankId && !linkImg && !linkQ.trim()) { setLinkErr('Nhập từ khóa, chọn SP từ Kho, hoặc tải ảnh SP'); return }
+    setLinkBusy(true); setLinks([]); setLinkHasMore(false); setLinkAngles([])
+    setLinkErr(linkImg ? '🔍 AI đang đọc ảnh + tạo từ khóa…' : '🧠 AI đang tạo từ khóa đa góc…')
+    let angles: string[] = []
+    try { angles = await genAngles() } catch { /* fallback dưới */ }
+    if (!angles.length && linkQ.trim()) angles = [linkQ.trim()]
+    if (!angles.length) { setLinkBusy(false); setLinkErr('Không tạo được từ khóa — thử nhập tay'); return }
+    setLinkAngles(angles); setLinkErr(null)
     linkSeenRef.current = new Set()
-    linkQueryRef.current = query
+    linkQueryRef.current = angles.join(' ')
     const plats: ('fb' | 'tiktok')[] = linkPlat === 'both' ? ['fb', 'tiktok'] : [linkPlat]
-    linkCursorRef.current = { fb: plats.includes('fb') ? undefined : null, tiktok: plats.includes('tiktok') ? undefined : null }
+    linkSourcesRef.current = angles.flatMap((q) => plats.map((plat) => ({ q, plat, cursor: undefined as string | null | undefined })))
     try {
-      const batch = await fetchLinkBatch(query)
+      const batch = await fetchLinkBatch()
       setLinks(batch)
       setLinkHasMore(linkHasMoreNow())
-      if (!batch.length) { setLinkErr('Không tìm thấy link nào — đổi từ khóa/nước (FB là nguồn chính; TikTok thường ẩn link đích)'); return }
-      void verifyLinks(batch, query)
+      if (!batch.length) { setLinkErr('Không tìm thấy link salepage — thử SP/ảnh/nước khác (FB là nguồn chính)'); return }
+      void verifyLinks(batch)
+      if (imgMatch && linkImg) void verifyImageMatch(batch)
     } catch (e) { setLinkErr((e as Error).message) } finally { setLinkBusy(false) }
   }
   const loadMoreLinks = async () => {
     if (linkMoreBusy || linkBusy) return
     setLinkMoreBusy(true)
-    const query = linkQueryRef.current
     try {
-      const batch = await fetchLinkBatch(query)
+      const batch = await fetchLinkBatch()
       if (batch.length) setLinks((prev) => [...(prev || []), ...batch])
       setLinkHasMore(linkHasMoreNow())
-      if (!batch.length) addToast('Đã hết trang cho từ khóa này', 'success')
-      else void verifyLinks(batch, query)
+      if (!batch.length) addToast('Đã hết trang cho các từ khóa này', 'success')
+      else { void verifyLinks(batch); if (imgMatch && linkImg) void verifyImageMatch(batch) }
     } catch (e) { addToast('Tải thêm lỗi: ' + ((e as Error).message || '').slice(0, 60), 'error') } finally { setLinkMoreBusy(false) }
   }
-  const shownLinks = (links || []).filter((l) => (!onlyWeb || l.web) && (!onlyMatched || l.contains === true))
+  // onlyMatched: ẩn link xác minh KHÔNG khớp (giữ chưa xác minh để khỏi trống lúc đang verify).
+  // onlySku: chỉ giữ link "cùng SP" theo đối chiếu ảnh (ẩn cái đã xác nhận khác).
+  const shownLinks = (links || []).filter((l) =>
+    (!onlyWeb || l.web) && (!onlyMatched || l.contains !== false) && (!onlySku || l.matchSku !== false),
+  )
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#EEEEF2]">
@@ -805,8 +862,9 @@ CHỈ trả JSON.`
                 <option value="">— SP từ Kho —</option>
                 {products.map((p) => <option key={p.id} value={p.id}>{p.productName}</option>)}
               </select>
+              {linkImg && <img src={linkImg} alt="" className="h-9 w-9 shrink-0 rounded-lg border border-black/10 object-cover" />}
               <label className="flex cursor-pointer items-center gap-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50" title="Tìm link bằng ảnh SP">
-                🖼️ {linkImg ? 'Đã chọn ảnh' : 'Ảnh SP'}<input type="file" accept="image/*" className="hidden" onChange={onLinkImg} />
+                🖼️ {linkImg ? 'Đổi ảnh' : 'Ảnh SP'}<input type="file" accept="image/*" className="hidden" onChange={onLinkImg} />
               </label>
               <button onClick={() => void runLinkFinder()} disabled={linkBusy}
                 className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50">
@@ -815,10 +873,18 @@ CHỈ trả JSON.`
             </div>
             <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-slate-600">
               <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={onlyWeb} onChange={(e) => setOnlyWeb(e.target.checked)} /> 🔗 Chỉ Web/Ladipage (bỏ sàn + chat)</label>
-              <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={onlyMatched} onChange={(e) => setOnlyMatched(e.target.checked)} /> ✓ Chỉ link đã khớp nội dung</label>
+              <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={onlyMatched} onChange={(e) => setOnlyMatched(e.target.checked)} /> ✓ Ẩn link không khớp</label>
+              {linkImg && <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={imgMatch} onChange={(e) => setImgMatch(e.target.checked)} /> 🖼️ Đối chiếu ảnh (cùng mã hàng)</label>}
+              {linkImg && imgMatch && <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={onlySku} onChange={(e) => setOnlySku(e.target.checked)} /> ✅ Chỉ cùng SP</label>}
               {linkImg && <button onClick={() => setLinkImg('')} className="text-rose-500 underline">bỏ ảnh</button>}
               {linkErr && <span className="text-rose-500">{linkErr}</span>}
             </div>
+            {linkAngles.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
+                <span className="font-semibold">Từ khóa AI:</span>
+                {linkAngles.map((a) => <span key={a} className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600">{a}</span>)}
+              </div>
+            )}
           </>
         )}
       </header>
@@ -995,7 +1061,7 @@ CHỈ trả JSON.`
               <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-black/10 text-center text-slate-400">
                 <Link2 className="h-8 w-8" />
                 <p className="text-sm">Nhập từ khóa / chọn SP từ Kho / tải ảnh → <b>Tìm link</b>.</p>
-                <p className="text-xs">Bóc link salepage/ladipage từ ad đối thủ. <b>FB là nguồn chính</b>; TikTok thường ẩn link đích nên chỉ bắt link gõ trong caption.</p>
+                <p className="text-xs">AI tạo <b>từ khóa đa góc</b> (brand + đặc điểm/lợi ích) để bắt cả đối thủ <b>rebrand cùng mã hàng</b>. Tải ảnh + bật "Đối chiếu ảnh" để lọc đúng <b>cùng SP</b>. FB là nguồn chính; TikTok ẩn link đích nên ít.</p>
               </div>
             )}
             {linkBusy && <div className="py-10 text-center text-sm text-slate-400">🔎 Đang quét ad + bóc link đích…</div>}
@@ -1014,6 +1080,9 @@ CHỈ trả JSON.`
                         {l.verifying && <span className="text-[10px] text-slate-400">đang xác minh…</span>}
                         {l.contains === true && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">✓ khớp nội dung</span>}
                         {l.contains === false && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-400">? chưa thấy key</span>}
+                        {l.matchBusy && <span className="text-[10px] text-slate-400">đối chiếu ảnh…</span>}
+                        {l.matchSku === true && <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">✅ cùng SP</span>}
+                        {l.matchSku === false && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500">✗ khác SP</span>}
                       </div>
                       <a href={l.url} target="_blank" rel="noopener noreferrer" className="block break-all text-[11px] text-blue-600 underline">{l.url}</a>
                       {l.page && <p className="line-clamp-1 text-[10px] text-slate-400">📢 {l.page}{l.adText ? ` · ${l.adText.slice(0, 90)}` : ''}</p>}
