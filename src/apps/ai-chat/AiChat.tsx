@@ -183,39 +183,39 @@ export default function AiChat() {
 
   return (
     <div className="flex h-full flex-col">
-      <AppHeader icon={Bot} eyebrow="TRỢ LÝ AI · NỘI BỘ" title="Trợ lý AI" />
-
-      {/* Toolbar: chọn model + trò chuyện mới */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-app-border px-4 py-2">
-        <button onClick={() => setHistoryOpen(true)} title="Lịch sử trò chuyện"
-          className="flex items-center gap-1.5 rounded-lg border border-app-border bg-app-card px-3 py-1.5 text-xs font-bold text-app-muted hover:text-app-text">
-          <History className="h-3.5 w-3.5" /> Lịch sử{convos.length > 0 ? ` (${convos.length})` : ''}
-        </button>
-        <div className="inline-flex rounded-xl border border-app-border bg-app-card p-0.5">
-          {(['gemini', 'gpt'] as const).map((mm) => (
-            <button key={mm} onClick={() => switchModel(mm)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${model === mm ? 'ui-accent-solid shadow' : 'text-app-muted hover:text-app-text'}`}>
-              {mm === 'gemini' ? '✦ Gemini' : '⬡ GPT'}
-            </button>
-          ))}
-        </div>
-        {model === 'gpt' && (
-          <div className="inline-flex rounded-lg border border-app-border bg-app-card p-0.5 text-[11px] font-bold" title="Chọn model GPT: mini rẻ hơn ~15× cho việc thường, 4o đỉnh hơn cho việc khó">
-            {([['gpt-4o-mini', 'mini · rẻ'], ['gpt-4o', '4o · đỉnh']] as const).map(([g, lbl]) => (
-              <button key={g} onClick={() => setGptModel(g)} className={`rounded-md px-2 py-1 ${gptModel === g ? 'ui-accent-soft' : 'text-app-muted hover:text-app-text'}`}>{lbl}</button>
+      <AppHeader icon={Bot} eyebrow="TRỢ LÝ AI · NỘI BỘ" title="Trợ lý AI" actions={
+        <>
+          <button onClick={() => setHistoryOpen(true)} title="Lịch sử trò chuyện"
+            className="flex items-center gap-1.5 rounded-lg border border-app-border bg-app-card px-2.5 py-1.5 text-xs font-bold text-app-muted hover:text-app-text">
+            <History className="h-3.5 w-3.5" /> Lịch sử{convos.length > 0 ? ` (${convos.length})` : ''}
+          </button>
+          <div className="inline-flex rounded-xl border border-app-border bg-app-card p-0.5">
+            {(['gemini', 'gpt'] as const).map((mm) => (
+              <button key={mm} onClick={() => switchModel(mm)}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors ${model === mm ? 'ui-accent-solid shadow' : 'text-app-muted hover:text-app-text'}`}>
+                {mm === 'gemini' ? '✦ Gemini' : '⬡ GPT'}
+              </button>
             ))}
           </div>
-        )}
-        {model === 'gpt' && (
-          <button onClick={() => setKeyModalOpen(true)}
-            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${openaiKey ? 'border-emerald-300 text-emerald-600' : 'border-amber-300 text-amber-600'}`}>
-            <KeyRound className="h-3 w-3" /> {openaiKey ? 'OpenAI key đã có' : 'Nhập OpenAI key'}
+          {model === 'gpt' && (
+            <div className="inline-flex rounded-lg border border-app-border bg-app-card p-0.5 text-[11px] font-bold" title="Chọn model GPT: mini rẻ hơn ~15× cho việc thường, 4o đỉnh hơn cho việc khó">
+              {([['gpt-4o-mini', 'mini · rẻ'], ['gpt-4o', '4o · đỉnh']] as const).map(([g, lbl]) => (
+                <button key={g} onClick={() => setGptModel(g)} className={`rounded-md px-2 py-1 ${gptModel === g ? 'ui-accent-soft' : 'text-app-muted hover:text-app-text'}`}>{lbl}</button>
+              ))}
+            </div>
+          )}
+          {model === 'gpt' && (
+            <button onClick={() => setKeyModalOpen(true)}
+              className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${openaiKey ? 'border-emerald-300 text-emerald-600' : 'border-amber-300 text-amber-600'}`}>
+              <KeyRound className="h-3 w-3" /> {openaiKey ? 'OpenAI key' : 'Nhập key'}
+            </button>
+          )}
+          <button onClick={newChat} title="Trò chuyện mới"
+            className="flex items-center gap-1.5 rounded-lg border border-app-border bg-app-card px-2.5 py-1.5 text-xs font-bold text-app-muted hover:text-app-text">
+            <MessageSquarePlus className="h-3.5 w-3.5" /> Trò chuyện mới
           </button>
-        )}
-        <button onClick={newChat} className="ml-auto flex items-center gap-1.5 rounded-lg border border-app-border bg-app-card px-3 py-1.5 text-xs font-bold text-app-muted hover:text-app-text">
-          <MessageSquarePlus className="h-3.5 w-3.5" /> Trò chuyện mới
-        </button>
-      </div>
+        </>
+      } />
 
       {/* Khung chat */}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6">
