@@ -32,6 +32,12 @@ interface LadiRead { headline: string; offer: string; structure: string; cta: st
 interface AdaptScript { hook: string; script: string; shots: string; caption: string }
 // SP win từ TikTok Shop (tái dùng /api/research) — Bước 1 của Radar.
 interface WinProduct { productId: string; title: string; imageUrl: string; sale: number; unitPrice: string; seller: string; url: string; niche: string }
+// 🔗 Link salepage/ladipage bóc từ ad (tab Tìm Salepage).
+interface FoundLink {
+  url: string; domain: string; kindLabel: string; kindEmoji: string; web: boolean
+  page: string; adText: string; platform: 'fb' | 'tiktok'
+  cms?: string; contains?: boolean | null; verifying?: boolean
+}
 
 // Rút LÕI từ khóa từ tên SP (bỏ [..], (..), đơn vị, từ marketing) để mồi ô tìm ad sạch.
 const MKT_RE = /\b(beli|percuma|free|gift|cod|promosi|diskaun|sale|offer|ready|stock|stok|terhad|viral|terlaris|original|ori|new|hot|murah|jimat|harga|runtuh|borong|set|pack|pcs|pc|tawaran|hebat|bundle|combo|pengar|pengiriman|gratis|terbaru|berkualiti)\b/gi
@@ -57,6 +63,11 @@ function cleanLink(u: string): string {
     }
   } catch { /* giữ nguyên */ }
   return u
+}
+// Domain gọn (bỏ www) + khoá dedup (host+path) cho danh sách link.
+function domainOf(u: string): string { try { return new URL(u).hostname.replace(/^www\./, '') } catch { return u } }
+function normUrl(u: string): string {
+  try { const x = new URL(u); return (x.hostname.replace(/^www\./, '') + x.pathname).replace(/\/$/, '').toLowerCase() } catch { return u.toLowerCase() }
 }
 // Nhận loại link đích — nhiều ad COD MY đẩy về WhatsApp/Shopee chứ không phải ladipage.
 function linkKind(u: string): { label: string; emoji: string; web: boolean } {
@@ -93,7 +104,7 @@ export default function SpyAds() {
   const sendToApp = useAppStore((s) => s.sendToApp)
   const addToast = useAppStore((s) => s.addToast)
 
-  const [mode, setMode] = useState<'radar' | 'ads'>('radar') // 🎯 Radar SP win | 🔍 tìm ad
+  const [mode, setMode] = useState<'radar' | 'ads' | 'links'>('radar') // 🎯 Radar SP win | 🔍 tìm ad | 🔗 tìm salepage
   const [platform, setPlatform] = useState<'fb' | 'tiktok'>('fb')
   const [q, setQ] = useState('')
   // Radar SP win (Bước 1): dò TikTok Shop theo ngách
@@ -143,6 +154,16 @@ export default function SpyAds() {
   const [adaptBusy, setAdaptBusy] = useState(false)
   const [adaptErr, setAdaptErr] = useState<string | null>(null)
   const [adaptResult, setAdaptResult] = useState<AdaptScript | null>(null)
+  // 🔗 Link Finder (tab Tìm Salepage)
+  const [linkQ, setLinkQ] = useState('')
+  const [linkBankId, setLinkBankId] = useState('')
+  const [linkImg, setLinkImg] = useState('')
+  const [linkPlat, setLinkPlat] = useState<'fb' | 'tiktok' | 'both'>('fb')
+  const [links, setLinks] = useState<FoundLink[] | null>(null)
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [linkErr, setLinkErr] = useState<string | null>(null)
+  const [onlyWeb, setOnlyWeb] = useState(true)
+  const [onlyMatched, setOnlyMatched] = useState(false)
 
   // Cache kết quả RIÊNG theo platform → đổi tab FB↔TikTok không mất kết quả cũ.
   type AdCache = { ads: FbAd[] | null; cursor: string | null; hasMore: boolean; q: string }
@@ -456,6 +477,90 @@ CHỈ trả JSON.`
     for (let i = 0; i < list.length; i++) { downloadOne(list[i], i); await new Promise((r) => setTimeout(r, 900)) }
   }
 
+  // ── 🔗 Link Finder — bóc link salepage/ladipage từ ad theo từ khóa / SP Kho / ảnh ──
+  const onLinkImg = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return
+    const rd = new FileReader(); rd.onload = () => setLinkImg(String(rd.result || '')); rd.readAsDataURL(f)
+  }
+  const visionToKeyword = async (dataUrl: string): Promise<string> => {
+    const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/); if (!m) return ''
+    const raw = await directGeminiVision({
+      apiKey: geminiApiKey,
+      parts: [
+        { inlineData: { mimeType: m[1], data: m[2] } },
+        { text: 'Đây là ảnh 1 sản phẩm COD/affiliate. Trả DUY NHẤT 2-4 từ khóa NGẮN bằng tiếng Malay (ưu tiên) hoặc English để tìm quảng cáo + landing page bán sản phẩm này tại Malaysia. CHỈ trả từ khóa, không giải thích, không ngoặc kép.' },
+      ],
+      temperature: 0.3, maxOutputTokens: 60,
+    })
+    return raw.replace(/["\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60)
+  }
+  const verifyLinks = async (list: FoundLink[], query: string) => {
+    const queue = list.filter((l) => l.web)
+    const worker = async () => {
+      for (;;) {
+        const l = queue.shift(); if (!l) break
+        setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, verifying: true } : x))
+        try {
+          const d = (await fetch(`/api/check-link?url=${encodeURIComponent(l.url)}&q=${encodeURIComponent(query)}`).then((r) => r.json())) as { cms?: string; contains?: boolean | null }
+          setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, verifying: false, cms: d.cms, contains: d.contains ?? null } : x))
+        } catch {
+          setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, verifying: false, contains: null } : x))
+        }
+      }
+    }
+    await Promise.all([worker(), worker(), worker(), worker()])
+  }
+  const runLinkFinder = async () => {
+    let query = linkQ.trim()
+    if (linkBankId) { const p = products.find((x) => x.id === linkBankId); if (p) query = coreTerms(p.productName) || p.productName }
+    if (linkImg) {
+      if (!geminiApiKey) { setLinkErr('Cần Gemini API key trong Cài đặt để đọc ảnh'); return }
+      setLinkBusy(true); setLinkErr('🔍 AI đang đọc ảnh ra từ khóa…')
+      try { query = await visionToKeyword(linkImg) } catch { /* dùng linkQ nếu lỗi */ }
+      if (query) setLinkQ(query)
+    }
+    if (!query) { setLinkBusy(false); setLinkErr('Nhập từ khóa, chọn SP từ Kho, hoặc tải ảnh SP'); return }
+    setLinkBusy(true); setLinkErr(null); setLinks([])
+    const seen = new Set<string>()
+    const collected: FoundLink[] = []
+    try {
+      const plats: ('fb' | 'tiktok')[] = linkPlat === 'both' ? ['fb', 'tiktok'] : [linkPlat]
+      for (const plat of plats) {
+        const base = plat === 'fb' ? '/api/fb-ads' : '/api/tiktok-ads'
+        let cur: string | null = null
+        for (let pg = 0; pg < 2; pg++) {
+          const st = plat === 'fb' ? '&status=ALL' : ''   // ALL: bắt cả salepage từ ad đã tắt
+          const curP = cur ? `&cursor=${encodeURIComponent(cur)}` : ''
+          const d = (await fetch(`${base}?q=${encodeURIComponent(query)}&country=${country}${st}${curP}`).then((r) => r.json())) as { error?: string; ads?: FbAd[]; cursor?: string | number | null; hasMore?: boolean; credits?: number | null }
+          if (d.error) { if (pg === 0 && plats.length === 1) setLinkErr(d.error); break }
+          const adsArr: FbAd[] = Array.isArray(d.ads) ? d.ads : []
+          for (const a of adsArr) {
+            const cands: string[] = []
+            if (a.linkUrl) cands.push(a.linkUrl)
+            const inText = String(a.text || '').match(/https?:\/\/[^\s)"']+/gi) || []   // TikTok: link gõ trong caption
+            cands.push(...inText)
+            for (const rawu of cands) {
+              const dest = cleanLink(rawu)
+              if (!/^https?:\/\//i.test(dest)) continue
+              const key = normUrl(dest)
+              if (seen.has(key)) continue
+              seen.add(key)
+              const k = linkKind(dest)
+              collected.push({ url: dest, domain: domainOf(dest), kindLabel: k.label, kindEmoji: k.emoji, web: k.web, page: a.page || '', adText: a.text || '', platform: plat })
+            }
+          }
+          if (d.credits != null) setCredits(d.credits)
+          cur = d.cursor != null && d.hasMore ? String(d.cursor) : null
+          if (!cur) break
+        }
+      }
+      setLinks(collected)
+      if (!collected.length) { setLinkErr('Không tìm thấy link nào — đổi từ khóa/nước (FB là nguồn chính; TikTok thường ẩn link đích)'); return }
+      void verifyLinks(collected, query)
+    } catch (e) { setLinkErr((e as Error).message) } finally { setLinkBusy(false) }
+  }
+  const shownLinks = (links || []).filter((l) => (!onlyWeb || l.web) && (!onlyMatched || l.contains === true))
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#EEEEF2]">
       {/* Header + search */}
@@ -475,6 +580,8 @@ CHỈ trả JSON.`
               className={`rounded-md px-3 py-1 text-xs font-semibold ${mode === 'radar' ? 'bg-rose-600 text-white' : 'text-slate-500'}`}>🎯 Radar SP win</button>
             <button onClick={() => setMode('ads')}
               className={`rounded-md px-3 py-1 text-xs font-semibold ${mode === 'ads' ? 'bg-rose-600 text-white' : 'text-slate-500'}`}>🔍 Tìm ad theo từ khóa</button>
+            <button onClick={() => setMode('links')}
+              className={`rounded-md px-3 py-1 text-xs font-semibold ${mode === 'links' ? 'bg-rose-600 text-white' : 'text-slate-500'}`}>🔗 Tìm Salepage</button>
           </div>
           <select value={country} onChange={(e) => setCountry(e.target.value)} className="rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-sm font-medium">
             {COUNTRIES.map((x) => <option key={x.c} value={x.c}>{x.f} {x.c}</option>)}
@@ -622,6 +729,41 @@ CHỈ trả JSON.`
                 )}
               </div>
             )}
+          </>
+        )}
+
+        {/* MODE: Tìm Salepage/Link — bóc link đích từ ad theo từ khóa / SP Kho / ảnh */}
+        {mode === 'links' && (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
+                <button onClick={() => setLinkPlat('fb')} className={`rounded-md px-3 py-1 text-xs font-semibold ${linkPlat === 'fb' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>👍 Facebook</button>
+                <button onClick={() => setLinkPlat('tiktok')} className={`rounded-md px-3 py-1 text-xs font-semibold ${linkPlat === 'tiktok' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>🎵 TikTok</button>
+                <button onClick={() => setLinkPlat('both')} className={`rounded-md px-3 py-1 text-xs font-semibold ${linkPlat === 'both' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>Cả 2</button>
+              </div>
+              <input
+                value={linkQ} onChange={(e) => { setLinkQ(e.target.value); setLinkBankId(''); setLinkImg('') }} onKeyDown={(e) => { if (e.key === 'Enter') void runLinkFinder() }}
+                placeholder="từ khóa SP (vd: collagen, sakit lutut, jam tangan…)"
+                className="min-w-[200px] flex-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm" />
+              <select value={linkBankId} onChange={(e) => { setLinkBankId(e.target.value); if (e.target.value) { setLinkImg(''); setLinkQ('') } }}
+                className="max-w-[180px] rounded-lg border border-black/10 bg-white px-2 py-1.5 text-xs">
+                <option value="">— SP từ Kho —</option>
+                {products.map((p) => <option key={p.id} value={p.id}>{p.productName}</option>)}
+              </select>
+              <label className="flex cursor-pointer items-center gap-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50" title="Tìm link bằng ảnh SP">
+                🖼️ {linkImg ? 'Đã chọn ảnh' : 'Ảnh SP'}<input type="file" accept="image/*" className="hidden" onChange={onLinkImg} />
+              </label>
+              <button onClick={() => void runLinkFinder()} disabled={linkBusy}
+                className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50">
+                <Link2 className="h-4 w-4" /> {linkBusy ? 'Đang tìm…' : 'Tìm link'}
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-slate-600">
+              <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={onlyWeb} onChange={(e) => setOnlyWeb(e.target.checked)} /> 🔗 Chỉ Web/Ladipage (bỏ sàn + chat)</label>
+              <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={onlyMatched} onChange={(e) => setOnlyMatched(e.target.checked)} /> ✓ Chỉ link đã khớp nội dung</label>
+              {linkImg && <button onClick={() => setLinkImg('')} className="text-rose-500 underline">bỏ ảnh</button>}
+              {linkErr && <span className="text-rose-500">{linkErr}</span>}
+            </div>
           </>
         )}
       </header>
@@ -787,6 +929,54 @@ CHỈ trả JSON.`
                 className="mt-4 w-full rounded-xl border border-rose-300 bg-white py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">
                 {moreLoading ? 'Đang tải…' : '↻ Tải thêm ad'}
               </button>
+            )}
+          </>
+        )}
+
+        {/* ── MODE TÌM SALEPAGE ── */}
+        {mode === 'links' && (
+          <>
+            {!links && !linkBusy && (
+              <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-black/10 text-center text-slate-400">
+                <Link2 className="h-8 w-8" />
+                <p className="text-sm">Nhập từ khóa / chọn SP từ Kho / tải ảnh → <b>Tìm link</b>.</p>
+                <p className="text-xs">Bóc link salepage/ladipage từ ad đối thủ. <b>FB là nguồn chính</b>; TikTok thường ẩn link đích nên chỉ bắt link gõ trong caption.</p>
+              </div>
+            )}
+            {linkBusy && <div className="py-10 text-center text-sm text-slate-400">🔎 Đang quét ad + bóc link đích…</div>}
+            {links && links.length > 0 && (
+              <>
+                <div className="mb-2 text-xs font-semibold text-slate-500">{shownLinks.length} link{onlyWeb ? ' Web/Ladipage' : ''} (tổng {links.length})</div>
+                <div className="flex flex-col gap-2">
+                  {shownLinks.map((l) => (
+                    <div key={l.url} className="flex flex-col gap-1.5 rounded-xl border border-black/10 bg-white p-3 shadow-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm">{l.kindEmoji}</span>
+                        <span className="text-xs font-bold text-slate-700">{l.domain}</span>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{l.kindLabel}</span>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{l.platform === 'fb' ? '👍 FB' : '🎵 TikTok'}</span>
+                        {l.cms && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">🧱 {l.cms}</span>}
+                        {l.verifying && <span className="text-[10px] text-slate-400">đang xác minh…</span>}
+                        {l.contains === true && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">✓ khớp nội dung</span>}
+                        {l.contains === false && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-400">? chưa thấy key</span>}
+                      </div>
+                      <a href={l.url} target="_blank" rel="noopener noreferrer" className="block break-all text-[11px] text-blue-600 underline">{l.url}</a>
+                      {l.page && <p className="line-clamp-1 text-[10px] text-slate-400">📢 {l.page}{l.adText ? ` · ${l.adText.slice(0, 90)}` : ''}</p>}
+                      <div className="flex gap-1.5">
+                        <button onClick={() => { navigator.clipboard?.writeText(l.url); addToast('Đã copy link', 'success') }}
+                          className="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-rose-600 hover:bg-rose-50">📋 Copy</button>
+                        <a href={l.url} target="_blank" rel="noopener noreferrer"
+                          className="rounded-md border border-black/10 bg-white px-2.5 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">↗ Mở</a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {shownLinks.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
+                    Tất cả link bị lọc — bỏ tick "Chỉ Web/Ladipage" hoặc "Chỉ link đã khớp" để xem thêm.
+                  </p>
+                )}
+              </>
             )}
           </>
         )}
