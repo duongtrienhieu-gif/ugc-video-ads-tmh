@@ -6,6 +6,10 @@
 import type { SpCandidate, DeepDive, SpyAd } from '../store'
 import { expandSearchTerms } from './expandTerms'
 
+// Advertiser KHÔNG phải hàng COD clone được: phòng khám/nha khoa/dịch vụ/nhà thuốc.
+// Loại khỏi "cầu danh mục" để số sát đối thủ COD thật (vd "sakit gigi" hay ra clinic).
+const NON_COD_RE = /klinik|dental|pergigi|dentist|\bclinic\b|hospital|farmasi|pharmacy|aesthetic|\bspa\b|salon|booking|appointment|temujanji/i
+
 // Từ khóa search ad: ƯU TIÊN NGÁCH khớp ("minyak urut") — generic, FB/TikTok ra
 // kết quả. Tên SP dài/đặc thù ("Minyak 1001 Khasiat JUNGLE GIRL") → FB Ads rỗng.
 // Fallback (không có niche): lọc tên → 3 từ cốt lõi, bỏ số/khuyến mãi/ngoặc.
@@ -109,10 +113,12 @@ export async function deepDive(c: SpCandidate, geminiApiKey?: string): Promise<D
   adsResults.forEach((r, idx) => {
     if (r.status !== 'fulfilled') return
     const platform: 'fb' | 'tiktok' = idx % 2 === 0 ? 'fb' : 'tiktok'
-    const list = (r.value.ads as { id?: string; cover?: string; videoUrl?: string; text?: string; daysRunning?: number; advertiserAds?: number }[] | undefined) ?? []
+    const list = (r.value.ads as { id?: string; page?: string; cover?: string; videoUrl?: string; text?: string; daysRunning?: number; advertiserAds?: number }[] | undefined) ?? []
     for (const a of list) {
       const id = String(a.id ?? '')
       if (!id) continue
+      // Bỏ phòng khám/dịch vụ (không phải đối thủ COD của SP) — chống drift "cầu danh mục".
+      if (NON_COD_RE.test(`${a.page ?? ''} ${a.text ?? ''}`)) continue
       const days = Number(a.daysRunning) || 0
       const scale = Number(a.advertiserAds) || 0
       const prev = adMap.get(id)

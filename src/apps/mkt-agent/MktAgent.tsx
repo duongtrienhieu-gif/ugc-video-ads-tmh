@@ -233,13 +233,13 @@ export default function MktAgent() {
                     {/* Mở app NỘI BỘ + tự điền SP */}
                     <div className="flex flex-wrap gap-1.5">
                       <button title="Mở Spy Ads + tự search ad đối thủ"
-                        onClick={() => sendToApp({ targetApp: 'spy-ads', targetField: 'query', data: searchKeyword(p) })}
+                        onClick={() => sendToApp({ targetApp: 'spy-ads', targetField: 'query', data: p.deep?.terms?.[0] || searchKeyword(p) })}
                         className="px-2 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 text-[11px] text-sky-300 border border-sky-500/40">📣 Spy Ads</button>
                       <button title="Mở Tìm nguồn 1688 + tự điền ảnh SP"
                         onClick={() => sendToApp({ targetApp: 'research', targetField: 'source', data: { name: p.title, imageUrl: p.imageUrl } })}
                         className="px-2 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 text-[11px] text-sky-300 border border-sky-500/40">🏭 Tìm nguồn</button>
                       <button title="Mở Research + quét ngách SP này"
-                        onClick={() => sendToApp({ targetApp: 'research', targetField: 'niche', data: searchKeyword(p) })}
+                        onClick={() => sendToApp({ targetApp: 'research', targetField: 'niche', data: p.deep?.terms?.[0] || searchKeyword(p) })}
                         className="px-2 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 text-[11px] text-sky-300 border border-sky-500/40">📊 Research</button>
                     </div>
 
@@ -247,10 +247,11 @@ export default function MktAgent() {
                     {p.deep ? (
                       <div className="text-[11px] text-zinc-300 bg-zinc-900 rounded-md px-2 py-1.5 space-y-0.5">
                         <div>🎬 {p.deep.videoCount} video{p.deep.maxViews > 0 ? ` · ${compact(p.deep.maxViews)} view` : ''}</div>
-                        <div>📣 {p.deep.adCount} ads (FB+TikTok) · cầu danh mục{p.deep.adTopDays > 0 ? ` · chạy ${p.deep.adTopDays}d` : ''}{p.deep.adTopScale > 1 ? ` · x${p.deep.adTopScale}` : ''}</div>
-                        {p.deep.exactChecked ? (
-                          <div className="text-emerald-300">🎯 {p.deep.exactCount} spy ĐÚNG SP (ảnh khớp ≥75 + có video)</div>
-                        ) : (p.deep.rawAds && p.deep.rawAds.length > 0 && geminiApiKey && p.imageUrl) ? (
+                        {p.deep.exactChecked && (
+                          <div className="text-emerald-300 font-medium">🎯 {p.deep.exactCount} spy ĐÚNG SP (ảnh khớp ≥75 + có video){(p.deep.exactCount ?? 0) === 0 ? ' — harvest bù bằng app' : ''}</div>
+                        )}
+                        <div className="text-zinc-500">📣 {p.deep.adCount} ads (FB+TikTok) · cầu danh mục (đã bỏ clinic/dịch vụ){p.deep.adTopDays > 0 ? ` · chạy ${p.deep.adTopDays}d` : ''}{p.deep.adTopScale > 1 ? ` · x${p.deep.adTopScale}` : ''}</div>
+                        {!p.deep.exactChecked && p.deep.rawAds && p.deep.rawAds.length > 0 && geminiApiKey && p.imageUrl ? (
                           <button onClick={() => runExactFilter(p)} disabled={p.filtering}
                             className="text-[10px] text-sky-300 underline disabled:opacity-50 text-left">
                             {p.filtering ? 'Đang lọc ảnh…' : `🎯 Lọc spy chính xác (${p.deep.rawAds.length} ad → so ảnh)`}

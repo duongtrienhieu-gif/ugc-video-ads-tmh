@@ -14,13 +14,18 @@ export async function expandSearchTerms(
 ): Promise<string[]> {
   const fallback = [c.niche, c.title.split(/\s+/).slice(0, 2).join(' ')].filter(Boolean) as string[]
   const prompt = `Sản phẩm: "${c.title}"${c.niche ? ` (ngách: ${c.niche})` : ''}.
-Sinh 6-8 TỪ KHÓA NGẮN tiếng Malay để search quảng cáo COD cho SP này trên FB/TikTok Ad Library ở Malaysia. Phủ NHIỀU GÓC mà đối thủ hay target: LOẠI sản phẩm · NỖI ĐAU người mua · LỢI ÍCH · THÀNH PHẦN chính · 1-2 từ tiếng Anh. Mỗi từ 2-3 chữ, generic (KHÔNG kèm tên thương hiệu riêng).
-CHỈ trả JSON mảng chuỗi: ["minyak urut","sakit sendi","minyak halia",...]`
+Sinh 6-8 TỪ KHÓA NGẮN tiếng Malay để search QUẢNG CÁO COD của ĐÚNG LOẠI sản phẩm này trên FB/TikTok Ad Library (Malaysia).
+QUY TẮC QUAN TRỌNG:
+- ƯU TIÊN từ chỉ LOẠI/DẠNG sản phẩm (vd "spray sakit gigi", "pemutih gigi", "minyak urut", "gel sendi") — sắp lên ĐẦU danh sách.
+- TRÁNH từ TRIỆU CHỨNG TRẦN ("sakit gigi", "sakit sendi") vì ra phòng khám/dịch vụ/brand lớn, KHÔNG phải hàng COD clone được.
+- KHÔNG kèm tên thương hiệu riêng. Mỗi từ 2-3 chữ.
+CHỈ trả JSON mảng (cụ thể-sản-phẩm TRƯỚC): ["spray sakit gigi","ubat gigi","pemutih gigi",...]`
   try {
     const raw = await directGeminiText({ apiKey, prompt, responseMimeType: 'application/json', temperature: 0.4 })
     const arr = JSON.parse(stripFences(raw)) as unknown
     const terms = Array.isArray(arr) ? arr.map((x) => String(x).trim()).filter(Boolean) : []
-    const all = [...fallback, ...terms]
+    // Từ loại-SP (Gemini) TRƯỚC, niche/triệu-chứng SAU → terms[0] là từ loại-SP (ít drift).
+    const all = terms.length ? [...terms, ...(c.niche ? [c.niche] : [])] : fallback
     // khử trùng theo lowercase, giữ thứ tự, cap 8
     const seen = new Set<string>()
     const uniq: string[] = []
