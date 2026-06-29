@@ -501,7 +501,7 @@ CHỈ trả JSON.`
         const l = queue.shift(); if (!l) break
         setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, verifying: true } : x))
         try {
-          const d = (await fetch(`/api/check-link?url=${encodeURIComponent(l.url)}&q=${encodeURIComponent(query)}`).then((r) => r.json())) as { cms?: string; contains?: boolean | null }
+          const d = (await fetch(`/api/detect-cms?url=${encodeURIComponent(l.url)}&q=${encodeURIComponent(query)}`).then((r) => r.json())) as { cms?: string; contains?: boolean | null }
           setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, verifying: false, cms: d.cms, contains: d.contains ?? null } : x))
         } catch {
           setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, verifying: false, contains: null } : x))
