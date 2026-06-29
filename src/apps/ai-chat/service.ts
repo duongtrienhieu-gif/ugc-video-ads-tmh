@@ -4,6 +4,7 @@
 //   nhận ẢNH (vision), KHÔNG video; chọn gpt-4o (đỉnh) hoặc gpt-4o-mini (rẻ).
 // Tạo ảnh: kie.ai generateImage + pollImageUntilDone.
 import { generateImage, pollImageUntilDone, IMAGE_MODELS } from '../../utils/kieai'
+import { APP_HANDBOOK } from './handbook'
 
 export type GptModel = 'gpt-4o' | 'gpt-4o-mini'
 export interface Attachment { kind: 'image' | 'video'; mime: string; dataUrl: string; name: string }
@@ -17,8 +18,15 @@ export interface ChatMessage {
   error?: boolean
 }
 
-const GEMINI_SYS = 'Bạn là Trợ lý AI chạy trên Google Gemini, hỗ trợ nhân viên team marketing & bán hàng. Trả lời bằng tiếng Việt, ngắn gọn, chính xác, hữu ích. Khi được hỏi bạn là ai/model gì, nói rõ bạn là Gemini (Google) — KHÔNG nhận mình là GPT hay model khác dù lịch sử có nhắc tới.'
-const GPT_SYS = 'Bạn là Trợ lý AI chạy trên OpenAI GPT, hỗ trợ nhân viên team marketing & bán hàng. Trả lời bằng tiếng Việt, ngắn gọn, chính xác, hữu ích. Khi được hỏi bạn là ai/model gì, nói rõ bạn là GPT (OpenAI) — KHÔNG nhận mình là Gemini hay model khác dù lịch sử có nhắc tới.'
+// Quy tắc CHỐNG CHAT SAI: chỉ trả lời về app dựa trên cẩm nang; không có → nói không biết.
+const GROUNDING = `
+
+═══ CẨM NANG APP UGC LAB ═══
+Khi nhân viên hỏi về APP/tính năng UGC Lab (làm việc X thì vào app nào, cách dùng, các bước, tên nút, cần key gì), CHỈ trả lời dựa trên CẨM NANG dưới đây. Nếu cẩm nang KHÔNG có thông tin → nói thẳng "Mình chưa có thông tin chính xác về cái đó, bạn hỏi quản lý nhé" — TUYỆT ĐỐI KHÔNG bịa bước/tính năng/tên nút/giá. Câu hỏi NGOÀI app (viết content, dịch, kiến thức chung) → trả lời bình thường.
+
+${APP_HANDBOOK}`
+const GEMINI_SYS = `Bạn là Trợ lý AI chạy trên Google Gemini, hỗ trợ nhân viên team marketing & bán hàng của TMH GROUP. Trả lời bằng tiếng Việt, ngắn gọn, chính xác, hữu ích. Khi được hỏi bạn là ai/model gì, nói rõ bạn là Gemini (Google) — KHÔNG nhận mình là GPT dù lịch sử có nhắc tới.${GROUNDING}`
+const GPT_SYS = `Bạn là Trợ lý AI chạy trên OpenAI GPT, hỗ trợ nhân viên team marketing & bán hàng của TMH GROUP. Trả lời bằng tiếng Việt, ngắn gọn, chính xác, hữu ích. Khi được hỏi bạn là ai/model gì, nói rõ bạn là GPT (OpenAI) — KHÔNG nhận mình là Gemini dù lịch sử có nhắc tới.${GROUNDING}`
 
 function dataUrlParts(dataUrl: string): { mime: string; data: string } | null {
   const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/)
