@@ -17,6 +17,9 @@ export interface ChatMessage {
   error?: boolean
 }
 
+const GEMINI_SYS = 'Bạn là Trợ lý AI chạy trên Google Gemini, hỗ trợ nhân viên team marketing & bán hàng. Trả lời bằng tiếng Việt, ngắn gọn, chính xác, hữu ích. Khi được hỏi bạn là ai/model gì, nói rõ bạn là Gemini (Google) — KHÔNG nhận mình là GPT hay model khác dù lịch sử có nhắc tới.'
+const GPT_SYS = 'Bạn là Trợ lý AI chạy trên OpenAI GPT, hỗ trợ nhân viên team marketing & bán hàng. Trả lời bằng tiếng Việt, ngắn gọn, chính xác, hữu ích. Khi được hỏi bạn là ai/model gì, nói rõ bạn là GPT (OpenAI) — KHÔNG nhận mình là Gemini hay model khác dù lịch sử có nhắc tới.'
+
 function dataUrlParts(dataUrl: string): { mime: string; data: string } | null {
   const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/)
   return m ? { mime: m[1], data: m[2] } : null
@@ -85,7 +88,7 @@ export async function geminiChatStream(apiKey: string, history: ChatMessage[], o
     try {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents, generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } }),
+        body: JSON.stringify({ contents, systemInstruction: { parts: [{ text: GEMINI_SYS }] }, generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } }),
       })
       if (!res.ok) {
         lastErr = `Gemini ${res.status}: ${(await res.text().catch(() => '')).slice(0, 150)}`
@@ -102,7 +105,7 @@ export async function geminiChatStream(apiKey: string, history: ChatMessage[], o
 
 // ── GPT streaming (nhận ảnh, KHÔNG video) ──
 export async function openaiChatStream(apiKey: string, model: GptModel, history: ChatMessage[], onDelta: (s: string) => void): Promise<string> {
-  const messages = buildOpenAiMessages(history)
+  const messages = [{ role: 'system', content: GPT_SYS }, ...buildOpenAiMessages(history)]
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },

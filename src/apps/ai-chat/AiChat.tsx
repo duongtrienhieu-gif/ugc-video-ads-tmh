@@ -53,14 +53,14 @@ export default function AiChat() {
     try { const cs = JSON.parse(localStorage.getItem(convosKey(email)) || '[]'); localList = Array.isArray(cs) ? cs : [] } catch { localList = [] }
     setConvos(localList)
     const act = localList.find((c) => c.id === localStorage.getItem(activeKey(email)))
-    if (act) { setActiveId(act.id); setMessages(act.messages) }
+    if (act) { setModel(act.messages[0]?.model ?? 'gemini'); setActiveId(act.id); setMessages(act.messages) }
     else { setActiveId(crypto.randomUUID()); setMessages([]) }
     if (!userId) return
     let cancelled = false
     fetchConvos(userId).then((cloud) => {
       if (cancelled || !cloud.length) return
       setConvos(cloud)
-      if (localList.length === 0) { setActiveId(cloud[0].id); setMessages(cloud[0].messages) }   // máy mới → mở cuộc gần nhất
+      if (localList.length === 0) { setModel(cloud[0].messages[0]?.model ?? 'gemini'); setActiveId(cloud[0].id); setMessages(cloud[0].messages) }   // máy mới → mở cuộc gần nhất
     })
     return () => { cancelled = true }
   }, [email, userId])
@@ -86,12 +86,21 @@ export default function AiChat() {
   useEffect(() => { if (activeId) localStorage.setItem(activeKey(email), activeId) }, [activeId, email])
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }) }, [messages, busy])
 
-  const openConvo = (c: Convo) => { setActiveId(c.id); setMessages(c.messages); setHistoryOpen(false) }
+  const convoModel = (c: Convo): 'gemini' | 'gpt' => c.messages[0]?.model ?? 'gemini'
+  const openConvo = (c: Convo) => { setModel(convoModel(c)); setActiveId(c.id); setMessages(c.messages); setHistoryOpen(false) }
   const deleteConvo = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     setConvos((prev) => prev.filter((c) => c.id !== id))
     void deleteConvoCloud(id)
     if (id === activeId) { setActiveId(crypto.randomUUID()); setMessages([]) }
+  }
+  // Đổi model = chuyển sang LUỒNG RIÊNG của model đó (không trộn lịch sử Gemini với GPT).
+  const switchModel = (mm: 'gemini' | 'gpt') => {
+    if (mm === model) return
+    setModel(mm)
+    const latest = convos.find((c) => c.messages.length > 0 && convoModel(c) === mm)   // convos sắp xếp mới-nhất-trước
+    if (latest) { setActiveId(latest.id); setMessages(latest.messages) }
+    else { setActiveId(crypto.randomUUID()); setMessages([]) }
   }
 
   const onFiles = (files: FileList | null) => {
@@ -173,7 +182,7 @@ export default function AiChat() {
         </button>
         <div className="inline-flex rounded-xl border border-app-border bg-app-card p-0.5">
           {(['gemini', 'gpt'] as const).map((mm) => (
-            <button key={mm} onClick={() => setModel(mm)}
+            <button key={mm} onClick={() => switchModel(mm)}
               className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${model === mm ? 'ui-accent-solid shadow' : 'text-app-muted hover:text-app-text'}`}>
               {mm === 'gemini' ? '✦ Gemini' : '⬡ GPT'}
             </button>
@@ -287,6 +296,7 @@ export default function AiChat() {
                   {convos.map((c) => (
                     <div key={c.id} onClick={() => openConvo(c)}
                       className={`group flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 ${c.id === activeId ? 'ui-accent-soft' : 'hover:bg-app-card-elevated'}`}>
+                      <span className={`shrink-0 rounded px-1 py-0.5 text-[8px] font-bold ${convoModel(c) === 'gpt' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700'}`}>{convoModel(c) === 'gpt' ? 'GPT' : '✦ Gem'}</span>
                       <span className="min-w-0 flex-1 truncate text-xs text-app-text">{c.title || 'Cuộc trò chuyện'}</span>
                       <button onClick={(e) => deleteConvo(c.id, e)} title="Xóa"
                         className="shrink-0 text-app-faint opacity-0 transition-opacity hover:text-rose-500 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
