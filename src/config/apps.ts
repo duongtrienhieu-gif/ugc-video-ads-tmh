@@ -10,7 +10,7 @@
 // bank (handled by the shell), so it carries `action: 'products'`.
 // ─────────────────────────────────────────────────────────────────────
 import {
-  User, Mic, PenLine, Sparkles, Images,
+  Bot, User, Mic, PenLine, Sparkles, Images,
   Megaphone, ShoppingBag, Rocket, MessageCircle, TrendingUp,
   Palette, Package, History as HistoryIcon, LayoutGrid, Radar, Warehouse, Target,
 } from 'lucide-react'
@@ -41,6 +41,7 @@ export const APP_GROUPS: AppGroup[] = [
   {
     label: 'Sáng tạo',
     items: [
+      { id: 'mkt-agent',        label: 'MKT Agent',      desc: 'Tự tìm SP → content → Drive', icon: Bot, tint: 'gold', hot: true },
       { id: 'character-studio', label: 'Avatar AI',      desc: 'Tạo KOL ảo',          icon: User,     tint: 'gold',    hot: true },
       { id: 'voice-studio',     label: 'Giọng đọc',      desc: 'Voice Việt + clone',  icon: Mic,      tint: 'violet' },
       { id: 'script-architect', label: 'Kịch bản',       desc: 'Script Architect',    icon: PenLine,  tint: 'sky' },
