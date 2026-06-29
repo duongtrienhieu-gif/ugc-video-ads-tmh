@@ -4,6 +4,7 @@
 //   research-videos (# video + view) · fb-ads (# ads đối thủ + scale) ·
 //   rapid-1688 (khớp 1688 + giá vốn). Tất cả allSettled → 1 nguồn lỗi không vỡ.
 import type { SpCandidate, DeepDive } from '../store'
+import { expandSearchTerms } from './expandTerms'
 
 // Từ khóa search ad: ƯU TIÊN NGÁCH khớp ("minyak urut") — generic, FB/TikTok ra
 // kết quả. Tên SP dài/đặc thù ("Minyak 1001 Khasiat JUNGLE GIRL") → FB Ads rỗng.
@@ -45,15 +46,26 @@ async function getJson(url: string, init?: RequestInit): Promise<Record<string, 
   return (await r.json()) as Record<string, unknown>
 }
 
-export async function deepDive(c: SpCandidate): Promise<DeepDive> {
-  const kw = searchKeyword(c)
-  const [vids, ads, s1688] = await Promise.allSettled([
-    getJson(`/api/research-videos?market=MY&q=${encodeURIComponent(kw)}&minSec=15`),
-    getJson(`/api/fb-ads?q=${encodeURIComponent(kw)}&country=MY&status=ACTIVE`),
+export async function deepDive(c: SpCandidate, geminiApiKey?: string): Promise<DeepDive> {
+  // Bung từ khóa (Gemini) → search rộng nhiều góc; không có key thì 1 từ.
+  const terms = geminiApiKey ? await expandSearchTerms(geminiApiKey, c) : [searchKeyword(c)]
+  const adTerms = terms.slice(0, 2).length ? terms.slice(0, 2) : [searchKeyword(c)]
+
+  // Mỗi từ (top 2) × FB + TikTok ads → gộp khử trùng. 1 từ cho video.
+  const adFetches = adTerms.flatMap((t) => [
+    getJson(`/api/fb-ads?q=${encodeURIComponent(t)}&country=MY&status=ACTIVE`),
+    getJson(`/api/tiktok-ads?q=${encodeURIComponent(t)}&country=MY`),
+  ])
+  const settled = await Promise.allSettled([
+    getJson(`/api/research-videos?market=MY&q=${encodeURIComponent(terms[0] ?? searchKeyword(c))}&minSec=15`),
     c.imageUrl
       ? getJson('/api/rapid-1688', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrl: c.imageUrl }) })
-      : Promise.resolve({ products: [] as unknown[] }),
+      : Promise.resolve({ products: [] } as Record<string, unknown>),
+    ...adFetches,
   ])
+  const vids = settled[0]
+  const s1688 = settled[1]
+  const adsResults = settled.slice(2)
 
   let videoCount = 0, maxViews = 0
   if (vids.status === 'fulfilled') {
@@ -62,13 +74,23 @@ export async function deepDive(c: SpCandidate): Promise<DeepDive> {
     maxViews = list.reduce((m, v) => Math.max(m, Number(v.views) || 0), 0)
   }
 
-  let adCount = 0, adTopDays = 0, adTopScale = 0
-  if (ads.status === 'fulfilled') {
-    const list = (ads.value.ads as { daysRunning?: number; advertiserAds?: number }[] | undefined) ?? []
-    adCount = list.length
-    adTopDays = list.reduce((m, a) => Math.max(m, Number(a.daysRunning) || 0), 0)
-    adTopScale = list.reduce((m, a) => Math.max(m, Number(a.advertiserAds) || 0), 0)
+  // Gộp ads từ FB + TikTok × các từ khóa → khử trùng theo id.
+  const adMap = new Map<string, { days: number; scale: number }>()
+  for (const r of adsResults) {
+    if (r.status !== 'fulfilled') continue
+    const list = (r.value.ads as { id?: string; daysRunning?: number; advertiserAds?: number }[] | undefined) ?? []
+    for (const a of list) {
+      const id = String(a.id ?? '')
+      if (!id) continue
+      const days = Number(a.daysRunning) || 0
+      const scale = Number(a.advertiserAds) || 0
+      const prev = adMap.get(id)
+      adMap.set(id, { days: Math.max(days, prev?.days ?? 0), scale: Math.max(scale, prev?.scale ?? 0) })
+    }
   }
+  const adCount = adMap.size
+  let adTopDays = 0, adTopScale = 0
+  for (const v of adMap.values()) { adTopDays = Math.max(adTopDays, v.days); adTopScale = Math.max(adTopScale, v.scale) }
 
   let on1688 = false, count1688 = 0, cost1688 = '', link1688 = ''
   if (s1688.status === 'fulfilled') {
@@ -81,5 +103,5 @@ export async function deepDive(c: SpCandidate): Promise<DeepDive> {
     if (first?.itemId) link1688 = `https://detail.1688.com/offer/${first.itemId}.html`
   }
 
-  return { videoCount, maxViews, adCount, adTopDays, adTopScale, on1688, count1688, cost1688, link1688 }
+  return { videoCount, maxViews, adCount, adTopDays, adTopScale, on1688, count1688, cost1688, link1688, terms }
 }

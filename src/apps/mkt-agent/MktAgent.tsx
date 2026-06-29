@@ -92,7 +92,7 @@ export default function MktAgent() {
   const runDeep = async (c: SpCandidate) => {
     patchCandidate(c.productId, { diving: true, deepError: undefined })
     try {
-      const deep = await deepDive(c)
+      const deep = await deepDive(c, geminiApiKey)
       patchCandidate(c.productId, { deep })
       if (geminiApiKey) {
         try {
@@ -235,7 +235,7 @@ export default function MktAgent() {
                     {p.deep ? (
                       <div className="text-[11px] text-zinc-300 bg-zinc-900 rounded-md px-2 py-1.5 space-y-0.5">
                         <div>🎬 {p.deep.videoCount} video{p.deep.maxViews > 0 ? ` · ${compact(p.deep.maxViews)} view` : ''}</div>
-                        <div>📣 {p.deep.adCount} ads{p.deep.adTopDays > 0 ? ` · chạy ${p.deep.adTopDays}d` : ''}{p.deep.adTopScale > 1 ? ` · x${p.deep.adTopScale} biến thể` : ''}</div>
+                        <div>📣 {p.deep.adCount} ads (FB+TikTok){p.deep.adTopDays > 0 ? ` · chạy ${p.deep.adTopDays}d` : ''}{p.deep.adTopScale > 1 ? ` · x${p.deep.adTopScale}` : ''}</div>
                         <div>
                           🏭 1688: {p.deep.on1688
                             ? <>✓ {p.deep.count1688} khớp{p.deep.cost1688 ? ` · từ ¥${p.deep.cost1688}` : ''}{p.deep.link1688 ? <> · <a href={p.deep.link1688} target="_blank" rel="noopener noreferrer" className="text-sky-400 underline">xem</a></> : ''}</>
@@ -247,6 +247,9 @@ export default function MktAgent() {
                             {p.judge.reasons.map((r, i) => <div key={`r${i}`} className="text-[10px] text-zinc-400">+ {r}</div>)}
                             {p.judge.risks.map((r, i) => <div key={`k${i}`} className="text-[10px] text-rose-300">⚠ {r}</div>)}
                           </div>
+                        )}
+                        {p.deep.terms && p.deep.terms.length > 1 && (
+                          <div className="text-[10px] text-zinc-500">🔎 {p.deep.terms.length} từ khóa: {p.deep.terms.join(' · ')}</div>
                         )}
                       </div>
                     ) : (

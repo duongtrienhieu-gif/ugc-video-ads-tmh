@@ -23,6 +23,7 @@ export interface DeepDive {
   count1688: number
   cost1688: string       // giá thấp nhất trên 1688 (¥ CNY)
   link1688: string
+  terms?: string[]       // rổ từ khóa đã bung (Gemini) — search FB+TikTok đa góc
 }
 
 // Giám khảo Gemini — phân tích sâu tổng hợp hồ sơ SP.
