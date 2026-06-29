@@ -5,14 +5,20 @@
 //   rapid-1688 (khớp 1688 + giá vốn). Tất cả allSettled → 1 nguồn lỗi không vỡ.
 import type { SpCandidate, DeepDive } from '../store'
 
-// Từ khóa search ngắn (tên SP dài/lộn xộn → lấy ~5 từ đầu, bỏ ngoặc/khuyến mãi).
-export function searchKeyword(title: string): string {
-  const cleaned = title
+// Từ khóa search ad: ƯU TIÊN NGÁCH khớp ("minyak urut") — generic, FB/TikTok ra
+// kết quả. Tên SP dài/đặc thù ("Minyak 1001 Khasiat JUNGLE GIRL") → FB Ads rỗng.
+// Fallback (không có niche): lọc tên → 3 từ cốt lõi, bỏ số/khuyến mãi/ngoặc.
+const NOISE_RE = /\b(original|hq|flash\s*sales?|promosi|terhad|ready\s*stock|cod|free\s*shipping|next-day\s*delivery|borong|botol|vegan|sale)\b/gi
+export function searchKeyword(c: { title: string; niche?: string }): string {
+  if (c.niche && c.niche.trim()) return c.niche.trim()
+  const cleaned = c.title
     .replace(/[[(（【][^\])）】]*[\])）】]/g, ' ')
-    .split(/[|–—•·]/)[0]
+    .replace(NOISE_RE, ' ')
+    .replace(/\d+/g, ' ')
+    .split(/[|–—•·/]/)[0]
     .trim()
-  const kw = cleaned.split(/\s+/).slice(0, 5).join(' ').trim()
-  return kw || title.slice(0, 40)
+  const kw = cleaned.split(/\s+/).filter(Boolean).slice(0, 3).join(' ').trim()
+  return kw || c.title.slice(0, 30)
 }
 
 export interface VerifyLinks {
@@ -23,7 +29,7 @@ export interface VerifyLinks {
 }
 
 export function buildVerifyLinks(c: SpCandidate): VerifyLinks {
-  const kw = encodeURIComponent(searchKeyword(c.title))
+  const kw = encodeURIComponent(searchKeyword(c))
   const img = c.imageUrl ? encodeURIComponent(c.imageUrl) : ''
   return {
     tiktokShop: c.url && /^https?:/i.test(c.url) ? c.url : `https://www.tiktok.com/search?q=${kw}`,
@@ -40,7 +46,7 @@ async function getJson(url: string, init?: RequestInit): Promise<Record<string, 
 }
 
 export async function deepDive(c: SpCandidate): Promise<DeepDive> {
-  const kw = searchKeyword(c.title)
+  const kw = searchKeyword(c)
   const [vids, ads, s1688] = await Promise.allSettled([
     getJson(`/api/research-videos?market=MY&q=${encodeURIComponent(kw)}&minSec=15`),
     getJson(`/api/fb-ads?q=${encodeURIComponent(kw)}&country=MY&status=ACTIVE`),

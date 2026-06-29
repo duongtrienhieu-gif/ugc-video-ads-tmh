@@ -35,6 +35,7 @@ export interface SpCandidate {
   price: number          // 0 = chưa rõ
   revenue: number        // sale*price (0 nếu price chưa rõ)
   rating?: number        // 0-5 (free, từ API)
+  niche?: string         // ngách khớp lúc quét — dùng làm từ khóa search ad (generic)
   shipFrom?: string      // local vs cross-border (hint hoàn)
   source: 'tiktok' | 'fb'
   isBranded?: boolean    // undefined = chưa lọc

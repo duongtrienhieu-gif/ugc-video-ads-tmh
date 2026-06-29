@@ -193,13 +193,13 @@ export default function MktAgent() {
                     {/* Mở app NỘI BỘ + tự điền SP */}
                     <div className="flex flex-wrap gap-1.5">
                       <button title="Mở Spy Ads + tự search ad đối thủ"
-                        onClick={() => sendToApp({ targetApp: 'spy-ads', targetField: 'query', data: searchKeyword(p.title) })}
+                        onClick={() => sendToApp({ targetApp: 'spy-ads', targetField: 'query', data: searchKeyword(p) })}
                         className="px-2 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 text-[11px] text-sky-300 border border-sky-500/40">📣 Spy Ads</button>
                       <button title="Mở Tìm nguồn 1688 + tự điền ảnh SP"
                         onClick={() => sendToApp({ targetApp: 'research', targetField: 'source', data: { name: p.title, imageUrl: p.imageUrl } })}
                         className="px-2 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 text-[11px] text-sky-300 border border-sky-500/40">🏭 Tìm nguồn</button>
                       <button title="Mở Research + quét ngách SP này"
-                        onClick={() => sendToApp({ targetApp: 'research', targetField: 'niche', data: searchKeyword(p.title) })}
+                        onClick={() => sendToApp({ targetApp: 'research', targetField: 'niche', data: searchKeyword(p) })}
                         className="px-2 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 text-[11px] text-sky-300 border border-sky-500/40">📊 Research</button>
                     </div>
 

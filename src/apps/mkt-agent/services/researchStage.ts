@@ -14,6 +14,7 @@ interface ApiProduct {
   ship?: string
   seller?: string
   url?: string
+  niche?: string
 }
 
 // "RM12.90" / "RM 12.90" / "RM12.90 - RM25" / "RM1,290" → lấy số đầu tiên.
@@ -51,6 +52,7 @@ export async function scanWinningProducts(niches: string[], amount = 30): Promis
       price,
       revenue: Math.round(sale * price),
       rating: Number(p.rating) || 0,
+      niche: p.niche || undefined,
       shipFrom: p.ship || undefined,
       source: 'tiktok' as const,
     }
