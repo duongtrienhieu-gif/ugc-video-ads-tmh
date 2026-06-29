@@ -10,6 +10,7 @@ interface ApiProduct {
   imageUrl?: string
   sale?: number | string
   unitPrice?: string | number
+  rating?: number | string
   ship?: string
   seller?: string
   url?: string
@@ -49,6 +50,7 @@ export async function scanWinningProducts(niches: string[], amount = 30): Promis
       sale,
       price,
       revenue: Math.round(sale * price),
+      rating: Number(p.rating) || 0,
       shipFrom: p.ship || undefined,
       source: 'tiktok' as const,
     }

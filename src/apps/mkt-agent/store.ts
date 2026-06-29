@@ -12,6 +12,19 @@ export type AgentStage =
 
 // Ứng viên SP — tiêu chí "test được" = generic (không brand) + có trên 1688 (ready)
 // + có cầu (số bán / ads). Nguồn: tiktok (TikTok Shop) + fb (FB Ad Library).
+// Số liệu kiểm chứng kéo on-demand ("Soi sâu") — feed cho cả người + bot.
+export interface DeepDive {
+  videoCount: number     // # video TikTok đang đẩy SP
+  maxViews: number       // view cao nhất
+  adCount: number        // # ad đối thủ đang chạy (FB)
+  adTopDays: number      // ad chạy lâu nhất (ngày) — win signal
+  adTopScale: number     // advertiser có nhiều ad nhất — đang scale
+  on1688: boolean        // có khớp trên 1688?
+  count1688: number
+  cost1688: string       // giá thấp nhất trên 1688 (¥ CNY)
+  link1688: string
+}
+
 export interface SpCandidate {
   productId: string
   title: string
@@ -21,12 +34,14 @@ export interface SpCandidate {
   sale: number
   price: number          // 0 = chưa rõ
   revenue: number        // sale*price (0 nếu price chưa rõ)
+  rating?: number        // 0-5 (free, từ API)
   shipFrom?: string      // local vs cross-border (hint hoàn)
   source: 'tiktok' | 'fb'
   isBranded?: boolean    // undefined = chưa lọc
   brand?: string
-  on1688?: boolean       // undefined = chưa kiểm 1688
-  checking1688?: boolean
+  diving?: boolean       // đang Soi sâu
+  deep?: DeepDive        // kết quả Soi sâu
+  deepError?: string
 }
 
 interface MktAgentState {
