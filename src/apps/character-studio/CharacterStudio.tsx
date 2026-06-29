@@ -1,6 +1,9 @@
 ﻿import { useState, useEffect, useRef } from 'react'
 import { User, MapPin, Move, Camera } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
+import { useBankStore } from '../../stores/bankStore'
+import { useAssetUrl } from '../../hooks/useAssetUrl'
+import type { Model } from '../../stores/types'
 import type { CharacterProfile, TabId } from './types'
 import { createEmptyProfile, TABS } from './types'
 import ControlsPanel from './components/ControlsPanel'
@@ -36,8 +39,9 @@ export default function CharacterStudio() {
   const [result, setResult] = useState<GenerationResult | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [activeTab, setActiveTab] = useState<TabId>('physical')
-  const [mode, setMode] = useState<'random' | 'clone'>('random')
+  const [mode, setMode] = useState<'random' | 'clone' | 'library'>('random')
   const cancelledRef = useRef(false)
+  const models = useBankStore((s) => s.models)   // avatar đã tạo (Thư viện)
 
   const interAppPayload = useAppStore((s) => s.interAppPayload)
   const consumePayload = useAppStore((s) => s.consumePayload)
@@ -134,6 +138,15 @@ export default function CharacterStudio() {
     prevResultRef.current = result
   }, [result])
 
+  // Đưa 1 avatar từ Thư viện vào studio: nạp làm result (ảnh + JSON) → OutputPanel hiện
+  // → có thể tạo thêm góc mặt cùng người, tải, hoặc lưu lại. Reuse luồng Random.
+  const loadAvatarFromLibrary = (m: Model) => {
+    setResult({ imageUrl: m.characterImage, jsonPrompt: (m.jsonProfile ?? {}) as GenerationResult['jsonPrompt'] })
+    setMode('random')
+    setMobileTab('result')
+    addToast(`✓ Đã đưa "${m.name || 'avatar'}" vào studio — tạo thêm góc mặt / tải / lưu lại`, 'success')
+  }
+
   return (
     <div className="flex h-full flex-col">
       <AppHeader
@@ -146,7 +159,7 @@ export default function CharacterStudio() {
       {/* ── Mode toggle: Random (attribute-driven) vs Clone (keep uploaded face) ── */}
       <div className="shrink-0 border-b border-app-border px-4 py-2">
         <div className="inline-flex rounded-xl border border-app-border bg-app-card p-0.5">
-          {([['random', 'Tạo Avatar Random'], ['clone', 'Tạo Avatar Clone']] as const).map(([m, label]) => (
+          {([['random', 'Tạo Avatar Random'], ['clone', 'Tạo Avatar Clone'], ['library', 'Thư viện Avatar']] as const).map(([m, label]) => (
             <button
               key={m}
               onClick={() => setMode(m)}
@@ -162,6 +175,28 @@ export default function CharacterStudio() {
           generation survives switching to Random mode and back. */}
       <div className={`min-h-0 flex-1 flex-col ${mode === 'clone' ? 'flex' : 'hidden'}`}>
         <CloneStudio />
+      </div>
+
+      {/* Library mode — chọn avatar đã tạo đưa vào studio (thêm góc mặt / tải / lưu lại). */}
+      <div className={`min-h-0 flex-1 flex-col ${mode === 'library' ? 'flex' : 'hidden'}`}>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <p className="mb-3 text-xs text-app-muted">
+            Chọn 1 avatar đã tạo để đưa vào studio — có thể tạo thêm <b className="text-app-text">góc mặt cùng người</b>, tải ảnh, hoặc lưu lại.
+          </p>
+          {models.length === 0 ? (
+            <div className="flex h-48 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-app-border text-center text-app-subtle">
+              <User className="h-8 w-8" />
+              <p className="text-sm">Chưa có avatar nào trong Thư viện.</p>
+              <p className="text-xs">Tạo ở tab "Tạo Avatar Random / Clone" rồi lưu vào Project.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+              {models.map((m) => (
+                <AvatarLibraryCard key={m.id} model={m} onPick={() => loadAvatarFromLibrary(m)} />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Random mode — also kept mounted; only one is visible at a time. */}
@@ -238,5 +273,31 @@ export default function CharacterStudio() {
       )}
       </div>
     </div>
+  )
+}
+
+// ── Thẻ avatar trong Thư viện — resolve asset:// qua useAssetUrl ──
+function AvatarLibraryCard({ model, onPick }: { model: Model; onPick: () => void }) {
+  const url = useAssetUrl(model.characterImage)
+  const angles = model.variants?.length ?? 0
+  return (
+    <button
+      onClick={onPick}
+      className="group flex flex-col overflow-hidden rounded-xl border border-app-border bg-app-card text-left transition-colors hover:border-app-border-strong"
+      title="Đưa vào studio"
+    >
+      <div className="relative aspect-[3/4] bg-app-card-elevated">
+        {url
+          ? <img src={url} alt={model.name} className="h-full w-full object-cover" />
+          : <div className="flex h-full items-center justify-center text-app-faint"><User className="h-8 w-8" /></div>}
+        {angles > 0 && (
+          <span className="absolute right-1.5 top-1.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] font-bold text-white">+{angles} góc</span>
+        )}
+      </div>
+      <div className="px-2 py-1.5">
+        <p className="truncate text-[11px] font-bold text-app-text">{model.name || '(chưa đặt tên)'}</p>
+        <p className="text-[9px] font-medium" style={{ color: 'var(--color-accent)' }}>Đưa vào studio →</p>
+      </div>
+    </button>
   )
 }
