@@ -279,6 +279,32 @@ function getGeminiKey(): string {
   return store.getGeminiApiKey()
 }
 
+// Fallback khi khối <<<MALAY>>> thiếu/cắt cụt: dịch riêng VN→Malay bản địa (tái dùng
+// đúng MS native block). Call ngắn (chỉ dịch 1 đoạn) nên không bị cắt cụt → app không
+// hard-fail khi lượt đầu lỡ bỏ sót khối Malay.
+async function translateVnToMalay(apiKey: string, product: Product, vietnamese: string): Promise<string> {
+  const nicheHint = `${product.productName ?? ''} ${product.productDescription ?? ''} ${product.benefits ?? ''}`.trim()
+  const prompt = [
+    'Dịch kịch bản voice-over quảng cáo COD tiếng Việt dưới đây sang BAHASA MELAYU bản địa Malaysia.',
+    'Giữ NGUYÊN sell-arc, cường độ và độ dài tương đương. Giọng nhà quảng cáo bán cho khách ("korang/awak"), KHÔNG phải review ngôi thứ nhất.',
+    'Tiếng Malay nói tự nhiên — không sách vở, không dịch máy, không lẫn tiếng Indonesia. Giữ nguyên tên sản phẩm/thành phần + đơn vị tiền (RM, ₫, $).',
+    'CHỈ in ra phần lời Malay, không nhãn, không markdown.',
+    '',
+    'MS NATIVE VOICE GUIDE (bám nhịp/tiểu từ/code-switch):',
+    buildMsBodyVocabBlock(nicheHint),
+    '',
+    'KỊCH BẢN TIẾNG VIỆT (bản gốc cần dịch):',
+    vietnamese,
+  ].join('\n')
+  const out = await directGeminiVision({
+    apiKey,
+    parts: [{ text: prompt }],
+    maxOutputTokens: 4096,
+    temperature: 0.6,
+  })
+  return stripLabels(out.trim())
+}
+
 // ── Main export ─────────────────────────────────────────────────────────
 
 export async function generateUGCScript(params: ScriptGenerationParams): Promise<ScriptGenerationResult> {
@@ -291,11 +317,14 @@ export async function generateUGCScript(params: ScriptGenerationParams): Promise
 
   const userPrompt = buildUserPrompt(params, product)
 
+  // 8192 (không phải 4096): gemini-2.5-flash tốn 1 phần token cho "thinking",
+  // và script hardsell dài (VN master + MY + JSON) — 4096 hay bị cắt cụt khối
+  // <<<MALAY>>> (block thứ 2) → lỗi "không dịch được sang tiếng Malay".
   const raw = await directGeminiVision({
     apiKey,
     parts: [{ text: userPrompt }],
     systemInstruction: SYSTEM_PROMPT,
-    maxOutputTokens: 4096,
+    maxOutputTokens: 8192,
   })
 
   const { vietnamese, malay, structured } = parseResponse(raw)
@@ -303,13 +332,18 @@ export async function generateUGCScript(params: ScriptGenerationParams): Promise
   if (!vietnamese || vietnamese.length < 30) {
     throw new Error('Gemini trả về kịch bản tiếng Việt quá ngắn — thử lại')
   }
-  if (!malay || malay.length < 30) {
+  // Khối Malay thiếu/cắt cụt → dịch riêng VN→Malay (fallback) thay vì hard-fail ngay.
+  let malayFinal = malay
+  if (!malayFinal || malayFinal.length < 30) {
+    try { malayFinal = await translateVnToMalay(apiKey, product, vietnamese) } catch { /* giữ rỗng → báo lỗi dưới */ }
+  }
+  if (!malayFinal || malayFinal.length < 30) {
     throw new Error('Gemini không dịch được sang tiếng Malay — thử lại')
   }
 
   return {
     vietnamese,
-    malay,
+    malay: malayFinal,
     structured,
     presetId: params.presetId,
     presetLabel: preset.label,
