@@ -5,6 +5,7 @@ import { useAppStore } from '../../stores/appStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { geminiChatStream, openaiChatStream, genImage, type ChatMessage, type Attachment, type GptModel } from './service'
+import { fetchSharedOpenAiKey, saveSharedOpenAiKey, fetchConvos, upsertConvo, deleteConvoCloud } from './cloud'
 
 // Lịch sử RIÊNG theo email: nhiều cuộc trò chuyện, tự lưu; mở "Trò chuyện mới" thì cuộc cũ vào lịch sử.
 interface Convo { id: string; title: string; messages: ChatMessage[]; updatedAt: number }
@@ -20,6 +21,7 @@ function stripForStore(msgs: ChatMessage[]): ChatMessage[] {
 export default function AiChat() {
   const addToast = useAppStore((s) => s.addToast)
   const email = useAuthStore((s) => s.user?.email) || 'guest'
+  const userId = useAuthStore((s) => s.user?.id) || ''
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const kieApiKey = useSettingsStore((s) => s.kieApiKey)
 
@@ -38,21 +40,31 @@ export default function AiChat() {
 
   const fileRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const syncTimer = useRef<number | undefined>(undefined)
 
-  // OpenAI key (local, riêng app này — không vào settings chung)
-  useEffect(() => { setOpenaiKey(localStorage.getItem(OPENAI_LS) || '') }, [])
-  // Nạp lịch sử theo email → cuộc đang mở (hoặc cuộc mới nếu chưa có).
+  // OpenAI key: local trước (hiện ngay), rồi key DÙNG CHUNG trên Supabase (chủ set 1 lần) ghi đè.
   useEffect(() => {
-    try {
-      const cs = JSON.parse(localStorage.getItem(convosKey(email)) || '[]') as Convo[]
-      const list = Array.isArray(cs) ? cs : []
-      setConvos(list)
-      const act = list.find((c) => c.id === localStorage.getItem(activeKey(email)))
-      if (act) { setActiveId(act.id); setMessages(act.messages) }
-      else { setActiveId(crypto.randomUUID()); setMessages([]) }
-    } catch { setConvos([]); setActiveId(crypto.randomUUID()); setMessages([]) }
-  }, [email])
-  // Đồng bộ cuộc đang mở vào danh sách (bỏ cuộc rỗng) — auto-save liên tục.
+    setOpenaiKey(localStorage.getItem(OPENAI_LS) || '')
+    fetchSharedOpenAiKey().then((k) => { if (k) setOpenaiKey(k) })
+  }, [])
+  // Nạp lịch sử: local trước (hiện ngay), rồi Supabase (nguồn chuẩn xuyên máy) ghi đè nếu có.
+  useEffect(() => {
+    let localList: Convo[] = []
+    try { const cs = JSON.parse(localStorage.getItem(convosKey(email)) || '[]'); localList = Array.isArray(cs) ? cs : [] } catch { localList = [] }
+    setConvos(localList)
+    const act = localList.find((c) => c.id === localStorage.getItem(activeKey(email)))
+    if (act) { setActiveId(act.id); setMessages(act.messages) }
+    else { setActiveId(crypto.randomUUID()); setMessages([]) }
+    if (!userId) return
+    let cancelled = false
+    fetchConvos(userId).then((cloud) => {
+      if (cancelled || !cloud.length) return
+      setConvos(cloud)
+      if (localList.length === 0) { setActiveId(cloud[0].id); setMessages(cloud[0].messages) }   // máy mới → mở cuộc gần nhất
+    })
+    return () => { cancelled = true }
+  }, [email, userId])
+  // Đồng bộ cuộc đang mở vào danh sách local (bỏ cuộc rỗng) — auto-save liên tục.
   useEffect(() => {
     if (!activeId) return
     setConvos((prev) => {
@@ -62,6 +74,14 @@ export default function AiChat() {
       return [{ id: activeId, title, messages: stripForStore(messages), updatedAt: Date.now() }, ...others]
     })
   }, [messages, activeId])
+  // Đẩy cuộc đang mở lên Supabase (debounce 1.5s) → đi mọi máy.
+  useEffect(() => {
+    if (!userId || !activeId || messages.length === 0) return
+    window.clearTimeout(syncTimer.current)
+    const title = (messages.find((m) => m.role === 'user')?.text || 'Cuộc trò chuyện').slice(0, 50)
+    syncTimer.current = window.setTimeout(() => { void upsertConvo(userId, { id: activeId, title, messages: stripForStore(messages) }) }, 1500)
+    return () => window.clearTimeout(syncTimer.current)
+  }, [messages, activeId, userId])
   useEffect(() => { try { localStorage.setItem(convosKey(email), JSON.stringify(convos)) } catch { /* quota */ } }, [convos, email])
   useEffect(() => { if (activeId) localStorage.setItem(activeKey(email), activeId) }, [activeId, email])
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }) }, [messages, busy])
@@ -70,6 +90,7 @@ export default function AiChat() {
   const deleteConvo = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     setConvos((prev) => prev.filter((c) => c.id !== id))
+    void deleteConvoCloud(id)
     if (id === activeId) { setActiveId(crypto.randomUUID()); setMessages([]) }
   }
 
@@ -131,7 +152,14 @@ export default function AiChat() {
     } finally { setBusy(false) }
   }
 
-  const saveOpenaiKey = (k: string) => { setOpenaiKey(k); localStorage.setItem(OPENAI_LS, k); setKeyModalOpen(false) }
+  const saveOpenaiKey = (k: string, shareTeam: boolean) => {
+    setOpenaiKey(k); localStorage.setItem(OPENAI_LS, k); setKeyModalOpen(false)
+    if (shareTeam && k) {
+      saveSharedOpenAiKey(k, email).then((ok) =>
+        addToast(ok ? '✓ Đã lưu key GPT cho cả team (Supabase)' : 'Lưu Supabase thất bại — đã chạy migration ai_chat.sql chưa? Key vẫn lưu local', ok ? 'success' : 'error'),
+      )
+    }
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -304,21 +332,26 @@ function MessageBubble({ m }: { m: ChatMessage }) {
   )
 }
 
-function OpenAiKeyModal({ current, onSave, onClose }: { current: string; onSave: (k: string) => void; onClose: () => void }) {
+function OpenAiKeyModal({ current, onSave, onClose }: { current: string; onSave: (k: string, shareTeam: boolean) => void; onClose: () => void }) {
   const [val, setVal] = useState(current)
+  const [team, setTeam] = useState(true)
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-2xl border border-app-border bg-app-card p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-2 flex items-center gap-2"><KeyRound className="h-4 w-4" style={{ color: 'var(--color-accent)' }} /><h3 className="text-sm font-bold text-app-text">OpenAI API key (cho GPT)</h3></div>
         <p className="mb-3 text-[11px] leading-relaxed text-app-subtle">
           Đây là <b>API key</b> tạo ở <b>platform.openai.com</b> (tính tiền theo token) — <b>KHÁC</b> gói ChatGPT Go.
-          Gói Go không dùng được để nhúng vào app. Key lưu trên máy này.
+          Gói Go không dùng được để nhúng vào app.
         </p>
         <input value={val} onChange={(e) => setVal(e.target.value)} placeholder="sk-..." type="password"
           className="w-full rounded-lg border border-app-border bg-app-surface px-3 py-2 text-sm text-app-text outline-none" />
+        <label className="mt-2.5 flex cursor-pointer items-start gap-2 text-[11px] text-app-muted">
+          <input type="checkbox" checked={team} onChange={(e) => setTeam(e.target.checked)} className="mt-0.5" />
+          <span><b>Lưu cho cả team</b> (Supabase) — mọi nhân viên tự dùng chung, khỏi gửi key cho từng đứa. Bỏ tick nếu chỉ lưu máy này.</span>
+        </label>
         <div className="mt-3 flex justify-end gap-2">
           <button onClick={onClose} className="rounded-lg border border-app-border px-3 py-1.5 text-xs font-bold text-app-muted">Hủy</button>
-          <button onClick={() => onSave(val.trim())} disabled={!val.trim()} className="ui-accent-solid rounded-lg px-4 py-1.5 text-xs font-bold disabled:opacity-40">Lưu</button>
+          <button onClick={() => onSave(val.trim(), team)} disabled={!val.trim()} className="ui-accent-solid rounded-lg px-4 py-1.5 text-xs font-bold disabled:opacity-40">Lưu</button>
         </div>
       </div>
     </div>
