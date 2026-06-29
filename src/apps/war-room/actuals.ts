@@ -66,18 +66,12 @@ export async function fetchSpStats(): Promise<SpStatsResult> {
   return { stats, profit, stale: false, at: Date.now() } // chưa từng có cache → trả số hiện có (có thể thiếu)
 }
 
-// Map marketer → các mã SP họ phụ trách (từ file Ghép quà sheet 4 cột marketer) → để TỰ GÁN
+// Map marketer → ĐẦY ĐỦ mã SP họ chạy (đọc 5 file riêng từng marketer, không phải file Ghép
+// quà — vốn thiếu mã). Key = token tên (KHÁNH/DUY/TUẤN/ANH/HÀ); spForMember khớp theo token.
 export async function fetchMarketerSp(): Promise<Record<string, string[]>> {
-  const r = await fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ giftOnly: true }), cache: 'no-store' })
-  const j = (await r.json()) as { giftCatalog?: { maChinh: string; marketer: string }[] }
-  const map: Record<string, string[]> = {}
-  for (const c of j.giftCatalog ?? []) {
-    if (!c.marketer || !c.maChinh) continue
-    const k = c.marketer.trim().toUpperCase()
-    ;(map[k] ??= [])
-    if (!map[k].includes(c.maChinh)) map[k].push(c.maChinh)
-  }
-  return map
+  const r = await fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marketerSp: true }), cache: 'no-store' })
+  const j = (await r.json()) as { marketerSp?: Record<string, string[]> }
+  return j.marketerSp ?? {}
 }
 
 // Gộp các mã của 1 nhân sự → DT · lãi · %CPQC · %hoàn · AOV · %chốt (đều weighted theo DT)

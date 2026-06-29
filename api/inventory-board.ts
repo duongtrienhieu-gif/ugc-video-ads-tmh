@@ -285,6 +285,30 @@ function parseGiftCatalog(wb: XLSX.WorkBook): GiftCat[] {
   return items
 }
 
+// File riêng từng marketer (sheet "BÁO CÁO SẢN PHẨM" = log giao dịch: ngày·nguồn·SP·tiền).
+// Token = tên trong war-room; spForMember khớp theo token (HÀ+PHY → 'HÀ'). HIẾU là test, không có file.
+const MKT_FILES: { token: string; id: string }[] = [
+  { token: 'KHÁNH', id: '1vHiLS3V85wL6rWvnmCOZB8bfR5lu_sw0ZAuy8xUczSA' },
+  { token: 'DUY', id: '1LRsxCJ4JVxlN9yBIdAVtndxggfAem9wf58BE2iMdAKM' },
+  { token: 'TUẤN', id: '1cKMfUPJ67Q6b1TGynqjyCZm5GTupbQ_sNO1J4eDxl9I' },
+  { token: 'ANH', id: '1gUG9JgO0cC-zYkvTePXfcFYIlS2CXzMUL4n0o8mmDbA' },
+  { token: 'HÀ', id: '18c_BtFLdGB7EBaN06rWKJiFLiZogdDNS_O_0xVccV6s' },
+]
+// gom danh sách SP đầy đủ của 1 marketer từ log giao dịch: cột "Mặt hàng" (tự dò) có tiền > 0
+function parseMarketerSp(rows: string[][]): string[] {
+  let pc = 3 // cột Mặt hàng — mặc định D, dò lại theo tiêu đề
+  for (let r = 0; r < Math.min(6, rows.length); r++) for (let c = 0; c < (rows[r]?.length ?? 0); c++) {
+    if (/mặt hàng|sản phẩm|^product$/i.test(String(rows[r][c] ?? '').trim())) { pc = c; break }
+  }
+  const set = new Set<string>()
+  for (const row of rows) {
+    const prod = String(row[pc] ?? '').trim()
+    if (!prod || /mặt hàng|sản phẩm|^product$|tổng/i.test(prod)) continue
+    if (viNum(row[pc + 1]) > 0) set.add(prod.toUpperCase())
+  }
+  return [...set]
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed' })
   const bodyLinks = (req.body && typeof req.body === 'object' ? (req.body as { links?: Record<string, string> }).links : undefined) || {}
@@ -299,6 +323,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch (e) {
       return res.status(200).json({ ok: false, giftMaster: [], giftCatalog: [], error: (e as Error).message })
     }
+  }
+
+  // ── Nhánh: SP đầy đủ theo marketer (đọc 5 file marketer) → token → [mã SP] ──
+  // Để 🪄 Tự gán mã SP lấy ĐỦ mã từ file riêng từng người (thay vì file Ghép quà thiếu mã).
+  if (req.body && (req.body as { marketerSp?: boolean }).marketerSp) {
+    const rs = await Promise.allSettled(MKT_FILES.map((f) => fetchCsv(f.id, 'BÁO CÁO SẢN PHẨM')))
+    const marketerSp: Record<string, string[]> = {}
+    rs.forEach((r, i) => { if (r.status === 'fulfilled') { const sps = parseMarketerSp(r.value); if (sps.length) marketerSp[MKT_FILES[i].token] = sps } })
+    return res.status(200).json({ ok: Object.keys(marketerSp).length > 0, marketerSp })
   }
 
   const errors: string[] = []
