@@ -27,8 +27,10 @@ interface NavGroup {
 // stays short. Only the apps in active use are listed; the rest still have
 // live routes in App.tsx (reachable via direct openApp / inter-app links),
 // they're just hidden from the nav:
-//   • hidden: creative-studio, video-translate, ad-anatomy
-//   • deleted entirely: tim-source-video, lab-content, landing-page
+//   • hidden: creative-studio, video-translate, ad-anatomy, landing-page
+//     (landing-page vẫn LIVE — super-ladipage/ad-anatomy/chat-bot dùng chung
+//      schema + projectsAPI của nó; chỉ ẩn khỏi nav, KHÔNG xoá)
+//   • deleted entirely: tim-source-video, lab-content
 const NAV_GROUPS: NavGroup[] = [
   {
     label: '',

@@ -320,12 +320,25 @@ export async function generateUGCScript(params: ScriptGenerationParams): Promise
   // 8192 (không phải 4096): gemini-2.5-flash tốn 1 phần token cho "thinking",
   // và script hardsell dài (VN master + MY + JSON) — 4096 hay bị cắt cụt khối
   // <<<MALAY>>> (block thứ 2) → lỗi "không dịch được sang tiếng Malay".
-  const raw = await directGeminiVision({
-    apiKey,
-    parts: [{ text: userPrompt }],
-    systemInstruction: SYSTEM_PROMPT,
-    maxOutputTokens: 8192,
-  })
+  // Bọc timeout 150s (cục bộ, giống Super Ladipage) — tránh treo vô hạn nếu
+  // Gemini/mạng chậm. Không sửa directGeminiVision (util dùng chung) để khỏi
+  // ảnh hưởng caller khác; chỉ race ở đây.
+  const SCRIPT_GEN_TIMEOUT_MS = 150_000
+  let genTimer: ReturnType<typeof setTimeout> | undefined
+  const raw = await Promise.race([
+    directGeminiVision({
+      apiKey,
+      parts: [{ text: userPrompt }],
+      systemInstruction: SYSTEM_PROMPT,
+      maxOutputTokens: 8192,
+    }).finally(() => clearTimeout(genTimer)),
+    new Promise<string>((_, reject) => {
+      genTimer = setTimeout(
+        () => reject(new Error('Tạo kịch bản quá lâu (timeout 150s) — thử lại')),
+        SCRIPT_GEN_TIMEOUT_MS,
+      )
+    }),
+  ])
 
   const { vietnamese, malay, structured } = parseResponse(raw)
 

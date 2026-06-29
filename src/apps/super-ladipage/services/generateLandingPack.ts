@@ -323,7 +323,7 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
 
   if (!validPack) {
     throw new Error(
-      `Tạo landing pack thất bại sau 3 lần thử. Lỗi cuối: ${lastError?.message ?? 'không rõ'}`,
+      `Tạo landing pack thất bại sau ${MAX_ATTEMPTS} lần thử. Lỗi cuối: ${lastError?.message ?? 'không rõ'}`,
     )
   }
 
