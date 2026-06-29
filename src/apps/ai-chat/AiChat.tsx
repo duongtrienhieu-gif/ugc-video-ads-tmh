@@ -9,7 +9,7 @@ import { fetchSharedOpenAiKey, saveSharedOpenAiKey, fetchConvos, upsertConvo, de
 import { loadMyDataBlock } from './myData'
 
 // Chỉ gắn DỮ LIỆU THẬT (doanh thu/mã SP…) khi câu hỏi liên quan — riêng tư + không lậm + đỡ token.
-const DATA_RE = /doanh thu|doanhthu|lãi|lợi nhuận|ho[àa]n|cpqc|ch[ốo]t|aov|\bđơn\b|của tôi|của mình|của em|mã sp|mã của|target|chỉ tiêu|kpi|ngân sách|bán được|số liệu|báo cáo|\bkho\b|tồn|team|nhân viên/i
+const DATA_RE = /doanh thu|doanhthu|lãi|lợi nhuận|ho[àa]n|cpqc|ch[ốo]t|aov|\bđơn\b|của tôi|của mình|của em|mã sp|mã của|target|chỉ tiêu|kpi|ngân sách|bán được|số liệu|báo cáo|\bkho\b|tồn|team|nhân viên|sắp đứt|đứt hàng|nhập hàng|cần nhập|\btỉnh\b|\bbom\b|tốc độ bán|đang về/i
 
 // Lịch sử RIÊNG theo email: nhiều cuộc trò chuyện, tự lưu; mở "Trò chuyện mới" thì cuộc cũ vào lịch sử.
 interface Convo { id: string; title: string; messages: ChatMessage[]; updatedAt: number }
