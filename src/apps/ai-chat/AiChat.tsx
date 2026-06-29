@@ -4,7 +4,7 @@ import AppHeader from '../../components/shell/AppHeader'
 import { useAppStore } from '../../stores/appStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { geminiChat, openaiChat, genImage, type ChatMessage, type Attachment } from './service'
+import { geminiChatStream, openaiChatStream, genImage, type ChatMessage, type Attachment, type GptModel } from './service'
 
 const threadKey = (email: string) => `ai-chat:thread:${email}`
 const OPENAI_LS = 'ai-chat:openai-key'
@@ -21,6 +21,7 @@ export default function AiChat() {
   const kieApiKey = useSettingsStore((s) => s.kieApiKey)
 
   const [model, setModel] = useState<'gemini' | 'gpt'>('gemini')
+  const [gptModel, setGptModel] = useState<GptModel>('gpt-4o-mini')   // mặc định mini (rẻ)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [pending, setPending] = useState<Attachment[]>([])
@@ -69,22 +70,36 @@ export default function AiChat() {
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', text, atts: pending, imageUrls: [], model }
     const next = [...messages, userMsg]
     setMessages(next); setInput(''); setPending([]); setBusy(true)
-    try {
-      if (imageMode) {
+
+    // Tạo ảnh — one-shot (không stream).
+    if (imageMode) {
+      try {
         if (!kieApiKey) throw new Error('Cần kie.ai API key trong Cài đặt để tạo ảnh')
         const url = await genImage(kieApiKey, text || 'photo')
         setMessages((m) => [...m, { id: crypto.randomUUID(), role: 'assistant', text: '', atts: [], imageUrls: [url], model }])
-      } else if (model === 'gpt') {
+      } catch (e) {
+        setMessages((m) => [...m, { id: crypto.randomUUID(), role: 'assistant', text: '⚠️ ' + ((e as Error).message || 'Lỗi'), atts: [], imageUrls: [], model, error: true }])
+      } finally { setBusy(false) }
+      return
+    }
+
+    // Chat — STREAMING: thêm 1 tin assistant rỗng rồi đổ chữ dần vào.
+    const asstId = crypto.randomUUID()
+    setMessages((m) => [...m, { id: asstId, role: 'assistant', text: '', atts: [], imageUrls: [], model: model === 'gpt' ? 'gpt' : 'gemini' }])
+    const onDelta = (chunk: string) => setMessages((m) => m.map((x) => (x.id === asstId ? { ...x, text: x.text + chunk } : x)))
+    try {
+      let full = ''
+      if (model === 'gpt') {
         if (userMsg.atts.some((a) => a.kind === 'video')) addToast('GPT bỏ qua video — dùng Gemini cho video', 'error')
-        const reply = await openaiChat(openaiKey, next)
-        setMessages((m) => [...m, { id: crypto.randomUUID(), role: 'assistant', text: reply, atts: [], imageUrls: [], model: 'gpt' }])
+        full = await openaiChatStream(openaiKey, gptModel, next, onDelta)
       } else {
         if (!geminiApiKey) throw new Error('Cần Gemini API key trong Cài đặt')
-        const reply = await geminiChat(geminiApiKey, next)
-        setMessages((m) => [...m, { id: crypto.randomUUID(), role: 'assistant', text: reply, atts: [], imageUrls: [], model: 'gemini' }])
+        full = await geminiChatStream(geminiApiKey, next, onDelta)
       }
+      setMessages((m) => m.map((x) => (x.id === asstId ? { ...x, text: full || x.text || '(không có nội dung)' } : x)))
     } catch (e) {
-      setMessages((m) => [...m, { id: crypto.randomUUID(), role: 'assistant', text: '⚠️ ' + ((e as Error).message || 'Lỗi'), atts: [], imageUrls: [], model, error: true }])
+      const msg = (e as Error).message || 'Lỗi'
+      setMessages((m) => m.map((x) => (x.id === asstId ? { ...x, text: (x.text ? x.text + '\n\n' : '') + '⚠️ ' + msg, error: !x.text } : x)))
     } finally { setBusy(false) }
   }
 
@@ -104,6 +119,13 @@ export default function AiChat() {
             </button>
           ))}
         </div>
+        {model === 'gpt' && (
+          <div className="inline-flex rounded-lg border border-app-border bg-app-card p-0.5 text-[11px] font-bold" title="Chọn model GPT: mini rẻ hơn ~15× cho việc thường, 4o đỉnh hơn cho việc khó">
+            {([['gpt-4o-mini', 'mini · rẻ'], ['gpt-4o', '4o · đỉnh']] as const).map(([g, lbl]) => (
+              <button key={g} onClick={() => setGptModel(g)} className={`rounded-md px-2 py-1 ${gptModel === g ? 'ui-accent-soft' : 'text-app-muted hover:text-app-text'}`}>{lbl}</button>
+            ))}
+          </div>
+        )}
         {model === 'gpt' && (
           <button onClick={() => setKeyModalOpen(true)}
             className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${openaiKey ? 'border-emerald-300 text-emerald-600' : 'border-amber-300 text-amber-600'}`}>
@@ -136,9 +158,9 @@ export default function AiChat() {
         ) : (
           <div className="mx-auto flex max-w-3xl flex-col gap-3">
             {messages.map((m) => <MessageBubble key={m.id} m={m} />)}
-            {busy && (
+            {busy && imageMode && (
               <div className="flex items-center gap-2 text-xs text-app-muted">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> {imageMode ? 'Đang tạo ảnh…' : `${model === 'gpt' ? 'GPT' : 'Gemini'} đang trả lời…`}
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang tạo ảnh…
               </div>
             )}
           </div>
@@ -181,7 +203,7 @@ export default function AiChat() {
             </button>
           </div>
           <p className="mt-1 px-1 text-[10px] text-app-faint">
-            {imageMode ? 'Tạo ảnh qua kie.ai (tốn credit).' : model === 'gpt' ? 'GPT đọc ảnh, không đọc video. Cần OpenAI API key (không phải gói ChatGPT Go).' : 'Gemini đọc ảnh + video ngắn (<15MB).'}
+            {imageMode ? 'Tạo ảnh qua kie.ai (tốn credit).' : model === 'gpt' ? `GPT ${gptModel === 'gpt-4o-mini' ? '(mini · rẻ)' : '(4o · đỉnh)'} đọc ảnh, không video. Cần OpenAI API key (≠ gói ChatGPT Go).` : 'Gemini đọc ảnh + video ngắn (<15MB).'}
           </p>
         </div>
       </div>
@@ -206,6 +228,7 @@ function MessageBubble({ m }: { m: ChatMessage }) {
           </div>
         )}
         {m.text && <p className="whitespace-pre-wrap leading-relaxed">{m.text}</p>}
+        {!m.text && m.role === 'assistant' && m.imageUrls.length === 0 && <span className="animate-pulse text-app-faint">▍</span>}
         {m.imageUrls.map((u) => (
           <div key={u} className="relative mt-1">
             <img src={u} alt="generated" className="max-h-96 rounded-xl" />

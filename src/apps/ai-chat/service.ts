@@ -1,17 +1,18 @@
-// ── Trợ lý AI — service: chat Gemini + GPT (one-shot, đa lượt) + tạo ảnh (kie) ──
-// Gemini: gọi REST generateContent từ client (key trả phí của chủ). Ảnh + video gửi INLINE
-//   base64 (không cần Files API/endpoint) — đủ cho ảnh và video NGẮN (< ~15MB).
-// GPT: gọi api.openai.com/chat/completions trực tiếp (CORS OK). Nhận ẢNH (vision), KHÔNG video.
-// Tạo ảnh: kie.ai generateImage + pollImageUntilDone (như các app khác).
+// ── Trợ lý AI — service: chat Gemini + GPT (STREAMING) + tạo ảnh (kie) ──
+// Gemini: REST streamGenerateContent (SSE) từ client. Ảnh + video gửi INLINE base64
+//   (ảnh + video NGẮN < ~15MB). GPT: api.openai.com chat/completions stream (CORS OK),
+//   nhận ẢNH (vision), KHÔNG video; chọn gpt-4o (đỉnh) hoặc gpt-4o-mini (rẻ).
+// Tạo ảnh: kie.ai generateImage + pollImageUntilDone.
 import { generateImage, pollImageUntilDone, IMAGE_MODELS } from '../../utils/kieai'
 
+export type GptModel = 'gpt-4o' | 'gpt-4o-mini'
 export interface Attachment { kind: 'image' | 'video'; mime: string; dataUrl: string; name: string }
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   text: string
-  atts: Attachment[]        // file đính kèm (ảnh/video) — dataUrl rỗng nếu đã khôi phục từ lịch sử
-  imageUrls: string[]       // ảnh AI tạo (URL remote)
+  atts: Attachment[]
+  imageUrls: string[]
   model?: 'gemini' | 'gpt'
   error?: boolean
 }
@@ -21,73 +22,104 @@ function dataUrlParts(dataUrl: string): { mime: string; data: string } | null {
   return m ? { mime: m[1], data: m[2] } : null
 }
 
-// ── Gemini (đa lượt, ảnh + video inline) ──
-export async function geminiChat(apiKey: string, history: ChatMessage[]): Promise<string> {
-  type Part = { text: string } | { inlineData: { mimeType: string; data: string } }
-  const contents = history.map((m) => {
-    const parts: Part[] = []
-    for (const a of m.atts) {
-      const p = dataUrlParts(a.dataUrl)
-      if (p) parts.push({ inlineData: { mimeType: p.mime, data: p.data } })
-    }
+// ── Payload builders (dùng chung stream) ──
+type GPart = { text: string } | { inlineData: { mimeType: string; data: string } }
+function buildGeminiContents(history: ChatMessage[]) {
+  return history.map((m) => {
+    const parts: GPart[] = []
+    for (const a of m.atts) { const p = dataUrlParts(a.dataUrl); if (p) parts.push({ inlineData: { mimeType: p.mime, data: p.data } }) }
     if (m.text.trim()) parts.push({ text: m.text })
     if (!parts.length) parts.push({ text: '...' })
     return { role: m.role === 'assistant' ? 'model' : 'user', parts }
   })
+}
+type OTextPart = { type: 'text'; text: string }
+type OImgPart = { type: 'image_url'; image_url: { url: string } }
+function buildOpenAiMessages(history: ChatMessage[]) {
+  return history.map((m) => {
+    const imgs = m.atts.filter((a) => a.kind === 'image' && a.dataUrl.startsWith('data:'))
+    if (m.role === 'user' && imgs.length) {
+      const content: (OTextPart | OImgPart)[] = []
+      if (m.text.trim()) content.push({ type: 'text', text: m.text })
+      for (const a of imgs) content.push({ type: 'image_url', image_url: { url: a.dataUrl } })
+      return { role: 'user', content }
+    }
+    return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text || '...' }
+  })
+}
+
+// ── Đọc SSE: gom 'data:' lines → trích mẩu chữ → onDelta + cộng dồn ──
+async function readSSE(res: Response, extract: (j: unknown) => string, onDelta: (s: string) => void): Promise<string> {
+  if (!res.body) throw new Error('Không mở được luồng phản hồi')
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''; let full = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop() ?? ''
+    for (const line of lines) {
+      const t = line.trim()
+      if (!t.startsWith('data:')) continue
+      const p = t.slice(5).trim()
+      if (!p || p === '[DONE]') continue
+      try { const piece = extract(JSON.parse(p)); if (piece) { full += piece; onDelta(piece) } } catch { /* mẩu chưa đủ — bỏ qua */ }
+    }
+  }
+  return full
+}
+const extractGemini = (j: unknown): string =>
+  ((j as { candidates?: { content?: { parts?: { text?: string }[] } }[] }).candidates?.[0]?.content?.parts ?? [])
+    .map((p) => p.text).filter(Boolean).join('')
+const extractOpenAi = (j: unknown): string =>
+  (j as { choices?: { delta?: { content?: string } }[] }).choices?.[0]?.delta?.content ?? ''
+
+// ── Gemini streaming (đa lượt, ảnh + video) ──
+export async function geminiChatStream(apiKey: string, history: ChatMessage[], onDelta: (s: string) => void): Promise<string> {
+  const contents = buildGeminiContents(history)
   const models = ['gemini-2.5-flash', 'gemini-2.0-flash']
   let lastErr = ''
   for (const model of models) {
     try {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents, generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } }),
       })
-      if (r.ok) {
-        const d = (await r.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] }
-        const txt = (d.candidates?.[0]?.content?.parts ?? []).map((p) => p.text).filter(Boolean).join('').trim()
-        if (txt) return txt
-        lastErr = 'Gemini trả phản hồi rỗng'
+      if (!res.ok) {
+        lastErr = `Gemini ${res.status}: ${(await res.text().catch(() => '')).slice(0, 150)}`
+        if (res.status === 400 || res.status === 401 || res.status === 403) break
         continue
       }
-      lastErr = `Gemini ${r.status}: ${(await r.text().catch(() => '')).slice(0, 160)}`
-      if (r.status === 400 || r.status === 401 || r.status === 403) break
+      const full = await readSSE(res, extractGemini, onDelta)
+      if (full.trim()) return full
+      lastErr = 'Gemini phản hồi rỗng'
     } catch (e) { lastErr = (e as Error).message }
   }
   throw new Error(lastErr || 'Gemini lỗi không rõ')
 }
 
-// ── GPT (OpenAI chat completions — nhận ảnh, KHÔNG video) ──
-export async function openaiChat(apiKey: string, history: ChatMessage[]): Promise<string> {
-  type TextPart = { type: 'text'; text: string }
-  type ImgPart = { type: 'image_url'; image_url: { url: string } }
-  const messages = history.map((m) => {
-    const imgs = m.atts.filter((a) => a.kind === 'image' && a.dataUrl.startsWith('data:'))
-    if (m.role === 'user' && imgs.length) {
-      const content: (TextPart | ImgPart)[] = []
-      if (m.text.trim()) content.push({ type: 'text', text: m.text })
-      for (const a of imgs) content.push({ type: 'image_url', image_url: { url: a.dataUrl } })
-      return { role: m.role, content }
-    }
-    return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text || '...' }
-  })
-  const r = await fetch('https://api.openai.com/v1/chat/completions', {
+// ── GPT streaming (nhận ảnh, KHÔNG video) ──
+export async function openaiChatStream(apiKey: string, model: GptModel, history: ChatMessage[], onDelta: (s: string) => void): Promise<string> {
+  const messages = buildOpenAiMessages(history)
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model: 'gpt-4o', messages, temperature: 0.7, max_tokens: 2048 }),
+    body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 2048, stream: true }),
   })
-  if (!r.ok) {
-    const t = (await r.text().catch(() => '')).slice(0, 200)
-    if (r.status === 401) throw new Error('OpenAI API key sai/hết hạn — kiểm tra lại (key API, KHÔNG phải gói ChatGPT Go)')
-    if (r.status === 429) throw new Error('OpenAI hết credit/giới hạn — nạp tiền tại platform.openai.com')
-    throw new Error(`OpenAI ${r.status}: ${t}`)
+  if (!res.ok) {
+    const t = (await res.text().catch(() => '')).slice(0, 200)
+    if (res.status === 401) throw new Error('OpenAI API key sai/hết hạn (key API ở platform.openai.com, KHÔNG phải gói ChatGPT Go)')
+    if (res.status === 429) throw new Error('OpenAI hết credit/giới hạn — nạp tiền tại platform.openai.com → Billing')
+    throw new Error(`OpenAI ${res.status}: ${t}`)
   }
-  const d = (await r.json()) as { choices?: { message?: { content?: string } }[] }
-  return d.choices?.[0]?.message?.content?.trim() ?? '(không có nội dung)'
+  return readSSE(res, extractOpenAi, onDelta)
 }
 
 // ── Tạo ảnh (kie.ai) ──
 export async function genImage(kieApiKey: string, prompt: string, aspectRatio = '1:1'): Promise<string> {
-  const model = IMAGE_MODELS[0].id   // Nano Banana 2 — mặc định ổn định
+  const model = IMAGE_MODELS[0].id
   const { taskId } = await generateImage({ apiKey: kieApiKey, model, prompt, resolution: '1K', aspectRatio })
   return pollImageUntilDone({ apiKey: kieApiKey, taskId, timeoutMs: 3 * 60 * 1000 })
 }
