@@ -42,6 +42,7 @@ export const APP_GROUPS: AppGroup[] = [
     label: 'Sáng tạo',
     items: [
       { id: 'mkt-agent',        label: 'MKT Agent',      desc: 'Tự tìm SP → content → Drive', icon: Bot, tint: 'gold', hot: true },
+      { id: 'ai-chat',          label: 'Trợ lý AI',      desc: 'Chat Gemini/GPT · ảnh · video', icon: Sparkles, tint: 'indigo', hot: true },
       { id: 'character-studio', label: 'Avatar AI',      desc: 'Tạo KOL ảo',          icon: User,     tint: 'gold',    hot: true },
       { id: 'voice-studio',     label: 'Giọng đọc',      desc: 'Voice Việt + clone',  icon: Mic,      tint: 'violet' },
       { id: 'script-architect', label: 'Kịch bản',       desc: 'Script Architect',    icon: PenLine,  tint: 'sky' },

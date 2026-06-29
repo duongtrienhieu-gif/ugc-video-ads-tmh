@@ -39,6 +39,7 @@ import TikTokShop from './apps/tiktok-shop/TikTokShop'
 import Research from './apps/research/Research'
 import SpyAds from './apps/spy-ads/SpyAds'
 import ChatBot from './apps/chat-bot/ChatBot'
+import AiChat from './apps/ai-chat/AiChat'
 import ImageStudio from './apps/image-studio/ImageStudio'
 import InventoryBoard from './apps/inventory-board/InventoryBoard'
 import WarRoom from './apps/war-room/WarRoom'
@@ -68,6 +69,7 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'research': Research,
   'spy-ads': SpyAds,
   'chat-bot': ChatBot,
+  'ai-chat': AiChat,
   'image-studio': ImageStudio,
   'inventory-board': InventoryBoard,
   'war-room': WarRoom,
@@ -98,6 +100,7 @@ const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> =
   'research':          { name: 'Research',         resetKeys: [] },
   'spy-ads':           { name: 'Spy Ads',          resetKeys: [] },
   'chat-bot':          { name: 'Chat Bot',         resetKeys: ['chat-bot-configs-v1'] },
+  'ai-chat':           { name: 'Trợ lý AI',         resetKeys: [] },
   'image-studio':      { name: 'Xưởng Ảnh',        resetKeys: ['gift-studio-draft-v1', 'form-bg-studio-draft-v1', 'rebrand-studio-draft-v1', 'image-studio-mode-v1'] },
   'inventory-board':   { name: 'Kho & Nhập hàng',  resetKeys: ['inv_board_sources'] },
   'war-room':          { name: 'Tác Chiến',         resetKeys: [] },
