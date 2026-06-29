@@ -46,6 +46,28 @@ async function getJson(url: string, init?: RequestInit): Promise<Record<string, 
   return (await r.json()) as Record<string, unknown>
 }
 
+// Resize ảnh client → JPEG base64 nhỏ TRƯỚC khi gửi 1688 (ảnh to → 1688 trả 400
+// "ảnh quá lớn" → không khớp). Giống SourceFinder. crossOrigin để canvas không taint.
+function toResizedBase64(src: string, max = 800, q = 0.72): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      let w = img.naturalWidth || img.width
+      let h = img.naturalHeight || img.height
+      const scale = Math.min(1, max / Math.max(w, h))
+      w = Math.max(1, Math.round(w * scale)); h = Math.max(1, Math.round(h * scale))
+      const c = document.createElement('canvas'); c.width = w; c.height = h
+      const ctx = c.getContext('2d')
+      if (!ctx) { reject(new Error('no canvas ctx')); return }
+      ctx.drawImage(img, 0, 0, w, h)
+      try { resolve(c.toDataURL('image/jpeg', q)) } catch (e) { reject(e as Error) }
+    }
+    img.onerror = () => reject(new Error('img load fail'))
+    img.src = src
+  })
+}
+
 export async function deepDive(c: SpCandidate, geminiApiKey?: string): Promise<DeepDive> {
   // Bung từ khóa (Gemini) → search rộng nhiều góc; không có key thì 1 từ.
   const terms = geminiApiKey ? await expandSearchTerms(geminiApiKey, c) : [searchKeyword(c)]
@@ -56,10 +78,17 @@ export async function deepDive(c: SpCandidate, geminiApiKey?: string): Promise<D
     getJson(`/api/fb-ads?q=${encodeURIComponent(t)}&country=MY&status=ACTIVE`),
     getJson(`/api/tiktok-ads?q=${encodeURIComponent(t)}&country=MY`),
   ])
+  // 1688: RESIZE ảnh client → 800px base64 (né 400 "ảnh quá lớn"); fallback imageUrl thô.
+  let body1688: { base64?: string; imageUrl?: string } | null = null
+  if (c.imageUrl) {
+    try { body1688 = { base64: await toResizedBase64(c.imageUrl, 800, 0.72) } }
+    catch { body1688 = c.imageUrl.startsWith('data:') ? { base64: c.imageUrl } : { imageUrl: c.imageUrl } }
+  }
+
   const settled = await Promise.allSettled([
     getJson(`/api/research-videos?market=MY&q=${encodeURIComponent(terms[0] ?? searchKeyword(c))}&minSec=15`),
-    c.imageUrl
-      ? getJson('/api/rapid-1688', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrl: c.imageUrl }) })
+    body1688
+      ? getJson('/api/rapid-1688', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body1688) })
       : Promise.resolve({ products: [] } as Record<string, unknown>),
     ...adFetches,
   ])
