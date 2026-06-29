@@ -202,7 +202,7 @@ export default function MktAgent() {
                     ) : (
                       <button onClick={() => runDeep(p)} disabled={p.diving}
                         className="h-7 rounded-md text-[12px] bg-zinc-800 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50">
-                        {p.diving ? 'Đang soi…' : '🔬 Soi sâu (video · ads · 1688, ~3cr)'}
+                        {p.diving ? 'Đang soi…' : '🔬 Soi sâu (video·ads·1688 — quota API ngoài)'}
                       </button>
                     )}
                     {p.deepError && <p className="text-[11px] text-rose-400">Soi sâu lỗi: {p.deepError}</p>}
