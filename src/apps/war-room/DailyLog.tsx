@@ -1,7 +1,7 @@
 // ── 📒 NHẬT KÝ NGÀY — kế hoạch sáng (checklist) + báo cáo tối (số nhập tay) ──────
 // Nhân viên: tự điền/tick + khoá kế hoạch sáng + gửi báo cáo tối (thẻ gọn để chụp Zalo).
 // CEO: 1 màn gom CẢ ĐỘI theo ngày (ai gửi sáng/tối, % việc, số) + soi từng người.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useWarStore, memberEmails, type Member, type PlanItem } from './store'
 import type { SpProfit } from './actuals'
 
@@ -17,6 +17,16 @@ const fmtInt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const hhmm = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '')
 const nowISO = () => new Date().toISOString()
+const fmtMoney = (n: number) => Math.round(n).toLocaleString('vi-VN') + 'đ'
+const cpaOf = (data: number | null | undefined, ads: number | null | undefined) => (data && ads ? ads / data : null) // CPA = chi ads ÷ data
+// ô tiền có dấu chấm (3.333.333) — gõ tới đâu format tới đó, lưu số nguyên khi rời ô
+function MoneyField({ value, disabled, onSave, style }: { value: number | null | undefined; disabled?: boolean; onSave: (v: number | null) => void; style: React.CSSProperties }) {
+  const [txt, setTxt] = useState(value != null ? value.toLocaleString('vi-VN') : '')
+  useEffect(() => { setTxt(value != null ? value.toLocaleString('vi-VN') : '') }, [value])
+  return <input disabled={disabled} value={txt} inputMode="numeric" placeholder="—"
+    onChange={(e) => { const d = e.target.value.replace(/[^\d]/g, ''); setTxt(d === '' ? '' : parseInt(d, 10).toLocaleString('vi-VN')) }}
+    onBlur={() => { const d = txt.replace(/[^\d]/g, ''); onSave(d === '' ? null : parseInt(d, 10)) }} style={style} />
+}
 
 // gom việc gợi ý cho 1 người: ⚡ từ số (cắt/đẩy/giảm hoàn) + việc được giao + SP test tới hạn
 function buildTodos(view: Member, profit: SpProfit[], tasks: ReturnType<typeof useWarStore.getState>['tasks'], tests: ReturnType<typeof useWarStore.getState>['tests']): PlanItem[] {
@@ -36,7 +46,7 @@ function buildTodos(view: Member, profit: SpProfit[], tasks: ReturnType<typeof u
 }
 
 export default function DailyLog({ isCEO, userEmail, profit }: { isCEO: boolean; userEmail: string; profit: SpProfit[] }) {
-  const { members, dailyLogs, tasks, tests, saveDailyLog } = useWarStore()
+  const { members, dailyLogs, tasks, tests, error, saveDailyLog } = useWarStore()
   const [date, setDate] = useState(todayISO())
   const [viewId, setViewId] = useState('')
   const [manual, setManual] = useState('')
@@ -71,6 +81,8 @@ export default function DailyLog({ isCEO, userEmail, profit }: { isCEO: boolean;
 
   return (
     <>
+      {error && <div style={{ ...panelStyle, borderColor: C.red, background: 'rgba(255,77,94,0.07)', fontSize: 12.5, color: C.red }}>⚠ Lỗi lưu: {error}. {/relation|does not exist|column|constraint/i.test(error) ? 'Bảng daily_logs chưa tạo — CEO chạy SQL (kèm trong chat) rồi tải lại.' : 'Thử lại; nếu vẫn lỗi báo CEO.'}</div>}
+
       {/* chọn ngày + (CEO) chọn người */}
       <div style={{ ...panelStyle, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 160 }}>
@@ -101,7 +113,7 @@ export default function DailyLog({ isCEO, userEmail, profit }: { isCEO: boolean;
                 <span style={{ fontSize: 12, minWidth: 120, color: l?.plan_locked_at ? C.green : C.muted }}>{l?.plan_locked_at ? `🟢 sáng ${hhmm(l.plan_locked_at)}` : '⚪ chưa gửi sáng'}</span>
                 <span style={{ fontSize: 12, minWidth: 120, color: l?.reported_at ? C.green : C.muted }}>{l?.reported_at ? `🟢 tối ${hhmm(l.reported_at)}` : '⚪ chưa báo cáo'}</span>
                 <span style={{ fontSize: 12, color: C.muted2, minWidth: 80 }}>việc {tot ? `${dc}/${tot}` : '—'}</span>
-                <span style={{ fontSize: 12, color: C.muted2 }}>data {l?.data_keo ?? '—'} · đơn {l?.don_chot ?? '—'} · ads {l?.chi_ads != null ? fmtInt(l.chi_ads) + 'đ' : '—'}</span>
+                <span style={{ fontSize: 12, color: C.muted2 }}>data {l?.data_keo ?? '—'} · ads {l?.chi_ads != null ? fmtInt(l.chi_ads) + 'đ' : '—'} · CPA {cpaOf(l?.data_keo, l?.chi_ads) != null ? fmtMoney(cpaOf(l?.data_keo, l?.chi_ads) as number) : '—'}</span>
                 {l?.blocker ? <span style={{ marginLeft: 'auto', fontSize: 11.5, color: C.amber }}>⚠ {l.blocker.slice(0, 40)}</span> : null}
               </div>
             )
@@ -122,7 +134,7 @@ export default function DailyLog({ isCEO, userEmail, profit }: { isCEO: boolean;
               {items.length > 0 && <> · việc <b style={{ color: C.text }}>{doneCount}/{items.length}</b></>}
             </div>
             {log?.reported_at && (
-              <div style={{ fontSize: 12.5, color: C.muted2, marginTop: 4 }}>📊 data <b style={{ color: C.text }}>{log.data_keo ?? '—'}</b> · đơn <b style={{ color: C.text }}>{log.don_chot ?? '—'}</b> · chi ads <b style={{ color: C.text }}>{log.chi_ads != null ? fmtInt(log.chi_ads) + 'đ' : '—'}</b>{log.blocker ? <> · ⚠ {log.blocker}</> : null}</div>
+              <div style={{ fontSize: 12.5, color: C.muted2, marginTop: 4 }}>📊 data <b style={{ color: C.text }}>{log.data_keo ?? '—'}</b> · chi ads <b style={{ color: C.text }}>{log.chi_ads != null ? fmtInt(log.chi_ads) + 'đ' : '—'}</b> · CPA <b style={{ color: C.green }}>{cpaOf(log.data_keo, log.chi_ads) != null ? fmtMoney(cpaOf(log.data_keo, log.chi_ads) as number) : '—'}</b>{log.blocker ? <> · ⚠ {log.blocker}</> : null}</div>
             )}
           </div>
 
@@ -153,14 +165,20 @@ export default function DailyLog({ isCEO, userEmail, profit }: { isCEO: boolean;
           <div style={panelStyle}>
             <div style={eyebrow}>② BÁO CÁO TỐI — số thực tế hôm nay (nhập tay)</div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {([['data_keo', 'DATA ĐÃ KÉO', false], ['don_chot', 'ĐƠN CHỐT', false], ['chi_ads', 'CHI ADS (đ)', true]] as const).map(([k, lbl, money]) => (
-                <div key={k} style={{ flex: '1 1 150px', minWidth: 130 }}>
-                  <div style={{ fontSize: 10.5, letterSpacing: 1, color: C.muted, marginBottom: 5 }}>{lbl}</div>
-                  <input disabled={!canEdit} defaultValue={log?.[k] != null ? (money ? fmtInt(log[k] as number) : String(log[k])) : ''} inputMode="numeric" placeholder="—"
-                    onBlur={(e) => { const raw = e.target.value.replace(/[^\d]/g, ''); const v = raw === '' ? null : parseInt(raw, 10); if (v !== (log?.[k] ?? null)) save({ [k]: v }) }}
-                    style={{ ...inp, width: '100%', fontSize: 16, fontWeight: 600 }} />
-                </div>
-              ))}
+              <div style={{ flex: '1 1 150px', minWidth: 130 }}>
+                <div style={{ fontSize: 10.5, letterSpacing: 1, color: C.muted, marginBottom: 5 }}>DATA ĐÃ KÉO</div>
+                <input disabled={!canEdit} defaultValue={log?.data_keo ?? ''} inputMode="numeric" placeholder="—"
+                  onBlur={(e) => { const raw = e.target.value.replace(/[^\d]/g, ''); const v = raw === '' ? null : parseInt(raw, 10); if (v !== (log?.data_keo ?? null)) save({ data_keo: v }) }}
+                  style={{ ...inp, width: '100%', fontSize: 16, fontWeight: 600 }} />
+              </div>
+              <div style={{ flex: '1 1 150px', minWidth: 130 }}>
+                <div style={{ fontSize: 10.5, letterSpacing: 1, color: C.muted, marginBottom: 5 }}>CHI ADS (đ)</div>
+                <MoneyField value={log?.chi_ads} disabled={!canEdit} onSave={(v) => { if (v !== (log?.chi_ads ?? null)) save({ chi_ads: v }) }} style={{ ...inp, width: '100%', fontSize: 16, fontWeight: 600 }} />
+              </div>
+              <div style={{ flex: '1 1 150px', minWidth: 130 }}>
+                <div style={{ fontSize: 10.5, letterSpacing: 1, color: C.muted, marginBottom: 5 }}>CPA / DATA (tự tính)</div>
+                <div style={{ ...inp, width: '100%', fontSize: 16, fontWeight: 700, color: C.green }}>{cpaOf(log?.data_keo, log?.chi_ads) != null ? fmtMoney(cpaOf(log?.data_keo, log?.chi_ads) as number) : '—'}</div>
+              </div>
             </div>
             <div style={{ marginTop: 12 }}>
               <div style={{ fontSize: 10.5, letterSpacing: 1, color: C.muted, marginBottom: 5 }}>VƯỚNG MẮC / CẦN HỖ TRỢ</div>
