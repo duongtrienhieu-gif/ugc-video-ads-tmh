@@ -136,6 +136,12 @@ export default function InventoryBoard() {
   }, [])
 
   const [tab, setTab] = useState<'kho' | 'calc' | 'profit' | 'gift'>('kho')
+  const [view, setView] = useState<'ceo' | 'nv'>(() => (localStorage.getItem('inv_board_view') === 'nv' ? 'nv' : 'ceo'))
+  const [nvTeam, setNvTeam] = useState<'APEX' | 'TITAN' | 'SUMMIT'>(() => {
+    const t = localStorage.getItem('inv_board_team'); return t === 'TITAN' || t === 'SUMMIT' ? t : 'APEX'
+  })
+  const [teamSp, setTeamSp] = useState<Record<string, string[]>>({})
+  const [teamLoading, setTeamLoading] = useState(false)
   const [sources, setSources] = useState<Record<string, string>>({})
   const [showCfg, setShowCfg] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -227,6 +233,17 @@ export default function InventoryBoard() {
     const id = setInterval(() => void load(sources), 5 * 60 * 1000)
     return () => clearInterval(id)
   }, [sources])
+
+  // nhớ lựa chọn view/team trên máy này
+  useEffect(() => { try { localStorage.setItem('inv_board_view', view) } catch { /* quota */ } }, [view])
+  useEffect(() => { try { localStorage.setItem('inv_board_team', nvTeam) } catch { /* quota */ } }, [nvTeam])
+  // NV view: nạp map TEAM→[mã SP] (cùng endpoint, nhánh marketerSp) — lazy khi mở view nhân viên
+  useEffect(() => {
+    if (view !== 'nv' || Object.keys(teamSp).length || !Object.keys(sources).length) return
+    setTeamLoading(true)
+    fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marketerSp: true, links: sources }), cache: 'no-store' })
+      .then((r) => r.json()).then((j) => { if (j?.marketerSp) setTeamSp(j.marketerSp) }).catch(() => { /* để rỗng → hiện báo thiếu */ }).finally(() => setTeamLoading(false))
+  }, [view, sources, teamSp])
 
   function saveSources() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sources))
@@ -351,6 +368,13 @@ export default function InventoryBoard() {
     eDong: cockpit.eDong,
     matLeft: hoanMatureDaysLeft(),
   }), [byGroup, verdicts, cockpit])
+  // NV: chỉ mã của team đang chọn (map TEAM→SP từ marketerSp, tên mã UPPERCASE)
+  const nvByGroup = useMemo(() => {
+    const set = new Set((teamSp[nvTeam] ?? []).map((s) => s.trim().toUpperCase()))
+    const g: Record<VGroup, VerdictRow[]> = { nhap: [], cho: [], suano: [], cat: [] }
+    if (set.size) verdicts.forEach((v) => { if (set.has(v.name.trim().toUpperCase())) g[v.group].push(v) })
+    return g
+  }, [verdicts, teamSp, nvTeam])
 
   // ── render verdict (dùng cho cả CEO; thẻ đã sẵn dạng card → mobile chạy luôn) ──
   const toneCol = (t: VerdictRow['tone']) => (t === 'green' ? C.green : t === 'red' ? C.red : t === 'gray' ? C.muted2 : C.amber)
@@ -429,6 +453,43 @@ export default function InventoryBoard() {
       </div>
     )
   }
+  // ── NV: thẻ gọn 1 dòng (việc + tên + 1 số cốt) ─────────────────────────────
+  const signPct = (n: number) => (n >= 0 ? '+' : '') + Math.round(n * 100) + '%'
+  const miniFact = (v: VerdictRow): string => {
+    if (v.group === 'nhap') {
+      if (v.kind === 'dangve') return `đang về ${num(v.incQty)} — vít tiếp`
+      if (v.kind === 'khoan') return `nhập lô nhỏ · theo dõi 3-5 ngày`
+      return v.nhapQty > 0 ? `nhập ${num(v.nhapQty)} · vít ~${num(v.tranAds)}/ngày` : `vít tới ~${num(v.tranAds)}/ngày`
+    }
+    if (v.group === 'cho') return `cấu trúc ${signPct(v.laiStruct)} · chờ hoàn T7`
+    if (v.group === 'suano') return v.kind === 'no' ? `nợ ${num(v.spNo)} cái → đặt bù` : `hoàn ${fmtPct(v.hoanPct)} — sửa`
+    return `cấu trúc ${signPct(v.laiStruct)} · ads ${fmtPct(v.adsPct)}`
+  }
+  const vCardMini = (v: VerdictRow) => {
+    const tc = toneCol(v.tone)
+    return (
+      <div key={v.name} style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between', background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '9px 12px', marginBottom: 7, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+          <span style={{ color: tc, border: `1px solid ${tc}`, borderRadius: 20, padding: '2px 8px', fontSize: 10.5, whiteSpace: 'nowrap' }}>{v.label}</span>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{v.name}{v.hoanEst ? ' ~ƯT' : ''}</span>
+        </div>
+        <span style={{ fontSize: 11.5, color: C.muted2, whiteSpace: 'nowrap' }}>{miniFact(v)}</span>
+      </div>
+    )
+  }
+  const groupSectionMini = (title: string, dotCol: string, rows: VerdictRow[]) => {
+    if (!rows.length) return null
+    return (
+      <div key={title}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0 8px' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: dotCol }} />
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: dotCol }}>{title} · {rows.length}</span>
+        </div>
+        {rows.map(vCardMini)}
+        <div style={{ height: 10 }} />
+      </div>
+    )
+  }
 
   const provCols: Col<Province>[] = [
     { label: 'TỈNH', node: (p) => p.ten },
@@ -460,6 +521,17 @@ export default function InventoryBoard() {
         </div>
 
         {tab === 'kho' && (<>
+        {/* xem theo: Chủ (đủ 5 nhóm) / Nhân viên (gọn, theo team) */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, letterSpacing: 1.5, color: C.muted }}>XEM THEO</span>
+          {([['ceo', '👔 Chủ'], ['nv', '🧑‍💼 Nhân viên']] as const).map(([k, lbl]) => (
+            <button key={k} onClick={() => setView(k)} style={{ background: view === k ? C.gold : 'transparent', color: view === k ? '#0a0a0a' : C.muted2, border: `1px solid ${view === k ? C.gold : C.line}`, borderRadius: 9, padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{lbl}</button>
+          ))}
+          {view === 'nv' && <span style={{ width: 1, height: 20, background: C.line, margin: '0 2px' }} />}
+          {view === 'nv' && (['APEX', 'TITAN', 'SUMMIT'] as const).map((t) => (
+            <button key={t} onClick={() => setNvTeam(t)} style={{ background: nvTeam === t ? C.panel2 : 'transparent', color: nvTeam === t ? C.gold : C.muted2, border: `1px solid ${nvTeam === t ? C.gold : C.line}`, borderRadius: 9, padding: '7px 12px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>{t}</button>
+          ))}
+        </div>
         {/* nguồn dữ liệu + cấu hình */}
         <div style={{ ...panelStyle, padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, letterSpacing: 1.5, color: C.muted }}>NGUỒN DỮ LIỆU</span>
@@ -510,8 +582,8 @@ export default function InventoryBoard() {
           <div style={{ ...panelStyle, textAlign: 'center', color: C.muted, fontSize: 14 }}>● Đang tải dữ liệu kho từ Google Sheet...</div>
         )}
 
-        {/* BẢNG ĐIỀU PHỐI NHẬP HÀNG — 1 verdict/mã, gom theo việc */}
-        {verdicts.length > 0 && (
+        {/* BẢNG ĐIỀU PHỐI NHẬP HÀNG — 1 verdict/mã, gom theo việc (view CHỦ) */}
+        {view === 'ceo' && verdicts.length > 0 && (
           <div style={panelStyle}>
             <div style={eyebrowStyle}>🧭 BẢNG ĐIỀU PHỐI NHẬP HÀNG · {verdicts.length} mã · đề xuất — người chốt</div>
             <div style={{ fontSize: 12, color: C.muted, margin: '6px 0 12px' }}>Mỗi mã 1 việc gắt nhất, gộp lãi thật × tồn × trend · điểm đặt lại = bán/ngày × 15 (TQ 8 ngày + đệm 7).</div>
@@ -540,8 +612,27 @@ export default function InventoryBoard() {
           </div>
         )}
 
-        {/* BOM HÀNG THEO TỈNH */}
-        {provinces.length > 0 && (
+        {/* BẢNG NHÂN VIÊN — gọn, chỉ mã của team, mỗi mã 1 việc */}
+        {view === 'nv' && (
+          <div style={panelStyle}>
+            <div style={eyebrowStyle}>🧑‍💼 VIỆC CỦA TEAM {nvTeam} · mỗi mã 1 việc</div>
+            <div style={{ fontSize: 12, color: C.muted, margin: '6px 0 12px' }}>Chỉ hiện mã team {nvTeam} đang chạy. Vít/Nhập = đổ tiền · Theo dõi = chờ số thật, chưa làm gì · Sửa/Nợ · Cắt = tắt ads.</div>
+            {teamLoading && !Object.keys(teamSp).length ? (
+              <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: '8px 0' }}>● Đang nạp danh sách mã của team...</div>
+            ) : !(nvByGroup.nhap.length || nvByGroup.cho.length || nvByGroup.suano.length || nvByGroup.cat.length) ? (
+              <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: '8px 0' }}>Chưa có mã cho team {nvTeam} (file team chưa công khai / chưa có số). Thử team khác hoặc bấm ⟳ Tải lại.</div>
+            ) : (<>
+              {groupSectionMini('🟢 NHẬP / VÍT — đẩy mạnh', C.green, nvByGroup.nhap.filter((v) => !v.noAction))}
+              {groupSectionMini('👀 THEO DÕI — chờ số thật', C.muted2, nvByGroup.cho)}
+              {groupSectionMini('🟠 SỬA / NỢ HÀNG', C.amber, nvByGroup.suano)}
+              {groupSectionMini('🔴 CẮT — tắt ads', C.red, nvByGroup.cat)}
+              {nvByGroup.nhap.some((v) => v.noAction) && <div style={{ fontSize: 11, color: C.muted }}>+ {nvByGroup.nhap.filter((v) => v.noAction).length} mã đủ hàng, ổn.</div>}
+            </>)}
+          </div>
+        )}
+
+        {/* BOM HÀNG THEO TỈNH (chỉ view Chủ) */}
+        {view === 'ceo' && provinces.length > 0 && (
           <div style={panelStyle}>
             <div style={eyebrowStyle}>⚑ BOM HÀNG THEO TỈNH · {provinces.length} tỉnh</div>
             <div style={{ height: 10 }} />
@@ -550,7 +641,7 @@ export default function InventoryBoard() {
           </div>
         )}
 
-        {status === 'live' && !verdicts.length && !provinces.length && (
+        {view === 'ceo' && status === 'live' && !verdicts.length && !provinces.length && (
           <div style={{ ...panelStyle, textAlign: 'center', color: C.muted, fontSize: 14 }}>Chưa có dữ liệu hiển thị. Kiểm tra link nguồn ở ⚙ Cấu hình.</div>
         )}
         </>)}
