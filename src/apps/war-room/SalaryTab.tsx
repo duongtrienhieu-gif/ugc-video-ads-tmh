@@ -1,10 +1,11 @@
 // ── Tab 💰 Lương (trong War Room) ────────────────────────────────────────────
 // Net/DT/CPQC đọc THẲNG từ dòng TỔNG file team (BÁO CÁO SẢN PHẨM) → số kế toán THẬT, khớp sheet
 // (gồm +%hoàn theo công thức sheet). Marketer: CHỈ team mình. CEO: tất cả + lớp ẩn (6500/buffer).
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Member } from './store'
 import type { TeamFin } from './actuals'
-import { tinhLuong, realNet, realRevenue, DEFAULT_CEO } from './salary'
+import { tinhLuong, realNet, realRevenue, DEFAULT_CEO, type CeoCfg } from './salary'
+import { loadCeoCfg, saveCeoCfg } from './salaryConfig'
 
 const C = {
   panel: '#0c111c', panel2: '#0a0f19', line: '#1b2233', line2: '#161d2c',
@@ -31,6 +32,10 @@ interface Row { id: string; name: string; fin?: TeamFin }
 export default function SalaryTab({ members, teamFin, isCEO, myMember }: {
   members: Member[]; teamFin: Record<string, TeamFin>; isCEO: boolean; myMember?: Member
 }) {
+  // Config CEO (số thật ẩn) — load Supabase 1 lần; chỉ CEO mới chỉnh/lưu.
+  const [cfg, setCfg] = useState<CeoCfg>(DEFAULT_CEO)
+  useEffect(() => { void loadCeoCfg().then(setCfg) }, [])
+
   const rows = useMemo<Row[]>(() => {
     let mkt = members.filter((m) => m.role === 'marketer')
     if (!isCEO) mkt = mkt.filter((m) => m.id === myMember?.id)
@@ -44,12 +49,12 @@ export default function SalaryTab({ members, teamFin, isCEO, myMember }: {
     for (const r of rows) {
       if (!hasData(r.fin)) continue
       const f = r.fin as TeamFin
-      rev += realRevenue(f.dt); rn += realNet(f.dt, f.net)
+      rev += realRevenue(f.dt, cfg); rn += realNet(f.dt, f.net, cfg)
       luong += tinhLuong({ dtSauHoan: f.dtSauHoan, net: f.net, cpqc: f.cpqc }).luongTeam
     }
-    const giu = rn - luong - DEFAULT_CEO.overhead
-    return { rev, rn, luong, overhead: DEFAULT_CEO.overhead, giu, bufferPct: rev > 0 ? giu / rev : 0 }
-  }, [rows])
+    const giu = rn - luong - cfg.overhead
+    return { rev, rn, luong, overhead: cfg.overhead, giu, bufferPct: rev > 0 ? giu / rev : 0 }
+  }, [rows, cfg])
 
   return (
     <div>
@@ -109,15 +114,17 @@ export default function SalaryTab({ members, teamFin, isCEO, myMember }: {
             </div>
             {isCEO && (
               <div style={{ marginTop: 10, padding: '9px 12px', background: 'rgba(122,169,239,0.07)', border: '1px solid #25324a', borderRadius: 10, fontSize: 12, color: C.blue }}>
-                🔒 Thật (6500): doanh thu ~{fmtTr(realRevenue(f.dt))} · <b>net thật ~{fmtTr(realNet(f.dt, f.net))}</b> · trả lương team {fmtTr(L.luongTeam)}
+                🔒 Thật ({cfg.tgReal}): doanh thu ~{fmtTr(realRevenue(f.dt, cfg))} · <b>net thật ~{fmtTr(realNet(f.dt, f.net, cfg))}</b> · trả lương team {fmtTr(L.luongTeam)}
               </div>
             )}
           </div>
         )
       })}
 
+      {isCEO && <CeoConfigPanel cfg={cfg} onSave={setCfg} by={myMember?.email} />}
+
       {isCEO && ceo.rev > 0 && (
-        <div style={{ ...panelStyle, border: `1px solid ${ceo.bufferPct < DEFAULT_CEO.buffer ? C.red : '#25324a'}` }}>
+        <div style={{ ...panelStyle, border: `1px solid ${ceo.bufferPct < cfg.buffer ? C.red : '#25324a'}` }}>
           <div style={{ ...eyebrowStyle, color: C.blue }}>🔒 BUỒNG LÁI CEO (toàn công ty · số thật)</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(168px,1fr))', gap: 10 }}>
             {[
@@ -125,7 +132,7 @@ export default function SalaryTab({ members, teamFin, isCEO, myMember }: {
               { l: '− Lương trả', v: fmtTr(ceo.luong) },
               { l: '− Overhead', v: fmtTr(ceo.overhead) },
               { l: '= CEO giữ', v: fmtTr(ceo.giu), c: ceo.giu < 0 ? C.red : C.green },
-              { l: 'Buffer / DT', v: fmtPct(ceo.bufferPct), c: ceo.bufferPct < DEFAULT_CEO.buffer ? C.red : C.green },
+              { l: 'Buffer / DT', v: fmtPct(ceo.bufferPct), c: ceo.bufferPct < cfg.buffer ? C.red : C.green },
             ].map((k) => (
               <div key={k.l} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px' }}>
                 <div style={{ fontSize: 10, letterSpacing: 0.5, color: C.muted, marginBottom: 4 }}>{k.l}</div>
@@ -133,8 +140,8 @@ export default function SalaryTab({ members, teamFin, isCEO, myMember }: {
               </div>
             ))}
           </div>
-          {ceo.bufferPct < DEFAULT_CEO.buffer && (
-            <div style={{ marginTop: 8, fontSize: 12, color: C.red, fontWeight: 600 }}>⚠ Buffer dưới 12% — lương + overhead ăn quá sâu vào lãi thật. Cần đẩy DT hoặc ghìm chi phí.</div>
+          {ceo.bufferPct < cfg.buffer && (
+            <div style={{ marginTop: 8, fontSize: 12, color: C.red, fontWeight: 600 }}>⚠ Buffer dưới {fmtPct(cfg.buffer)} — lương + overhead ăn quá sâu vào lãi thật. Cần đẩy DT hoặc ghìm chi phí.</div>
           )}
         </div>
       )}
@@ -179,6 +186,72 @@ function Scratch() {
         <span style={{ fontSize: 13, color: C.muted2 }}>Cứng {fmtTr(L.cung)} + Thưởng {net < 0 ? '0đ' : fmtTr(L.thuongNguoi)} ({net < 0 ? 'net âm' : `${L.heLabel}`})</span>
         <span style={{ fontSize: 18, fontWeight: 700, color: C.gold, whiteSpace: 'nowrap' }}>{fmtTr(L.luongNguoi)} /người</span>
       </div>
+    </div>
+  )
+}
+
+// ── Ô chỉnh config CEO (số thật ẩn) — chỉ CEO render ─────────────────────────
+function CeoConfigPanel({ cfg, onSave, by }: { cfg: CeoCfg; onSave: (c: CeoCfg) => void; by?: string }) {
+  const [open, setOpen] = useState(false)
+  const [d, setD] = useState<CeoCfg>(cfg)
+  const [state, setState] = useState<'idle' | 'saving' | 'ok' | 'local'>('idle')
+  // cfg đổi (load xong) → đồng bộ draft khi chưa mở chỉnh.
+  useEffect(() => { if (!open) setD(cfg) }, [cfg, open])
+
+  const dirty = JSON.stringify(d) !== JSON.stringify(cfg)
+  const inp: React.CSSProperties = { width: '100%', background: C.panel2, border: `1px solid ${C.line}`, color: C.text, borderRadius: 8, padding: '8px 10px', fontSize: 14, marginTop: 4 }
+  const ro: React.CSSProperties = { ...inp, color: C.muted, background: '#0a0d15', cursor: 'not-allowed' }
+  const lbl: React.CSSProperties = { fontSize: 11.5, color: C.muted2 }
+
+  async function save() {
+    setState('saving')
+    const ok = await saveCeoCfg(d, by)
+    onSave(d)
+    setState(ok ? 'ok' : 'local')
+  }
+
+  return (
+    <div style={{ ...panelStyle, border: `1px solid ${dirty ? '#4a4015' : C.line}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => setOpen((o) => !o)}>
+        <div style={{ ...eyebrowStyle, color: C.blue, marginBottom: 0 }}>🔧 CẤU HÌNH CEO (ẩn · số thật)</div>
+        <span style={{ fontSize: 12, color: C.muted }}>{open ? '▲ thu gọn' : '▼ mở chỉnh'}</span>
+      </div>
+      {open && (
+        <>
+          <div style={{ fontSize: 11.5, color: C.muted, margin: '10px 0 12px', lineHeight: 1.6 }}>
+            Số <b style={{ color: C.muted2 }}>THẬT</b> chỉ CEO thấy & chỉnh — dùng cho Buồng lái + dòng khoá thật mỗi team. Nhóm <b style={{ color: C.muted2 }}>"thổi"</b> (nhân viên xem) khoá theo sheet kế toán.
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
+            <label style={lbl}>Tỷ giá thật (VNĐ/RM)
+              <input type="number" step={50} value={d.tgReal} onChange={(e) => setD({ ...d, tgReal: +e.target.value })} style={inp} /></label>
+            <label style={lbl}>CPVC thật (%)
+              <input type="number" step={0.5} value={+(d.cpvcThat * 100).toFixed(2)} onChange={(e) => setD({ ...d, cpvcThat: +e.target.value / 100 })} style={inp} /></label>
+            <label style={lbl}>CPVH thật (%)
+              <input type="number" step={0.5} value={+(d.cpvhThat * 100).toFixed(2)} onChange={(e) => setD({ ...d, cpvhThat: +e.target.value / 100 })} style={inp} /></label>
+            <label style={lbl}>Buffer mục tiêu (%)
+              <input type="number" step={1} value={+(d.buffer * 100).toFixed(2)} onChange={(e) => setD({ ...d, buffer: +e.target.value / 100 })} style={inp} /></label>
+            <label style={lbl}>Overhead / tháng (triệu)
+              <input type="number" step={10} value={+(d.overhead / TR).toFixed(2)} onChange={(e) => setD({ ...d, overhead: +e.target.value * TR })} style={inp} /></label>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, marginTop: 12 }}>
+            <label style={lbl}>Tỷ giá thổi (NV xem)
+              <input type="number" value={d.tgVisible} readOnly disabled style={ro} /></label>
+            <label style={lbl}>CPVC thổi (%)
+              <input type="number" value={+(d.cpvcThoi * 100).toFixed(2)} readOnly disabled style={ro} /></label>
+            <label style={lbl}>CPVH thổi (%)
+              <input type="number" value={+(d.cpvhThoi * 100).toFixed(2)} readOnly disabled style={ro} /></label>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
+            <button onClick={() => void save()} disabled={!dirty || state === 'saving'}
+              style={{ background: dirty ? C.gold : '#2a2f3d', color: dirty ? '#1a1205' : C.muted, border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: dirty ? 'pointer' : 'default' }}>
+              {state === 'saving' ? 'Đang lưu…' : 'Lưu cấu hình'}
+            </button>
+            {dirty && <button onClick={() => setD(cfg)} style={{ background: 'transparent', color: C.muted, border: `1px solid ${C.line}`, borderRadius: 8, padding: '9px 14px', fontSize: 13, cursor: 'pointer' }}>Hoàn tác</button>}
+            {!dirty && state === 'ok' && <span style={{ fontSize: 12.5, color: C.green }}>✓ Đã lưu — đồng bộ mọi máy CEO</span>}
+            {!dirty && state === 'local' && <span style={{ fontSize: 12.5, color: C.amber }}>⚠ Supabase lỗi — chỉ lưu máy này (kiểm tra cột ceo_cfg)</span>}
+          </div>
+        </>
+      )}
     </div>
   )
 }

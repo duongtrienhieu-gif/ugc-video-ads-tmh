@@ -392,15 +392,17 @@ export default function InventoryBoard() {
       {sub ? <div style={{ fontSize: 10.5, color: C.muted }}>{sub}</div> : null}
     </div>
   )
+  // lãi%: to + xanh (lãi) / đỏ (lỗ) cho nổi
+  const laiTag = (laiPct: number) => <b style={{ color: laiPct >= 0 ? C.green : C.red, fontSize: 14 }}>{signPct(laiPct)}</b>
   // dòng "vì sao / làm gì" — lãi quy về %, không VNĐ
   const noteOf = (v: VerdictRow): ReactNode => {
-    const lai = signPct(v.laiPct), hoan = fmtPct(v.hoanPct)
+    const hoan = fmtPct(v.hoanPct)
     if (v.group === 'cho') return <>hoàn ƯT(T6) <b style={{ color: C.muted2 }}>{hoan}</b> · {v.laiStruct >= 0.05 ? 'bỏ hoàn ra vẫn lãi → chờ đơn T7 về mới chốt' : 'cấu trúc mỏng, hoàn T7 còn cao là cắt'}</>
-    if (v.group === 'cat') return <>lãi <b style={{ color: C.red }}>{lai}</b> · hoàn <b style={{ color: C.red }}>{hoan}</b> · {v.chayDat ? '🔥 chạy đắt · ' : ''}{v.kind === 'xa' ? 'thanh lý lấy vốn' : 'tắt ads, ép cọc/chặn tỉnh'}</>
+    if (v.group === 'cat') return <>lãi {laiTag(v.laiPct)} · hoàn <b style={{ color: C.red }}>{hoan}</b> · {v.chayDat ? '🔥 chạy đắt · ' : ''}{v.kind === 'xa' ? 'thanh lý lấy vốn' : 'tắt ads, ép cọc/chặn tỉnh'}</>
     if (v.group === 'suano') return v.kind === 'no' ? <>nợ <b style={{ color: C.red }}>{num(v.donNo)}</b> đơn chưa gửi → bù gấp hoặc huỷ đơn</> : <>hoàn <b style={{ color: C.amber }}>{hoan}</b> · ads cao → sửa giá-combo-chặn tỉnh trước khi nhập</>
-    if (v.kind === 'dangve') return <>đang về <b style={{ color: C.amber }}>{num(v.incQty)}</b>{v.incEta ? ` (${v.incEta.slice(8, 10)}/${v.incEta.slice(5, 7)})` : ''} — đừng đặt thêm · lãi {lai}</>
-    if (v.kind === 'khoan') return <>đơn đang tụt → nhập lô nhỏ, theo dõi 3-5 ngày · lãi {lai}</>
-    return <>lãi <b style={{ color: v.laiPct >= 0 ? C.green : C.red }}>{lai}</b> · hoàn <b style={{ color: C.muted2 }}>{hoan}</b>{v.nhapQty > 0 ? ' · nhập xong đủ chạy ~38 ngày' : ' · còn dư địa'}</>
+    if (v.kind === 'dangve') return <>đang về <b style={{ color: C.amber }}>{num(v.incQty)}</b>{v.incEta ? ` (${v.incEta.slice(8, 10)}/${v.incEta.slice(5, 7)})` : ''} — đừng đặt thêm · lãi {laiTag(v.laiPct)}</>
+    if (v.kind === 'khoan') return <>đơn đang tụt → nhập lô nhỏ, theo dõi 3-5 ngày · lãi {laiTag(v.laiPct)}</>
+    return <>lãi {laiTag(v.laiPct)} · hoàn <b style={{ color: C.muted2 }}>{hoan}</b>{v.nhapQty > 0 ? ' · nhập xong đủ chạy ~38 ngày' : ' · còn dư địa'}</>
   }
   const vCard = (v: VerdictRow) => {
     const tc = toneCol(v.tone)
@@ -430,7 +432,7 @@ export default function InventoryBoard() {
         </div>
         <div style={{ display: 'flex', gap: 18, marginTop: 10, fontSize: 12, flexWrap: 'wrap' }}>
           <span style={{ color: C.muted }}>DOANH THU <b style={{ color: C.text }}>{fmtMoney(v.doanhThu)}</b></span>
-          <span style={{ color: C.muted }}>CPQC <b style={{ color: C.amber }}>{fmtMoney(v.cpqc)}</b></span>
+          <span style={{ color: C.muted }}>CPQC <b style={{ color: C.amber }}>{fmtMoney(v.cpqc)}</b> <span style={{ color: C.muted2 }}>({Math.round(v.adsPct * 100)}%)</span></span>
         </div>
         <div style={{ fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>{noteOf(v)}</div>
       </div>
@@ -473,7 +475,7 @@ export default function InventoryBoard() {
           </div>
           <span style={{ fontSize: 11.5, color: C.muted2, whiteSpace: 'nowrap' }}>{miniFact(v)}</span>
         </div>
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>DT <b style={{ color: C.muted2 }}>{fmtMoney(v.doanhThu)}</b> · CPQC <b style={{ color: C.amber }}>{fmtMoney(v.cpqc)}</b></div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>DT <b style={{ color: C.muted2 }}>{fmtMoney(v.doanhThu)}</b> · CPQC <b style={{ color: C.amber }}>{fmtMoney(v.cpqc)}</b> ({Math.round(v.adsPct * 100)}%)</div>
       </div>
     )
   }
