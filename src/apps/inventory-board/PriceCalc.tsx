@@ -17,6 +17,10 @@ const fmtPct = (n: number) => (n * 100).toFixed(1) + '%'
 const fmtRM = (n: number) => n.toFixed(1)
 const panelStyle: React.CSSProperties = { background: C.panel, border: `1px solid ${C.line}`, borderRadius: 14, padding: '16px 20px', marginBottom: 14 }
 const eyebrowStyle: React.CSSProperties = { fontSize: 13, fontWeight: 700, letterSpacing: 0.3, color: C.gold, marginBottom: 10 }
+// Nền nhẹ tách 2 cụm cho dễ nhìn: GIẢ LẬP (xanh) vs MÁY TÍNH GIÁ (vàng) — chỉ để phân biệt khối.
+const simGroupStyle: React.CSSProperties = { background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.22)', borderRadius: 16, padding: '14px 14px 1px', marginBottom: 14 }
+const calcGroupStyle: React.CSSProperties = { background: 'rgba(245,196,81,0.045)', border: '1px solid rgba(245,196,81,0.18)', borderRadius: 16, padding: '14px 14px 4px', marginBottom: 4 }
+const groupTagStyle: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, letterSpacing: 1.2, marginBottom: 10, textTransform: 'uppercase' }
 const PACK_FACTOR = (name: string) => (name.trim().toUpperCase() === 'KNEE PAD' ? 2 : 1)
 
 interface Channel { name: string; chot: number; hoan: number }
@@ -158,6 +162,15 @@ export default function PriceCalc({ products, priceVnd, inv, velocity, saleStats
 
   return (
     <div>
+      {/* ░░ CỤM 1 — GIẢ LẬP (nền xanh nhẹ, đứng đầu) ░░ */}
+      <div style={simGroupStyle}>
+        <div style={{ ...groupTagStyle, color: '#7aa9ef' }}>🎛 Giả lập nhanh trên 1 SP</div>
+        <ProfitSim products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} />
+      </div>
+
+      {/* ░░ CỤM 2 — MÁY TÍNH GIÁ (nền vàng nhẹ): nhập liệu · combo · bảng LN · tham chiếu · tổng ░░ */}
+      <div style={calcGroupStyle}>
+        <div style={{ ...groupTagStyle, color: C.gold }}>🧮 Máy tính giá &amp; lợi nhuận</div>
       {/* ① NHẬP LIỆU */}
       <div style={panelStyle}>
         <div style={eyebrowStyle}>① NHẬP LIỆU</div>
@@ -188,9 +201,6 @@ export default function PriceCalc({ products, priceVnd, inv, velocity, saleStats
           <NumField label="⭐ CPA / 1 data-lead (VNĐ)" value={cpaLead} onChange={setCpaLead} step={5000} tint />
         </div>
       </div>
-
-      {/* 🎛 giả lập trên SP thật — nằm giữa ① nhập liệu và ② combo */}
-      <ProfitSim products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} />
 
       {/* ②③④⑤ lưới 2×2 — ô cùng hàng tự cao bằng nhau cho gọn */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.25fr 1fr', gap: 14, marginBottom: 14, alignItems: 'stretch' }}>
@@ -350,6 +360,7 @@ export default function PriceCalc({ products, priceVnd, inv, velocity, saleStats
       </div>
 
       <div style={{ fontSize: 11, color: C.muted, marginTop: 4, textAlign: 'center' }}>Máy tính giá test sản phẩm · số nhảy tức thì khi bạn chỉnh · không lưu, mở ra tính rồi đóng</div>
+      </div>{/* /CỤM 2 — MÁY TÍNH GIÁ */}
     </div>
   )
 }
