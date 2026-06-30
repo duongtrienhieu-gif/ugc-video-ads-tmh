@@ -7,6 +7,7 @@ import { useAppStore } from '../../stores/appStore'
 import { fetchSpStats, fetchMarketerSp, readCachedSpStats, aggregate, type SpStat, type SpProfit } from './actuals'
 import TestPipeline from './TestPipeline'
 import DailyLog from './DailyLog'
+import SalaryTab from './SalaryTab'
 
 const C = {
   bg: '#070a12', panel: '#0c111c', panel2: '#0a0f19', line: '#1b2233', line2: '#161d2c',
@@ -44,7 +45,7 @@ function paceBadge(actDt: number, targetDt: number | undefined, monthProgress: n
 export default function WarRoom() {
   const { members, targets, tasks, loaded, error, load, addMember, updateMember, deleteMember, setTarget, addTask, updateTask, deleteTask } = useWarStore()
   const userEmail = useAuthStore((s) => s.user?.email ?? '')
-  const [tab, setTab] = useState<'me' | 'daily' | 'target' | 'viec' | 'test' | 'nhansu'>('me')
+  const [tab, setTab] = useState<'me' | 'daily' | 'target' | 'viec' | 'test' | 'nhansu' | 'luong'>('me')
   const [stats, setStats] = useState<Record<string, SpStat>>({})
   const [profit, setProfit] = useState<SpProfit[]>([])
   const [mktSp, setMktSp] = useState<Record<string, string[]>>({})
@@ -92,8 +93,8 @@ export default function WarRoom() {
 
   // Nhân viên chỉ được "Bảng của tôi" + "Test SP" (tự đề xuất test, CEO theo dõi cùng).
   // Target/Việc/Nhân sự là quản lý xem chéo → CHỈ CEO.
-  const ALL_TABS = [['me', '🎯 Bảng của tôi'], ['daily', '📒 Nhật ký'], ['target', '📊 Target'], ['viec', '✅ Việc'], ['test', '🧪 Test SP'], ['nhansu', '👥 Nhân sự']] as const
-  const EMP_TABS = new Set(['me', 'daily', 'test'])
+  const ALL_TABS = [['me', '🎯 Bảng của tôi'], ['daily', '📒 Nhật ký'], ['target', '📊 Target'], ['viec', '✅ Việc'], ['test', '🧪 Test SP'], ['luong', '💰 Lương'], ['nhansu', '👥 Nhân sự']] as const
+  const EMP_TABS = new Set(['me', 'daily', 'test', 'luong'])
   const visibleTabs = isCEO ? ALL_TABS : ALL_TABS.filter(([k]) => EMP_TABS.has(k))
   const effTab = isCEO || EMP_TABS.has(tab) ? tab : 'me' // nhân viên bấm tab cấm → ép về 'me'
 
@@ -125,6 +126,7 @@ export default function WarRoom() {
       {isCEO && effTab === 'target' && <TargetTab {...{ members, targets, stats, isCEO, setTarget, reloadStats }} />}
       {isCEO && effTab === 'viec' && <ViecTab {...{ members, tasks, profit, spOwner, userEmail, addTask, updateTask, deleteTask }} />}
       {effTab === 'test' && <TestPipeline isCEO={isCEO} userEmail={userEmail} />}
+      {effTab === 'luong' && <SalaryTab members={members} stats={stats} isCEO={isCEO} myMember={myMember} />}
     </Shell>
   )
 }
