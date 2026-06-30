@@ -92,7 +92,6 @@ export function computeVerdicts(
 
     const incList = incMap.get(key) || []
     const incQty = incList.reduce((s, x) => s + x.qty, 0)
-    const etaMin = incList.length ? Math.min(...incList.map((x) => x.etaDays)) : null
     const incEta = incList.length ? incList.slice().sort((a, b) => a.etaDays - b.etaDays)[0].eta : ''
     const incLate = incList.some((x) => x.etaDays < 0)
 
@@ -123,12 +122,15 @@ export function computeVerdicts(
       label = pr.adsPct > pr.cpqcTarget ? 'SỬA — ghìm ads' : 'SỬA — chặn tỉnh bom'
     } else if (sapDut) {
       group = 'nhap'
-      if (incQty > 0 && !incLate && etaMin != null && cover >= etaMin) {
-        kind = 'dangve'; tone = 'amber'; label = '📦 ĐANG VỀ — vít tiếp'
+      // hàng đang về đã che đủ (nhập cần ≤ 0) → ĐỪNG đặt thêm, hàng về tự bù nợ
+      if (incQty > 0 && nhapQtyRaw <= 0 && !incLate) {
+        kind = 'dangve'; tone = 'amber'; label = spNo > 0 ? '📦 ĐANG VỀ — bù nợ khi về' : '📦 ĐANG VỀ — đừng đặt thêm'
       } else if (tr.state === 'tut' || tr.state === 'gay') {
         kind = 'khoan'; tone = 'amber'; label = 'KHOAN NHẬP — đơn tụt'; nhapQty = Math.round(nhapQtyRaw * 0.5)
       } else {
-        kind = 'nhap'; tone = 'green'; label = spNo > 0 ? 'NHẬP + bù gấp' : 'NHẬP ĐỂ VÍT'; nhapQty = nhapQtyRaw
+        kind = 'nhap'; tone = 'green'
+        label = incLate ? '⚠ NHẬP — đơn về trễ' : spNo > 0 ? 'NHẬP + bù gấp' : 'NHẬP ĐỂ VÍT'
+        nhapQty = nhapQtyRaw
       }
       von = nhapQty * giaUnit
     } else if (spNo > 0) {
