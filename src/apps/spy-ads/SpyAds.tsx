@@ -486,8 +486,10 @@ CHỈ trả JSON.`
     let r = ads || []
     // Chặn phim ngắn / ad cài app (mọi nước, luôn bật).
     r = r.filter((a) => !isSpamAd(a))
-    // CẤM video dài: bỏ ad >3 phút. TikTok có durationSec sẵn; FB đo ở client (durMap). Chưa đo xong → tạm hiện.
-    r = r.filter((a) => { const d = a.durationSec ?? durMap[a.id]; return d == null || d <= MAX_AD_SEC })
+    // CẤM video dài: bỏ ad >3 phút CHỈ theo durationSec server (TikTok, biết ngay lúc fetch).
+    // KHÔNG dùng durMap (FB đo async ở client): nếu đo xong mới loại → ad đã hiện BIẾN MẤT DẦN
+    // + layout nhảy → nút "Tải thêm" bị đẩy đi, bấm trượt. durMap chỉ dùng cho badge thời lượng.
+    r = r.filter((a) => { const d = a.durationSec; return d == null || d <= MAX_AD_SEC })
     // Ép đúng quốc gia đã chọn (≠ALL): chỉ giữ ad đúng nước.
     if (country !== 'ALL') r = r.filter((a) => !a.country || a.country.toUpperCase() === country)
     if (ladiOnly && platform === 'fb') r = r.filter((a) => !!a.linkUrl && linkKind(cleanLink(a.linkUrl)).web)
