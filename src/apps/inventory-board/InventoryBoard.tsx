@@ -9,6 +9,8 @@ import type { ReactNode } from 'react'
 import PriceCalc from './PriceCalc'
 import ProfitTruth from './ProfitTruth'
 import { computeProfit } from './profitCalc'
+import { computeVerdicts, hoanMatureDaysLeft } from './verdict'
+import type { VerdictRow, VGroup } from './verdict'
 import GiftCombo from './GiftCombo'
 import { useAppStore } from '../../stores/appStore'
 import { loadBoardLinks, saveBoardLinks } from './boardConfig'
@@ -66,6 +68,7 @@ interface BoardData {
   products: Prod[]
   inv: InvItem[]
   velocity: Record<string, number>
+  velDaily: Record<string, number[]>
   saleStats: Record<string, { chot: number; upsell: number }>
   incoming: Incoming[]
   priceVnd: Record<string, number>
@@ -235,6 +238,7 @@ export default function InventoryBoard() {
   const products = data?.products ?? []
   const inv = data?.inv ?? []
   const velocity = data?.velocity ?? {}
+  const velDaily = data?.velDaily ?? {}
   const saleStats = data?.saleStats ?? {}
   const incoming = data?.incoming ?? []
   const priceVnd = data?.priceVnd ?? {}
@@ -328,27 +332,104 @@ export default function InventoryBoard() {
     return { vonNhap, eDong }
   }, [restock, invRows])
 
-  // ── cột bảng (port từ dashboard) ───────────────────────────────────────────
-  const restockCols: Col<(typeof restock)[number]>[] = [
-    { label: 'SẢN PHẨM', node: (r) => r.name },
-    { label: 'TỒN', node: (r) => <span style={{ color: C.muted2 }}>{Math.round(r.ton).toLocaleString('vi-VN')}</span> },
-    { label: 'SP NỢ', node: (r) => r.spNo > 0 ? <span style={{ color: C.red, whiteSpace: 'nowrap' }} title={`${r.donNo} đơn chờ hàng`}>{Math.round(r.spNo).toLocaleString('vi-VN')}</span> : <span style={{ color: C.muted }}>—</span> },
-    { label: 'BÁN/NGÀY', node: (r) => <span style={{ color: C.muted2 }}>{r.vel.toFixed(1)}</span> },
-    { label: 'CÒN ~NGÀY', node: (r) => <span style={{ color: r.cover < 0 ? C.red : r.cover <= 15 ? C.red : r.cover <= 25 ? C.amber : C.muted2 }}>{r.cover < 0 ? 'ÂM' : r.cover >= 999 ? '∞' : Math.round(r.cover)}</span> },
-    { label: '% HOÀN', node: (r) => <span style={{ color: r.pctHoan > 0.4 ? C.red : C.muted2 }}>{fmtPct(r.pctHoan)}</span> },
-    { label: 'ĐANG VỀ', node: (r) => r.incQty > 0 ? <span style={{ color: r.incLate ? C.red : C.amber, fontSize: 12, whiteSpace: 'nowrap' }}>{r.incQty.toLocaleString('vi-VN')} · {r.incEta ? r.incEta.slice(8, 10) + '/' + r.incEta.slice(5, 7) : '?'}{r.incLate ? ' ⚠trễ' : ''}</span> : <span style={{ color: C.muted }}>—</span> },
-    { label: 'ĐỀ XUẤT', center: true, node: (r) => <span style={{ color: r.color, border: `1px solid ${r.color}`, borderRadius: 20, padding: '2px 10px', fontSize: 11, whiteSpace: 'nowrap' }}>{r.act}</span> },
-    { label: 'NHẬP (CÁI)', node: (r) => <span style={{ color: r.qty > 0 ? C.gold : C.muted }}>{r.qty > 0 ? r.qty.toLocaleString('vi-VN') : '—'}</span> },
-    { label: 'GIÁ/CÁI', node: (r) => <span style={{ color: r.qty > 0 ? (r.giaReal ? C.muted2 : C.amber) : C.muted }} title={r.giaReal ? 'giá vốn thật (giá thực tế file nhập / KHO)' : 'ước tính (chưa có giá thực tế)'}>{r.qty > 0 && r.giaUnit > 0 ? fmtMoney(r.giaUnit) + (r.giaReal ? '' : ' *') : '—'}</span> },
-    { label: 'VỐN CẦN', node: (r) => <span style={{ color: r.von > 0 ? C.gold : C.muted }}>{r.von > 0 ? fmtMoney(r.von) : '—'}</span> },
-  ]
-  const invCols: Col<(typeof invRows)[number]>[] = [
-    { label: 'SẢN PHẨM', node: (r) => r.ten },
-    { label: 'TỒN', node: (r) => <span style={{ color: C.muted2 }}>{Math.round(r.ton).toLocaleString('vi-VN')}</span> },
-    { label: 'ĐÃ BÁN', node: (r) => <span style={{ color: C.muted2 }}>{Math.round(r.ban).toLocaleString('vi-VN')}</span> },
-    { label: 'GIÁ TRỊ TỒN', node: (r) => <span style={{ color: C.gold }}>{fmtMoney(r.value)}</span> },
-    { label: 'TRẠNG THÁI', center: true, node: (r) => <span style={{ color: r.st.c, border: `1px solid ${r.st.c}`, borderRadius: 20, padding: '2px 10px', fontSize: 11, whiteSpace: 'nowrap' }}>{r.st.t}</span> },
-  ]
+  // ── BẢNG ĐIỀU PHỐI: 1 verdict/mã (lãi thật × tồn × trend), gom theo việc cần làm ──
+  const verdicts = useMemo(
+    () => computeVerdicts(products, inv, velocity, velDaily, priceVnd, incoming, backorder),
+    [products, inv, velocity, velDaily, priceVnd, incoming, backorder],
+  )
+  const byGroup = useMemo(() => {
+    const g: Record<VGroup, VerdictRow[]> = { nhap: [], cho: [], suano: [], cat: [] }
+    verdicts.forEach((v) => g[v.group].push(v))
+    return g
+  }, [verdicts])
+  const triage = useMemo(() => ({
+    rotVon: byGroup.nhap.filter((v) => !v.noAction).length,
+    cho: byGroup.cho.length,
+    cat: byGroup.cat.length,
+    suano: byGroup.suano.length,
+    vonNhap: verdicts.reduce((s, v) => s + v.von, 0),
+    eDong: cockpit.eDong,
+    matLeft: hoanMatureDaysLeft(),
+  }), [byGroup, verdicts, cockpit])
+
+  // ── render verdict (dùng cho cả CEO; thẻ đã sẵn dạng card → mobile chạy luôn) ──
+  const toneCol = (t: VerdictRow['tone']) => (t === 'green' ? C.green : t === 'red' ? C.red : t === 'gray' ? C.muted2 : C.amber)
+  const num = (n: number) => Math.round(n).toLocaleString('vi-VN')
+  const chip = (txt: ReactNode, col: string, bg: string) => <span style={{ background: bg, color: col, borderRadius: 6, padding: '1px 7px', fontSize: 11, whiteSpace: 'nowrap' }}>{txt}</span>
+  const trendChip = (v: VerdictRow) => {
+    if (v.trend === 'gay') return chip(`⚠ GÃY −${Math.round(v.drop * 100)}% + biên mỏng`, C.red, '#2a1410')
+    if (v.trend === 'tut') return chip(`↘ −${Math.round(v.drop * 100)}% · 2 ngày liền`, C.amber, '#2a2410')
+    if (v.trend === 'up') return chip(`↗ +${Math.round(-v.drop * 100)}%`, C.green, '#11261a')
+    return null
+  }
+  const structLabel = (v: VerdictRow) => (
+    <span style={{ color: C.muted }} title="lãi nếu bỏ hoàn ra — đo sức khỏe thật của mã">
+      cấu trúc T7 <b style={{ color: v.laiStruct >= 0 ? C.green : C.red }}>{(v.laiStruct >= 0 ? '+' : '') + Math.round(v.laiStruct * 100) + '%'}</b>
+    </span>
+  )
+  const statLine = (v: VerdictRow): ReactNode[] => {
+    const els: ReactNode[] = []
+    if (v.group === 'cho') {
+      els.push(structLabel(v))
+      els.push(<span style={{ color: C.muted }}>hoàn ƯT(T6) <b style={{ color: C.muted2 }}>{fmtPct(v.hoanPct)}</b></span>)
+      els.push(<span style={{ color: C.muted2 }}>→ {v.laiStruct >= 0.05 ? 'bỏ hoàn vẫn lãi → chờ đơn T7 về mới chốt' : 'cấu trúc mỏng · hoàn T7 còn cao là cắt'}{v.spNo > 0 ? ` · lo bù ${num(v.spNo)} đơn nợ trước` : ''}</span>)
+    } else if (v.group === 'cat') {
+      els.push(structLabel(v))
+      els.push(<span style={{ color: C.muted }}>ads <b style={{ color: C.red }}>{fmtPct(v.adsPct)}</b></span>)
+      if (v.chayDat) els.push(chip('🔥 chạy đắt', '#ff8a5e', '#2a1410'))
+      els.push(<span style={{ color: C.muted2 }}>→ {v.kind === 'xa' ? 'thanh lý lấy vốn' : 'tắt ads ngay, ép cọc/chặn tỉnh bom'}</span>)
+    } else if (v.group === 'suano') {
+      if (v.kind === 'no') els.push(<span style={{ color: C.muted2 }}>nợ <b style={{ color: C.red }}>{num(v.spNo)}</b> cái ({num(v.donNo)} đơn) → đặt bù gấp / huỷ đơn</span>)
+      else { els.push(<span style={{ color: C.muted }}>hoàn <b style={{ color: C.amber }}>{fmtPct(v.hoanPct)}</b></span>); els.push(<span style={{ color: C.muted }}>ads <b style={{ color: C.muted2 }}>{fmtPct(v.adsPct)}</b></span>); els.push(<span style={{ color: C.muted2 }}>→ sửa giá/combo/chặn tỉnh trước khi nhập</span>) }
+    } else {
+      els.push(<span style={{ color: C.muted }}>lãi <b style={{ color: v.laiDon >= 0 ? C.green : C.red }}>{fmtMoney(v.laiDon)}/đơn</b></span>)
+      els.push(<span style={{ color: C.muted }}>hoàn <b style={{ color: C.muted2 }}>{fmtPct(v.hoanPct)}</b></span>)
+      const tc = trendChip(v); if (tc) els.push(tc)
+      if (v.kind === 'dangve') els.push(<span style={{ color: C.muted2 }}>đang về {num(v.incQty)}{v.incEta ? ` (${v.incEta.slice(8, 10)}/${v.incEta.slice(5, 7)})` : ''} — vít tiếp</span>)
+      else if (v.kind === 'khoan') els.push(<span style={{ color: C.muted2 }}>nhập lô nhỏ theo tốc độ gần nhất · theo dõi 3-5 ngày</span>)
+      else els.push(<span style={{ color: C.muted2 }}>vít tới <b style={{ color: C.gold }}>~{num(v.tranAds)}/ngày</b>{v.sapDut ? '' : ' · còn dư địa'}</span>)
+    }
+    return els
+  }
+  const vCard = (v: VerdictRow) => {
+    const tc = toneCol(v.tone)
+    const arrow = (v.trend === 'tut' || v.trend === 'gay') ? `${Math.round(v.vel)}→${Math.round(v.v3)}` : (Math.round(v.vel * 10) / 10).toString()
+    return (
+      <div key={v.name} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 12, padding: '11px 13px', marginBottom: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>
+              {v.name}
+              {v.hoanEst && <span title="hoàn đang lấy số tháng trước — chưa chốt" style={{ background: '#23262e', color: C.muted2, borderRadius: 6, padding: '1px 6px', fontSize: 10.5, marginLeft: 5 }}>~ƯT</span>}
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>tồn {num(v.effTon)} · bán {arrow}/ngày · điểm đặt lại {num(v.rop)}</div>
+          </div>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <span style={{ color: tc, border: `1px solid ${tc}`, borderRadius: 20, padding: '2px 9px', fontSize: 11, whiteSpace: 'nowrap' }}>{v.label}</span>
+            {v.nhapQty > 0 && <div style={{ fontSize: 13, color: C.gold, marginTop: 4 }}>nhập {num(v.nhapQty)}{v.von > 0 ? ` · ${fmtMoney(v.von)}` : ''}</div>}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 14, marginTop: 9, fontSize: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          {statLine(v).map((e, i) => <span key={i}>{e}</span>)}
+        </div>
+      </div>
+    )
+  }
+  const groupSection = (title: string, dotCol: string, rows: VerdictRow[], sub?: string) => {
+    if (!rows.length) return null
+    return (
+      <div key={title}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0 9px', flexWrap: 'wrap' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: dotCol }} />
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: dotCol }}>{title}</span>
+          {sub && <span style={{ fontSize: 11, color: C.muted }}>· {sub}</span>}
+        </div>
+        {rows.map(vCard)}
+        <div style={{ height: 10 }} />
+      </div>
+    )
+  }
+
   const provCols: Col<Province>[] = [
     { label: 'TỈNH', node: (p) => p.ten },
     { label: 'DOANH SỐ', node: (p) => <span style={{ color: C.gold }}>{fmtMoney(p.doanhSoRM * TY_GIA)}</span> },
@@ -358,10 +439,6 @@ export default function InventoryBoard() {
         return <span style={{ color: st.c, border: `1px solid ${st.c}`, borderRadius: 20, padding: '2px 10px', fontSize: 11, whiteSpace: 'nowrap' }}>{st.t}</span>
       } },
   ]
-
-  const canXuLy = restock.filter((r) => r.act.includes('NHẬP') || r.act.startsWith('⚠')).length
-  const soNo = restock.filter((r) => r.spNo > 0).length
-  const tongVon = restock.reduce((s, r) => s + r.von, 0)
 
   return (
     <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: 'inherit' }}>
@@ -433,13 +510,33 @@ export default function InventoryBoard() {
           <div style={{ ...panelStyle, textAlign: 'center', color: C.muted, fontSize: 14 }}>● Đang tải dữ liệu kho từ Google Sheet...</div>
         )}
 
-        {/* ĐỀ XUẤT NHẬP HÀNG */}
-        {restock.length > 0 && (
+        {/* BẢNG ĐIỀU PHỐI NHẬP HÀNG — 1 verdict/mã, gom theo việc */}
+        {verdicts.length > 0 && (
           <div style={panelStyle}>
-            <div style={eyebrowStyle}>🧠 ĐỀ XUẤT NHẬP HÀNG · {canXuLy} mã cần xử lý · {soNo} mã đang NỢ HÀNG · {incoming.length} đơn đang về · tổng vốn ~{fmtMoney(tongVon)}</div>
-            <div style={{ fontSize: 12, color: C.muted, margin: '6px 0 10px' }}>Nhập TQ 8 ngày + đệm an toàn 7 ngày · trữ đủ 30 ngày · tốc độ = đơn chốt TB/ngày của 7 ngày gần nhất · đã TRỪ hàng đang về.</div>
-            <RespTable cols={restockCols} data={restock} mobile={isMobile} />
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>🔴 NHẬP GẤP = sắp hết &amp; chưa có đơn về · 📦 Đang về = đơn về KỊP, đừng đặt thêm · ⚠ Nợ hàng = đã chốt đơn nhưng chưa có hàng gửi, phải nhập bù gấp · ⚠ Đứt/Đơn trễ = thúc NCC · Hoàn cao = ĐỪNG nhập. <b style={{ color: C.muted2 }}>CÒN ~NGÀY tính trên tồn THỰC DỤNG = tồn − SP nợ; số NHẬP đã gồm trả nợ &amp; trừ hàng đang về.</b> Giá/cái ưu tiên GIÁ THỰC TẾ (cột E file nhập) → KHO (cột N × tỷ giá); <span style={{ color: C.amber }}>*</span> = ước tính.</div>
+            <div style={eyebrowStyle}>🧭 BẢNG ĐIỀU PHỐI NHẬP HÀNG · {verdicts.length} mã · đề xuất — người chốt</div>
+            <div style={{ fontSize: 12, color: C.muted, margin: '6px 0 12px' }}>Mỗi mã 1 việc gắt nhất, gộp lãi thật × tồn × trend · điểm đặt lại = bán/ngày × 15 (TQ 8 ngày + đệm 7).</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))', gap: 9, marginBottom: 8 }}>
+              {([
+                ['NÊN RÓT VỐN', `${triage.rotVon} mã`, 'winner · nhập', C.green, '#1f3a28'],
+                ['CHỜ SỐ THẬT', `${triage.cho} mã`, 'hoàn ƯT — chưa cắt', C.muted2, '#2a3140'],
+                ['CẮT THẬT', `${triage.cat} mã`, 'cấu trúc âm', C.red, '#3a1820'],
+                ['SỬA / NỢ', `${triage.suano} mã`, 'sửa giá / đặt bù', C.amber, '#3a3414'],
+                ['Ế ĐỌNG', fmtMoney(triage.eDong), 'xả lấy vốn', C.muted2, '#1b2233'],
+              ] as [string, string, string, string, string][]).map(([lbl, val, sub, col, bd], i) => (
+                <div key={i} style={{ background: C.panel2, border: `1px solid ${bd}`, borderRadius: 12, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 11, color: col }}>{lbl}</div>
+                  <div style={{ fontSize: 21, fontWeight: 600, margin: '1px 0' }}>{val}</div>
+                  <div style={{ fontSize: 10.5, color: C.muted }}>{sub}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, marginBottom: 16, lineHeight: 1.5 }}>Đầu tháng phần lớn nằm ở <b style={{ color: C.muted2 }}>CHỜ SỐ THẬT</b> (hoàn còn lấy T6) — chỉ cắt nhóm <b style={{ color: C.red }}>CẮT THẬT</b> (bỏ hoàn ra vẫn lỗ). Vốn cần nhập ~{fmtMoney(triage.vonNhap)}.</div>
+
+            {groupSection('NÊN NHẬP / VÍT — đổ tiền vào đây', C.green, byGroup.nhap.filter((v) => !v.noAction))}
+            {groupSection('CHỜ SỐ THẬT — đừng cắt vội', C.muted2, byGroup.cho, `hoàn T7 đủ chín ~còn ${triage.matLeft} ngày`)}
+            {groupSection('SỬA / NỢ HÀNG', C.amber, byGroup.suano)}
+            {groupSection('CẮT THẬT — tắt ads, xả tồn', C.red, byGroup.cat)}
+            {byGroup.nhap.some((v) => v.noAction) && <div style={{ fontSize: 11, color: C.muted }}>+ {byGroup.nhap.filter((v) => v.noAction).length} mã đủ hàng, ổn — không cần làm gì.</div>}
           </div>
         )}
 
@@ -453,17 +550,7 @@ export default function InventoryBoard() {
           </div>
         )}
 
-        {/* TỒN KHO · CẢNH BÁO */}
-        {invRows.length > 0 && (
-          <div style={panelStyle}>
-            <div style={eyebrowStyle}>▦ TỒN KHO · CẢNH BÁO ({invRows.filter((r) => r.st.t === 'Sắp hết').length} sắp hết · {invRows.filter((r) => r.st.t === 'Ế/đọng').length} ế)</div>
-            <div style={{ height: 10 }} />
-            <RespTable cols={invCols} data={invRows} mobile={isMobile} />
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>🔴 Sắp hết = tồn &lt; 30% lượng bán kỳ này (SP đang chạy, lo đứt hàng) · Ế/đọng = còn tồn nhưng kỳ này không bán được (vốn chôn).</div>
-          </div>
-        )}
-
-        {status === 'live' && !restock.length && !invRows.length && !provinces.length && (
+        {status === 'live' && !verdicts.length && !provinces.length && (
           <div style={{ ...panelStyle, textAlign: 'center', color: C.muted, fontSize: 14 }}>Chưa có dữ liệu hiển thị. Kiểm tra link nguồn ở ⚙ Cấu hình.</div>
         )}
         </>)}

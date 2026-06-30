@@ -8,6 +8,7 @@
 //   products[]:  { name, rmRevenue, cpqc, pctCpqc, pctHoan, c2 }       (TỔNG SẢN PHẨM_TH + hoàn Cách A từ QLHB)
 //   inv[]:       { ten, ton, ban, giaVonRM, giaVonVnd }                (KHO RP_KHO_SL)
 //   velocity:    Record<TÊN_HOA, số đơn/ngày 7 ngày gần nhất>          (SALE Report_Product)
+//   velDaily:    Record<TÊN_HOA, số[] 5 ngày gần nhất cũ→mới>          (SALE — để bắt trend tụt)
 //   incoming[]:  { ma, qty, order, eta }                              (NHẬP HÀNG — đơn CHƯA VỀ)
 //   priceVnd:    Record<MÃ, giá thực tế VNĐ/cái>                       (NHẬP HÀNG — đơn ĐÃ VỀ mới nhất)
 //   backorder[]: { ma, donNo, spNo, ton, tonDuKien }                  (SALE NỢ ĐƠN — Tồn kho dự kiến)
@@ -197,7 +198,7 @@ function parseInventory(wb: XLSX.WorkBook): InvItem[] {
 
 // SALE "Report_Product" → tốc độ bán 7 ngày + tỉ lệ chốt (C2/Data) + upsell (SLSP/C2) theo TỔNG CỘNG
 // Cột TỔNG: B=tên(1) · D=Data lead(3) · E=SL SP(4) · F=C2 đơn chốt(5) · G=%C2(6).
-function parseVelocity(R: string[][]): { velocity: Record<string, number>; saleStats: Record<string, { chot: number; upsell: number }> } {
+function parseVelocity(R: string[][]): { velocity: Record<string, number>; velDaily: Record<string, number[]>; saleStats: Record<string, { chot: number; upsell: number }> } {
   if (R.length < 4) throw new Error('Sheet Report_Product rỗng')
   const hdr = R[0], tot = R[2]
   const dayC2: number[] = []
@@ -205,19 +206,21 @@ function parseVelocity(R: string[][]): { velocity: Record<string, number>; saleS
     if (/^\d{2}\/\d{2}\/\d{4}/.test(String(h).trim())) { const cc = i + 3; if (viNum(tot[cc]) > 0) dayC2.push(cc) }
   })
   const last7 = dayC2.slice(-7)
+  const last5 = dayC2.slice(-5) // chuỗi NGÀY (cũ→mới) để client bắt trend "2 ngày liên tiếp xuống"
   const ndays = last7.length || 1
   const vel: Record<string, number> = {}
+  const velDaily: Record<string, number[]> = {}
   const saleStats: Record<string, { chot: number; upsell: number }> = {}
   for (let r = 3; r < R.length; r++) {
     const name = String(R[r][1] ?? '').trim()
     if (!name || name === 'Product') continue
     const key = name.toUpperCase()
     const sum7 = last7.reduce((s, c) => s + viNum(R[r][c]), 0)
-    if (sum7 > 0) vel[key] = sum7 / ndays
+    if (sum7 > 0) { vel[key] = sum7 / ndays; velDaily[key] = last5.map((c) => viNum(R[r][c])) }
     const data = viNum(R[r][3]), slsp = viNum(R[r][4]), c2 = viNum(R[r][5]) // Data · SL SP · C2 (TỔNG)
     if (data > 0 && c2 > 0) saleStats[key] = { chot: c2 / data, upsell: slsp / c2 }
   }
-  return { velocity: vel, saleStats }
+  return { velocity: vel, velDaily, saleStats }
 }
 
 // NHẬP HÀNG "BÁO GIÁ VÀ THANH TOÁN" → đơn ĐANG VỀ + giá thực tế (cột E) đơn ĐÃ VỀ
@@ -369,10 +372,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (e) { errors.push('Tồn kho: ' + (e as Error).message) }
 
   let velocity: Record<string, number> = {}
+  let velDaily: Record<string, number[]> = {}
   let saleStats: Record<string, { chot: number; upsell: number }> = {}
   try {
     if (saleR.status !== 'fulfilled') throw new Error(saleR.reason?.message || 'lỗi tải file SALE')
-    const sv = parseVelocity(saleR.value); velocity = sv.velocity; saleStats = sv.saleStats
+    const sv = parseVelocity(saleR.value); velocity = sv.velocity; velDaily = sv.velDaily; saleStats = sv.saleStats
   } catch (e) { errors.push('Tốc độ bán: ' + (e as Error).message) }
 
   let incoming: { ma: string; qty: number; order: string; eta: string }[] = []
@@ -394,7 +398,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=120')
 
-  const result = { ok: products.length > 0 || inv.length > 0, products, inv, velocity, saleStats, incoming, priceVnd, backorder, provinces, cashflow, errors }
+  const result = { ok: products.length > 0 || inv.length > 0, products, inv, velocity, velDaily, saleStats, incoming, priceVnd, backorder, provinces, cashflow, errors }
   const isGood = products.length > 0 && inv.length > 0 // QLHB tách riêng nên không tính cashflow vào "đủ"
   if (isGood) {
     await cacheWrite(result as unknown as Record<string, unknown>) // lưu số tốt cho lần sau / máy khác
