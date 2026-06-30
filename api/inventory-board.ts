@@ -287,12 +287,17 @@ function parseGiftCatalog(wb: XLSX.WorkBook): GiftCat[] {
   return items
 }
 
-// 3 file TEAM (sheet "BÁO CÁO SẢN PHẨM": A=team, B=tên SP, D=doanh thu RM). token = tên team
-// war-room. Default T7/2026; client (War Room) dán đè qua body.links.team_* — không hardcode chết.
-const MKT_FILES: { token: string; linkKey: string; id: string }[] = [
-  { token: 'APEX', linkKey: 'team_apex', id: '1BFGlk9lDGqjmpsiG4p813ExdDZL90tVLXqy7izoGKw8' },     // Duy + Khánh
-  { token: 'TITAN', linkKey: 'team_titan', id: '1YEgGsUjiWYHCYv5bpxspoRMhDPe6sUhfRBDrcxrj--I' },   // Tuấn + Anh
-  { token: 'SUMMIT', linkKey: 'team_summit', id: '1A4Mz7aRWM9hYLE9ISqlIyAJoLKY8fjN_XiHtB7czLtQ' }, // Hà + Phy
+// Mỗi team = file TEAM T7 (chính, dán đè qua link) + file CÁ NHÂN THÁNG RỒI của 2 người (legacy
+// = lịch sử) → UNION mã SP, KHÔNG bỏ sót đứa nào. Đầu tháng T7 chưa có số → vẫn ra đủ SP từ lịch
+// sử; T7 vào số là tự cộng thêm. Sheet "BÁO CÁO SẢN PHẨM": B=tên SP, D=doanh thu RM.
+// (PHY tháng rồi chưa có file riêng → SUMMIT = team T7 + HÀ.)
+const MKT_FILES: { token: string; linkKey: string; id: string; legacy: string[] }[] = [
+  { token: 'APEX', linkKey: 'team_apex', id: '1BFGlk9lDGqjmpsiG4p813ExdDZL90tVLXqy7izoGKw8',
+    legacy: ['1LRsxCJ4JVxlN9yBIdAVtndxggfAem9wf58BE2iMdAKM', '1vHiLS3V85wL6rWvnmCOZB8bfR5lu_sw0ZAuy8xUczSA'] }, // DUY + KHÁNH
+  { token: 'TITAN', linkKey: 'team_titan', id: '1YEgGsUjiWYHCYv5bpxspoRMhDPe6sUhfRBDrcxrj--I',
+    legacy: ['1cKMfUPJ67Q6b1TGynqjyCZm5GTupbQ_sNO1J4eDxl9I', '1gUG9JgO0cC-zYkvTePXfcFYIlS2CXzMUL4n0o8mmDbA'] }, // TUẤN + ANH
+  { token: 'SUMMIT', linkKey: 'team_summit', id: '1A4Mz7aRWM9hYLE9ISqlIyAJoLKY8fjN_XiHtB7czLtQ',
+    legacy: ['18c_BtFLdGB7EBaN06rWKJiFLiZogdDNS_O_0xVccV6s'] }, // HÀ
 ]
 // Sheet TỔNG HỢP "BÁO CÁO SẢN PHẨM" (server đọc qua gviz csv): cột B(1) = TÊN SP,
 // cột D(3) = doanh thu RM. Lấy SP có doanh thu > 0. (Verify cả 5 file qua fetch y hệt server.)
@@ -325,9 +330,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // ── Nhánh: SP đầy đủ theo marketer (đọc 5 file riêng) → token → [mã SP] cho 🪄 Tự gán ──
   if (req.body && (req.body as { marketerSp?: boolean }).marketerSp) {
     const teamId = (f: { linkKey: string; id: string }) => { const v = bodyLinks[f.linkKey]; return v ? extractId(v) : f.id }
-    const rs = await Promise.allSettled(MKT_FILES.map((f) => fetchCsv(teamId(f), 'BÁO CÁO SẢN PHẨM')))
+    // Mỗi team đọc [file team + 2 file cá nhân] → UNION. Gom unique id để KHÔNG fetch trùng.
+    const jobs = MKT_FILES.map((f) => ({ token: f.token, ids: [teamId(f), ...f.legacy] }))
+    const allIds = Array.from(new Set(jobs.flatMap((j) => j.ids)))
+    const fetched = await Promise.allSettled(allIds.map((id) => fetchCsv(id, 'BÁO CÁO SẢN PHẨM')))
+    const spById = new Map<string, string[]>()
+    allIds.forEach((id, i) => { const r = fetched[i]; if (r.status === 'fulfilled') spById.set(id, parseMarketerSp(r.value)) })
     const marketerSp: Record<string, string[]> = {}
-    rs.forEach((r, i) => { if (r.status === 'fulfilled') { const sps = parseMarketerSp(r.value); if (sps.length) marketerSp[MKT_FILES[i].token] = sps } })
+    for (const j of jobs) {
+      const set = new Set<string>()
+      for (const id of j.ids) for (const s of spById.get(id) ?? []) set.add(s)
+      if (set.size) marketerSp[j.token] = Array.from(set)
+    }
     return res.status(200).json({ ok: Object.keys(marketerSp).length > 0, marketerSp })
   }
 

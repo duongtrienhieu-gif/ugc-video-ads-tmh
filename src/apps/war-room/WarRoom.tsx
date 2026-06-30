@@ -415,9 +415,9 @@ function NhanSu({ members, isCEO, mktSp, addMember, updateMember, deleteMember }
     <div style={panelStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <div style={eyebrowStyle}>👥 NHÂN SỰ · {members.length} người</div>
-        {isCEO && Object.keys(mktSp).length > 0 && <button onClick={() => void autoAssign()} style={{ background: 'rgba(245,196,81,0.1)', color: C.gold, border: '1px solid #4a4015', borderRadius: 8, padding: '7px 13px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>🪄 Tự gán mã SP từ data</button>}
+        {isCEO && Object.keys(mktSp).length > 0 && <button onClick={() => void autoAssign()} style={{ background: 'rgba(245,196,81,0.1)', color: C.gold, border: '1px solid #4a4015', borderRadius: 8, padding: '7px 13px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>🪄 Quét &amp; cộng dồn SP cho team</button>}
       </div>
-      <div style={{ fontSize: 12, color: C.muted, margin: '4px 0 12px' }}>Mỗi người 1 dòng. <b style={{ color: C.muted2 }}>1 slot chung team 2 người</b> (vd HÀ + PHY) thì điền <b style={{ color: C.muted2 }}>cả 2 ô mail</b> — ai đăng nhập bằng mail nào cũng vào đúng bảng này. Mã SP → bấm 🪄 để app tự điền từ file Ghép quà, hoặc gõ tay.</div>
+      <div style={{ fontSize: 12, color: C.muted, margin: '4px 0 12px' }}>Mỗi team 1 dòng. <b style={{ color: C.muted2 }}>1 slot 2 người</b> (vd HÀ + PHY) thì điền <b style={{ color: C.muted2 }}>cả 2 ô mail</b> — ai đăng nhập bằng mail nào cũng vào đúng bảng. Mã SP → bấm <b style={{ color: C.gold }}>🪄 Quét &amp; cộng dồn</b>: app gộp SP của <b style={{ color: C.muted2 }}>cả 2 người</b> (file team T7 + lịch sử tháng rồi), không bỏ sót; hoặc gõ tay.</div>
       {members.map((m) => (
         <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 0', borderTop: `1px solid ${C.line2}`, flexWrap: 'wrap' }}>
           <input key={m.id} defaultValue={m.name} placeholder="Tên (KHÁNH / HÀ + PHY...)"
