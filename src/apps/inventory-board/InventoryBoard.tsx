@@ -383,7 +383,7 @@ export default function InventoryBoard() {
   const toneCol = (t: VerdictRow['tone']) => (t === 'green' ? C.green : t === 'red' ? C.red : t === 'gray' ? C.muted2 : C.amber)
   const num = (n: number) => Math.round(n).toLocaleString('vi-VN')
   const signPct = (n: number) => (n >= 0 ? '+' : '') + Math.round(n * 100) + '%'
-  const coverTxt = (c: number) => (c <= 0 ? 'đứt' : c >= 999 ? '∞' : Math.round(c) + ' ngày')
+  const coverTxt = (c: number) => (c <= 0 ? 'gãy hàng' : c >= 999 ? '∞' : Math.round(c) + ' ngày')
   const STRUCT_TIP = 'lãi nếu bỏ hoàn ra — đo sức khỏe thật của mã'
   const stat = (label: string, val: string, valCol: string, sub?: string, titleAttr?: string) => (
     <div style={{ minWidth: 62 }}>
@@ -425,10 +425,14 @@ export default function InventoryBoard() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(72px, 1fr))', gap: 10 }}>
           {stat('TỒN', tonShow, stockCol, v.spNo > 0 ? `nợ ${num(v.spNo)}` : (v.ton < 0 ? 'âm kho' : 'cái'))}
           {stat('ĐANG BÁN', (Math.round(v.vel * 10) / 10) + '/ngày', C.muted2, tSub)}
-          {stat('CÒN', coverTxt(v.cover), coverCol, 'đặt lại ' + num(v.rop))}
+          {stat('CÒN', coverTxt(v.cover), coverCol, 'đặt thêm khi tồn còn ' + num(v.rop))}
           {s4}
         </div>
-        <div style={{ fontSize: 11.5, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>{noteOf(v)}</div>
+        <div style={{ display: 'flex', gap: 18, marginTop: 10, fontSize: 12, flexWrap: 'wrap' }}>
+          <span style={{ color: C.muted }}>DOANH THU <b style={{ color: C.text }}>{fmtMoney(v.doanhThu)}</b></span>
+          <span style={{ color: C.muted }}>CPQC <b style={{ color: C.amber }}>{fmtMoney(v.cpqc)}</b></span>
+        </div>
+        <div style={{ fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>{noteOf(v)}</div>
       </div>
     )
   }
@@ -461,12 +465,15 @@ export default function InventoryBoard() {
   const vCardMini = (v: VerdictRow) => {
     const tc = toneCol(v.tone)
     return (
-      <div key={v.name} style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between', background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '9px 12px', marginBottom: 7, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
-          <span style={{ color: tc, border: `1px solid ${tc}`, borderRadius: 20, padding: '2px 8px', fontSize: 10.5, whiteSpace: 'nowrap' }}>{v.label}</span>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>{v.name}{v.hoanEst ? ' ~ƯT' : ''}</span>
+      <div key={v.name} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '9px 12px', marginBottom: 7 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+            <span style={{ color: tc, border: `1px solid ${tc}`, borderRadius: 20, padding: '2px 8px', fontSize: 10.5, whiteSpace: 'nowrap' }}>{v.label}</span>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>{v.name}{v.hoanEst ? ' ~ƯT' : ''}</span>
+          </div>
+          <span style={{ fontSize: 11.5, color: C.muted2, whiteSpace: 'nowrap' }}>{miniFact(v)}</span>
         </div>
-        <span style={{ fontSize: 11.5, color: C.muted2, whiteSpace: 'nowrap' }}>{miniFact(v)}</span>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>DT <b style={{ color: C.muted2 }}>{fmtMoney(v.doanhThu)}</b> · CPQC <b style={{ color: C.amber }}>{fmtMoney(v.cpqc)}</b></div>
       </div>
     )
   }

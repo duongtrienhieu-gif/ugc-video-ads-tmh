@@ -14,7 +14,7 @@ const C = {
 const TR = 1_000_000
 const panelStyle: React.CSSProperties = { background: C.panel, border: `1px solid ${C.line}`, borderRadius: 14, padding: '16px 20px', marginBottom: 14 }
 const eyebrowStyle: React.CSSProperties = { fontSize: 13, fontWeight: 700, letterSpacing: 0.3, color: C.gold, marginBottom: 10 }
-const fmtTr = (n: number) => (n / TR).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + 'tr'
+const fmtTr = (n: number) => Math.round(n).toLocaleString('vi-VN') + 'đ' // FULL từng đồng (vd 21.654.564đ)
 const fmtPct = (n: number) => (n * 100).toFixed(1) + '%'
 const heColor = (c: number) => (c <= 0.34 ? C.green : c <= 0.38 ? C.muted2 : C.red)
 
@@ -79,7 +79,7 @@ export default function SalaryTab({ members, teamFin, isCEO, myMember }: {
               <span style={{ fontWeight: 600, fontSize: 16 }}>{r.name}</span>
               <span style={{ fontSize: 11, color: C.green, background: 'rgba(74,222,128,0.1)', padding: '2px 8px', borderRadius: 6 }}>✓ số thật từ sheet</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(118px,1fr))', gap: 10, marginBottom: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(168px,1fr))', gap: 10, marginBottom: 12 }}>
               {[
                 { l: 'Doanh thu', v: fmtTr(f.dt), c: C.text },
                 { l: 'DT sau hoàn', v: fmtTr(f.dtSauHoan), c: C.text },
@@ -89,7 +89,7 @@ export default function SalaryTab({ members, teamFin, isCEO, myMember }: {
               ].map((k) => (
                 <div key={k.l} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '11px 13px' }}>
                   <div style={{ fontSize: 10.5, letterSpacing: 0.5, color: C.muted, marginBottom: 5 }}>{k.l}</div>
-                  <div style={{ fontSize: k.big ? 21 : 17, fontWeight: 700, color: k.c }}>{k.v}</div>
+                  <div style={{ fontSize: k.big ? 17 : 15, fontWeight: 700, color: k.c, whiteSpace: 'nowrap' }}>{k.v}</div>
                   {k.sub && <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{k.sub}</div>}
                 </div>
               ))}

@@ -28,6 +28,7 @@ export interface VerdictRow {
   laiDon: number; laiPct: number; laiStruct: number
   hoanPct: number; hoanEst: boolean
   adsPct: number; cpqcTarget: number
+  doanhThu: number; cpqc: number // VNĐ chính xác (DT = rmRevenue×5800 · CPQC tuyệt đối)
   // tồn / nhịp
   ton: number; effTon: number; spNo: number; donNo: number
   vel: number; v3: number; cover: number; rop: number; sapDut: boolean
@@ -150,6 +151,7 @@ export function computeVerdicts(
       name: pr.name, kind, group, tone, label, noAction,
       laiDon: pr.laiDon, laiPct: lai, laiStruct, hoanPct: pr.hoanPct, hoanEst: pr.hoanEstimated,
       adsPct: pr.adsPct, cpqcTarget: pr.cpqcTarget,
+      doanhThu: (p?.rmRevenue ?? 0) * TY_GIA, cpqc: p?.cpqc ?? 0,
       ton, effTon, spNo, donNo, vel, v3: tr.v3, cover, rop, sapDut, trend: tr.state, drop: tr.drop, chayDat,
       nhapQty, von, giaUnit, giaReal, tranAds, incQty, incEta, incLate,
     })
