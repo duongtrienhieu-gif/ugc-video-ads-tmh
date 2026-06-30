@@ -57,7 +57,7 @@ export default function ProfitSim({ products, inv, velocity, priceVnd }: {
           { l: 'Lãi thật / đơn', v: fmtMoney(simLaiDon), c: simLaiDon < 0 ? C.red : C.green },
           { l: '% Lợi nhuận', v: fmtPct(simLaiPct), c: simLaiPct < 0 ? C.red : C.green },
           { l: '%CPQC ngưỡng (đạt mục tiêu)', v: fmtPct(Math.max(0, sel.cpqcTarget)), c: C.gold },
-          { l: 'CPA / data (trên camp)', v: selChot > 0 ? fmtPlain(cpaData) : '—', c: C.gold },
+          { l: 'CPA / data chia sale (trừ số trùng)', v: selChot > 0 ? fmtPlain(cpaData) : '—', c: C.gold },
           { l: 'Trạng thái', v: simSt.t, c: simSt.c },
         ].map((k) => (
           <div key={k.l} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '11px 13px', minWidth: 0 }}>
@@ -69,7 +69,7 @@ export default function ProfitSim({ products, inv, velocity, priceVnd }: {
       <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>
         {sel.hoanPct === 0 && <span style={{ color: C.red, fontWeight: 600 }}>⚠ %hoàn = 0 (QLHB chưa tải / file tháng mới chưa có số) → lãi đang ẢO, ĐỪNG tin tới khi có %hoàn. </span>}
         Giá vốn / %hoàn ({fmtPct(sel.hoanPct)}) / AOV ({fmtPlain(sel.aov)}/đơn) lấy từ số THẬT của mã; chỉ kéo %CPQC để thấy lãi/đơn đổi. Hạ %CPQC xuống dưới ngưỡng {fmtPct(Math.max(0, sel.cpqcTarget))} là đạt lãi mục tiêu {fmtPct(LN_TARGET)}.
-        {' '}<b style={{ color: C.muted2 }}>CPA / data (trên camp)</b> = %CPQC × AOV × tỉ lệ chốt{selChot > 0 ? ` (${fmtPct(selChot)})` : ''} — chi phí mỗi data trên camp (chưa × chốt ra đơn), {selChot > 0 ? 'tỉ lệ chốt lấy từ số thật của mã.' : 'mã này chưa có tỉ lệ chốt nên hiện "—".'}
+        {' '}<b style={{ color: C.muted2 }}>CPA / data chia sale (trừ số trùng)</b> = %CPQC × AOV × tỉ lệ chốt{selChot > 0 ? ` (${fmtPct(selChot)})` : ''} = chi phí ÷ data sale thực nhận (đã trừ trùng) — khớp cột CPQC/CNT trong file báo cáo. <b style={{ color: C.amber }}>Chạy ads thật nên ghìm CPA rẻ hơn ~10% số này</b> cho chắc lãi.
       </div>
     </div>
   )
