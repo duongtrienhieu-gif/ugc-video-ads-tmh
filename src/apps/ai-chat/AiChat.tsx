@@ -128,6 +128,19 @@ export default function AiChat() {
     }
   }
 
+  // Dán ảnh (Ctrl+V) thẳng vào khung chat — lấy ảnh từ clipboard rồi đi đúng luồng onFiles.
+  const onPaste = (e: React.ClipboardEvent) => {
+    const imgs = Array.from(e.clipboardData?.items ?? [])
+      .filter((it) => it.kind === 'file')
+      .map((it) => it.getAsFile())
+      .filter((f): f is File => !!f && f.type.startsWith('image/'))
+    if (!imgs.length) return   // không có ảnh → để dán văn bản bình thường
+    e.preventDefault()
+    const dt = new DataTransfer()
+    for (const f of imgs) dt.items.add(f)
+    onFiles(dt.files)
+  }
+
   const newChat = () => { setActiveId(crypto.randomUUID()); setMessages([]); setInput(''); setPending([]); setHistoryOpen(false) }
 
   const send = async () => {
@@ -269,6 +282,7 @@ export default function AiChat() {
             <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={(e) => { onFiles(e.target.files); e.target.value = '' }} />
             <textarea
               value={input} onChange={(e) => setInput(e.target.value)} rows={1}
+              onPaste={onPaste}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }}
               placeholder={imageMode ? 'Mô tả ảnh muốn tạo…' : 'Hỏi bất cứ điều gì…'}
               className="max-h-32 min-h-[36px] flex-1 resize-none bg-transparent px-1 py-2 text-sm text-app-text outline-none placeholder:text-app-faint"
