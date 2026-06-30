@@ -138,7 +138,7 @@ export default function MktAgent() {
               className="mt-1 w-24 bg-zinc-950 border border-zinc-700 rounded-md px-3 py-2 text-zinc-100 text-sm" />
           </label>
           <button onClick={scan} disabled={scanning || classifying}
-            className="h-[42px] px-5 rounded-md font-medium bg-amber-500 text-zinc-950 hover:bg-amber-400 disabled:bg-amber-500 disabled:cursor-wait">
+            className="h-[42px] px-5 rounded-md font-semibold bg-amber-400 text-zinc-950 hover:bg-amber-300 shadow-lg shadow-amber-400/40 disabled:opacity-60 disabled:cursor-wait">
             {scanning ? 'Đang quét…' : classifying ? 'Đang lọc…' : '⚡ Quét MY'}
           </button>
         </div>
@@ -237,12 +237,12 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp }: {
               className="text-[10px] text-zinc-500 hover:text-zinc-300 underline" title="Google Lens — soi branding/1688 bằng mắt (tùy chọn)">🔍 kiểm tay</a>
           </div>
           {busy ? (
-            <div className="h-9 rounded-md text-[12px] bg-zinc-900 text-amber-300 grid place-items-center animate-pulse">
+            <div className="h-10 rounded-md text-[12px] bg-amber-500/10 border border-amber-400/40 text-amber-200 grid place-items-center animate-pulse">
               {p.diving ? '⏳ Đang soi sâu (video · ads · 1688)…' : '⏳ Đang đào spy đối thủ…'}
             </div>
           ) : (
             <button onClick={onAnalyze} disabled={!hasKey}
-              className="h-10 rounded-md text-[13px] font-medium bg-amber-500 text-zinc-950 hover:bg-amber-400 disabled:opacity-50">
+              className="h-10 rounded-md text-[13px] font-semibold bg-amber-400 text-zinc-950 hover:bg-amber-300 shadow-lg shadow-amber-400/40 disabled:opacity-40 disabled:shadow-none">
               🔬 Phân tích SP này
             </button>
           )}
@@ -272,7 +272,7 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp }: {
 
           {/* SPY đối thủ — payload để quyết định */}
           {p.filtering ? (
-            <div className="h-9 rounded-md text-[12px] bg-zinc-900 text-amber-300 grid place-items-center animate-pulse">⏳ Đang đào spy đối thủ…</div>
+            <div className="h-10 rounded-md text-[12px] bg-amber-500/10 border border-amber-400/40 text-amber-200 grid place-items-center animate-pulse">⏳ Đang đào spy đối thủ…</div>
           ) : d!.exactChecked ? (
             <div>
               <p className={`text-[12px] font-medium ${(d!.exactCount ?? 0) >= 5 ? 'text-emerald-300' : 'text-amber-300'}`}>
