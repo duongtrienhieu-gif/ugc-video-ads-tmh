@@ -10,7 +10,7 @@ export async function judgeSp(apiKey: string, c: SpCandidate): Promise<JudgeResu
   const profile = [
     `Tên: ${c.title}`,
     `Ngách: ${c.niche ?? '—'}`,
-    `Loại: ${c.isBranded === false ? 'generic (clone được)' : c.isBranded === true ? 'BRANDED (không clone)' : 'chưa rõ'}`,
+    `Loại: ${c.tier === 'generic' ? 'generic (clone tự do)' : c.tier === 'oem' ? 'nhãn xưởng (nhập sẵn 1688)' : c.tier === 'brand' ? 'BRAND BẢO HỘ (không bán được)' : 'chưa rõ'}`,
     `Số bán: ${c.sale} · Giá: ${c.price ? 'RM' + c.price : '—'} · Rating: ${c.rating ?? '—'}`,
     `Ship: ${c.shipFrom ?? '—'}`,
     d ? `Video TikTok: ${d.videoCount} (view cao nhất ${d.maxViews})` : 'Chưa Soi sâu video',

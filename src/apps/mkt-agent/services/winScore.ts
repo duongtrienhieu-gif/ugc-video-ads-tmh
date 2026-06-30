@@ -14,12 +14,16 @@ export interface WinScore {
 const CNY_TO_RM = 0.65 // 1元 ≈ 0.65 RM (thô — chỉ để ước biên lời)
 
 export function computeWinScore(c: SpCandidate): WinScore {
-  if (c.isBranded === true) {
-    return { score: 0, tier: 'reject', risks: ['Branded — không clone-test được'], full: false }
+  if (c.tier === 'brand') {
+    return { score: 0, tier: 'reject', risks: ['Brand bảo hộ — bán lậu bị gỡ/ban'], full: false }
   }
   const risks: string[] = []
   const d = c.deep
   let score = 0
+
+  // Nhãn xưởng = nhập được nhưng cần xác nhận 1688. Biến thể cao = sai số/hoàn.
+  if (c.tier === 'oem') risks.push('Nhãn xưởng — xác nhận 1688 nhập được')
+  if (c.variantRisk === 'high') risks.push('Nhiều biến thể (thời trang/giày) — sai số + hoàn cao')
 
   // Cầu — số bán (0-28)
   score += c.sale >= 100000 ? 28 : c.sale >= 50000 ? 22 : c.sale >= 10000 ? 15 : c.sale >= 3000 ? 8 : 3

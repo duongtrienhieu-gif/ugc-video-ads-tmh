@@ -65,7 +65,7 @@ export default function MktAgent() {
   // Dò video bán SP cho top-N (theo số bán) chưa dò → xếp SP-có-video lên đầu.
   const runVideoRank = async (list: SpCandidate[], depth: number) => {
     const targets = list
-      .filter((c) => c.isBranded !== true && !c.vids && !c.videoChecking)
+      .filter((c) => c.tier !== 'brand' && !c.vids && !c.videoChecking)
       .sort((a, b) => b.sale - a.sale)
       .slice(0, depth)
     if (!targets.length) return
@@ -139,12 +139,13 @@ export default function MktAgent() {
     }
   }
 
-  const genericCount = candidates.filter((c) => c.isBranded === false).length
-  const brandedCount = candidates.filter((c) => c.isBranded === true).length
+  const genericCount = candidates.filter((c) => c.tier === 'generic').length
+  const oemCount = candidates.filter((c) => c.tier === 'oem').length
+  const brandCount = candidates.filter((c) => c.tier === 'brand').length
   const withVideoCount = candidates.filter((c) => (c.vids?.count ?? 0) > 0).length
   const checkedCount = candidates.filter((c) => c.vids).length
 
-  let shown = onlyGeneric ? candidates.filter((c) => c.isBranded !== true) : candidates
+  let shown = onlyGeneric ? candidates.filter((c) => c.tier !== 'brand') : candidates
   if (onlyWithVideo) shown = shown.filter((c) => (c.vids?.count ?? 0) > 0)
   // Xếp: SP có video lên đầu → max view → số bán.
   shown = [...shown].sort((a, b) => {
@@ -214,7 +215,7 @@ export default function MktAgent() {
             <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
               <p className="text-[12px] text-zinc-500">
                 {candidates.length} SP · <span className="text-emerald-400">🎥 {withVideoCount} có video</span>
-                {' · '}{classifying ? 'đang lọc branded…' : <><span className="text-emerald-400">{genericCount} generic</span> · <span className="text-rose-400">{brandedCount} branded</span></>}
+                {' · '}{classifying ? 'đang lọc…' : <><span className="text-emerald-400">{genericCount} generic</span> · <span className="text-amber-300">{oemCount} nhãn-xưởng</span> · <span className="text-rose-400">{brandCount} bảo hộ</span></>}
                 {vidScanning && <span className="text-amber-300 animate-pulse"> · đang dò video…</span>}
               </p>
               <div className="flex items-center gap-2.5 flex-wrap">
@@ -224,7 +225,7 @@ export default function MktAgent() {
                 </label>
                 <label className="flex items-center gap-1.5 text-[12px] text-zinc-300 cursor-pointer">
                   <input type="checkbox" checked={onlyGeneric} onChange={(e) => setOnlyGeneric(e.target.checked)} />
-                  Ẩn branded
+                  Ẩn brand bảo hộ
                 </label>
                 {checkedCount < candidates.length && (
                   <button onClick={() => runVideoRank(candidates, videoDepth)} disabled={vidScanning}
@@ -291,7 +292,7 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay }: {
   onSendToApp: (a: { targetApp: string; targetField: string; data: unknown }) => void
   onPlay: (v: VidItem) => void
 }) {
-  const branded = p.isBranded === true
+  const branded = p.tier === 'brand'
   const win = computeWinScore(p)
   const ship = shipHint(p.shipFrom)
   const d = p.deep
@@ -325,6 +326,12 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay }: {
         <span>{p.price > 0 ? `RM${fmt(p.price)}` : 'giá —'}{p.revenue > 0 ? ` · DT RM${fmt(p.revenue)}` : ''}</span>
       </div>
       {ship && <div className={`text-[11px] ${ship.cls}`}>{ship.label}</div>}
+      {(p.tier === 'oem' || p.variantRisk === 'high') && (
+        <div className="flex flex-wrap gap-1">
+          {p.tier === 'oem' && <span className="text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0.5">🏭 nhãn xưởng · nhập sẵn</span>}
+          {p.variantRisk === 'high' && <span className="text-[10px] text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded px-1.5 py-0.5">⚠ nhiều biến thể</span>}
+        </div>
+      )}
 
       {/* 🎥 VIDEO REEL — rip-ready (ưu tiên #1) */}
       {p.videoChecking ? (
@@ -373,7 +380,7 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay }: {
       ) : null}
 
       {branded ? (
-        <span className={`px-2 py-0.5 rounded border text-[11px] self-start ${TONE.rose}`}>🔴 BRANDED · bỏ (không clone được)</span>
+        <span className={`px-2 py-0.5 rounded border text-[11px] self-start ${TONE.rose}`}>🔴 BRAND BẢO HỘ · bỏ (bán lậu bị gỡ){p.brand ? ` · ${p.brand}` : ''}</span>
       ) : !hasDeep ? (
         // Triage — WIN sơ bộ + nút Phân tích sâu (tùy chọn)
         <>
