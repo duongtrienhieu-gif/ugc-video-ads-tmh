@@ -49,7 +49,7 @@ export default function SalaryTab({ members, stats, isCEO, myMember }: {
       <div style={panelStyle}>
         <div style={eyebrowStyle}>💰 LƯƠNG {isCEO ? '· TẤT CẢ TEAM' : '· TEAM CỦA TÔI'}</div>
         <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
-          Lương/người = <b style={{ color: C.muted2 }}>Cứng</b> (theo DT team sau hoàn) + <b style={{ color: C.muted2 }}>Thưởng net ÷2 × Hệ số CPQC</b>. Net âm → sàn 8tr. Số tự lên từ data thật của team.
+          Lương/người = <b style={{ color: C.muted2 }}>Cứng</b> (theo DT team sau hoàn) + <b style={{ color: C.muted2 }}>( Thưởng net /2 ) × Hệ số CPQC</b>. Net âm → sàn 8tr. Số tự lên từ data thật của team.
         </div>
       </div>
 
@@ -61,14 +61,32 @@ export default function SalaryTab({ members, stats, isCEO, myMember }: {
         const loss = r.net < 0
         return (
           <div key={r.id} style={panelStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-              <span style={{ fontWeight: 600, fontSize: 15 }}>{r.name}</span>
-              <span style={{ fontSize: 12, color: C.muted2 }}>DT sau hoàn {fmtTr(r.dtSauHoan)} · net {fmtTr(r.net)} · CPQC <b style={{ color: heColor(r.cpqc) }}>{fmtPct(r.cpqc)}</b></span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+              <span style={{ fontWeight: 600, fontSize: 16 }}>{r.name}</span>
+              <span style={{ fontSize: 11, color: C.amber, background: 'rgba(251,191,36,0.1)', padding: '2px 8px', borderRadius: 6 }}>≈ ước tính engine · số chốt theo sheet kế toán</span>
             </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(118px,1fr))', gap: 10, marginBottom: 12 }}>
+              {[
+                { l: 'Doanh thu', v: fmtTr(r.dt), c: C.text },
+                { l: 'DT sau hoàn', v: fmtTr(r.dtSauHoan), c: C.text },
+                { l: 'Tiền ads', v: fmtTr(r.dt * r.cpqc), c: heColor(r.cpqc), sub: 'CPQC ' + fmtPct(r.cpqc) },
+                { l: '% Hoàn', v: fmtPct(r.hoan), c: r.hoan > 0.4 ? C.red : r.hoan > 0.3 ? C.amber : C.muted2 },
+                { l: 'NET (lợi nhuận)', v: fmtTr(r.net), c: r.net < 0 ? C.red : C.green, big: true },
+              ].map((k) => (
+                <div key={k.l} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '11px 13px' }}>
+                  <div style={{ fontSize: 10.5, letterSpacing: 0.5, color: C.muted, marginBottom: 5 }}>{k.l}</div>
+                  <div style={{ fontSize: k.big ? 21 : 17, fontWeight: 700, color: k.c }}>{k.v}</div>
+                  {k.sub && <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{k.sub}</div>}
+                </div>
+              ))}
+            </div>
+            {r.net > 0 && r.dtSauHoan > 0 && r.net / r.dtSauHoan > 0.08 && (
+              <div style={{ fontSize: 11.5, color: C.amber, marginBottom: 8 }}>⚠ Biên {fmtPct(r.net / r.dtSauHoan)} cao bất thường (COD biên mỏng) — engine có thể ước giá vốn/hoàn thấp. Đối chiếu lợi nhuận thật ở sheet.</div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 10 }}>
               {[
                 { l: '① Cứng / người', v: fmtTr(L.cung) },
-                { l: '② Thưởng / người', v: loss ? '0' : fmtTr(L.thuongNguoi), sub: loss ? 'net âm' : `pool ${fmtTr(L.pool)}÷2 ${L.heLabel}` },
+                { l: '② Thưởng / người', v: loss ? '0' : fmtTr(L.thuongNguoi), sub: loss ? 'net âm' : `pool ${fmtTr(L.pool)} /2 ${L.heLabel}` },
                 { l: '→ LƯƠNG / người', v: fmtTr(L.luongNguoi), gold: true },
               ].map((k) => (
                 <div key={k.l} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px' }}>
