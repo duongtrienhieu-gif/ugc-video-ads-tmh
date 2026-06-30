@@ -1,12 +1,11 @@
-// ── MKT Agent · Dò video bán SP (lite, rip-ready) — TikTok + FB ──────────────
+// ── MKT Agent · Dò video bán SP (lite, rip-ready) — TikTok ───────────────────
 // CHỐNG DRIFT: search bằng coreTerms(TÊN SP) — KHÔNG phải niche (niche → mọi SP
-// cùng ngách ra cùng video). Giống app Research. Lấy CẢ 2 nguồn:
-//   • TikTok (research-videos): video bán SP, có downloadUrl no-watermark → tải rip.
-//   • FB Ad Library (fb-ads): ad đối thủ đang chạy (mở link xem). RẺ ~2 call/SP.
+// cùng ngách ra cùng video). Giống app Research (có chấm điểm liên quan brand-
+// token nên lọc drift). FB KHÔNG dò ở đây: keyword FB không biết đúng SP → 90%
+// rác; FB chuẩn = SO ẢNH (matchSpy) chạy ở "Phân tích sâu" cho SP đã chốt.
 import type { SpCandidate, VideoCheck, VidItem } from '../store'
 
-// Bỏ bracket + từ marketing + đơn vị → token đặc trưng (token[0] ~ brand). Copy
-// nguyên logic coreTerms của app Research để khớp video ĐÚNG SP, không drift.
+// Bỏ bracket + từ marketing + đơn vị → token đặc trưng. Copy coreTerms từ Research.
 const TERM_STOP = new Set([
   'new', 'promo', 'sale', 'hot', 'big', 'free', 'buy', 'beli', 'murah', 'viral', 'original', 'ori', 'ready', 'stock',
   'pek', 'pcs', 'pc', 'pack', 'set', 'box', 'botol', 'bottle', 'tablet', 'tablets', 'kapsul', 'capsule', 'gummies', 'sachet',
@@ -29,8 +28,6 @@ function coreTerms(title: string): string[] {
   return out
 }
 
-interface FbAd { id?: string; page?: string; cover?: string; videoUrl?: string; daysRunning?: number }
-
 export async function checkProductVideos(c: SpCandidate): Promise<VideoCheck> {
   const terms = coreTerms(c.title)
   // q = token tên SP (đặc trưng) — fallback: tên đã gỡ ngoặc, 8 từ đầu.
@@ -40,7 +37,6 @@ export async function checkProductVideos(c: SpCandidate): Promise<VideoCheck> {
     : (c.title.replace(/[【[(][^】\])]*[】\])]/g, ' ').split(/[|\-–—]/)[0] || c.title).trim().split(/\s+/).filter(Boolean).slice(0, 8).join(' ')
   const termsParam = terms.join(',')
 
-  // TikTok — video bán SP (rip-ready)
   const tk: VidItem[] = []
   try {
     const r = await fetch(`/api/research-videos?market=MY&q=${encodeURIComponent(q)}&minSec=15&maxSec=90${termsParam ? `&terms=${encodeURIComponent(termsParam)}` : ''}`)
@@ -48,29 +44,9 @@ export async function checkProductVideos(c: SpCandidate): Promise<VideoCheck> {
       const j = (await r.json()) as { videos?: VidItem[] }
       for (const v of j.videos ?? []) tk.push({ ...v, platform: 'tiktok' })
     }
-  } catch { /* TikTok lỗi → bỏ qua, vẫn còn FB */ }
+  } catch { /* lỗi → trả rỗng, không vỡ */ }
   tk.sort((a, b) => (Number(b.views) || 0) - (Number(a.views) || 0))
 
-  // FB Ad Library — ad đối thủ đang chạy (mở link)
-  const fb: VidItem[] = []
-  try {
-    const r = await fetch(`/api/fb-ads?q=${encodeURIComponent(terms.slice(0, 2).join(' ') || q)}&country=MY&status=ACTIVE`)
-    if (r.ok) {
-      const j = (await r.json()) as { ads?: FbAd[] }
-      for (const a of j.ads ?? []) {
-        if (!a.videoUrl || !a.cover) continue
-        fb.push({
-          id: 'fb_' + String(a.id ?? Math.random()), platform: 'fb',
-          cover: String(a.cover), downloadUrl: '', url: String(a.videoUrl),
-          views: 0, desc: String(a.page ?? ''), author: String(a.page ?? ''), durationSec: 0, days: Number(a.daysRunning) || 0,
-        })
-      }
-    }
-  } catch { /* FB lỗi → bỏ qua */ }
-  fb.sort((a, b) => (b.days ?? 0) - (a.days ?? 0))
-
   const maxViews = tk.reduce((m, v) => Math.max(m, Number(v.views) || 0), 0)
-  // TikTok trước (rip-ready) rồi FB (intel) — cap mỗi nguồn.
-  const list = [...tk.slice(0, 10), ...fb.slice(0, 6)]
-  return { count: list.length, maxViews, list }
+  return { count: tk.length, maxViews, list: tk.slice(0, 12) }
 }

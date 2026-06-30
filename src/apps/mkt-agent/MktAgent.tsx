@@ -412,6 +412,23 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay }: {
             {d!.on1688 && d!.link1688 && <a href={d!.link1688} target="_blank" rel="noopener noreferrer" className="text-[10px] text-sky-400 underline">xem nguồn 1688 →</a>}
           </div>
 
+          {/* FB ad ĐÚNG SP — so ảnh vision (reliable, không drift như keyword) */}
+          {d!.exactChecked && ((d!.exactAds?.length ?? 0) > 0 ? (
+            <div className="rounded-md border border-sky-500/30 bg-sky-500/5 p-2">
+              <p className="text-[11px] font-semibold text-sky-300">📣 {d!.exactCount} ad FB ĐÚNG SP <span className="font-normal text-sky-400/80">(đã so ảnh ≥75)</span></p>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {d!.exactAds!.slice(0, 8).map((a) => (
+                  <a key={a.id} href={a.videoUrl} target="_blank" rel="noopener noreferrer" title={`FB · chạy ${a.days}d — mở`}
+                    className="block w-10 h-10 rounded overflow-hidden border border-sky-500/40 bg-zinc-800 hover:border-sky-400">
+                    {a.cover ? <img src={a.cover} alt="" className="w-full h-full object-cover" loading="lazy" /> : <span className="grid place-items-center w-full h-full text-[8px]">▶</span>}
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-[11px] text-zinc-500">📣 0 ad FB đúng SP (so ảnh) — đối thủ FB ít/không có</p>
+          ))}
+
           {!busy && (
             <div className="flex flex-wrap gap-1.5 pt-0.5 border-t border-zinc-800 mt-0.5">
               <button onClick={onPick}
