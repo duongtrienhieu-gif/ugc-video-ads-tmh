@@ -142,6 +142,7 @@ export default function InventoryBoard() {
   })
   const [teamSp, setTeamSp] = useState<Record<string, string[]>>({})
   const [teamLoading, setTeamLoading] = useState(false)
+  const [showCho, setShowCho] = useState(false) // nhóm CHỜ (do-nothing) gập mặc định cho gọn
   const [sources, setSources] = useState<Record<string, string>>({})
   const [showCfg, setShowCfg] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -379,63 +380,53 @@ export default function InventoryBoard() {
   // ── render verdict (dùng cho cả CEO; thẻ đã sẵn dạng card → mobile chạy luôn) ──
   const toneCol = (t: VerdictRow['tone']) => (t === 'green' ? C.green : t === 'red' ? C.red : t === 'gray' ? C.muted2 : C.amber)
   const num = (n: number) => Math.round(n).toLocaleString('vi-VN')
-  const chip = (txt: ReactNode, col: string, bg: string) => <span style={{ background: bg, color: col, borderRadius: 6, padding: '1px 7px', fontSize: 11, whiteSpace: 'nowrap' }}>{txt}</span>
-  const trendChip = (v: VerdictRow) => {
-    if (v.trend === 'gay') return chip(`⚠ GÃY −${Math.round(v.drop * 100)}% + biên mỏng`, C.red, '#2a1410')
-    if (v.trend === 'tut') return chip(`↘ −${Math.round(v.drop * 100)}% · 2 ngày liền`, C.amber, '#2a2410')
-    if (v.trend === 'up') return chip(`↗ +${Math.round(-v.drop * 100)}%`, C.green, '#11261a')
-    return null
-  }
-  const structLabel = (v: VerdictRow) => (
-    <span style={{ color: C.muted }} title="lãi nếu bỏ hoàn ra — đo sức khỏe thật của mã">
-      cấu trúc T7 <b style={{ color: v.laiStruct >= 0 ? C.green : C.red }}>{(v.laiStruct >= 0 ? '+' : '') + Math.round(v.laiStruct * 100) + '%'}</b>
-    </span>
+  const signPct = (n: number) => (n >= 0 ? '+' : '') + Math.round(n * 100) + '%'
+  const coverTxt = (c: number) => (c <= 0 ? 'đứt' : c >= 999 ? '∞' : Math.round(c) + ' ngày')
+  const STRUCT_TIP = 'lãi nếu bỏ hoàn ra — đo sức khỏe thật của mã'
+  const stat = (label: string, val: string, valCol: string, sub?: string, titleAttr?: string) => (
+    <div style={{ minWidth: 62 }}>
+      <div style={{ fontSize: 9.5, letterSpacing: 0.5, color: C.muted }} title={titleAttr}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: valCol, lineHeight: 1.15 }}>{val}</div>
+      {sub ? <div style={{ fontSize: 10.5, color: C.muted }}>{sub}</div> : null}
+    </div>
   )
-  const statLine = (v: VerdictRow): ReactNode[] => {
-    const els: ReactNode[] = []
-    if (v.group === 'cho') {
-      els.push(structLabel(v))
-      els.push(<span style={{ color: C.muted }}>hoàn ƯT(T6) <b style={{ color: C.muted2 }}>{fmtPct(v.hoanPct)}</b></span>)
-      els.push(<span style={{ color: C.muted2 }}>→ {v.laiStruct >= 0.05 ? 'bỏ hoàn vẫn lãi → chờ đơn T7 về mới chốt' : 'cấu trúc mỏng · hoàn T7 còn cao là cắt'}{v.spNo > 0 ? ` · lo bù ${num(v.spNo)} đơn nợ trước` : ''}</span>)
-    } else if (v.group === 'cat') {
-      els.push(structLabel(v))
-      els.push(<span style={{ color: C.muted }}>ads <b style={{ color: C.red }}>{fmtPct(v.adsPct)}</b></span>)
-      if (v.chayDat) els.push(chip('🔥 chạy đắt', '#ff8a5e', '#2a1410'))
-      els.push(<span style={{ color: C.muted2 }}>→ {v.kind === 'xa' ? 'thanh lý lấy vốn' : 'tắt ads ngay, ép cọc/chặn tỉnh bom'}</span>)
-    } else if (v.group === 'suano') {
-      if (v.kind === 'no') els.push(<span style={{ color: C.muted2 }}>nợ <b style={{ color: C.red }}>{num(v.spNo)}</b> cái ({num(v.donNo)} đơn) → đặt bù gấp / huỷ đơn</span>)
-      else { els.push(<span style={{ color: C.muted }}>hoàn <b style={{ color: C.amber }}>{fmtPct(v.hoanPct)}</b></span>); els.push(<span style={{ color: C.muted }}>ads <b style={{ color: C.muted2 }}>{fmtPct(v.adsPct)}</b></span>); els.push(<span style={{ color: C.muted2 }}>→ sửa giá/combo/chặn tỉnh trước khi nhập</span>) }
-    } else {
-      els.push(<span style={{ color: C.muted }}>lãi <b style={{ color: v.laiDon >= 0 ? C.green : C.red }}>{fmtMoney(v.laiDon)}/đơn</b></span>)
-      els.push(<span style={{ color: C.muted }}>hoàn <b style={{ color: C.muted2 }}>{fmtPct(v.hoanPct)}</b></span>)
-      const tc = trendChip(v); if (tc) els.push(tc)
-      if (v.kind === 'dangve') els.push(<span style={{ color: C.muted2 }}>đang về {num(v.incQty)}{v.incEta ? ` (${v.incEta.slice(8, 10)}/${v.incEta.slice(5, 7)})` : ''} — vít tiếp</span>)
-      else if (v.kind === 'khoan') els.push(<span style={{ color: C.muted2 }}>nhập lô nhỏ theo tốc độ gần nhất · theo dõi 3-5 ngày</span>)
-      else els.push(<span style={{ color: C.muted2 }}>vít tới <b style={{ color: C.gold }}>~{num(v.tranAds)}/ngày</b>{v.sapDut ? '' : ' · còn dư địa'}</span>)
-    }
-    return els
+  // dòng "vì sao / làm gì" — lãi quy về %, không VNĐ
+  const noteOf = (v: VerdictRow): ReactNode => {
+    const lai = signPct(v.laiPct), hoan = fmtPct(v.hoanPct)
+    if (v.group === 'cho') return <>hoàn ƯT(T6) <b style={{ color: C.muted2 }}>{hoan}</b> · {v.laiStruct >= 0.05 ? 'bỏ hoàn ra vẫn lãi → chờ đơn T7 về mới chốt' : 'cấu trúc mỏng, hoàn T7 còn cao là cắt'}</>
+    if (v.group === 'cat') return <>lãi <b style={{ color: C.red }}>{lai}</b> · hoàn <b style={{ color: C.red }}>{hoan}</b> · {v.chayDat ? '🔥 chạy đắt · ' : ''}{v.kind === 'xa' ? 'thanh lý lấy vốn' : 'tắt ads, ép cọc/chặn tỉnh'}</>
+    if (v.group === 'suano') return v.kind === 'no' ? <>nợ <b style={{ color: C.red }}>{num(v.donNo)}</b> đơn chưa gửi → bù gấp hoặc huỷ đơn</> : <>hoàn <b style={{ color: C.amber }}>{hoan}</b> · ads cao → sửa giá-combo-chặn tỉnh trước khi nhập</>
+    if (v.kind === 'dangve') return <>đang về <b style={{ color: C.amber }}>{num(v.incQty)}</b>{v.incEta ? ` (${v.incEta.slice(8, 10)}/${v.incEta.slice(5, 7)})` : ''} — đừng đặt thêm · lãi {lai}</>
+    if (v.kind === 'khoan') return <>đơn đang tụt → nhập lô nhỏ, theo dõi 3-5 ngày · lãi {lai}</>
+    return <>lãi <b style={{ color: v.laiPct >= 0 ? C.green : C.red }}>{lai}</b> · hoàn <b style={{ color: C.muted2 }}>{hoan}</b>{v.nhapQty > 0 ? ' · nhập xong đủ chạy ~38 ngày' : ' · còn dư địa'}</>
   }
   const vCard = (v: VerdictRow) => {
     const tc = toneCol(v.tone)
-    const arrow = (v.trend === 'tut' || v.trend === 'gay') ? `${Math.round(v.vel)}→${Math.round(v.v3)}` : (Math.round(v.vel * 10) / 10).toString()
+    const tonShow = Math.max(0, Math.round(v.ton)).toLocaleString('vi-VN')
+    const stockCol = v.cover <= 0 ? C.red : v.sapDut ? C.amber : C.muted2
+    const coverCol = v.cover <= 15 ? C.red : v.cover <= 25 ? C.amber : C.muted2
+    const tSub = v.trend === 'gay' ? '⚠ gãy' : v.trend === 'tut' ? `↘ ${Math.round(v.vel)}→${Math.round(v.v3)}` : v.trend === 'up' ? '↗ tăng' : ''
+    let s4: ReactNode
+    if (v.group === 'nhap') s4 = stat('NHẬP', v.nhapQty > 0 ? num(v.nhapQty) : '—', v.nhapQty > 0 ? C.gold : C.muted, v.von > 0 ? fmtMoney(v.von) : (v.kind === 'dangve' ? 'đang về' : ''))
+    else if (v.group === 'cho') s4 = stat('CẤU TRÚC', signPct(v.laiStruct), v.laiStruct >= 0 ? C.green : C.red, 'chờ hoàn T7', STRUCT_TIP)
+    else if (v.group === 'cat') s4 = stat('CẤU TRÚC', signPct(v.laiStruct), C.red, 'ads ' + fmtPct(v.adsPct), STRUCT_TIP)
+    else s4 = v.kind === 'no' ? stat('NỢ', num(v.spNo), C.red, 'cái') : stat('ADS', fmtPct(v.adsPct), C.amber, 'hoàn ' + fmtPct(v.hoanPct))
     return (
-      <div key={v.name} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 12, padding: '11px 13px', marginBottom: 8 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>
-              {v.name}
-              {v.hoanEst && <span title="hoàn đang lấy số tháng trước — chưa chốt" style={{ background: '#23262e', color: C.muted2, borderRadius: 6, padding: '1px 6px', fontSize: 10.5, marginLeft: 5 }}>~ƯT</span>}
-            </div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>tồn {num(v.effTon)} · bán {arrow}/ngày · điểm đặt lại {num(v.rop)}</div>
+      <div key={v.name} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 12, padding: '12px 14px', marginBottom: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>
+            {v.name}
+            {v.hoanEst && <span title="hoàn đang lấy số tháng trước — chưa chốt" style={{ background: '#23262e', color: C.muted2, borderRadius: 6, padding: '1px 6px', fontSize: 10.5, marginLeft: 5 }}>~ƯT</span>}
           </div>
-          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <span style={{ color: tc, border: `1px solid ${tc}`, borderRadius: 20, padding: '2px 9px', fontSize: 11, whiteSpace: 'nowrap' }}>{v.label}</span>
-            {v.nhapQty > 0 && <div style={{ fontSize: 13, color: C.gold, marginTop: 4 }}>nhập {num(v.nhapQty)}{v.von > 0 ? ` · ${fmtMoney(v.von)}` : ''}</div>}
-          </div>
+          <span style={{ color: tc, border: `1px solid ${tc}`, borderRadius: 20, padding: '3px 11px', fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>{v.label}</span>
         </div>
-        <div style={{ display: 'flex', gap: 14, marginTop: 9, fontSize: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          {statLine(v).map((e, i) => <span key={i}>{e}</span>)}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(72px, 1fr))', gap: 10 }}>
+          {stat('TỒN', tonShow, stockCol, v.spNo > 0 ? `nợ ${num(v.spNo)}` : (v.ton < 0 ? 'âm kho' : 'cái'))}
+          {stat('ĐANG BÁN', (Math.round(v.vel * 10) / 10) + '/ngày', C.muted2, tSub)}
+          {stat('CÒN', coverTxt(v.cover), coverCol, 'đặt lại ' + num(v.rop))}
+          {s4}
         </div>
+        <div style={{ fontSize: 11.5, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>{noteOf(v)}</div>
       </div>
     )
   }
@@ -453,17 +444,17 @@ export default function InventoryBoard() {
       </div>
     )
   }
-  // ── NV: thẻ gọn 1 dòng (việc + tên + 1 số cốt) ─────────────────────────────
-  const signPct = (n: number) => (n >= 0 ? '+' : '') + Math.round(n * 100) + '%'
+  // ── NV: thẻ gọn — TỒN + CÒN ngày + việc (số to, ít chữ) ────────────────────
   const miniFact = (v: VerdictRow): string => {
+    const tonS = Math.max(0, Math.round(v.ton)).toLocaleString('vi-VN')
     if (v.group === 'nhap') {
-      if (v.kind === 'dangve') return `đang về ${num(v.incQty)} — vít tiếp`
-      if (v.kind === 'khoan') return `nhập lô nhỏ · theo dõi 3-5 ngày`
-      return v.nhapQty > 0 ? `nhập ${num(v.nhapQty)} · vít ~${num(v.tranAds)}/ngày` : `vít tới ~${num(v.tranAds)}/ngày`
+      if (v.kind === 'dangve') return `tồn ${tonS} · đang về ${num(v.incQty)}`
+      if (v.nhapQty > 0) return `tồn ${tonS} · còn ${coverTxt(v.cover)} · nhập ${num(v.nhapQty)}`
+      return `tồn ${tonS} · còn ${coverTxt(v.cover)} · đủ chạy`
     }
     if (v.group === 'cho') return `cấu trúc ${signPct(v.laiStruct)} · chờ hoàn T7`
     if (v.group === 'suano') return v.kind === 'no' ? `nợ ${num(v.spNo)} cái → đặt bù` : `hoàn ${fmtPct(v.hoanPct)} — sửa`
-    return `cấu trúc ${signPct(v.laiStruct)} · ads ${fmtPct(v.adsPct)}`
+    return `tồn ${tonS} · cắt (ads ${fmtPct(v.adsPct)})`
   }
   const vCardMini = (v: VerdictRow) => {
     const tc = toneCol(v.tone)
@@ -605,9 +596,20 @@ export default function InventoryBoard() {
             <div style={{ fontSize: 11, color: C.muted, marginBottom: 16, lineHeight: 1.5 }}>Đầu tháng phần lớn nằm ở <b style={{ color: C.muted2 }}>CHỜ SỐ THẬT</b> (hoàn còn lấy T6) — chỉ cắt nhóm <b style={{ color: C.red }}>CẮT THẬT</b> (bỏ hoàn ra vẫn lỗ). Vốn cần nhập ~{fmtMoney(triage.vonNhap)}.</div>
 
             {groupSection('NÊN NHẬP / VÍT — đổ tiền vào đây', C.green, byGroup.nhap.filter((v) => !v.noAction))}
-            {groupSection('CHỜ SỐ THẬT — đừng cắt vội', C.muted2, byGroup.cho, `hoàn T7 đủ chín ~còn ${triage.matLeft} ngày`)}
-            {groupSection('SỬA / NỢ HÀNG', C.amber, byGroup.suano)}
             {groupSection('CẮT THẬT — tắt ads, xả tồn', C.red, byGroup.cat)}
+            {groupSection('SỬA / NỢ HÀNG', C.amber, byGroup.suano)}
+            {byGroup.cho.length > 0 && (
+              <div>
+                <button onClick={() => setShowCho((s) => !s)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: `1px dashed ${C.line}`, borderRadius: 10, padding: '9px 12px', cursor: 'pointer', color: C.muted2, marginBottom: showCho ? 9 : 0 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: C.muted2 }} />
+                  <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: C.muted2 }}>CHỜ SỐ THẬT · {byGroup.cho.length} mã</span>
+                  <span style={{ fontSize: 11, color: C.muted }}>· đừng cắt vội · hoàn T7 đủ chín ~còn {triage.matLeft} ngày</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 12, color: C.gold }}>{showCho ? 'Ẩn ▲' : 'Xem ▼'}</span>
+                </button>
+                {showCho && byGroup.cho.map(vCard)}
+                <div style={{ height: 10 }} />
+              </div>
+            )}
             {byGroup.nhap.some((v) => v.noAction) && <div style={{ fontSize: 11, color: C.muted }}>+ {byGroup.nhap.filter((v) => v.noAction).length} mã đủ hàng, ổn — không cần làm gì.</div>}
           </div>
         )}
