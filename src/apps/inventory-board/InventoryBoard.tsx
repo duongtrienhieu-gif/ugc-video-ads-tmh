@@ -12,6 +12,7 @@ import { computeProfit } from './profitCalc'
 import { computeVerdicts, hoanMatureDaysLeft, isComboName } from './verdict'
 import type { VerdictRow, VGroup } from './verdict'
 import GiftCombo from './GiftCombo'
+import RewardTab from './RewardTab'
 import { useAppStore } from '../../stores/appStore'
 import { loadBoardLinks, saveBoardLinks } from './boardConfig'
 
@@ -135,7 +136,7 @@ export default function InventoryBoard() {
     return () => window.removeEventListener('resize', f)
   }, [])
 
-  const [tab, setTab] = useState<'kho' | 'calc' | 'profit' | 'gift'>('kho')
+  const [tab, setTab] = useState<'kho' | 'calc' | 'profit' | 'gift' | 'reward'>('kho')
   const [view, setView] = useState<'ceo' | 'nv'>(() => (localStorage.getItem('inv_board_view') === 'nv' ? 'nv' : 'ceo'))
   const [nvTeam, setNvTeam] = useState<'APEX' | 'TITAN' | 'SUMMIT'>(() => {
     const t = localStorage.getItem('inv_board_team'); return t === 'TITAN' || t === 'SUMMIT' ? t : 'APEX'
@@ -224,7 +225,7 @@ export default function InventoryBoard() {
     if (activeApp !== 'inventory-board') return
     try {
       const t = localStorage.getItem('inv_board_tab')
-      if (t && ['kho', 'calc', 'profit', 'gift'].includes(t)) { setTab(t as 'kho' | 'calc' | 'profit' | 'gift'); localStorage.removeItem('inv_board_tab') }
+      if (t && ['kho', 'calc', 'profit', 'gift', 'reward'].includes(t)) { setTab(t as 'kho' | 'calc' | 'profit' | 'gift' | 'reward'); localStorage.removeItem('inv_board_tab') }
     } catch { /* ignore */ }
   }, [activeApp])
 
@@ -238,13 +239,14 @@ export default function InventoryBoard() {
   // nhớ lựa chọn view/team trên máy này
   useEffect(() => { try { localStorage.setItem('inv_board_view', view) } catch { /* quota */ } }, [view])
   useEffect(() => { try { localStorage.setItem('inv_board_team', nvTeam) } catch { /* quota */ } }, [nvTeam])
-  // NV view: nạp map TEAM→[mã SP] (cùng endpoint, nhánh marketerSp) — lazy khi mở view nhân viên
+  // Nạp map TEAM→[mã SP] (cùng endpoint, nhánh marketerSp) — lazy khi mở view nhân viên
+  // HOẶC tab Thưởng (cần map để gán winner cho team). Tải 1 lần, dùng chung.
   useEffect(() => {
-    if (view !== 'nv' || Object.keys(teamSp).length || !Object.keys(sources).length) return
+    if ((view !== 'nv' && tab !== 'reward') || Object.keys(teamSp).length || !Object.keys(sources).length) return
     setTeamLoading(true)
     fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marketerSp: true, links: sources }), cache: 'no-store' })
       .then((r) => r.json()).then((j) => { if (j?.marketerSp) setTeamSp(j.marketerSp) }).catch(() => { /* để rỗng → hiện báo thiếu */ }).finally(() => setTeamLoading(false))
-  }, [view, sources, teamSp])
+  }, [view, tab, sources, teamSp])
 
   function saveSources() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sources))
@@ -517,7 +519,7 @@ export default function InventoryBoard() {
 
         {/* tab switcher */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-          {([['kho', '📦 Kho & Nhập hàng'], ['calc', '🧮 Máy tính giá'], ['profit', '🔥 Lãi thật/SP'], ['gift', '🎁 Ghép Quà']] as const).map(([k, lbl]) => (
+          {([['kho', '📦 Kho & Nhập hàng'], ['calc', '🧮 Máy tính giá'], ['profit', '🔥 Lãi thật/SP'], ['reward', '🏆 Thưởng & Cấp nhập'], ['gift', '🎁 Ghép Quà']] as const).map(([k, lbl]) => (
             <button key={k} onClick={() => setTab(k)} style={{ background: tab === k ? C.gold : 'transparent', color: tab === k ? '#0a0a0a' : C.muted2, border: `1px solid ${tab === k ? C.gold : C.line}`, borderRadius: 10, padding: '9px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{lbl}</button>
           ))}
         </div>
@@ -660,6 +662,8 @@ export default function InventoryBoard() {
         </>)}
 
         {tab === 'profit' && <ProfitTruth products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} feed={feed} cockpit={cockpit} />}
+
+        {tab === 'reward' && <RewardTab products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} teamSp={teamSp} mobile={isMobile} />}
 
         {tab === 'gift' && <GiftCombo products={products} giftLink={sources.giftplan || ''} />}
 
