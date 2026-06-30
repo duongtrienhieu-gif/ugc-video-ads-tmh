@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
-import { useMktAgentStore, type SpCandidate } from './store'
+import { useMktAgentStore, type SpCandidate, type VidItem } from './store'
 import { scanWinningProducts } from './services/researchStage'
 import { classifyBranding } from './services/brandingFilter'
 import { buildVerifyLinks, deepDive, searchKeyword } from './services/enrichStage'
@@ -60,6 +60,7 @@ export default function MktAgent() {
   const [videoDepth] = useState(20)
   const [vidScanning, setVidScanning] = useState(false)
   const [onlyWithVideo, setOnlyWithVideo] = useState(false)
+  const [playVid, setPlayVid] = useState<VidItem | null>(null)
 
   // Dò video bán SP cho top-N (theo số bán) chưa dò → xếp SP-có-video lên đầu.
   const runVideoRank = async (list: SpCandidate[], depth: number) => {
@@ -244,24 +245,51 @@ export default function MktAgent() {
                   onAnalyze={() => analyzeSp(p)}
                   onPick={() => selectSp(selectedSp?.productId === p.productId ? null : p)}
                   onSendToApp={sendToApp}
+                  onPlay={setPlayVid}
                 />
               ))}
             </div>
           </div>
         )}
       </div>
+
+      {playVid && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-3" onClick={() => setPlayVid(null)}>
+          <div className="relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900 sm:flex-row" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setPlayVid(null)} className="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80" title="Đóng">✕</button>
+            <div className="flex shrink-0 items-center justify-center bg-black sm:w-[55%]">
+              <video src={playVid.downloadUrl || playVid.url} controls autoPlay playsInline className="max-h-[50vh] w-full object-contain sm:max-h-[92vh]" />
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col p-4">
+              <p className="text-[12px] font-semibold text-zinc-100 line-clamp-3">{playVid.desc || '(video)'}</p>
+              <p className="mt-1 text-[11px] text-zinc-400">{playVid.author ? `@${playVid.author} · ` : ''}👁 {compact(playVid.views)} · {playVid.durationSec}s</p>
+              <div className="mt-3 flex gap-2">
+                {playVid.downloadUrl && (
+                  <a href={playVid.downloadUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex-1 text-center rounded-lg border border-violet-400/40 bg-violet-500/20 py-2 text-[12px] font-semibold text-violet-200 hover:bg-violet-500/30">⬇ Tải (no-watermark)</a>
+                )}
+                {playVid.url && (
+                  <a href={playVid.url} target="_blank" rel="noopener noreferrer"
+                    className="flex-1 text-center rounded-lg border border-zinc-700 bg-zinc-800 py-2 text-[12px] font-semibold text-zinc-200 hover:bg-zinc-700">↗ Mở gốc</a>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // ── 1 card SP — video reel (rip-ready) trước, phân tích sâu sau ────────────────
-function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp }: {
+function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay }: {
   p: SpCandidate
   picked: boolean
   hasKey: boolean
   onAnalyze: () => void
   onPick: () => void
   onSendToApp: (a: { targetApp: string; targetField: string; data: unknown }) => void
+  onPlay: (v: VidItem) => void
 }) {
   const branded = p.isBranded === true
   const win = computeWinScore(p)
@@ -302,26 +330,44 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp }: {
       {p.videoChecking ? (
         <div className="text-[11px] text-amber-300 animate-pulse">⏳ Đang dò video bán SP…</div>
       ) : p.vids ? (
-        p.vids.count > 0 ? (
-          <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2">
-            <p className="text-[12px] font-semibold text-emerald-300">🎥 {p.vids.count} video bán SP · {compact(p.vids.maxViews)} view <span className="font-normal text-emerald-400/80">— tải về chạy ads</span></p>
-            <div className="flex gap-1.5 mt-1.5 overflow-x-auto pb-1">
-              {p.vids.list.map((v) => (
-                <div key={v.id} className="shrink-0 w-16">
-                  <a href={v.url || v.downloadUrl} target="_blank" rel="noopener noreferrer"
-                    className="block relative w-16 h-24 rounded overflow-hidden border border-emerald-500/40 bg-zinc-800 hover:border-emerald-400" title={`${compact(v.views)} view · ${v.durationSec}s — mở`}>
-                    {v.cover ? <img src={v.cover} alt="" className="w-full h-full object-cover" loading="lazy" /> : <span className="grid place-items-center w-full h-full text-[10px]">▶</span>}
-                    {v.durationSec > 0 && <span className="absolute bottom-0.5 right-0.5 bg-black/70 px-1 rounded text-[8px]">{v.durationSec}s</span>}
-                  </a>
-                  <div className="flex items-center justify-between mt-0.5 px-0.5">
-                    <span className="text-[9px] text-zinc-500">{compact(v.views)}</span>
-                    {v.downloadUrl && <a href={v.downloadUrl} target="_blank" rel="noopener noreferrer" title="Tải no-watermark" className="text-[10px] text-violet-300 hover:text-violet-200">⬇</a>}
-                  </div>
-                </div>
-              ))}
+        p.vids.count > 0 ? (() => {
+          const tkN = p.vids.list.filter((v) => v.platform !== 'fb').length
+          const fbN = p.vids.list.filter((v) => v.platform === 'fb').length
+          return (
+            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2">
+              <p className="text-[12px] font-semibold text-emerald-300">
+                🎥 {tkN} TikTok{fbN > 0 ? <span className="text-sky-300"> · 📣 {fbN} FB</span> : null}{p.vids.maxViews > 0 ? ` · ${compact(p.vids.maxViews)} view` : ''} <span className="font-normal text-emerald-400/80">— bấm xem / tải</span>
+              </p>
+              <div className="flex gap-1.5 mt-1.5 overflow-x-auto pb-1">
+                {p.vids.list.map((v) => {
+                  const isFb = v.platform === 'fb'
+                  const inner = (
+                    <>
+                      {v.cover ? <img src={v.cover} alt="" className="w-full h-full object-cover" loading="lazy" /> : <span className="grid place-items-center w-full h-full text-[10px]">▶</span>}
+                      {v.durationSec > 0 && <span className="absolute bottom-0.5 right-0.5 bg-black/70 px-1 rounded text-[8px]">{v.durationSec}s</span>}
+                      {isFb && <span className="absolute top-0.5 left-0.5 bg-sky-600/90 px-1 rounded text-[7px] font-bold text-white">FB</span>}
+                    </>
+                  )
+                  return (
+                    <div key={v.id} className="shrink-0 w-16">
+                      {isFb ? (
+                        <a href={v.url} target="_blank" rel="noopener noreferrer"
+                          className="block relative w-16 h-24 rounded overflow-hidden border border-sky-500/40 bg-zinc-800 hover:border-sky-400" title={`FB ad · chạy ${v.days}d — mở`}>{inner}</a>
+                      ) : (
+                        <button onClick={() => onPlay(v)}
+                          className="block relative w-16 h-24 rounded overflow-hidden border border-emerald-500/40 bg-zinc-800 hover:border-emerald-400" title={`${compact(v.views)} view · ${v.durationSec}s — xem trong app`}>{inner}</button>
+                      )}
+                      <div className="flex items-center justify-between mt-0.5 px-0.5">
+                        <span className="text-[9px] text-zinc-500">{isFb ? `${v.days}d` : compact(v.views)}</span>
+                        {!isFb && v.downloadUrl && <a href={v.downloadUrl} target="_blank" rel="noopener noreferrer" title="Tải no-watermark" className="text-[10px] text-violet-300 hover:text-violet-200">⬇</a>}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-          </div>
-        ) : (
+          )
+        })() : (
           <div className="text-[11px] text-zinc-500">🎥 0 video bán SP — chưa có creative sẵn để rip</div>
         )
       ) : null}

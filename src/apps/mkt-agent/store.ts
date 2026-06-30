@@ -48,13 +48,15 @@ export interface DeepDive {
 // Video bán SP (rip-ready) — từ /api/research-videos, có downloadUrl no-watermark.
 export interface VidItem {
   id: string
+  platform?: 'tiktok' | 'fb'  // tiktok = play inline + tải; fb = mở link ad
   cover: string
-  downloadUrl: string   // tải về chạy ads luôn (no watermark)
-  url: string           // link TikTok gốc
+  downloadUrl: string   // tải về chạy ads luôn (no watermark) — chỉ TikTok
+  url: string           // link gốc (TikTok / video ad FB)
   views: number
   desc: string
   durationSec: number
   author: string
+  days?: number         // FB: ad chạy bao lâu (winner signal)
 }
 export interface VideoCheck {
   count: number         // # video bán SP tìm được
