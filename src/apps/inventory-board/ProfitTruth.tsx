@@ -113,7 +113,7 @@ export default function ProfitTruth({ products, inv, velocity, priceVnd, feed, c
                 <tr key={i} style={{ borderTop: `1px solid ${C.line2}` }}>
                   <td style={{ padding: '11px 8px', fontWeight: 500 }}>{r.name}{!r.giaReal && <span style={{ color: C.amber }} title="chưa có giá vốn thật — ước tính 25%"> *</span>}</td>
                   <td style={cell}><span style={{ color: r.adsPct > r.cpqcTarget ? C.red : C.green }}>{fmtPct(r.adsPct)}</span><span style={{ color: C.muted }}> / {fmtPct(Math.max(0, r.cpqcTarget))}</span></td>
-                  <td style={{ ...cell, color: r.hoanPct > 0.4 ? C.red : r.hoanPct > 0.3 ? C.amber : C.muted2 }}>{fmtPct(r.hoanPct)}</td>
+                  <td style={{ ...cell, color: r.hoanPct > 0.4 ? C.red : r.hoanPct > 0.3 ? C.amber : C.muted2 }}>{fmtPct(r.hoanPct)}{r.hoanEstimated && <span style={{ color: C.amber }} title="hoàn ước tính tháng trước — đơn tháng này chưa về đủ"> ~ƯT</span>}</td>
                   <td style={{ ...cell, color: r.laiDon < 0 ? C.red : C.green, fontWeight: 500 }}>{fmtMoney(r.laiDon)}</td>
                   <td style={{ ...cell, color: r.laiNgay < 0 ? C.red : C.muted2 }}>{fmtMoney(r.laiNgay)}</td>
                   <td style={{ padding: '11px 8px', textAlign: 'center' }}><span style={{ color: tc(r.den.tone), border: `1px solid ${tc(r.den.tone)}`, borderRadius: 20, padding: '2px 10px', fontSize: 11, whiteSpace: 'nowrap' }}>{r.den.t}</span></td>

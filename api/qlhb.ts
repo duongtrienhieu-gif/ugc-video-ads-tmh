@@ -74,18 +74,25 @@ function locateCols(ws: XLSX.WorkSheet): DsCols {
 }
 const SKIP_NAME = new Set(['', 'brand', 'product', 'province', 'tổng', 'total', 'sản phẩm', 'tỉnh'])
 
-// QLHB "Tỉ lệ sản phẩm" → hoàn Cách A theo SP. hoàn = (return+returned)/(total−pending) [DS]
-function buildHoanMap(ws: XLSX.WorkSheet): Record<string, number> {
+// QLHB "Tỉ lệ sản phẩm" → hoàn Cách A theo SP + ĐỘ CHÍN. hoàn = (return+returned)/(total−pending)[DS].
+// mature = resolved/total ≥ 0.5 (≥ nửa DS đã có kết quả giao/hoàn). Đầu tháng đơn còn đang giao →
+// chưa chín → hoàn≈0 KHÔNG đáng tin → caller ưu tiên hoàn tháng trước cho mã chưa chín.
+const MATURE_RATIO = 0.5
+function buildHoanMap(ws: XLSX.WorkSheet): { rate: Record<string, number>; mature: Set<string> } {
   const C = locateCols(ws)
   const g = (col: string | undefined, r: number) => (col ? num(ws[`${col}${r}`]?.v) : 0)
-  const map: Record<string, number> = {}
+  const rate: Record<string, number> = {}
+  const mature = new Set<string>()
   for (let r = C.headerRow + 1; r <= 1100; r++) {
     const nm = String(ws[`B${r}`]?.v ?? '').trim()
     if (!nm || SKIP_NAME.has(nm.toLowerCase())) continue
-    const resolved = g(C.tong, r) - g(C.pend, r)
-    if (resolved > 0) map[nm.toUpperCase()] = (g(C.ret, r) + g(C.rted, r)) / resolved
+    const total = g(C.tong, r), resolved = total - g(C.pend, r)
+    if (resolved <= 0) continue
+    const key = nm.toUpperCase()
+    rate[key] = (g(C.ret, r) + g(C.rted, r)) / resolved
+    if (total > 0 && resolved / total >= MATURE_RATIO) mature.add(key)
   }
-  return map
+  return { rate, mature }
 }
 // QLHB "Tỉ lệ sản phẩm" → tiền theo trạng thái đơn (cộng DS toàn bộ SP)
 function parseCashflow(ws: XLSX.WorkSheet) {
@@ -130,24 +137,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const sp = wb.Sheets['Tỉ lệ sản phẩm']
     const tinh = wb.Sheets['Tỉ lệ tỉnh']
     if (!sp) throw new Error('Không thấy sheet Tỉ lệ sản phẩm')
-    const hoanMap = buildHoanMap(sp)
-    const cashflow = parseCashflow(sp)
-    const provinces = tinh ? parseProvinces(tinh) : []
-    const result = { ok: Object.keys(hoanMap).length > 0, hoanMap, cashflow, provinces }
-    if (result.ok) {
-      await cacheWrite(result as unknown as Record<string, unknown>)
-      res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300')
-      return res.status(200).json({ ...result, cached: false })
-    }
-    // File QLHB tháng mới CHƯA có số (hoanMap rỗng) → KHÔNG trả 0: thiếu %hoàn làm máy tính lãi ẢO
-    // (vd ở CPQC 55% vẫn báo lãi dù thật là lỗ). Lấy số tốt gần nhất đã cache (giống nhánh lỗi).
-    // Có số tháng mới là tự đè. Đồng bộ với /api/inventory-board (cũng fallback cache khi rỗng).
-    const cachedEmpty = await cacheRead()
-    if (cachedEmpty && cachedEmpty.hoanMap && Object.keys(cachedEmpty.hoanMap as object).length > 0) {
-      return res.status(200).json({ ...cachedEmpty, cached: true })
+    const live = buildHoanMap(sp)
+    const cached = await cacheRead()
+    const cachedHoan = (cached?.hoanMap as Record<string, number> | undefined) ?? {}
+
+    // ── MERGE hoàn theo ĐỘ CHÍN (chống lãi ẢO đầu tháng) ───────────────────────
+    // Ưu tiên: hoàn THÁNG NÀY đã chín > hoàn THÁNG TRƯỚC (cache) > hoàn tháng này chưa chín > 0.
+    // hoanEst[mã]=true nghĩa là ĐANG dùng số ƯỚC TÍNH (tháng trước / mẫu nhỏ) — UI gắn cờ.
+    const hoanMap: Record<string, number> = {}
+    const hoanEst: Record<string, boolean> = {}
+    for (const [n, v] of Object.entries(cachedHoan)) { hoanMap[n] = v; hoanEst[n] = true }        // nền = tháng trước (ước tính)
+    for (const [n, v] of Object.entries(live.rate)) { if (!(n in hoanMap)) { hoanMap[n] = v; hoanEst[n] = true } } // mã mới chưa có nền → mẫu nhỏ (ước tính)
+    for (const n of live.mature) { hoanMap[n] = live.rate[n]; hoanEst[n] = false }                // đã chín → số THẬT, đè hết
+
+    // Baseline cache: tháng trước + mã ĐÃ CHÍN tháng này (KHÔNG cache mẫu chưa chín để khỏi nhiễu nền).
+    const cacheBaseline: Record<string, number> = { ...cachedHoan }
+    for (const n of live.mature) cacheBaseline[n] = live.rate[n]
+
+    // Dòng tiền / bom tỉnh = THÁNG HIỆN TẠI; rỗng hẳn (đầu tháng) thì lấy cache để khỏi trống.
+    const liveCash = parseCashflow(sp)
+    const liveProv = tinh ? parseProvinces(tinh) : []
+    const cashEmpty = liveCash.pendingDS + liveCash.deliveryDS + liveCash.paidDS + liveCash.returnDS + liveCash.returnedDS === 0
+    const cashflow = cashEmpty && cached?.cashflow ? cached.cashflow : liveCash
+    const provinces = cashEmpty && Array.isArray(cached?.provinces) && (cached!.provinces as unknown[]).length ? cached!.provinces : liveProv
+
+    const ok = Object.keys(hoanMap).length > 0
+    const estCount = Object.values(hoanEst).filter(Boolean).length
+    if (ok && Object.keys(cacheBaseline).length) {
+      await cacheWrite({ hoanMap: cacheBaseline, cashflow, provinces } as unknown as Record<string, unknown>)
     }
     res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300')
-    return res.status(200).json({ ...result, cached: false })
+    return res.status(200).json({ ok, hoanMap, hoanEst, estCount, cashflow, provinces, cached: false })
   } catch (e) {
     // QLHB chậm/lỗi → trả số tốt đã cache server (nếu có) để hoàn không bị trống
     const cached = await cacheRead()

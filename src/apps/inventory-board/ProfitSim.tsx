@@ -67,7 +67,9 @@ export default function ProfitSim({ products, inv, velocity, priceVnd }: {
         ))}
       </div>
       <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>
-        {sel.hoanPct === 0 && <span style={{ color: C.red, fontWeight: 600 }}>⚠ %hoàn = 0 (QLHB chưa tải / file tháng mới chưa có số) → lãi đang ẢO, ĐỪNG tin tới khi có %hoàn. </span>}
+        {sel.hoanEstimated
+          ? <span style={{ color: C.amber, fontWeight: 600 }}>⏳ %hoàn ({fmtPct(sel.hoanPct)}) đang là ƯỚC TÍNH tháng trước (đơn tháng này chưa về đủ để biết hoàn thật) — tự cập nhật khi đơn hoàn về. </span>
+          : sel.hoanPct === 0 ? <span style={{ color: C.red, fontWeight: 600 }}>⚠ %hoàn = 0 (chưa có số) → lãi đang ẢO, ĐỪNG tin tới khi có %hoàn. </span> : null}
         Giá vốn / %hoàn ({fmtPct(sel.hoanPct)}) / AOV ({fmtPlain(sel.aov)}/đơn) lấy từ số THẬT của mã; chỉ kéo %CPQC để thấy lãi/đơn đổi. Hạ %CPQC xuống dưới ngưỡng {fmtPct(Math.max(0, sel.cpqcTarget))} là đạt lãi mục tiêu {fmtPct(LN_TARGET)}.
         {' '}<b style={{ color: C.muted2 }}>CPA / data chia sale (trừ số trùng)</b> = %CPQC × AOV × tỉ lệ chốt{selChot > 0 ? ` (${fmtPct(selChot)})` : ''} = chi phí ÷ data sale thực nhận (đã trừ trùng) — khớp cột CPQC/CNT trong file báo cáo. <b style={{ color: C.amber }}>Chạy ads thật nên ghìm CPA rẻ hơn ~10% số này</b> cho chắc lãi.
       </div>

@@ -31,12 +31,13 @@ export async function fetchSpStats(): Promise<SpStatsResult> {
   // Gọi SONG SONG: /api/inventory-board (5 file nhẹ) + /api/qlhb (file nặng, function riêng).
   const [boardR, qlhbR] = await Promise.allSettled([
     fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ links }), cache: 'no-store' }).then((r) => r.json() as Promise<BoardResp>),
-    fetch('/api/qlhb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link: links.qlhb ?? '' }), cache: 'no-store' }).then((r) => r.json() as Promise<{ hoanMap?: Record<string, number> }>),
+    fetch('/api/qlhb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link: links.qlhb ?? '' }), cache: 'no-store' }).then((r) => r.json() as Promise<{ hoanMap?: Record<string, number>; hoanEst?: Record<string, boolean> }>),
   ])
   if (boardR.status === 'fulfilled') { const j = boardR.value; products = j.products ?? []; inv = j.inv ?? []; velocity = j.velocity ?? {}; priceVnd = j.priceVnd ?? {} }
-  if (qlhbR.status === 'fulfilled') hoanMap = qlhbR.value.hoanMap ?? {}
-  // Đè %hoàn từ QLHB vào products TRƯỚC khi tính lãi (computeProfit dùng pctHoan).
-  for (const p of products) { const h = hoanMap[p.name.trim().toUpperCase()]; if (h != null) p.pctHoan = h }
+  let hoanEst: Record<string, boolean> = {}
+  if (qlhbR.status === 'fulfilled') { hoanMap = qlhbR.value.hoanMap ?? {}; hoanEst = qlhbR.value.hoanEst ?? {} }
+  // Đè %hoàn từ QLHB vào products TRƯỚC khi tính lãi (computeProfit dùng pctHoan) + cờ ước tính.
+  for (const p of products) { const k = p.name.trim().toUpperCase(); const h = hoanMap[k]; if (h != null) { p.pctHoan = h; p.hoanEstimated = hoanEst[k] ?? false } }
 
   const rows = computeProfit(products, inv, velocity, priceVnd)
   const laiPctByName: Record<string, number> = {}

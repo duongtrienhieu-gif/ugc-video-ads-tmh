@@ -7,12 +7,12 @@ export const PACK_FACTOR = (name: string) => (name.trim().toUpperCase() === 'KNE
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n))
 
 export type Tone = 'red' | 'amber' | 'green' | 'muted'
-export interface Prod { name: string; rmRevenue: number; cpqc: number; pctCpqc: number; pctHoan: number; c2: number; pctChot: number }
+export interface Prod { name: string; rmRevenue: number; cpqc: number; pctCpqc: number; pctHoan: number; c2: number; pctChot: number; hoanEstimated?: boolean }
 export interface InvItem { ten: string; ton: number; ban: number; giaVonRM: number; giaVonVnd: number }
 export interface ProfitRow {
   name: string; aov: number; adsPct: number; cogsPct: number; vonNetPct: number; hoanPct: number
   laiPct: number; laiDon: number; laiNgay: number; cpqcTarget: number
-  den: { t: string; tone: Tone; rank: number }; viec: string; giaReal: boolean
+  den: { t: string; tone: Tone; rank: number }; viec: string; giaReal: boolean; hoanEstimated: boolean
 }
 
 function denOf(laiPct: number, hoanPct: number, adsPct: number, target: number): { t: string; tone: Tone; rank: number } {
@@ -56,7 +56,7 @@ export function computeProfit(products: Prod[], inv: InvItem[], velocity: Record
     const laiNgay = laiDon * vel
     const cpqcTarget = 1 - LN_TARGET - vonNetPct - SHIP - VH - hoanPct
     const den = denOf(laiPct, hoanPct, adsPct, cpqcTarget)
-    out.push({ name: p.name, aov, adsPct, cogsPct, vonNetPct, hoanPct, laiPct, laiDon, laiNgay, cpqcTarget, den, viec: viecOf(den.t, hoanPct, adsPct, cpqcTarget), giaReal })
+    out.push({ name: p.name, aov, adsPct, cogsPct, vonNetPct, hoanPct, laiPct, laiDon, laiNgay, cpqcTarget, den, viec: viecOf(den.t, hoanPct, adsPct, cpqcTarget), giaReal, hoanEstimated: !!p.hoanEstimated })
   }
   return out.sort((a, b) => a.den.rank - b.den.rank || Math.abs(b.laiNgay) - Math.abs(a.laiNgay))
 }

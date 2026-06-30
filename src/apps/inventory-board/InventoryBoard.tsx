@@ -56,7 +56,7 @@ const STORAGE_KEY = 'inv_board_sources'
 const GOOD_KEY = 'inv_board_lastgood' // cache "số tốt gần nhất" để load lỗi vẫn hiện đủ số
 
 // ── kiểu dữ liệu trả về từ endpoint ──────────────────────────────────────────
-interface Prod { name: string; rmRevenue: number; cpqc: number; pctCpqc: number; pctHoan: number; c2: number; pctChot: number }
+interface Prod { name: string; rmRevenue: number; cpqc: number; pctCpqc: number; pctHoan: number; c2: number; pctChot: number; hoanEstimated?: boolean }
 interface InvItem { ten: string; ton: number; ban: number; giaVonRM: number; giaVonVnd: number }
 interface Incoming { ma: string; qty: number; order: string; eta: string }
 interface BackorderItem { ma: string; donNo: number; spNo: number; ton: number; tonDuKien: number }
@@ -153,7 +153,7 @@ export default function InventoryBoard() {
   async function load(s: Record<string, string>) {
     setStatus('loading'); setErrMsg('')
     // Gọi SONG SONG: board (5 file nhẹ, nhanh) + qlhb (file nặng, function riêng 60s).
-    type QlhbResp = { hoanMap?: Record<string, number>; provinces?: BoardData['provinces']; cashflow?: BoardData['cashflow'] }
+    type QlhbResp = { hoanMap?: Record<string, number>; hoanEst?: Record<string, boolean>; provinces?: BoardData['provinces']; cashflow?: BoardData['cashflow'] }
     const [boardRes, qlhbRes] = await Promise.allSettled([
       fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ links: s }), cache: 'no-store' }).then((r) => r.json() as Promise<BoardData>),
       fetch('/api/qlhb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link: s.qlhb || '' }), cache: 'no-store' }).then((r) => r.json() as Promise<QlhbResp>),
@@ -162,7 +162,7 @@ export default function InventoryBoard() {
     // Gộp hoàn (đè per-SP) + tỉnh + dòng tiền từ /api/qlhb vào dữ liệu board.
     const merge = (d: BoardData): BoardData => {
       if (!q) return d
-      if (q.hoanMap) for (const p of d.products ?? []) { const h = q.hoanMap[p.name.trim().toUpperCase()]; if (h != null) p.pctHoan = h }
+      if (q.hoanMap) for (const p of d.products ?? []) { const k = p.name.trim().toUpperCase(); const h = q.hoanMap[k]; if (h != null) { p.pctHoan = h; p.hoanEstimated = q.hoanEst?.[k] ?? false } }
       if (Array.isArray(q.provinces)) d.provinces = q.provinces
       if (q.cashflow) d.cashflow = q.cashflow
       return d

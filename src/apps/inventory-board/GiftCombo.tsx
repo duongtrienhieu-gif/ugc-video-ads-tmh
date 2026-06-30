@@ -16,7 +16,7 @@ const fmtInt = (n: number) => (Number.isFinite(n) ? Math.round(n).toLocaleString
 const panelStyle: React.CSSProperties = { background: C.panel, border: `1px solid ${C.line}`, borderRadius: 14, padding: '14px 16px', marginBottom: 12 }
 const eyebrowStyle: React.CSSProperties = { fontSize: 13, fontWeight: 700, letterSpacing: 0.3, color: C.gold }
 const MKT_ORDER = ['KHÁNH', 'HÀ', 'ANH', 'DUY', 'TUẤN']
-interface Prod { name: string; pctHoan: number; pctCpqc: number; pctChot: number }
+interface Prod { name: string; pctHoan: number; pctCpqc: number; pctChot: number; hoanEstimated?: boolean }
 
 export default function GiftCombo({ products, giftLink }: { products: Prod[]; giftLink: string }) {
   const [isMobile, setIsMobile] = useState(false)
@@ -111,6 +111,11 @@ export default function GiftCombo({ products, giftLink }: { products: Prod[]; gi
           ))}
         </div>
       </div>
+      {products.some((p) => p.hoanEstimated) && (
+        <div style={{ ...panelStyle, padding: '9px 14px', border: '1px solid #5a4a18', background: 'rgba(245,196,81,0.07)', color: C.amber, fontSize: 12.5 }}>
+          ⏳ Đầu tháng: %hoàn một số mã đang dùng <b>ước tính tháng trước</b> (đơn tháng này chưa về đủ) → lãi/đèn quà là tạm tính, tự chuẩn lại khi đơn hoàn về (~7-10 ngày).
+        </div>
+      )}
 
       {groups.map(([marketer, list]) => (
         <div key={marketer} style={{ marginBottom: 18 }}>
