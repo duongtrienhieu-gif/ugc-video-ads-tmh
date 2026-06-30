@@ -9,6 +9,10 @@ import type { Prod, InvItem } from './profitCalc'
 const LEAD = 8, SAFETY = 7, CYCLE = 30 // nhập TQ 8 ngày + đệm 7 + trữ 30
 const ROP_DAYS = LEAD + SAFETY // điểm đặt lại tính theo số ngày này
 
+// Combo "X + GIFT" / "X + Y + Z" KHÔNG phải SKU kho riêng — số liệu thật (doanh thu,
+// tồn, giá vốn) nằm ở MÃ GỐC; dòng combo chỉ có ads/contact treo → lọc khỏi board cho hết nhiễu.
+export const isComboName = (name: string) => / \+ /.test(name)
+
 export type VGroup = 'nhap' | 'cho' | 'suano' | 'cat'
 export type VTone = 'green' | 'amber' | 'gray' | 'red'
 export type TrendState = 'up' | 'flat' | 'tut' | 'gay'
@@ -59,8 +63,9 @@ export function computeVerdicts(
   incoming: { ma: string; qty: number; eta: string }[],
   backorder: Record<string, { donNo: number; spNo: number }>,
 ): VerdictRow[] {
-  const profitRows = computeProfit(products, inv, velocity, priceVnd)
-  const prodMap = new Map(products.map((p) => [p.name.trim().toUpperCase(), p]))
+  const baseProducts = products.filter((p) => !isComboName(p.name)) // bỏ combo, chỉ giữ mã gốc
+  const profitRows = computeProfit(baseProducts, inv, velocity, priceVnd)
+  const prodMap = new Map(baseProducts.map((p) => [p.name.trim().toUpperCase(), p]))
   const invMap = new Map(inv.map((it) => [it.ten.trim().toUpperCase(), it]))
   const days = new Date().getDate() || 24
   const today = new Date(); today.setHours(0, 0, 0, 0)

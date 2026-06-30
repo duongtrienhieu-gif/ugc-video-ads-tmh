@@ -9,7 +9,7 @@ import type { ReactNode } from 'react'
 import PriceCalc from './PriceCalc'
 import ProfitTruth from './ProfitTruth'
 import { computeProfit } from './profitCalc'
-import { computeVerdicts, hoanMatureDaysLeft } from './verdict'
+import { computeVerdicts, hoanMatureDaysLeft, isComboName } from './verdict'
 import type { VerdictRow, VGroup } from './verdict'
 import GiftCombo from './GiftCombo'
 import { useAppStore } from '../../stores/appStore'
@@ -253,7 +253,9 @@ export default function InventoryBoard() {
     void load(sources)
   }
 
-  const products = data?.products ?? []
+  const productsAll = data?.products ?? []
+  // combo "+ GIFT" không phải SKU kho riêng (số thật ở mã gốc) → lọc khỏi board, Lãi thật, máy tính giá
+  const products = useMemo(() => productsAll.filter((p) => !isComboName(p.name)), [productsAll])
   const inv = data?.inv ?? []
   const velocity = data?.velocity ?? {}
   const velDaily = data?.velDaily ?? {}
