@@ -45,6 +45,23 @@ export interface DeepDive {
   exactAds?: SpyAd[]     // danh sách ad ĐÚNG SP (tải về được) — harvest output
 }
 
+// Video bán SP (rip-ready) — từ /api/research-videos, có downloadUrl no-watermark.
+export interface VidItem {
+  id: string
+  cover: string
+  downloadUrl: string   // tải về chạy ads luôn (no watermark)
+  url: string           // link TikTok gốc
+  views: number
+  desc: string
+  durationSec: number
+  author: string
+}
+export interface VideoCheck {
+  count: number         // # video bán SP tìm được
+  maxViews: number      // view cao nhất (winner signal)
+  list: VidItem[]       // top video (đã sort theo view), giữ link Tải
+}
+
 // Giám khảo Gemini — phân tích sâu tổng hợp hồ sơ SP.
 export interface JudgeResult {
   verdict: string        // NÊN TEST | CÂN NHẮC | BỎ
@@ -68,6 +85,8 @@ export interface SpCandidate {
   source: 'tiktok' | 'fb'
   isBranded?: boolean    // undefined = chưa lọc
   brand?: string
+  vids?: VideoCheck      // dò video bán SP (lite, sau quét) — rip-ready
+  videoChecking?: boolean // đang dò video
   diving?: boolean       // đang Soi sâu
   filtering?: boolean    // đang lọc spy chính xác (vision)
   deep?: DeepDive        // kết quả Soi sâu

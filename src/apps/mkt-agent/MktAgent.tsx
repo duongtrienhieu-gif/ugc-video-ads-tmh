@@ -1,8 +1,8 @@
-// ── MKT Agent — UI (1-logic: Triage → Phân tích → Quyết định) ────────────────
-// Giai đoạn 0: Quét SP win GENERIC sourceable (MY). Mỗi SP đi đúng 1 mạch:
-//   1) Triage (số bán + WIN sơ bộ)  →  2) 1 nút "Phân tích" (soi sâu + đào spy)
-//   →  3) Verdict gộp (Gemini + WIN) + video spy đối thủ → ra quyết định.
-// Gộp 3 hệ chấm điểm cũ làm 1, ẩn nút thừa, lộ dần theo bước. Xem MKT_AGENT_SPEC.md.
+// ── MKT Agent — UI (video-first: quét → dò video đối thủ → xếp lên đầu → rip) ──
+// Mục tiêu: SP CÓ VIDEO đối thủ sẵn = khởi đầu. Sau quét, tự dò video top-N (rẻ,
+// 1 call/SP) → xếp SP-có-video lên đầu + reel Tải no-watermark ngay trên card.
+// Phân tích sâu (ads/1688/Gemini) chỉ chạy khi chốt 1 SP. Xem MKT_AGENT_SPEC.md.
+import { useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
 import { useMktAgentStore, type SpCandidate } from './store'
@@ -12,11 +12,12 @@ import { buildVerifyLinks, deepDive, searchKeyword } from './services/enrichStag
 import { judgeSp } from './services/judge'
 import { harvestExactSpy } from './services/harvestSpy'
 import { computeWinScore } from './services/winScore'
+import { checkProductVideos } from './services/checkVideos'
+import { KEYWORD_GROUPS, toggleGroup, isGroupActive, parseNiches } from './keywords'
 
 const fmt = (n: number) => new Intl.NumberFormat('en-US').format(Math.round(n))
 const compact = (n: number) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n)
 
-// Gộp verdict: ưu tiên Gemini (lập luận), WIN số làm điểm phụ.
 type Tone = 'emerald' | 'amber' | 'rose' | 'zinc'
 const TONE: Record<Tone, string> = {
   emerald: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/45',
@@ -40,6 +41,14 @@ function shipHint(s?: string): { label: string; cls: string } | null {
     : { label: '✈️ cross-border', cls: 'text-amber-400' }
 }
 
+// Pool chạy song song giới hạn n — dò video nhiều SP mà không spam API.
+async function pool<T>(items: T[], n: number, fn: (t: T) => Promise<void>): Promise<void> {
+  let i = 0
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (i < items.length) { const idx = i++; await fn(items[idx]) }
+  }))
+}
+
 export default function MktAgent() {
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const sendToApp = useAppStore((s) => s.sendToApp)
@@ -48,20 +57,45 @@ export default function MktAgent() {
     setNiches, setAmount, setScanning, setClassifying, setError,
     setCandidates, setBranding, patchCandidate, setOnlyGeneric, selectSp,
   } = useMktAgentStore()
+  const [videoDepth] = useState(20)
+  const [vidScanning, setVidScanning] = useState(false)
+  const [onlyWithVideo, setOnlyWithVideo] = useState(false)
+
+  // Dò video bán SP cho top-N (theo số bán) chưa dò → xếp SP-có-video lên đầu.
+  const runVideoRank = async (list: SpCandidate[], depth: number) => {
+    const targets = list
+      .filter((c) => c.isBranded !== true && !c.vids && !c.videoChecking)
+      .sort((a, b) => b.sale - a.sale)
+      .slice(0, depth)
+    if (!targets.length) return
+    setVidScanning(true)
+    await pool(targets, 4, async (c) => {
+      patchCandidate(c.productId, { videoChecking: true })
+      try {
+        const v = await checkProductVideos(c)
+        patchCandidate(c.productId, { vids: v, videoChecking: false })
+      } catch {
+        patchCandidate(c.productId, { vids: { count: 0, maxViews: 0, list: [] }, videoChecking: false })
+      }
+    })
+    setVidScanning(false)
+  }
 
   const scan = async () => {
-    setScanning(true); setError(null); selectSp(null); setCandidates([])
+    setScanning(true); setError(null); selectSp(null); setCandidates([]); setVidScanning(false)
     try {
       const res = await scanWinningProducts(niches.split(','), amount)
       setCandidates(res.candidates)
       if (!res.candidates.length) { setError('Không tìm thấy SP — thử đổi/thêm ngách.'); return }
-      if (!geminiApiKey) { setError('Có SP rồi — nhưng cần Gemini key (Cài đặt) để lọc branded/generic.'); return }
+      // Dò video chạy nền ngay (không chặn) — ưu tiên SP có video.
+      void runVideoRank(res.candidates, videoDepth)
+      if (!geminiApiKey) { setError('Có SP rồi — cần Gemini key (Cài đặt) để lọc branded.'); return }
       setClassifying(true)
       try {
         const map = await classifyBranding(geminiApiKey, res.candidates.map((c) => ({ id: c.productId, title: c.title })))
         setBranding(map)
       } catch {
-        setError('Quét xong nhưng lọc branded lỗi (thử lại). Vẫn xem được danh sách thô.')
+        setError('Quét xong nhưng lọc branded lỗi (thử lại). Vẫn xem được danh sách.')
       } finally {
         setClassifying(false)
       }
@@ -72,10 +106,10 @@ export default function MktAgent() {
     }
   }
 
-  // 1 NÚT = cả mạch: soi sâu (video/ads/1688) → giám khảo Gemini → đào spy đúng SP.
+  // 1 NÚT phân tích sâu (chỉ khi chốt): soi sâu → giám khảo → đào spy FB.
   const analyzeSp = async (c: SpCandidate) => {
-    if (!geminiApiKey) { setError('Cần Gemini key (Cài đặt) để phân tích.'); return }
-    if (!c.imageUrl) { patchCandidate(c.productId, { deepError: 'SP thiếu ảnh — không phân tích được.' }); return }
+    if (!geminiApiKey) { setError('Cần Gemini key (Cài đặt) để phân tích sâu.'); return }
+    if (!c.imageUrl) { patchCandidate(c.productId, { deepError: 'SP thiếu ảnh.' }); return }
     patchCandidate(c.productId, { diving: true, deepError: undefined })
     let deep = c.deep
     try {
@@ -85,7 +119,7 @@ export default function MktAgent() {
         try {
           const judge = await judgeSp(geminiApiKey, { ...c, deep })
           patchCandidate(c.productId, { judge })
-        } catch { /* giám khảo lỗi → vẫn giữ số Soi sâu */ }
+        } catch { /* judge lỗi → vẫn giữ số */ }
       } else {
         patchCandidate(c.productId, { diving: false })
       }
@@ -93,7 +127,6 @@ export default function MktAgent() {
       patchCandidate(c.productId, { diving: false, deepError: (e as Error).message })
       return
     }
-    // Đào spy đối thủ đúng SP (nếu có ad ứng viên + chưa đào).
     if (deep && !deep.exactChecked && deep.rawAds?.length) {
       patchCandidate(c.productId, { filtering: true })
       try {
@@ -107,28 +140,56 @@ export default function MktAgent() {
 
   const genericCount = candidates.filter((c) => c.isBranded === false).length
   const brandedCount = candidates.filter((c) => c.isBranded === true).length
-  const shown = onlyGeneric ? candidates.filter((c) => c.isBranded !== true) : candidates
+  const withVideoCount = candidates.filter((c) => (c.vids?.count ?? 0) > 0).length
+  const checkedCount = candidates.filter((c) => c.vids).length
+
+  let shown = onlyGeneric ? candidates.filter((c) => c.isBranded !== true) : candidates
+  if (onlyWithVideo) shown = shown.filter((c) => (c.vids?.count ?? 0) > 0)
+  // Xếp: SP có video lên đầu → max view → số bán.
+  shown = [...shown].sort((a, b) => {
+    const aHas = (a.vids?.count ?? 0) > 0 ? 1 : 0
+    const bHas = (b.vids?.count ?? 0) > 0 ? 1 : 0
+    if (aHas !== bHas) return bHas - aHas
+    if (aHas) { const d = (b.vids!.maxViews) - (a.vids!.maxViews); if (d) return d }
+    return b.sale - a.sale
+  })
 
   return (
     <div className="min-h-full bg-zinc-950 text-zinc-100 p-4 md:p-6">
       <div className="mb-5">
         <h1 className="text-xl font-medium text-amber-400">🤖 MKT Agent</h1>
         <p className="text-[13px] text-zinc-400 mt-0.5">
-          Quét <b className="text-zinc-200">SP win GENERIC</b> (clone-test được, sẵn 1688) → <b className="text-zinc-200">Phân tích 1 chạm</b> → xem spy đối thủ → quyết định.
+          Quét SP COD → tự <b className="text-zinc-200">dò video đối thủ</b> → SP có video (rip-ready) lên đầu → Tải về chạy ads.
         </p>
       </div>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 md:p-5">
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <span className="text-amber-400 font-medium">Bước 1 · Quét SP win (Malaysia)</span>
-          <span className="text-[11px] text-zinc-500">tự lọc branded · sort theo số bán</span>
+          <span className="text-[11px] text-zinc-500">tự dò video · tự lọc branded</span>
+        </div>
+
+        {/* Nhóm ngách — bấm để thêm/bớt nhanh (đã loại thời trang/giày) */}
+        <div className="mb-2">
+          <p className="text-[11px] text-zinc-500 mb-1">Nhóm ngách (bấm thêm/bớt · đã tránh thời trang/giày nhiều biến thể)</p>
+          <div className="flex flex-wrap gap-1.5">
+            {KEYWORD_GROUPS.map((g) => {
+              const active = isGroupActive(g, parseNiches(niches))
+              return (
+                <button key={g.label} onClick={() => setNiches(toggleGroup(g, niches))}
+                  className={`px-2.5 py-1 rounded-full text-[12px] border transition-colors ${active ? 'bg-amber-400 text-zinc-950 border-amber-400 font-semibold' : 'bg-zinc-900 text-zinc-300 border-zinc-700 hover:border-zinc-500'}`}>
+                  {g.label}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
           <label className="text-[13px] text-zinc-400">
             Ngách (cách nhau dấu phẩy — tiếng Malay)
             <input value={niches} onChange={(e) => setNiches(e.target.value)}
-              placeholder="minyak urut, sakit sendi, jerawat..."
+              placeholder="minyak urut, jerawat, sakit gigi..."
               className="mt-1 w-full bg-zinc-950 border border-zinc-700 rounded-md px-3 py-2 text-zinc-100 text-sm" />
           </label>
           <label className="text-[13px] text-zinc-400">
@@ -151,12 +212,26 @@ export default function MktAgent() {
           <div className="mt-4">
             <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
               <p className="text-[12px] text-zinc-500">
-                {candidates.length} SP · {classifying ? 'đang lọc branded…' : <><span className="text-emerald-400">{genericCount} generic</span> · <span className="text-rose-400">{brandedCount} branded</span></>} · sort theo số bán
+                {candidates.length} SP · <span className="text-emerald-400">🎥 {withVideoCount} có video</span>
+                {' · '}{classifying ? 'đang lọc branded…' : <><span className="text-emerald-400">{genericCount} generic</span> · <span className="text-rose-400">{brandedCount} branded</span></>}
+                {vidScanning && <span className="text-amber-300 animate-pulse"> · đang dò video…</span>}
               </p>
-              <label className="flex items-center gap-1.5 text-[12px] text-zinc-300 cursor-pointer">
-                <input type="checkbox" checked={onlyGeneric} onChange={(e) => setOnlyGeneric(e.target.checked)} />
-                Chỉ hiện generic (ẩn branded)
-              </label>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <label className="flex items-center gap-1.5 text-[12px] text-zinc-300 cursor-pointer">
+                  <input type="checkbox" checked={onlyWithVideo} onChange={(e) => setOnlyWithVideo(e.target.checked)} />
+                  Chỉ SP có video
+                </label>
+                <label className="flex items-center gap-1.5 text-[12px] text-zinc-300 cursor-pointer">
+                  <input type="checkbox" checked={onlyGeneric} onChange={(e) => setOnlyGeneric(e.target.checked)} />
+                  Ẩn branded
+                </label>
+                {checkedCount < candidates.length && (
+                  <button onClick={() => runVideoRank(candidates, videoDepth)} disabled={vidScanning}
+                    className="px-2.5 py-1 rounded-md text-[12px] bg-amber-400 text-zinc-950 font-semibold hover:bg-amber-300 shadow shadow-amber-400/30 disabled:opacity-50">
+                    🎥 Dò video thêm {videoDepth}
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 items-start">
@@ -179,7 +254,7 @@ export default function MktAgent() {
   )
 }
 
-// ── 1 card SP — 3 trạng thái: triage → đang phân tích → verdict + spy ─────────
+// ── 1 card SP — video reel (rip-ready) trước, phân tích sâu sau ────────────────
 function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp }: {
   p: SpCandidate
   picked: boolean
@@ -196,8 +271,7 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp }: {
   const hasDeep = !!d
   const links = buildVerifyLinks(p)
 
-  // Verdict gộp (sau phân tích): Gemini headline + WIN số phụ + lý do/rủi ro.
-  const verdictText = p.judge?.verdict || (win.tier === 'strong' ? 'NÊN TEST' : win.tier === 'weak' ? 'CÂN NHẮC' : 'CÂN NHẮC')
+  const verdictText = p.judge?.verdict || (win.tier === 'strong' ? 'NÊN TEST' : 'CÂN NHẮC')
   const tone: Tone = branded ? 'rose' : p.judge ? judgeTone(p.judge.verdict) : win.tier === 'strong' ? 'emerald' : win.tier === 'good' ? 'amber' : 'zinc'
   const reasons = p.judge?.reasons ?? []
   const risks = [...new Set([...(p.judge?.risks ?? []), ...win.risks])]
@@ -205,7 +279,7 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp }: {
   const marginPct = (p.price > 0 && costRM > 0) ? Math.round((p.price - costRM) / p.price * 100) : null
 
   return (
-    <div className={`rounded-lg border bg-zinc-950 p-3 flex flex-col gap-2 ${picked ? 'border-amber-500' : branded ? 'border-rose-500/30 opacity-70' : 'border-zinc-800'}`}>
+    <div className={`rounded-lg border bg-zinc-950 p-3 flex flex-col gap-2 ${picked ? 'border-amber-500' : branded ? 'border-rose-500/30 opacity-70' : (p.vids?.count ?? 0) > 0 ? 'border-emerald-500/30' : 'border-zinc-800'}`}>
       {/* Header */}
       <div className="flex gap-3">
         {p.imageUrl
@@ -224,43 +298,65 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp }: {
       </div>
       {ship && <div className={`text-[11px] ${ship.cls}`}>{ship.label}</div>}
 
+      {/* 🎥 VIDEO REEL — rip-ready (ưu tiên #1) */}
+      {p.videoChecking ? (
+        <div className="text-[11px] text-amber-300 animate-pulse">⏳ Đang dò video bán SP…</div>
+      ) : p.vids ? (
+        p.vids.count > 0 ? (
+          <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2">
+            <p className="text-[12px] font-semibold text-emerald-300">🎥 {p.vids.count} video bán SP · {compact(p.vids.maxViews)} view <span className="font-normal text-emerald-400/80">— tải về chạy ads</span></p>
+            <div className="flex gap-1.5 mt-1.5 overflow-x-auto pb-1">
+              {p.vids.list.map((v) => (
+                <div key={v.id} className="shrink-0 w-16">
+                  <a href={v.url || v.downloadUrl} target="_blank" rel="noopener noreferrer"
+                    className="block relative w-16 h-24 rounded overflow-hidden border border-emerald-500/40 bg-zinc-800 hover:border-emerald-400" title={`${compact(v.views)} view · ${v.durationSec}s — mở`}>
+                    {v.cover ? <img src={v.cover} alt="" className="w-full h-full object-cover" loading="lazy" /> : <span className="grid place-items-center w-full h-full text-[10px]">▶</span>}
+                    {v.durationSec > 0 && <span className="absolute bottom-0.5 right-0.5 bg-black/70 px-1 rounded text-[8px]">{v.durationSec}s</span>}
+                  </a>
+                  <div className="flex items-center justify-between mt-0.5 px-0.5">
+                    <span className="text-[9px] text-zinc-500">{compact(v.views)}</span>
+                    {v.downloadUrl && <a href={v.downloadUrl} target="_blank" rel="noopener noreferrer" title="Tải no-watermark" className="text-[10px] text-violet-300 hover:text-violet-200">⬇</a>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="text-[11px] text-zinc-500">🎥 0 video bán SP — chưa có creative sẵn để rip</div>
+        )
+      ) : null}
+
       {branded ? (
         <span className={`px-2 py-0.5 rounded border text-[11px] self-start ${TONE.rose}`}>🔴 BRANDED · bỏ (không clone được)</span>
       ) : !hasDeep ? (
-        // ── TRẠNG THÁI 1: TRIAGE — 1 chip WIN sơ bộ + 1 nút Phân tích ──
+        // Triage — WIN sơ bộ + nút Phân tích sâu (tùy chọn)
         <>
           <div className="flex items-center justify-between gap-2">
-            <span className={`px-2 py-0.5 rounded border text-[11px] ${TONE.zinc}`} title="Điểm sơ bộ (chỉ theo số bán). Bấm Phân tích để chấm đủ.">
-              WIN ~{win.score} · sơ bộ
-            </span>
+            <span className={`px-2 py-0.5 rounded border text-[11px] ${TONE.zinc}`}>WIN ~{win.score} · sơ bộ</span>
             <a href={links.googleLens} target="_blank" rel="noopener noreferrer"
-              className="text-[10px] text-zinc-500 hover:text-zinc-300 underline" title="Google Lens — soi branding/1688 bằng mắt (tùy chọn)">🔍 kiểm tay</a>
+              className="text-[10px] text-zinc-500 hover:text-zinc-300 underline" title="Google Lens — soi branding/1688">🔍 kiểm tay</a>
           </div>
           {busy ? (
             <div className="h-10 rounded-md text-[12px] bg-amber-500/10 border border-amber-400/40 text-amber-200 grid place-items-center animate-pulse">
-              {p.diving ? '⏳ Đang soi sâu (video · ads · 1688)…' : '⏳ Đang đào spy đối thủ…'}
+              {p.diving ? '⏳ Đang soi sâu (ads · 1688)…' : '⏳ Đang đào spy FB…'}
             </div>
           ) : (
             <button onClick={onAnalyze} disabled={!hasKey}
-              className="h-10 rounded-md text-[13px] font-semibold bg-amber-400 text-zinc-950 hover:bg-amber-300 shadow-lg shadow-amber-400/40 disabled:opacity-40 disabled:shadow-none">
-              🔬 Phân tích SP này
+              className="h-9 rounded-md text-[12px] font-medium bg-zinc-800 text-zinc-200 hover:bg-zinc-700 border border-zinc-700 disabled:opacity-40">
+              🔬 Phân tích sâu (ads · 1688 · Gemini)
             </button>
           )}
-          <p className="text-[10px] text-zinc-600 -mt-0.5">{hasKey ? 'Soi sâu + đào spy đối thủ · dùng quota API ngoài' : 'Cần Gemini key (Cài đặt)'}</p>
           {p.deepError && <p className="text-[11px] text-rose-400">{p.deepError}</p>}
         </>
       ) : (
-        // ── TRẠNG THÁI 2/3: VERDICT GỘP + SPY + QUYẾT ĐỊNH ──
+        // Verdict gộp + spy FB + quyết định
         <>
-          {/* Verdict gộp 1 khối */}
           <div className={`rounded-md border px-2.5 py-2 ${TONE[tone]}`}>
             <div className="flex items-center justify-between gap-2">
               <span className="text-[13px] font-semibold">{p.judge ? '🧠' : '📊'} {verdictText}</span>
-              <span className="text-[11px] opacity-80">{p.judge?.score ? `Gemini ${p.judge.score}` : ''}{p.judge?.score ? ' · ' : ''}WIN {win.score}</span>
+              <span className="text-[11px] opacity-80">{p.judge?.score ? `Gemini ${p.judge.score} · ` : ''}WIN {win.score}</span>
             </div>
-            {/* Bằng chứng 1 dòng */}
             <div className="text-[11px] text-zinc-300/90 mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
-              {d!.videoCount > 0 && <span>🎬 {d!.videoCount} video{d!.maxViews > 0 ? ` · ${compact(d!.maxViews)} view` : ''}</span>}
               {d!.adCount > 0 && <span>📣 {d!.adCount} ads{d!.adTopDays > 0 ? ` · chạy ${d!.adTopDays}d` : ''}{d!.adTopScale > 1 ? ` · x${d!.adTopScale}` : ''}</span>}
               <span>{d!.on1688 ? `🏭 1688 ✓${d!.count1688}${d!.cost1688 ? ` · ¥${d!.cost1688}` : ''}` : '🏭 1688 ✗'}</span>
               {marginPct !== null && <span>💰 biên ~{marginPct}%</span>}
@@ -270,30 +366,6 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp }: {
             {d!.on1688 && d!.link1688 && <a href={d!.link1688} target="_blank" rel="noopener noreferrer" className="text-[10px] text-sky-400 underline">xem nguồn 1688 →</a>}
           </div>
 
-          {/* SPY đối thủ — payload để quyết định */}
-          {p.filtering ? (
-            <div className="h-10 rounded-md text-[12px] bg-amber-500/10 border border-amber-400/40 text-amber-200 grid place-items-center animate-pulse">⏳ Đang đào spy đối thủ…</div>
-          ) : d!.exactChecked ? (
-            <div>
-              <p className={`text-[12px] font-medium ${(d!.exactCount ?? 0) >= 5 ? 'text-emerald-300' : 'text-amber-300'}`}>
-                🎯 {d!.exactCount} video spy ĐÚNG SP {(d!.exactCount ?? 0) >= 5 ? '✓ đủ 5' : (d!.exactCount ?? 0) === 0 ? '— gần như không có đối thủ COD (cân nhắc bỏ)' : '— chưa đủ 5'}
-              </p>
-              {d!.exactAds && d!.exactAds.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-1.5">
-                  {d!.exactAds.slice(0, 10).map((a) => (
-                    <a key={a.id} href={a.videoUrl} target="_blank" rel="noopener noreferrer" title={`${a.platform} · chạy ${a.days}d — mở video`}
-                      className="block w-11 h-11 rounded overflow-hidden border border-emerald-500/40 bg-zinc-800 hover:border-emerald-400">
-                      {a.cover ? <img src={a.cover} alt="" className="w-full h-full object-cover" loading="lazy" /> : <span className="text-[9px] grid place-items-center w-full h-full">▶</span>}
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-[11px] text-zinc-500">Không tìm thấy ad đối thủ để đào (keyword nông / SP ít cầu paid).</p>
-          )}
-
-          {/* Quyết định + bước tiếp */}
           {!busy && (
             <div className="flex flex-wrap gap-1.5 pt-0.5 border-t border-zinc-800 mt-0.5">
               <button onClick={onPick}
@@ -308,7 +380,7 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp }: {
                 className="h-8 px-2.5 rounded-md bg-sky-500/15 hover:bg-sky-500/25 text-[12px] text-sky-300 border border-sky-500/40">📣 Spy thêm</button>
             </div>
           )}
-          {picked && <p className="text-[10px] text-emerald-400/80">Đã chốt — bước sản xuất content (Brief→kịch bản→video) ở bản sau.</p>}
+          {picked && <p className="text-[10px] text-emerald-400/80">Đã chốt — bước sản xuất content ở bản sau.</p>}
         </>
       )}
     </div>
