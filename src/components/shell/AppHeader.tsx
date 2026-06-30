@@ -26,7 +26,10 @@ interface AppHeaderProps {
 export default function AppHeader({ icon: Icon, eyebrow, rec, title, subtitle, center, actions }: AppHeaderProps) {
   return (
     <header className="shrink-0 border-b border-app-border bg-app-surface px-3 py-1.5 sm:px-5 sm:py-2">
-      <div className="flex items-center justify-between gap-3">
+      {/* Mobile: stack dọc (tiêu đề trên, actions xuống dòng) để actions nhiều
+          chip không ép cột tiêu đề co lại làm chữ dồn dọc + tràn phải.
+          sm+ trở lên: 1 hàng như cũ. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
           {Icon && (
             <span
@@ -43,7 +46,7 @@ export default function AppHeader({ icon: Icon, eyebrow, rec, title, subtitle, c
           </div>
         </div>
         {center && <div className="hidden min-w-0 flex-1 lg:block">{center}</div>}
-        {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
+        {actions && <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap sm:shrink-0">{actions}</div>}
       </div>
     </header>
   )

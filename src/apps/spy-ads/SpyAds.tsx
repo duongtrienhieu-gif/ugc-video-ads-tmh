@@ -129,6 +129,9 @@ export default function SpyAds() {
   const addToast = useAppStore((s) => s.addToast)
 
   const [mode, setMode] = useState<'radar' | 'ads' | 'links'>('radar') // 🎯 Radar SP win | 🔍 tìm ad | 🔗 tìm salepage
+  // Mobile: ẩn bộ chip gợi ý từ khóa (ngách/COD) cho đỡ chiếm chỗ che output;
+  // bấm "Gợi ý" để bung. Desktop (lg+) luôn hiện nên không ảnh hưởng.
+  const [chipsOpen, setChipsOpen] = useState(false)
   const [platform, setPlatform] = useState<'fb' | 'tiktok'>('fb')
   const [q, setQ] = useState('')
   // Radar SP win (Bước 1): dò TikTok Shop theo ngách
@@ -755,12 +758,18 @@ CHỈ trả JSON.`
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[11px] font-medium text-slate-400">Ngách:</span>
-              {NICHE_CHIPS.map((c) => (
-                <button key={c} onClick={() => void radarSearch(c)} disabled={radarLoading}
-                  className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50">
-                  {c}
-                </button>
-              ))}
+              <button onClick={() => setChipsOpen((v) => !v)}
+                className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-600 lg:hidden">
+                Gợi ý {chipsOpen ? '▴' : '▾'}
+              </button>
+              <div className={`${chipsOpen ? 'contents' : 'hidden'} lg:contents`}>
+                {NICHE_CHIPS.map((c) => (
+                  <button key={c} onClick={() => void radarSearch(c)} disabled={radarLoading}
+                    className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50">
+                    {c}
+                  </button>
+                ))}
+              </div>
             </div>
           </>
         )}
@@ -812,12 +821,18 @@ CHỈ trả JSON.`
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[11px] font-medium text-slate-400">Từ khóa COD:</span>
-              {COD_CHIPS.map((c) => (
-                <button key={c} onClick={() => void search(c)} disabled={loading}
-                  className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50">
-                  {c}
-                </button>
-              ))}
+              <button onClick={() => setChipsOpen((v) => !v)}
+                className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-600 lg:hidden">
+                Gợi ý {chipsOpen ? '▴' : '▾'}
+              </button>
+              <div className={`${chipsOpen ? 'contents' : 'hidden'} lg:contents`}>
+                {COD_CHIPS.map((c) => (
+                  <button key={c} onClick={() => void search(c)} disabled={loading}
+                    className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50">
+                    {c}
+                  </button>
+                ))}
+              </div>
               <div className="ml-auto flex items-center gap-2">
                 {ads && ads.length > 0 && (
                   <>
