@@ -3,6 +3,7 @@
 // Spy → content → Drive. Co-pilot, checkpoint cheap→expensive.
 // Xem BaoCao/MKT_AGENT_SPEC.md. P1 = Mô hình A (tab trình duyệt).
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 export type CheckpointMode = 'every' | 'key' | 'auto'
 
@@ -110,6 +111,8 @@ interface MktAgentState {
   candidates: SpCandidate[]
   onlyGeneric: boolean
   selectedSp: SpCandidate | null
+  watchlist: SpCandidate[]      // SP đã ghim — lưu qua F5 + qua các lần quét
+  showWatchlist: boolean
   setStage: (s: AgentStage) => void
   setCheckpointMode: (m: CheckpointMode) => void
   setNiches: (s: string) => void
@@ -122,9 +125,11 @@ interface MktAgentState {
   patchCandidate: (id: string, patch: Partial<SpCandidate>) => void
   setOnlyGeneric: (b: boolean) => void
   selectSp: (p: SpCandidate | null) => void
+  toggleWatch: (c: SpCandidate) => void
+  setShowWatchlist: (b: boolean) => void
 }
 
-export const useMktAgentStore = create<MktAgentState>((set) => ({
+export const useMktAgentStore = create<MktAgentState>()(persist((set) => ({
   stage: 'research',
   checkpointMode: 'every',
   niches: 'minyak urut, sakit sendi lutut, jerawat, kurus cepat, sakit gigi',
@@ -135,6 +140,8 @@ export const useMktAgentStore = create<MktAgentState>((set) => ({
   candidates: [],
   onlyGeneric: true,
   selectedSp: null,
+  watchlist: [],
+  showWatchlist: false,
   setStage: (stage) => set({ stage }),
   setCheckpointMode: (checkpointMode) => set({ checkpointMode }),
   setNiches: (niches) => set({ niches }),
@@ -153,4 +160,13 @@ export const useMktAgentStore = create<MktAgentState>((set) => ({
   })),
   setOnlyGeneric: (onlyGeneric) => set({ onlyGeneric }),
   selectSp: (selectedSp) => set({ selectedSp }),
+  toggleWatch: (c) => set((s) => {
+    const exists = s.watchlist.some((w) => w.productId === c.productId)
+    return { watchlist: exists ? s.watchlist.filter((w) => w.productId !== c.productId) : [{ ...c }, ...s.watchlist] }
+  }),
+  setShowWatchlist: (showWatchlist) => set({ showWatchlist }),
+}), {
+  name: 'mkt-agent-store',
+  // Lưu kết quả quét + watchlist qua F5 (đỡ tốn call/credit quét lại). Bỏ qua cờ tạm.
+  partialize: (s) => ({ candidates: s.candidates, niches: s.niches, amount: s.amount, onlyGeneric: s.onlyGeneric, watchlist: s.watchlist }),
 }))

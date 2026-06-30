@@ -56,8 +56,9 @@ export default function MktAgent() {
   const addProduct = useBankStore((s) => s.addProduct)
   const {
     niches, amount, scanning, classifying, error, candidates, onlyGeneric, selectedSp,
+    watchlist, showWatchlist,
     setNiches, setAmount, setScanning, setClassifying, setError,
-    setCandidates, setBranding, patchCandidate, setOnlyGeneric, selectSp,
+    setCandidates, setBranding, patchCandidate, setOnlyGeneric, selectSp, toggleWatch, setShowWatchlist,
   } = useMktAgentStore()
   const [videoDepth] = useState(40)
   const [vidScanning, setVidScanning] = useState(false)
@@ -169,13 +170,14 @@ Suy luận hợp lý từ tên + ngách. TUYỆT ĐỐI KHÔNG đưa số lượ
     }
   }
 
-  const genericCount = candidates.filter((c) => c.tier === 'generic').length
-  const oemCount = candidates.filter((c) => c.tier === 'oem').length
-  const brandCount = candidates.filter((c) => c.tier === 'brand').length
-  const withVideoCount = candidates.filter((c) => (c.vids?.count ?? 0) > 0).length
-  const checkedCount = candidates.filter((c) => c.vids).length
+  const watchedIds = new Set(watchlist.map((w) => w.productId))
+  const source = showWatchlist ? watchlist : candidates
+  const genericCount = source.filter((c) => c.tier === 'generic').length
+  const oemCount = source.filter((c) => c.tier === 'oem').length
+  const brandCount = source.filter((c) => c.tier === 'brand').length
+  const withVideoCount = source.filter((c) => (c.vids?.count ?? 0) > 0).length
 
-  let shown = onlyGeneric ? candidates.filter((c) => c.tier !== 'brand') : candidates
+  let shown = onlyGeneric ? source.filter((c) => c.tier !== 'brand') : source
   if (onlyWithVideo) shown = shown.filter((c) => (c.vids?.count ?? 0) > 0)
   // Xếp: SP có video lên đầu → max view → số bán.
   shown = [...shown].sort((a, b) => {
@@ -188,11 +190,17 @@ Suy luận hợp lý từ tên + ngách. TUYỆT ĐỐI KHÔNG đưa số lượ
 
   return (
     <div className="min-h-full bg-zinc-950 text-zinc-100 p-4 md:p-6">
-      <div className="mb-5">
-        <h1 className="text-xl font-medium text-amber-400">🤖 MKT Agent</h1>
-        <p className="text-[13px] text-zinc-400 mt-0.5">
-          Quét SP COD → tự <b className="text-zinc-200">dò video đối thủ</b> → SP có video (rip-ready) lên đầu → Tải về chạy ads.
-        </p>
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-medium text-amber-400">🤖 MKT Agent</h1>
+          <p className="text-[13px] text-zinc-400 mt-0.5">
+            Quét SP COD → tự <b className="text-zinc-200">dò video đối thủ</b> → SP có video (rip-ready) lên đầu → Tải về chạy ads.
+          </p>
+        </div>
+        <button onClick={() => setShowWatchlist(!showWatchlist)}
+          className={`shrink-0 h-9 px-3 rounded-md text-[13px] font-semibold border ${showWatchlist ? 'bg-amber-400 text-zinc-950 border-amber-400' : 'bg-zinc-900 text-amber-300 border-amber-500/40 hover:bg-zinc-800'}`}>
+          📌 Đã lưu ({watchlist.length}){showWatchlist ? ' · ← quét' : ''}
+        </button>
       </div>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 md:p-5">
@@ -240,7 +248,7 @@ Suy luận hợp lý từ tên + ngách. TUYỆT ĐỐI KHÔNG đưa số lượ
           <div className="mt-3 text-[13px] text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-md px-3 py-2">{error}</div>
         )}
 
-        {candidates.length > 0 && (
+        {source.length > 0 ? (
           <div className="mt-4">
             <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
               <p className="text-[12px] text-zinc-500">
@@ -257,7 +265,7 @@ Suy luận hợp lý từ tên + ngách. TUYỆT ĐỐI KHÔNG đưa số lượ
                   <input type="checkbox" checked={onlyGeneric} onChange={(e) => setOnlyGeneric(e.target.checked)} />
                   Ẩn brand bảo hộ
                 </label>
-                {checkedCount < candidates.length && (
+                {!showWatchlist && candidates.some((c) => !c.vids) && (
                   <button onClick={() => runVideoRank(candidates, videoDepth)} disabled={vidScanning}
                     className="px-2.5 py-1 rounded-md text-[12px] bg-amber-400 text-zinc-950 font-semibold hover:bg-amber-300 shadow shadow-amber-400/30 disabled:opacity-50">
                     🎥 Dò video thêm {videoDepth}
@@ -278,11 +286,15 @@ Suy luận hợp lý từ tên + ngách. TUYỆT ĐỐI KHÔNG đưa số lượ
                   onSendToApp={sendToApp}
                   onPlay={setPlayVid}
                   onAddBank={() => addToBank(p)}
+                  isWatched={watchedIds.has(p.productId)}
+                  onWatch={() => toggleWatch(p)}
                 />
               ))}
             </div>
           </div>
-        )}
+        ) : showWatchlist ? (
+          <p className="mt-4 text-[13px] text-zinc-500">Chưa ghim SP nào. Bấm 📌 trên card để lưu SP — giữ qua F5 và qua các lần quét.</p>
+        ) : null}
       </div>
 
       {playVid && (
@@ -314,7 +326,7 @@ Suy luận hợp lý từ tên + ngách. TUYỆT ĐỐI KHÔNG đưa số lượ
 }
 
 // ── 1 card SP — video reel (rip-ready) trước, phân tích sâu sau ────────────────
-function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onAddBank }: {
+function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onAddBank, isWatched, onWatch }: {
   p: SpCandidate
   picked: boolean
   hasKey: boolean
@@ -323,6 +335,8 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
   onSendToApp: (a: { targetApp: string; targetField: string; data: unknown }) => void
   onPlay: (v: VidItem) => void
   onAddBank: () => void
+  isWatched: boolean
+  onWatch: () => void
 }) {
   const branded = p.tier === 'brand'
   const win = computeWinScore(p)
@@ -346,10 +360,12 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
         {p.imageUrl
           ? <img src={p.imageUrl} alt="" className="w-16 h-16 rounded-md object-cover bg-zinc-800 shrink-0" loading="lazy" />
           : <div className="w-16 h-16 rounded-md bg-zinc-800 shrink-0" />}
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-[13px] text-zinc-100 line-clamp-2">{p.title}</p>
           <p className="text-[11px] text-zinc-500 mt-1 truncate">{p.seller || '—'}{p.brand ? ` · ${p.brand}` : ''}</p>
         </div>
+        <button onClick={onWatch} title={isWatched ? 'Bỏ ghim' : 'Ghim vào kho đã lưu (giữ qua F5 + qua các lần quét)'}
+          className={`shrink-0 text-[15px] leading-none ${isWatched ? 'text-amber-400' : 'text-zinc-600 hover:text-amber-300'}`}>📌</button>
       </div>
 
       {/* Metrics */}
