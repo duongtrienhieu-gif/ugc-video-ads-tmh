@@ -10,7 +10,6 @@ import { scanWinningProducts } from './services/researchStage'
 import { classifyBranding } from './services/brandingFilter'
 import { buildVerifyLinks, deepDive, searchKeyword } from './services/enrichStage'
 import { judgeSp } from './services/judge'
-import { harvestExactSpy } from './services/harvestSpy'
 import { computeWinScore } from './services/winScore'
 import { checkProductVideos } from './services/checkVideos'
 import { KEYWORD_GROUPS, toggleGroup, isGroupActive, parseNiches } from './keywords'
@@ -126,16 +125,6 @@ export default function MktAgent() {
       }
     } catch (e) {
       patchCandidate(c.productId, { diving: false, deepError: (e as Error).message })
-      return
-    }
-    if (deep && !deep.exactChecked && deep.rawAds?.length) {
-      patchCandidate(c.productId, { filtering: true })
-      try {
-        const exact = await harvestExactSpy(geminiApiKey, c.imageUrl, deep.rawAds, 5)
-        patchCandidate(c.productId, { filtering: false, deep: { ...deep, exactCount: exact.length, exactChecked: true, exactAds: exact.slice(0, 10) } })
-      } catch {
-        patchCandidate(c.productId, { filtering: false })
-      }
     }
   }
 
@@ -343,7 +332,7 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay }: {
           return (
             <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2">
               <p className="text-[12px] font-semibold text-emerald-300">
-                🎥 {tkN} TikTok{fbN > 0 ? <span className="text-sky-300"> · 📣 {fbN} FB</span> : null}{p.vids.maxViews > 0 ? ` · ${compact(p.vids.maxViews)} view` : ''} <span className="font-normal text-emerald-400/80">— bấm xem / tải</span>
+                🎥 {tkN} TikTok đúng SP{fbN > 0 ? <span className="text-sky-300"> · 📣 {fbN} ad FB cùng ngách</span> : null}{p.vids.maxViews > 0 ? ` · ${compact(p.vids.maxViews)} view` : ''} <span className="font-normal text-emerald-400/80">— bấm xem / tải</span>
               </p>
               <div className="flex gap-1.5 mt-1.5 overflow-x-auto pb-1">
                 {p.vids.list.map((v) => {
@@ -418,23 +407,6 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay }: {
             {risks.slice(0, 3).map((r, i) => <div key={`k${i}`} className="text-[10px] text-rose-300/90">⚠ {r}</div>)}
             {d!.on1688 && d!.link1688 && <a href={d!.link1688} target="_blank" rel="noopener noreferrer" className="text-[10px] text-sky-400 underline">xem nguồn 1688 →</a>}
           </div>
-
-          {/* FB ad ĐÚNG SP — so ảnh vision (reliable, không drift như keyword) */}
-          {d!.exactChecked && ((d!.exactAds?.length ?? 0) > 0 ? (
-            <div className="rounded-md border border-sky-500/30 bg-sky-500/5 p-2">
-              <p className="text-[11px] font-semibold text-sky-300">📣 {d!.exactCount} ad FB ĐÚNG SP <span className="font-normal text-sky-400/80">(đã so ảnh ≥75)</span></p>
-              <div className="flex flex-wrap gap-1 mt-1">
-                {d!.exactAds!.slice(0, 8).map((a) => (
-                  <a key={a.id} href={a.videoUrl} target="_blank" rel="noopener noreferrer" title={`FB · chạy ${a.days}d — mở`}
-                    className="block w-10 h-10 rounded overflow-hidden border border-sky-500/40 bg-zinc-800 hover:border-sky-400">
-                    {a.cover ? <img src={a.cover} alt="" className="w-full h-full object-cover" loading="lazy" /> : <span className="grid place-items-center w-full h-full text-[8px]">▶</span>}
-                  </a>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <p className="text-[11px] text-zinc-500">📣 0 ad FB đúng SP (so ảnh) — đối thủ FB ít/không có</p>
-          ))}
 
           {!busy && (
             <div className="flex flex-wrap gap-1.5 pt-0.5 border-t border-zinc-800 mt-0.5">

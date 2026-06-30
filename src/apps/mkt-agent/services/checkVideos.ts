@@ -1,11 +1,11 @@
-// ── MKT Agent · Dò video bán SP (lite, rip-ready) — TikTok ───────────────────
-// CHỐNG DRIFT: search bằng coreTerms(TÊN SP) — KHÔNG phải niche (niche → mọi SP
-// cùng ngách ra cùng video). Giống app Research (có chấm điểm liên quan brand-
-// token nên lọc drift). FB KHÔNG dò ở đây: keyword FB không biết đúng SP → 90%
-// rác; FB chuẩn = SO ẢNH (matchSpy) chạy ở "Phân tích sâu" cho SP đã chốt.
+// ── MKT Agent · Dò spy lúc quét — TikTok (đúng SP) + FB (đối thủ cùng ngách) ──
+// TikTok: research-videos search bằng coreTerms(TÊN SP) + chấm liên quan → video
+//   bán ĐÚNG SP (tải no-watermark, rip).
+// FB: ad đối thủ ở MY viết TIẾNG MALAY → query bằng NGÁCH (Malay) chứ KHÔNG phải
+//   coreTerms tiếng Anh (sẽ 0/drift). Ra nhiều ad COD cùng ngách, loại clinic.
+// → reel cân bằng 2 nguồn; xếp SP có nhiều spy lên đầu. ~2 call/SP (free SC).
 import type { SpCandidate, VideoCheck, VidItem } from '../store'
 
-// Bỏ bracket + từ marketing + đơn vị → token đặc trưng. Copy coreTerms từ Research.
 const TERM_STOP = new Set([
   'new', 'promo', 'sale', 'hot', 'big', 'free', 'buy', 'beli', 'murah', 'viral', 'original', 'ori', 'ready', 'stock',
   'pek', 'pcs', 'pc', 'pack', 'set', 'box', 'botol', 'bottle', 'tablet', 'tablets', 'kapsul', 'capsule', 'gummies', 'sachet',
@@ -28,15 +28,19 @@ function coreTerms(title: string): string[] {
   return out
 }
 
+// Advertiser KHÔNG phải đối thủ COD (phòng khám/nha/dịch vụ/nhà thuốc) → loại.
+const NON_COD_RE = /klinik|dental|pergigi|dentist|\bclinic\b|hospital|farmasi|pharmacy|aesthetic|\bspa\b|salon|booking|appointment|temujanji/i
+interface FbAd { id?: string; page?: string; cover?: string; videoUrl?: string; text?: string; daysRunning?: number }
+
 export async function checkProductVideos(c: SpCandidate): Promise<VideoCheck> {
   const terms = coreTerms(c.title)
-  // q = token tên SP (đặc trưng) — fallback: tên đã gỡ ngoặc, 8 từ đầu.
   const joined = terms.slice(0, 6).join(' ')
   const q = joined.length >= 4
     ? joined
     : (c.title.replace(/[【[(][^】\])]*[】\])]/g, ' ').split(/[|\-–—]/)[0] || c.title).trim().split(/\s+/).filter(Boolean).slice(0, 8).join(' ')
   const termsParam = terms.join(',')
 
+  // TikTok — video bán ĐÚNG SP (rip-ready)
   const tk: VidItem[] = []
   try {
     const r = await fetch(`/api/research-videos?market=MY&q=${encodeURIComponent(q)}&minSec=15&maxSec=90${termsParam ? `&terms=${encodeURIComponent(termsParam)}` : ''}`)
@@ -44,9 +48,33 @@ export async function checkProductVideos(c: SpCandidate): Promise<VideoCheck> {
       const j = (await r.json()) as { videos?: VidItem[] }
       for (const v of j.videos ?? []) tk.push({ ...v, platform: 'tiktok' })
     }
-  } catch { /* lỗi → trả rỗng, không vỡ */ }
+  } catch { /* bỏ qua */ }
   tk.sort((a, b) => (Number(b.views) || 0) - (Number(a.views) || 0))
 
+  // FB — ad ĐỐI THỦ CÙNG NGÁCH (query NGÁCH tiếng Malay; coreTerms EN không khớp ad Malay)
+  const fbQ = (c.niche && c.niche.trim()) || terms[0] || q
+  const fb: VidItem[] = []
+  const seen = new Set<string>()
+  try {
+    const r = await fetch(`/api/fb-ads?q=${encodeURIComponent(fbQ)}&country=MY&status=ACTIVE`)
+    if (r.ok) {
+      const j = (await r.json()) as { ads?: FbAd[] }
+      for (const a of j.ads ?? []) {
+        const id = String(a.id ?? '')
+        if (!a.videoUrl || !a.cover || !id || seen.has(id)) continue
+        if (NON_COD_RE.test(`${a.page ?? ''} ${a.text ?? ''}`)) continue
+        seen.add(id)
+        fb.push({
+          id: 'fb_' + id, platform: 'fb', cover: String(a.cover), downloadUrl: '', url: String(a.videoUrl),
+          views: 0, desc: String(a.text || a.page || ''), author: String(a.page || ''), durationSec: 0, days: Number(a.daysRunning) || 0,
+        })
+      }
+    }
+  } catch { /* bỏ qua */ }
+  fb.sort((a, b) => (b.days ?? 0) - (a.days ?? 0))
+
   const maxViews = tk.reduce((m, v) => Math.max(m, Number(v.views) || 0), 0)
-  return { count: tk.length, maxViews, list: tk.slice(0, 12) }
+  // Cân bằng 2 nguồn: TikTok đúng SP trước, FB đối thủ cùng ngách sau.
+  const list = [...tk.slice(0, 10), ...fb.slice(0, 10)]
+  return { count: list.length, maxViews, list }
 }
