@@ -57,7 +57,7 @@ export default function MktAgent() {
     setNiches, setAmount, setScanning, setClassifying, setError,
     setCandidates, setBranding, patchCandidate, setOnlyGeneric, selectSp,
   } = useMktAgentStore()
-  const [videoDepth] = useState(20)
+  const [videoDepth] = useState(40)
   const [vidScanning, setVidScanning] = useState(false)
   const [onlyWithVideo, setOnlyWithVideo] = useState(false)
   const [playVid, setPlayVid] = useState<VidItem | null>(null)
@@ -70,7 +70,7 @@ export default function MktAgent() {
       .slice(0, depth)
     if (!targets.length) return
     setVidScanning(true)
-    await pool(targets, 4, async (c) => {
+    await pool(targets, 6, async (c) => {
       patchCandidate(c.productId, { videoChecking: true })
       try {
         const v = await checkProductVideos(c)
