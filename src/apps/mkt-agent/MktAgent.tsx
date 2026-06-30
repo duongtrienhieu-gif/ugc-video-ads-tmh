@@ -118,9 +118,31 @@ export default function MktAgent() {
     }
   }
 
+  // Pick = AUTO harvest: Soi sâu (nếu chưa) → đào ad đối thủ đúng SP. User không bấm tay.
+  const pickAndHarvest = async (c: SpCandidate) => {
+    if (selectedSp?.productId === c.productId) { selectSp(null); return }  // bấm lại = bỏ chọn
+    selectSp(c)
+    if (!geminiApiKey || !c.imageUrl) return
+    let deep = c.deep
+    if (!deep) {
+      patchCandidate(c.productId, { diving: true })
+      try { deep = await deepDive(c, geminiApiKey); patchCandidate(c.productId, { deep, diving: false }) }
+      catch { patchCandidate(c.productId, { diving: false }); return }
+    }
+    if (deep && !deep.exactChecked && deep.rawAds?.length) {
+      patchCandidate(c.productId, { filtering: true })
+      try {
+        const exact = await harvestExactSpy(geminiApiKey, c.imageUrl, deep.rawAds, 5)
+        patchCandidate(c.productId, { filtering: false, deep: { ...deep, exactCount: exact.length, exactChecked: true, exactAds: exact.slice(0, 10) } })
+      } catch { patchCandidate(c.productId, { filtering: false }) }
+    }
+  }
+
   const genericCount = candidates.filter((c) => c.isBranded === false).length
   const brandedCount = candidates.filter((c) => c.isBranded === true).length
   const shown = onlyGeneric ? candidates.filter((c) => c.isBranded !== true) : candidates
+  // selectedSp là snapshot — đọc bản LIVE từ candidates để thấy harvest cập nhật.
+  const selectedLive = selectedSp ? (candidates.find((c) => c.productId === selectedSp.productId) ?? selectedSp) : null
 
   return (
     <div className="min-h-full bg-zinc-950 text-zinc-100 p-5 md:p-6">
@@ -296,9 +318,9 @@ export default function MktAgent() {
                     )}
                     {p.deepError && <p className="text-[11px] text-rose-400">Soi sâu lỗi: {p.deepError}</p>}
 
-                    <button onClick={() => selectSp(picked ? null : p)}
-                      className={`h-8 rounded-md text-[13px] font-medium ${picked ? 'bg-amber-500 text-zinc-950' : 'bg-zinc-800 text-zinc-200 hover:bg-zinc-700'}`}>
-                      {picked ? '✓ Đã chọn' : 'Chọn SP này'}
+                    <button onClick={() => pickAndHarvest(p)} disabled={p.diving || p.filtering}
+                      className={`h-8 rounded-md text-[13px] font-medium disabled:opacity-60 ${picked ? 'bg-amber-500 text-zinc-950' : 'bg-zinc-800 text-zinc-200 hover:bg-zinc-700'}`}>
+                      {p.diving ? 'Đang Soi sâu…' : p.filtering ? 'Đang đào ad…' : picked ? '✓ Đã chọn' : 'Chọn SP này (auto harvest)'}
                     </button>
                   </div>
                 )
@@ -308,12 +330,33 @@ export default function MktAgent() {
         )}
       </div>
 
-      {selectedSp && (
+      {selectedLive && (
         <div className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
-          <p className="text-[13px] text-amber-300">✅ Đã chọn: <b>{selectedSp.title}</b></p>
-          <p className="text-[12px] text-zinc-400 mt-1">
-            Bước tới: Brief → Kịch bản → Video → Landing (theo checkpoint cheap→expensive).
-          </p>
+          <p className="text-[13px] text-amber-300">✅ Đã chọn: <b>{selectedLive.title}</b></p>
+          {selectedLive.diving ? (
+            <p className="text-[12px] text-zinc-400 mt-1">⏳ Đang Soi sâu SP…</p>
+          ) : selectedLive.filtering ? (
+            <p className="text-[12px] text-zinc-400 mt-1">⏳ Đang harvest spy (đào ad đối thủ FB)…</p>
+          ) : selectedLive.deep?.exactChecked ? (
+            <div className="mt-1.5">
+              <p className={`text-[13px] font-medium ${(selectedLive.deep.exactCount ?? 0) >= 5 ? 'text-emerald-300' : 'text-amber-300'}`}>
+                🎯 Harvest: {selectedLive.deep.exactCount} ad đối thủ ĐÚNG SP {(selectedLive.deep.exactCount ?? 0) >= 5 ? '✓ đủ 5' : '— chưa đủ 5 (SP ít đối thủ COD, cân nhắc bỏ)'}
+              </p>
+              {selectedLive.deep.exactAds && selectedLive.deep.exactAds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {selectedLive.deep.exactAds.slice(0, 10).map((a) => (
+                    <a key={a.id} href={a.videoUrl} target="_blank" rel="noopener noreferrer" title={`${a.platform} · chạy ${a.days}d — mở video`}
+                      className="block w-12 h-12 rounded overflow-hidden border border-emerald-500/40 bg-zinc-800">
+                      {a.cover ? <img src={a.cover} alt="" className="w-full h-full object-cover" loading="lazy" /> : <span className="text-[9px] grid place-items-center w-full h-full">▶</span>}
+                    </a>
+                  ))}
+                </div>
+              )}
+              <p className="text-[11px] text-zinc-500 mt-2">Bước production (sau): Brief → kịch bản → video app + tự tải các ad spy này về Drive.</p>
+            </div>
+          ) : (
+            <p className="text-[12px] text-zinc-400 mt-1">Cần Gemini key + ảnh SP để auto-harvest.</p>
+          )}
         </div>
       )}
     </div>
