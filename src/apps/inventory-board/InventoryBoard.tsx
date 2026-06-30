@@ -432,7 +432,7 @@ export default function InventoryBoard() {
         </div>
         <div style={{ display: 'flex', gap: 18, marginTop: 10, fontSize: 12, flexWrap: 'wrap' }}>
           <span style={{ color: C.muted }}>DOANH THU <b style={{ color: C.text }}>{fmtMoney(v.doanhThu)}</b></span>
-          <span style={{ color: C.muted }}>CPQC <b style={{ color: C.amber }}>{fmtMoney(v.cpqc)}</b> <span style={{ color: C.muted2 }}>({Math.round(v.adsPct * 100)}%)</span></span>
+          <span style={{ color: C.muted }}>CPQC <b style={{ color: C.amber }}>{fmtMoney(v.cpqc)}</b> - <b style={{ color: v.laiPct >= 0 ? C.green : C.red }}>{Math.round(v.adsPct * 100)}%</b></span>
         </div>
         <div style={{ fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>{noteOf(v)}</div>
       </div>
@@ -475,7 +475,7 @@ export default function InventoryBoard() {
           </div>
           <span style={{ fontSize: 11.5, color: C.muted2, whiteSpace: 'nowrap' }}>{miniFact(v)}</span>
         </div>
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>DT <b style={{ color: C.muted2 }}>{fmtMoney(v.doanhThu)}</b> · CPQC <b style={{ color: C.amber }}>{fmtMoney(v.cpqc)}</b> ({Math.round(v.adsPct * 100)}%)</div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>DT <b style={{ color: C.muted2 }}>{fmtMoney(v.doanhThu)}</b> · CPQC <b style={{ color: C.amber }}>{fmtMoney(v.cpqc)}</b> - <b style={{ color: v.laiPct >= 0 ? C.green : C.red }}>{Math.round(v.adsPct * 100)}%</b></div>
       </div>
     )
   }
