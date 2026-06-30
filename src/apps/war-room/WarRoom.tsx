@@ -1,6 +1,6 @@
 // ── 🎯 TÁC CHIẾN — giao việc · target ngày/tuần/tháng · việc tự sinh ──────────
 // CEO đặt target; nhân viên tự quản việc; hệ thống gợi ý việc từ số thật.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useWarStore, memberEmails, type Member } from './store'
 import { useAuthStore } from '../../stores/authStore'
 import { useAppStore } from '../../stores/appStore'
@@ -68,6 +68,24 @@ export default function WarRoom() {
     members.forEach((mem) => (mem.sp_codes ?? []).forEach((c) => { m[c.trim().toUpperCase()] = mem }))
     return m
   }, [members])
+
+  // TỰ ĐỘNG cộng dồn SP MỚI vào team (add-only) — khi file team xuất hiện mã mới (test SP tháng
+  // mới) thì tự gán thêm, KHÔNG xoá mã đã có / chỉnh tay. Chạy 1 lần/lần mở (mỗi lần mở = re-scan).
+  // Nút 🪄 vẫn là "reset đè đúng"; còn cái này chỉ THÊM, không clobber.
+  const autoMergedRef = useRef(false)
+  useEffect(() => {
+    if (!isCEO || autoMergedRef.current) return
+    if (!members.length || !Object.keys(mktSp).length) return
+    autoMergedRef.current = true
+    for (const m of members.filter((x) => x.role === 'marketer')) {
+      const scanned = spForMember(m.name, mktSp)
+      if (!scanned.length) continue
+      const cur = m.sp_codes ?? []
+      const curSet = new Set(cur.map((c) => c.trim().toUpperCase()))
+      const add = scanned.filter((c) => !curSet.has(c.trim().toUpperCase()))
+      if (add.length) void updateMember(m.id, { sp_codes: [...cur, ...add] })
+    }
+  }, [isCEO, members, mktSp, updateMember])
 
   if (!loaded) return <Shell><div style={{ ...panelStyle, textAlign: 'center', color: C.muted }}>● Đang tải Tác Chiến...</div></Shell>
   if (error && !members.length) return <Shell><div style={{ ...panelStyle, color: C.red }}>⚠ {error}. Đã chạy SQL tạo bảng team_members / targets / tasks trong Supabase chưa?</div></Shell>
@@ -469,7 +487,17 @@ function TargetTab({ members, targets, stats, isCEO, setTarget, reloadStats }: {
   if (!sel) return <div style={{ ...panelStyle, color: C.muted, textAlign: 'center' }}>Chưa có nhân sự. Thêm ở tab 👥 Nhân sự trước.</div>
   const act = aggregate(sel.sp_codes ?? [], stats)
   const actualOf = (k: string) => (k === 'dt' ? act.dt : k === 'lai' ? act.lai : k === 'cpqc' ? act.cpqc * 100 : act.hoan * 100)
-  const targetOf = (k: string) => targets.find((t) => t.member_id === sel.id && t.period === period && t.metric === k)?.value
+  // CEO chỉ nhập target THÁNG; Tuần/Ngày TỰ SUY: số tiền (DT, Lãi) chia đều theo ngày trong tháng;
+  // tỉ lệ (%CPQC, %Hoàn) GIỮ NGUYÊN (rate không chia theo thời gian).
+  const monthTgt = (k: string) => targets.find((t) => t.member_id === sel.id && t.period === 'month' && t.metric === k)?.value
+  const _now = new Date()
+  const daysInMonth = new Date(_now.getFullYear(), _now.getMonth() + 1, 0).getDate()
+  const deriveTgt = (mt: { key: string; money: boolean }): number | undefined => {
+    const mv = monthTgt(mt.key)
+    if (mv == null) return undefined
+    if (period === 'month' || !mt.money) return mv
+    return period === 'week' ? (mv * 7) / daysInMonth : mv / daysInMonth
+  }
 
   return (
     <div style={panelStyle}>
@@ -490,17 +518,21 @@ function TargetTab({ members, targets, stats, isCEO, setTarget, reloadStats }: {
         </tr></thead>
         <tbody>
           {METRICS.map((mt) => {
-            const tgt = targetOf(mt.key); const actual = actualOf(mt.key)
+            const isMonth = period === 'month'
+            const tgt = deriveTgt(mt); const actual = actualOf(mt.key)
             const missing = act.dt === 0 || (mt.key === 'hoan' && act.hoan === 0) // hoàn=0 = QLHB chưa tải, không phải thật
-            const ok = tgt == null || missing ? null : mt.lowerBetter ? actual <= tgt : actual >= tgt
+            // Đèn + THỰC TẾ chỉ so ở THÁNG (số thực tế là lũy kế tháng). Tuần/Ngày chỉ hiện target suy ra.
+            const ok = !isMonth || tgt == null || missing ? null : mt.lowerBetter ? actual <= tgt : actual >= tgt
             const show = (v: number) => (mt.money ? fmtMoney(v) : fmtPct(v))
             return (
               <tr key={mt.key} style={{ borderTop: `1px solid ${C.line2}` }}>
                 <td style={{ padding: '10px 0', color: C.muted2 }}>{mt.label}</td>
                 <td style={{ padding: '10px 8px', textAlign: 'right' }}>
-                  <TargetInput value={tgt} money={mt.money} disabled={!isCEO} onSave={(v) => void setTarget(sel.id, period, mt.key, v)} />
+                  {isMonth
+                    ? <TargetInput value={monthTgt(mt.key)} money={mt.money} disabled={!isCEO} onSave={(v) => void setTarget(sel.id, 'month', mt.key, v)} />
+                    : <span title="tự suy từ target tháng" style={{ color: tgt != null ? C.text : C.muted, fontWeight: 600 }}>{tgt != null ? show(tgt) : '— (đặt target tháng)'}</span>}
                 </td>
-                <td style={{ padding: '10px 8px', textAlign: 'right', color: missing ? C.muted : C.text }}>{missing ? '—' : show(actual)}</td>
+                <td style={{ padding: '10px 8px', textAlign: 'right', color: !isMonth || missing ? C.muted : C.text }}>{!isMonth || missing ? '—' : show(actual)}</td>
                 <td style={{ padding: '10px 0', textAlign: 'center' }}>{ok == null ? <span style={{ color: C.muted }}>—</span> : <span style={{ color: ok ? C.green : C.red }}>{ok ? '✓ đạt' : '✗ trượt'}</span>}</td>
               </tr>
             )
@@ -508,7 +540,7 @@ function TargetTab({ members, targets, stats, isCEO, setTarget, reloadStats }: {
         </tbody>
       </table>
       <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>
-        Target {isCEO ? '— CEO gõ rồi rời ô là lưu' : '(chỉ CEO sửa)'}. THỰC TẾ = gộp số thật các mã marketer phụ trách (lũy kế tháng) — gán mã ở tab Nhân sự. %CPQC/%hoàn nhập theo số (vd 30 = 30%). Chi tiết ngày/tuần sẽ thêm sau.
+        Target {isCEO ? '— CEO gõ ở ô THÁNG rồi rời ô là lưu' : '(chỉ CEO sửa)'}; <b style={{ color: C.muted2 }}>Tuần / Ngày tự suy từ tháng</b> (DT &amp; Lãi chia đều theo {daysInMonth} ngày; %CPQC/%Hoàn giữ nguyên) — khỏi nhập lại. THỰC TẾ = gộp số thật các mã marketer phụ trách (lũy kế tháng) — gán mã ở tab Nhân sự. %CPQC/%hoàn nhập theo số (vd 30 = 30%).
         {act.dt === 0 && <span style={{ color: C.amber }}> · {sel.name} chưa gán mã SP → bấm 🪄 ở tab Nhân sự.</span>}
         {act.dt > 0 && act.hoan === 0 && <span style={{ color: C.amber }}> · %Hoàn đang "—" = QLHB chưa tải (Google chặn) → bấm ⟳ Tải lại số vài lần.</span>}
       </div>
