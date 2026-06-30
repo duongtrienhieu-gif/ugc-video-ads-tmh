@@ -11,6 +11,7 @@ import ProfitTruth from './ProfitTruth'
 import { computeProfit } from './profitCalc'
 import GiftCombo from './GiftCombo'
 import { useAppStore } from '../../stores/appStore'
+import { loadBoardLinks, saveBoardLinks } from './boardConfig'
 
 const TY_GIA = 5800
 const PACK_FACTOR = (name: string) => (name.trim().toUpperCase() === 'KNEE PAD' ? 2 : 1)
@@ -26,22 +27,30 @@ const fmtPct = (n: number) => (n * 100).toFixed(1) + '%'
 
 // ── nguồn dữ liệu (có ô sửa link như dashboard) ──────────────────────────────
 const SOURCE_DEFS: { key: string; label: string }[] = [
-  { key: 'tong', label: 'File TỔNG (theo sản phẩm)' },
-  { key: 'qlhb', label: 'File QLHB (hoàn / tỉnh)' },
-  { key: 'kho', label: 'File KHO (tồn kho)' },
+  { key: 'tong', label: 'File CPQC TỔNG các TEAM (sheet SẢN PHẨM_TH)' },
+  { key: 'qlhb', label: 'File QLHB (hoàn / dòng tiền / bom tỉnh)' },
+  { key: 'kho', label: 'File KHO (tồn kho + giá vốn)' },
   { key: 'sale', label: 'File SALE (chốt theo ngày — tốc độ bán)' },
   { key: 'nhaphang', label: 'File NHẬP HÀNG (đơn đang về — sheet Báo giá & thanh toán)' },
   { key: 'noton', label: 'File SALE NỢ ĐƠN (sheet Tồn kho dự kiến — SP nợ chưa gửi)' },
   { key: 'giftplan', label: 'File KẾ HOẠCH QUÀ (sheet 3 Tồn + 4 Kho quà — cho tab Ghép Quà)' },
+  { key: 'team_apex', label: 'File TEAM APEX (Duy + Khánh — sheet BÁO CÁO SẢN PHẨM)' },
+  { key: 'team_titan', label: 'File TEAM TITAN (Tuấn + Anh — sheet BÁO CÁO SẢN PHẨM)' },
+  { key: 'team_summit', label: 'File TEAM SUMMIT (Hà + Phy — sheet BÁO CÁO SẢN PHẨM)' },
 ]
+// Default = link THÁNG 7/2026. Chỉ là dự phòng — link chính lấy từ board_config (Supabase),
+// chủ dán tháng mới là cả công ty nhảy tháng. Đổi tháng: dán ở ⚙ Cấu hình → Lưu.
 const DEFAULT_SOURCES: Record<string, string> = {
-  tong: 'https://docs.google.com/spreadsheets/d/19KaRjRgg0YhT8RBFfDbI25iF9wp7HKxaFZaqiS6ObfU/edit',
-  qlhb: 'https://docs.google.com/spreadsheets/d/1i9InE4s_GAvP6aSUiXivPch8ME2mL7Vk4MszMw0Jvp0/edit',
-  kho: 'https://docs.google.com/spreadsheets/d/1Bf5KPkPkM5VXs_W5xzjSpsri0YmdmxqguMbZZxkC9Fs/edit',
-  sale: 'https://docs.google.com/spreadsheets/d/1vSy4LHxx6WeFysdMJNT0c7473RNmpo8bKuRZvMueqtE/edit',
+  tong: 'https://docs.google.com/spreadsheets/d/1ZOYU59Dyrwmm7w2Iw-BXAZFX_BL5XFsofFyqWQ2zShQ/edit',
+  qlhb: 'https://docs.google.com/spreadsheets/d/1gci7u1_aTX_xutnSbCf7t-fu-2wowTqBdjHaa4dQTBQ/edit',
+  kho: 'https://docs.google.com/spreadsheets/d/1m3L6WQnB9Eto9Gugs5PgycYUs-x3YZieP-4vpzbIv7A/edit',
+  sale: 'https://docs.google.com/spreadsheets/d/145HZHGdZpwTXmzyMiXsnGfrgKOM-jtjrIWoJkQrgD7s/edit',
   nhaphang: 'https://docs.google.com/spreadsheets/d/1amJrEI5Z279_4ALWIco3oZETrB4F77cpkD1zSXENrg8/edit',
-  noton: 'https://docs.google.com/spreadsheets/d/18OdPLkDSLuzKhuO1VheLzkAM0K7xHEoepxhy4JNlYAI/edit',
+  noton: 'https://docs.google.com/spreadsheets/d/1cRjjRr8DKK16Nkwx7bhBBWyhCGwhqNroouZ8DBqAbsY/edit',
   giftplan: 'https://docs.google.com/spreadsheets/d/1NiCESFek8BYyycTHUMvcMhxpuNDsCI7KplpIxERhOW8/edit',
+  team_apex: 'https://docs.google.com/spreadsheets/d/1BFGlk9lDGqjmpsiG4p813ExdDZL90tVLXqy7izoGKw8/edit',
+  team_titan: 'https://docs.google.com/spreadsheets/d/1YEgGsUjiWYHCYv5bpxspoRMhDPe6sUhfRBDrcxrj--I/edit',
+  team_summit: 'https://docs.google.com/spreadsheets/d/1A4Mz7aRWM9hYLE9ISqlIyAJoLKY8fjN_XiHtB7czLtQ/edit',
 }
 const STORAGE_KEY = 'inv_board_sources'
 const GOOD_KEY = 'inv_board_lastgood' // cache "số tốt gần nhất" để load lỗi vẫn hiện đủ số
@@ -182,12 +191,19 @@ export default function InventoryBoard() {
   useEffect(() => {
     let saved: Record<string, string> = {}
     try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') } catch { /* ignore */ }
-    const s = { ...DEFAULT_SOURCES, ...saved }
-    setSources(s)
+    const local = { ...DEFAULT_SOURCES, ...saved }
+    setSources(local)
     // F5 / mở lại → hiện NGAY số tốt đã cache (khỏi chờ ~1 phút), rồi tải mới ngầm.
     const cached = readGood()
     if (cached) { setData(cached.data); setBoardStale(true); setStatus('live'); setLastUpdate(cached.at) }
-    void load(s)
+    // Link DÙNG CHUNG (Supabase) đè link máy này → đầu tháng chủ dán 1 lần là cả công ty
+    // nhảy tháng. Supabase lỗi/chưa cấu hình → dùng local/default. Chỉ load 1 lần sau khi có link.
+    void (async () => {
+      const shared = await loadBoardLinks()
+      const s = shared ? { ...local, ...shared } : local
+      if (shared) { setSources(s); try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)) } catch { /* quota */ } }
+      void load(s)
+    })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -211,6 +227,7 @@ export default function InventoryBoard() {
 
   function saveSources() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sources))
+    void saveBoardLinks(sources) // dán DÙNG CHUNG → mọi máy/điện thoại nhảy tháng theo
     setSaved(true); setTimeout(() => setSaved(false), 2000)
     void load(sources)
   }
@@ -389,7 +406,7 @@ export default function InventoryBoard() {
         {showCfg && (
           <div style={{ ...panelStyle, padding: '18px 20px' }}>
             <div style={eyebrowStyle}>⚙ CẤU HÌNH NGUỒN DỮ LIỆU</div>
-            <div style={{ fontSize: 12, color: C.muted, margin: '4px 0 14px' }}>Dán link Google Sheet (đã để công khai) cho từng file. Bấm Lưu là nhớ trên máy này.</div>
+            <div style={{ fontSize: 12, color: C.muted, margin: '4px 0 14px' }}>Dán link Google Sheet (đã để công khai) cho từng file. Bấm Lưu là <b>cả công ty</b> dùng chung — đầu tháng dán link tháng mới 1 lần, mọi máy/điện thoại tự nhảy tháng.</div>
             {SOURCE_DEFS.map((d) => (
               <div key={d.key} style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 12, color: C.gold, marginBottom: 5 }}>{d.label}</div>

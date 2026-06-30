@@ -8,7 +8,7 @@ import * as XLSX from 'xlsx'
 
 export const config = { maxDuration: 60 }
 
-const DEFAULT_QLHB = '1i9InE4s_GAvP6aSUiXivPch8ME2mL7Vk4MszMw0Jvp0' // NG (nhẹ hơn TMH; cột tự dò nên file nào cũng được)
+const DEFAULT_QLHB = '1gci7u1_aTX_xutnSbCf7t-fu-2wowTqBdjHaa4dQTBQ' // QLHB T7/2026 (dự phòng; cột tự dò nên file nào cũng được)
 function extractId(s: string) { const m = s.match(/\/d\/([a-zA-Z0-9_-]{20,})/); return m ? m[1] : s.trim() }
 function num(v: unknown): number {
   if (typeof v === 'number') return v

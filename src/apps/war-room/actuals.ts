@@ -1,5 +1,6 @@
 // ── Số THỰC TẾ per nhân sự — gộp từ dữ liệu per-SP (tái dùng endpoint kho + computeProfit) ──
 import { computeProfit, type Prod, type InvItem } from '../inventory-board/profitCalc'
+import { loadBoardLinks } from '../inventory-board/boardConfig'
 
 const RATE = 5800 // ĐỒNG BỘ với profitCalc.TY_GIA — app nhân viên luôn ×5800, KHÔNG 6500
 export interface SpStat { dt: number; lai: number; cpqc: number; hoan: number; aov: number; chot: number }
@@ -75,10 +76,12 @@ export function readCachedSpStats(): SpStatsResult | null {
   return null
 }
 
-// Map marketer → ĐẦY ĐỦ mã SP họ chạy (đọc 5 file riêng từng marketer, cột "Mặt hàng").
-// Key = token tên (KHÁNH/DUY/TUẤN/ANH/HÀ); spForMember khớp theo token (HÀ+PHY → 'HÀ').
+// Map TEAM → ĐẦY ĐỦ mã SP team chạy (đọc 3 file team APEX/TITAN/SUMMIT, sheet BÁO CÁO SẢN PHẨM).
+// Key = token team (APEX/TITAN/SUMMIT); spForMember map người→team rồi khớp. Truyền link team
+// từ board_config (Supabase) để đọc đúng file tháng đang dán; lỗi → backend dùng default tháng.
 export async function fetchMarketerSp(): Promise<Record<string, string[]>> {
-  const r = await fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marketerSp: true }), cache: 'no-store' })
+  const links = (await loadBoardLinks()) ?? {}
+  const r = await fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marketerSp: true, links }), cache: 'no-store' })
   const j = (await r.json()) as { marketerSp?: Record<string, string[]> }
   return j.marketerSp ?? {}
 }

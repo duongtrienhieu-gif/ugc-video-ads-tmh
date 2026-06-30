@@ -18,13 +18,15 @@ import * as XLSX from 'xlsx'
 
 export const config = { maxDuration: 60 }
 
+// Default = link THÁNG 7/2026 (dự phòng). Link chính do client dán → board_config (Supabase)
+// → truyền qua body.links. Đổi tháng chỉ cần dán ở ⚙ Cấu hình của app.
 const DEFAULTS = {
-  tong: '19KaRjRgg0YhT8RBFfDbI25iF9wp7HKxaFZaqiS6ObfU',
-  qlhb: '1i9InE4s_GAvP6aSUiXivPch8ME2mL7Vk4MszMw0Jvp0', // NG (file nhẹ) — QLHB giờ do /api/qlhb đọc
-  kho: '1Bf5KPkPkM5VXs_W5xzjSpsri0YmdmxqguMbZZxkC9Fs',
-  sale: '1vSy4LHxx6WeFysdMJNT0c7473RNmpo8bKuRZvMueqtE',
+  tong: '1ZOYU59Dyrwmm7w2Iw-BXAZFX_BL5XFsofFyqWQ2zShQ', // CPQC TỔNG các TEAM (sheet SẢN PHẨM_TH)
+  qlhb: '1gci7u1_aTX_xutnSbCf7t-fu-2wowTqBdjHaa4dQTBQ', // QLHB T7 — QLHB giờ do /api/qlhb đọc
+  kho: '1m3L6WQnB9Eto9Gugs5PgycYUs-x3YZieP-4vpzbIv7A',
+  sale: '145HZHGdZpwTXmzyMiXsnGfrgKOM-jtjrIWoJkQrgD7s',
   nhaphang: '1amJrEI5Z279_4ALWIco3oZETrB4F77cpkD1zSXENrg8',
-  noton: '18OdPLkDSLuzKhuO1VheLzkAM0K7xHEoepxhy4JNlYAI',
+  noton: '1cRjjRr8DKK16Nkwx7bhBBWyhCGwhqNroouZ8DBqAbsY',
   giftplan: '1NiCESFek8BYyycTHUMvcMhxpuNDsCI7KplpIxERhOW8',
 }
 type SrcKey = keyof typeof DEFAULTS
@@ -285,13 +287,12 @@ function parseGiftCatalog(wb: XLSX.WorkBook): GiftCat[] {
   return items
 }
 
-// File riêng từng marketer (sheet "BÁO CÁO SẢN PHẨM" = log giao dịch). Token = tên war-room.
-const MKT_FILES: { token: string; id: string }[] = [
-  { token: 'KHÁNH', id: '1vHiLS3V85wL6rWvnmCOZB8bfR5lu_sw0ZAuy8xUczSA' },
-  { token: 'DUY', id: '1LRsxCJ4JVxlN9yBIdAVtndxggfAem9wf58BE2iMdAKM' },
-  { token: 'TUẤN', id: '1cKMfUPJ67Q6b1TGynqjyCZm5GTupbQ_sNO1J4eDxl9I' },
-  { token: 'ANH', id: '1gUG9JgO0cC-zYkvTePXfcFYIlS2CXzMUL4n0o8mmDbA' },
-  { token: 'HÀ', id: '18c_BtFLdGB7EBaN06rWKJiFLiZogdDNS_O_0xVccV6s' },
+// 3 file TEAM (sheet "BÁO CÁO SẢN PHẨM": A=team, B=tên SP, D=doanh thu RM). token = tên team
+// war-room. Default T7/2026; client (War Room) dán đè qua body.links.team_* — không hardcode chết.
+const MKT_FILES: { token: string; linkKey: string; id: string }[] = [
+  { token: 'APEX', linkKey: 'team_apex', id: '1BFGlk9lDGqjmpsiG4p813ExdDZL90tVLXqy7izoGKw8' },     // Duy + Khánh
+  { token: 'TITAN', linkKey: 'team_titan', id: '1YEgGsUjiWYHCYv5bpxspoRMhDPe6sUhfRBDrcxrj--I' },   // Tuấn + Anh
+  { token: 'SUMMIT', linkKey: 'team_summit', id: '1A4Mz7aRWM9hYLE9ISqlIyAJoLKY8fjN_XiHtB7czLtQ' }, // Hà + Phy
 ]
 // Sheet TỔNG HỢP "BÁO CÁO SẢN PHẨM" (server đọc qua gviz csv): cột B(1) = TÊN SP,
 // cột D(3) = doanh thu RM. Lấy SP có doanh thu > 0. (Verify cả 5 file qua fetch y hệt server.)
@@ -323,7 +324,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── Nhánh: SP đầy đủ theo marketer (đọc 5 file riêng) → token → [mã SP] cho 🪄 Tự gán ──
   if (req.body && (req.body as { marketerSp?: boolean }).marketerSp) {
-    const rs = await Promise.allSettled(MKT_FILES.map((f) => fetchCsv(f.id, 'BÁO CÁO SẢN PHẨM')))
+    const teamId = (f: { linkKey: string; id: string }) => { const v = bodyLinks[f.linkKey]; return v ? extractId(v) : f.id }
+    const rs = await Promise.allSettled(MKT_FILES.map((f) => fetchCsv(teamId(f), 'BÁO CÁO SẢN PHẨM')))
     const marketerSp: Record<string, string[]> = {}
     rs.forEach((r, i) => { if (r.status === 'fulfilled') { const sps = parseMarketerSp(r.value); if (sps.length) marketerSp[MKT_FILES[i].token] = sps } })
     return res.status(200).json({ ok: Object.keys(marketerSp).length > 0, marketerSp })

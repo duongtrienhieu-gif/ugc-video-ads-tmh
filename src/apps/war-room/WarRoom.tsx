@@ -370,10 +370,19 @@ function MyBoard({ members, targets, tasks, stats, profit, isCEO, myMember, user
 }
 
 // ── NHÂN SỰ ──────────────────────────────────────────────────────────────────
-// khớp tên nhân sự với marketer trong data (HÀ + PHY → token 'HÀ' khớp marketer 'HÀ')
+// Người → TEAM (data giờ gộp theo 3 team APEX/TITAN/SUMMIT). Nhập tên người (DUY / HÀ + PHY)
+// hoặc thẳng tên team đều khớp.
+const TEAM_OF: Record<string, string> = {
+  DUY: 'APEX', KHÁNH: 'APEX', KHANH: 'APEX',
+  TUẤN: 'TITAN', TUAN: 'TITAN', ANH: 'TITAN',
+  HÀ: 'SUMMIT', HA: 'SUMMIT', PHY: 'SUMMIT',
+}
+// khớp tên nhân sự với data team (vd "HÀ + PHY" → team 'SUMMIT'); nhập "SUMMIT" cũng khớp.
 function spForMember(name: string, map: Record<string, string[]>): string[] {
   const tokens = name.toUpperCase().split(/[\s+,/]+/).filter(Boolean)
-  for (const [mk, codes] of Object.entries(map)) if (tokens.includes(mk)) return codes
+  const want = new Set<string>()
+  for (const t of tokens) { want.add(t); if (TEAM_OF[t]) want.add(TEAM_OF[t]) }
+  for (const [mk, codes] of Object.entries(map)) if (want.has(mk.toUpperCase())) return codes
   return []
 }
 // 2 ô mail cho 1 slot (vd HÀ + PHY chung team) — gộp lại bằng phẩy khi lưu
