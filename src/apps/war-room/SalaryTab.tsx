@@ -1,9 +1,9 @@
 // ── Tab 💰 Lương (trong War Room) ────────────────────────────────────────────
-// Marketer: CHỈ thấy team mình (số visible 5800 + 3 bảng mốc + nháp).
-// CEO: thấy TẤT CẢ team + LỚP ẨN (6500, cost thật → real net, buffer 12%, overhead 250tr, cờ đỏ).
+// Net/DT/CPQC đọc THẲNG từ dòng TỔNG file team (BÁO CÁO SẢN PHẨM) → số kế toán THẬT, khớp sheet
+// (gồm +%hoàn theo công thức sheet). Marketer: CHỈ team mình. CEO: tất cả + lớp ẩn (6500/buffer).
 import { useMemo, useState } from 'react'
 import type { Member } from './store'
-import { aggregate, type SpStat } from './actuals'
+import type { TeamFin } from './actuals'
 import { tinhLuong, realNet, realRevenue, DEFAULT_CEO } from './salary'
 
 const C = {
@@ -16,29 +16,36 @@ const panelStyle: React.CSSProperties = { background: C.panel, border: `1px soli
 const eyebrowStyle: React.CSSProperties = { fontSize: 13, fontWeight: 700, letterSpacing: 0.3, color: C.gold, marginBottom: 10 }
 const fmtTr = (n: number) => (n / TR).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + 'tr'
 const fmtPct = (n: number) => (n * 100).toFixed(1) + '%'
-const heColor = (c: number) => (c < 0.31 ? C.green : c <= 0.34 ? C.green : c <= 0.38 ? C.muted2 : C.red)
+const heColor = (c: number) => (c <= 0.34 ? C.green : c <= 0.38 ? C.muted2 : C.red)
 
-interface TeamRow { id: string; name: string; dt: number; dtSauHoan: number; net: number; cpqc: number; hoan: number }
+// Tên nhân sự → token team (data file team keyed APEX/TITAN/SUMMIT).
+const TEAM_OF: Record<string, string> = { DUY: 'APEX', KHÁNH: 'APEX', KHANH: 'APEX', TUẤN: 'TITAN', TUAN: 'TITAN', ANH: 'TITAN', HÀ: 'SUMMIT', HA: 'SUMMIT', PHY: 'SUMMIT' }
+function teamTokenOf(name: string): string | null {
+  const toks = name.toUpperCase().split(/[\s+,/]+/).filter(Boolean)
+  for (const t of toks) { if (t === 'APEX' || t === 'TITAN' || t === 'SUMMIT') return t; if (TEAM_OF[t]) return TEAM_OF[t] }
+  return null
+}
 
-export default function SalaryTab({ members, stats, isCEO, myMember }: {
-  members: Member[]; stats: Record<string, SpStat>; isCEO: boolean; myMember?: Member
+interface Row { id: string; name: string; fin?: TeamFin }
+
+export default function SalaryTab({ members, teamFin, isCEO, myMember }: {
+  members: Member[]; teamFin: Record<string, TeamFin>; isCEO: boolean; myMember?: Member
 }) {
-  const rows = useMemo<TeamRow[]>(() => {
+  const rows = useMemo<Row[]>(() => {
     let mkt = members.filter((m) => m.role === 'marketer')
-    if (!isCEO) mkt = mkt.filter((m) => m.id === myMember?.id) // nhân viên chỉ thấy team mình
-    return mkt.map((m) => {
-      const a = aggregate(m.sp_codes ?? [], stats)
-      return { id: m.id, name: m.name, dt: a.dt, dtSauHoan: a.dt * (1 - a.hoan), net: a.lai, cpqc: a.cpqc, hoan: a.hoan }
-    })
-  }, [members, stats, isCEO, myMember])
+    if (!isCEO) mkt = mkt.filter((m) => m.id === myMember?.id)
+    return mkt.map((m) => ({ id: m.id, name: m.name, fin: teamTokenOf(m.name) ? teamFin[teamTokenOf(m.name) as string] : undefined }))
+  }, [members, teamFin, isCEO, myMember])
 
-  // Buồng lái CEO (toàn công ty)
+  const hasData = (f?: TeamFin) => !!f && (f.dt > 0 || f.net !== 0 || f.dtSauHoan > 0)
+
   const ceo = useMemo(() => {
     let rev = 0, rn = 0, luong = 0
     for (const r of rows) {
-      rev += realRevenue(r.dt)
-      rn += realNet(r.dt, r.net)
-      luong += tinhLuong({ dtSauHoan: r.dtSauHoan, net: r.net, cpqc: r.cpqc }).luongTeam
+      if (!hasData(r.fin)) continue
+      const f = r.fin as TeamFin
+      rev += realRevenue(f.dt); rn += realNet(f.dt, f.net)
+      luong += tinhLuong({ dtSauHoan: f.dtSauHoan, net: f.net, cpqc: f.cpqc }).luongTeam
     }
     const giu = rn - luong - DEFAULT_CEO.overhead
     return { rev, rn, luong, overhead: DEFAULT_CEO.overhead, giu, bufferPct: rev > 0 ? giu / rev : 0 }
@@ -49,29 +56,36 @@ export default function SalaryTab({ members, stats, isCEO, myMember }: {
       <div style={panelStyle}>
         <div style={eyebrowStyle}>💰 LƯƠNG {isCEO ? '· TẤT CẢ TEAM' : '· TEAM CỦA TÔI'}</div>
         <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
-          Lương/người = <b style={{ color: C.muted2 }}>Cứng</b> (theo DT team sau hoàn) + <b style={{ color: C.muted2 }}>( Thưởng net /2 ) × Hệ số CPQC</b>. Net âm → sàn 8tr. Số tự lên từ data thật của team.
+          Lương/người = <b style={{ color: C.muted2 }}>Cứng</b> (theo DT team sau hoàn) + <b style={{ color: C.muted2 }}>( Thưởng net /2 ) × Hệ số CPQC</b>. Net âm → sàn 8tr. <span style={{ color: C.green }}>Net/DT lấy THẲNG từ sheet kế toán file team</span> (số thật, gồm %hoàn).
         </div>
       </div>
 
-      {/* Thẻ lương từng team */}
       {rows.length === 0 ? (
-        <div style={{ ...panelStyle, textAlign: 'center', color: C.muted }}>Chưa có số (team chưa gán mã SP, hoặc data chưa tải).</div>
+        <div style={{ ...panelStyle, textAlign: 'center', color: C.muted }}>Chưa có team (chưa gán nhân sự).</div>
       ) : rows.map((r) => {
-        const L = tinhLuong({ dtSauHoan: r.dtSauHoan, net: r.net, cpqc: r.cpqc })
-        const loss = r.net < 0
+        if (!hasData(r.fin)) return (
+          <div key={r.id} style={panelStyle}>
+            <span style={{ fontWeight: 600, fontSize: 16 }}>{r.name}</span>
+            <span style={{ marginLeft: 10, fontSize: 12.5, color: C.amber }}>— chưa có số tháng này (file team chưa có doanh thu)</span>
+          </div>
+        )
+        const f = r.fin as TeamFin
+        const hoan = f.dt > 0 ? Math.max(0, 1 - f.dtSauHoan / f.dt) : 0
+        const L = tinhLuong({ dtSauHoan: f.dtSauHoan, net: f.net, cpqc: f.cpqc })
+        const loss = f.net < 0
         return (
           <div key={r.id} style={panelStyle}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
               <span style={{ fontWeight: 600, fontSize: 16 }}>{r.name}</span>
-              <span style={{ fontSize: 11, color: C.amber, background: 'rgba(251,191,36,0.1)', padding: '2px 8px', borderRadius: 6 }}>≈ ước tính engine · số chốt theo sheet kế toán</span>
+              <span style={{ fontSize: 11, color: C.green, background: 'rgba(74,222,128,0.1)', padding: '2px 8px', borderRadius: 6 }}>✓ số thật từ sheet</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(118px,1fr))', gap: 10, marginBottom: 12 }}>
               {[
-                { l: 'Doanh thu', v: fmtTr(r.dt), c: C.text },
-                { l: 'DT sau hoàn', v: fmtTr(r.dtSauHoan), c: C.text },
-                { l: 'Tiền ads', v: fmtTr(r.dt * r.cpqc), c: heColor(r.cpqc), sub: 'CPQC ' + fmtPct(r.cpqc) },
-                { l: '% Hoàn', v: fmtPct(r.hoan), c: r.hoan > 0.4 ? C.red : r.hoan > 0.3 ? C.amber : C.muted2 },
-                { l: 'NET (lợi nhuận)', v: fmtTr(r.net), c: r.net < 0 ? C.red : C.green, big: true },
+                { l: 'Doanh thu', v: fmtTr(f.dt), c: C.text },
+                { l: 'DT sau hoàn', v: fmtTr(f.dtSauHoan), c: C.text },
+                { l: 'Tiền ads', v: fmtTr(f.dt * f.cpqc), c: heColor(f.cpqc), sub: 'CPQC ' + fmtPct(f.cpqc) },
+                { l: '% Hoàn', v: fmtPct(hoan), c: hoan > 0.4 ? C.red : hoan > 0.3 ? C.amber : C.muted2 },
+                { l: 'NET (lợi nhuận)', v: fmtTr(f.net), c: f.net < 0 ? C.red : C.green, big: true },
               ].map((k) => (
                 <div key={k.l} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '11px 13px' }}>
                   <div style={{ fontSize: 10.5, letterSpacing: 0.5, color: C.muted, marginBottom: 5 }}>{k.l}</div>
@@ -80,9 +94,6 @@ export default function SalaryTab({ members, stats, isCEO, myMember }: {
                 </div>
               ))}
             </div>
-            {r.net > 0 && r.dtSauHoan > 0 && r.net / r.dtSauHoan > 0.08 && (
-              <div style={{ fontSize: 11.5, color: C.amber, marginBottom: 8 }}>⚠ Biên {fmtPct(r.net / r.dtSauHoan)} cao bất thường (COD biên mỏng) — engine có thể ước giá vốn/hoàn thấp. Đối chiếu lợi nhuận thật ở sheet.</div>
-            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 10 }}>
               {[
                 { l: '① Cứng / người', v: fmtTr(L.cung) },
@@ -96,23 +107,21 @@ export default function SalaryTab({ members, stats, isCEO, myMember }: {
                 </div>
               ))}
             </div>
-            {/* Lớp ẩn CEO */}
             {isCEO && (
               <div style={{ marginTop: 10, padding: '9px 12px', background: 'rgba(122,169,239,0.07)', border: '1px solid #25324a', borderRadius: 10, fontSize: 12, color: C.blue }}>
-                🔒 Thật (6500): doanh thu ~{fmtTr(realRevenue(r.dt))} · <b>net thật ~{fmtTr(realNet(r.dt, r.net))}</b> · trả lương team {fmtTr(L.luongTeam)}
+                🔒 Thật (6500): doanh thu ~{fmtTr(realRevenue(f.dt))} · <b>net thật ~{fmtTr(realNet(f.dt, f.net))}</b> · trả lương team {fmtTr(L.luongTeam)}
               </div>
             )}
           </div>
         )
       })}
 
-      {/* Buồng lái CEO toàn công ty */}
-      {isCEO && rows.length > 0 && (
+      {isCEO && ceo.rev > 0 && (
         <div style={{ ...panelStyle, border: `1px solid ${ceo.bufferPct < DEFAULT_CEO.buffer ? C.red : '#25324a'}` }}>
           <div style={{ ...eyebrowStyle, color: C.blue }}>🔒 BUỒNG LÁI CEO (toàn công ty · số thật)</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10 }}>
             {[
-              { l: 'Net thật (3 team)', v: fmtTr(ceo.rn) },
+              { l: 'Net thật', v: fmtTr(ceo.rn) },
               { l: '− Lương trả', v: fmtTr(ceo.luong) },
               { l: '− Overhead', v: fmtTr(ceo.overhead) },
               { l: '= CEO giữ', v: fmtTr(ceo.giu), c: ceo.giu < 0 ? C.red : C.green },
@@ -125,7 +134,7 @@ export default function SalaryTab({ members, stats, isCEO, myMember }: {
             ))}
           </div>
           {ceo.bufferPct < DEFAULT_CEO.buffer && (
-            <div style={{ marginTop: 8, fontSize: 12, color: C.red, fontWeight: 600 }}>⚠ Buffer dưới 12% — lương + overhead đang ăn quá sâu vào lãi thật. Cần đẩy DT hoặc ghìm chi phí.</div>
+            <div style={{ marginTop: 8, fontSize: 12, color: C.red, fontWeight: 600 }}>⚠ Buffer dưới 12% — lương + overhead ăn quá sâu vào lãi thật. Cần đẩy DT hoặc ghìm chi phí.</div>
           )}
         </div>
       )}

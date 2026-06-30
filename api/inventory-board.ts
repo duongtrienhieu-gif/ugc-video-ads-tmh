@@ -313,6 +313,14 @@ function parseMarketerSp(rows: string[][]): string[] {
   }
   return [...set]
 }
+// File team "BÁO CÁO SẢN PHẨM" dòng TỔNG (rows[1]): E(4)=DT VNĐ · J(9)=%CPQC · Q(16)=LỢI NHUẬN
+// (số THẬT, công thức sheet đã gồm +%hoàn) · S(18)=DT SAU HOÀN. → số kế toán thật của team, khớp sheet.
+function parseTeamFin(rows: string[][]): { net: number; dtSauHoan: number; cpqc: number; dt: number } | null {
+  const r = rows[1]
+  if (!r) return null
+  const cpqcRaw = viNum(r[9])
+  return { dt: viNum(r[4]), cpqc: cpqcRaw > 1.5 ? cpqcRaw / 100 : cpqcRaw, net: viNum(r[16]), dtSauHoan: viNum(r[18]) }
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed' })
@@ -338,14 +346,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const allIds = Array.from(new Set(jobs.flatMap((j) => j.ids)))
     const fetched = await Promise.allSettled(allIds.map((id) => fetchCsv(id, 'BÁO CÁO SẢN PHẨM')))
     const spById = new Map<string, string[]>()
-    allIds.forEach((id, i) => { const r = fetched[i]; if (r.status === 'fulfilled') spById.set(id, parseMarketerSp(r.value)) })
+    const rowsById = new Map<string, string[][]>()
+    allIds.forEach((id, i) => { const r = fetched[i]; if (r.status === 'fulfilled') { spById.set(id, parseMarketerSp(r.value)); rowsById.set(id, r.value) } })
     const marketerSp: Record<string, string[]> = {}
+    const teamFin: Record<string, { net: number; dtSauHoan: number; cpqc: number; dt: number }> = {}
     for (const j of jobs) {
       const set = new Set<string>()
       for (const id of j.ids) for (const s of spById.get(id) ?? []) set.add(s)
       if (set.size) marketerSp[j.token] = Array.from(set)
+      const fin = parseTeamFin(rowsById.get(j.ids[0]) ?? []) // j.ids[0] = file team T7 (chính) → số kế toán thật
+      if (fin) teamFin[j.token] = fin
     }
-    return res.status(200).json({ ok: Object.keys(marketerSp).length > 0, marketerSp })
+    return res.status(200).json({ ok: Object.keys(marketerSp).length > 0, marketerSp, teamFin })
   }
 
   const errors: string[] = []

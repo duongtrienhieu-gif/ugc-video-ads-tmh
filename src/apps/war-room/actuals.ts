@@ -83,11 +83,13 @@ export function readCachedSpStats(): SpStatsResult | null {
 // Map TEAM → ĐẦY ĐỦ mã SP team chạy (đọc 3 file team APEX/TITAN/SUMMIT, sheet BÁO CÁO SẢN PHẨM).
 // Key = token team (APEX/TITAN/SUMMIT); spForMember map người→team rồi khớp. Truyền link team
 // từ board_config (Supabase) để đọc đúng file tháng đang dán; lỗi → backend dùng default tháng.
-export async function fetchMarketerSp(): Promise<Record<string, string[]>> {
+// Số kế toán THẬT của team (đọc thẳng dòng TỔNG file team — khớp sheet, gồm +%hoàn).
+export interface TeamFin { net: number; dtSauHoan: number; cpqc: number; dt: number }
+export async function fetchMarketerSp(): Promise<{ marketerSp: Record<string, string[]>; teamFin: Record<string, TeamFin> }> {
   const links = (await loadBoardLinks()) ?? {}
   const r = await fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marketerSp: true, links }), cache: 'no-store' })
-  const j = (await r.json()) as { marketerSp?: Record<string, string[]> }
-  return j.marketerSp ?? {}
+  const j = (await r.json()) as { marketerSp?: Record<string, string[]>; teamFin?: Record<string, TeamFin> }
+  return { marketerSp: j.marketerSp ?? {}, teamFin: j.teamFin ?? {} }
 }
 
 // Gộp các mã của 1 nhân sự → DT · lãi · %CPQC · %hoàn · AOV · %chốt (đều weighted theo DT)

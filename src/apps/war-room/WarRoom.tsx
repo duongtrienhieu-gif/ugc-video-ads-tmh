@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useWarStore, memberEmails, type Member } from './store'
 import { useAuthStore } from '../../stores/authStore'
 import { useAppStore } from '../../stores/appStore'
-import { fetchSpStats, fetchMarketerSp, readCachedSpStats, aggregate, type SpStat, type SpProfit } from './actuals'
+import { fetchSpStats, fetchMarketerSp, readCachedSpStats, aggregate, type SpStat, type SpProfit, type TeamFin } from './actuals'
 import TestPipeline from './TestPipeline'
 import DailyLog from './DailyLog'
 import SalaryTab from './SalaryTab'
@@ -49,6 +49,7 @@ export default function WarRoom() {
   const [stats, setStats] = useState<Record<string, SpStat>>({})
   const [profit, setProfit] = useState<SpProfit[]>([])
   const [mktSp, setMktSp] = useState<Record<string, string[]>>({})
+  const [teamFin, setTeamFin] = useState<Record<string, TeamFin>>({})
   const [stale, setStale] = useState(false)
 
   const reloadStats = () => fetchSpStats().then((r) => { setStats(r.stats); setProfit(r.profit); setStale(r.stale) }).catch(() => {})
@@ -57,7 +58,7 @@ export default function WarRoom() {
     const cached = readCachedSpStats()
     if (cached) { setStats(cached.stats); setProfit(cached.profit); setStale(true) } // F5 → hiện NGAY số đã cache
     void reloadStats() // rồi tải mới ngầm, không chặn màn hình
-    void fetchMarketerSp().then(setMktSp).catch(() => {})
+    void fetchMarketerSp().then((r) => { setMktSp(r.marketerSp); setTeamFin(r.teamFin) }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -126,7 +127,7 @@ export default function WarRoom() {
       {isCEO && effTab === 'target' && <TargetTab {...{ members, targets, stats, isCEO, setTarget, reloadStats }} />}
       {isCEO && effTab === 'viec' && <ViecTab {...{ members, tasks, profit, spOwner, userEmail, addTask, updateTask, deleteTask }} />}
       {effTab === 'test' && <TestPipeline isCEO={isCEO} userEmail={userEmail} />}
-      {effTab === 'luong' && <SalaryTab members={members} stats={stats} isCEO={isCEO} myMember={myMember} />}
+      {effTab === 'luong' && <SalaryTab members={members} teamFin={teamFin} isCEO={isCEO} myMember={myMember} />}
     </Shell>
   )
 }
