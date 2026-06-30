@@ -420,7 +420,9 @@ function NhanSu({ members, isCEO, mktSp, addMember, updateMember, deleteMember }
       <div style={{ fontSize: 12, color: C.muted, margin: '4px 0 12px' }}>Mỗi người 1 dòng. <b style={{ color: C.muted2 }}>1 slot chung team 2 người</b> (vd HÀ + PHY) thì điền <b style={{ color: C.muted2 }}>cả 2 ô mail</b> — ai đăng nhập bằng mail nào cũng vào đúng bảng này. Mã SP → bấm 🪄 để app tự điền từ file Ghép quà, hoặc gõ tay.</div>
       {members.map((m) => (
         <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 0', borderTop: `1px solid ${C.line2}`, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 600, minWidth: 90 }}>{m.name}</span>
+          <input key={m.id} defaultValue={m.name} placeholder="Tên (KHÁNH / HÀ + PHY...)"
+            onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== m.name) void updateMember(m.id, { name: v }) }}
+            disabled={!isCEO} style={{ ...inp, fontWeight: 600, minWidth: 90, width: 130, fontSize: 13 }} />
           <span style={{ color: C.gold, border: `1px solid ${C.gold}`, borderRadius: 20, padding: '1px 9px', fontSize: 11 }}>{roleLabel(m.role)}</span>
           <EmailPair value={m.email} disabled={!isCEO} onSave={(v) => void updateMember(m.id, { email: v })} />
           <input defaultValue={(m.sp_codes ?? []).join(', ')} placeholder="mã SP phụ trách (phẩy)" onBlur={(e) => void updateMember(m.id, { sp_codes: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
