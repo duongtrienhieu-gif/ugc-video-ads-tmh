@@ -67,7 +67,8 @@ export default function ProfitSim({ products, inv, velocity, priceVnd }: {
         ))}
       </div>
       <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>
-        Giá vốn / %hoàn / AOV ({fmtPlain(sel.aov)}/đơn) lấy từ số THẬT của mã; chỉ kéo %CPQC để thấy lãi/đơn đổi. Hạ %CPQC xuống dưới ngưỡng {fmtPct(Math.max(0, sel.cpqcTarget))} là đạt lãi mục tiêu {fmtPct(LN_TARGET)}.
+        {sel.hoanPct === 0 && <span style={{ color: C.red, fontWeight: 600 }}>⚠ %hoàn = 0 (QLHB chưa tải / file tháng mới chưa có số) → lãi đang ẢO, ĐỪNG tin tới khi có %hoàn. </span>}
+        Giá vốn / %hoàn ({fmtPct(sel.hoanPct)}) / AOV ({fmtPlain(sel.aov)}/đơn) lấy từ số THẬT của mã; chỉ kéo %CPQC để thấy lãi/đơn đổi. Hạ %CPQC xuống dưới ngưỡng {fmtPct(Math.max(0, sel.cpqcTarget))} là đạt lãi mục tiêu {fmtPct(LN_TARGET)}.
         {' '}<b style={{ color: C.muted2 }}>CPA / data (trên camp)</b> = %CPQC × AOV × tỉ lệ chốt{selChot > 0 ? ` (${fmtPct(selChot)})` : ''} — chi phí mỗi data trên camp (chưa × chốt ra đơn), {selChot > 0 ? 'tỉ lệ chốt lấy từ số thật của mã.' : 'mã này chưa có tỉ lệ chốt nên hiện "—".'}
       </div>
     </div>

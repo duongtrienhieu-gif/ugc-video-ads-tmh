@@ -134,7 +134,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cashflow = parseCashflow(sp)
     const provinces = tinh ? parseProvinces(tinh) : []
     const result = { ok: Object.keys(hoanMap).length > 0, hoanMap, cashflow, provinces }
-    if (result.ok) await cacheWrite(result as unknown as Record<string, unknown>)
+    if (result.ok) {
+      await cacheWrite(result as unknown as Record<string, unknown>)
+      res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300')
+      return res.status(200).json({ ...result, cached: false })
+    }
+    // File QLHB tháng mới CHƯA có số (hoanMap rỗng) → KHÔNG trả 0: thiếu %hoàn làm máy tính lãi ẢO
+    // (vd ở CPQC 55% vẫn báo lãi dù thật là lỗ). Lấy số tốt gần nhất đã cache (giống nhánh lỗi).
+    // Có số tháng mới là tự đè. Đồng bộ với /api/inventory-board (cũng fallback cache khi rỗng).
+    const cachedEmpty = await cacheRead()
+    if (cachedEmpty && cachedEmpty.hoanMap && Object.keys(cachedEmpty.hoanMap as object).length > 0) {
+      return res.status(200).json({ ...cachedEmpty, cached: true })
+    }
     res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300')
     return res.status(200).json({ ...result, cached: false })
   } catch (e) {

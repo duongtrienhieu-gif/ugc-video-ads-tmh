@@ -25,10 +25,13 @@ function isGood(stats: Record<string, SpStat>, profit: SpProfit[]): boolean {
 export async function fetchSpStats(): Promise<SpStatsResult> {
   let products: Prod[] = [], inv: InvItem[] = [], velocity: Record<string, number> = {}, priceVnd: Record<string, number> = {}
   let hoanMap: Record<string, number> = {}
+  // Đọc link DÙNG CHUNG (board_config Supabase) để War Room theo đúng file tháng đang dán — giống
+  // app Kho. Trước đây gửi links rỗng → bám default cứng → tháng mới đổi link mà War Room không theo.
+  const links = (await loadBoardLinks()) ?? {}
   // Gọi SONG SONG: /api/inventory-board (5 file nhẹ) + /api/qlhb (file nặng, function riêng).
   const [boardR, qlhbR] = await Promise.allSettled([
-    fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ links: {} }), cache: 'no-store' }).then((r) => r.json() as Promise<BoardResp>),
-    fetch('/api/qlhb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}), cache: 'no-store' }).then((r) => r.json() as Promise<{ hoanMap?: Record<string, number> }>),
+    fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ links }), cache: 'no-store' }).then((r) => r.json() as Promise<BoardResp>),
+    fetch('/api/qlhb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link: links.qlhb ?? '' }), cache: 'no-store' }).then((r) => r.json() as Promise<{ hoanMap?: Record<string, number> }>),
   ])
   if (boardR.status === 'fulfilled') { const j = boardR.value; products = j.products ?? []; inv = j.inv ?? []; velocity = j.velocity ?? {}; priceVnd = j.priceVnd ?? {} }
   if (qlhbR.status === 'fulfilled') hoanMap = qlhbR.value.hoanMap ?? {}
