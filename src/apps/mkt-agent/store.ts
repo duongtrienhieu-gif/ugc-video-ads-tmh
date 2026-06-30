@@ -90,6 +90,8 @@ export interface SpCandidate {
   brand?: string
   vids?: VideoCheck      // dò video bán SP (lite, sau quét) — rip-ready
   videoChecking?: boolean // đang dò video
+  bankAdding?: boolean   // đang AI điền hồ sơ + thêm vào kho SP
+  bankAddedId?: string   // id SP đã tạo trong bank (đã thêm)
   diving?: boolean       // đang Soi sâu
   filtering?: boolean    // đang lọc spy chính xác (vision)
   deep?: DeepDive        // kết quả Soi sâu

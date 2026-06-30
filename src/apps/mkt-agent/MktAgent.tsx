@@ -13,6 +13,8 @@ import { judgeSp } from './services/judge'
 import { computeWinScore } from './services/winScore'
 import { checkProductVideos } from './services/checkVideos'
 import { KEYWORD_GROUPS, toggleGroup, isGroupActive, parseNiches } from './keywords'
+import { useBankStore } from '../../stores/bankStore'
+import { directGeminiText } from '../../utils/gemini'
 
 const fmt = (n: number) => new Intl.NumberFormat('en-US').format(Math.round(n))
 const compact = (n: number) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n)
@@ -51,6 +53,7 @@ async function pool<T>(items: T[], n: number, fn: (t: T) => Promise<void>): Prom
 export default function MktAgent() {
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const sendToApp = useAppStore((s) => s.sendToApp)
+  const addProduct = useBankStore((s) => s.addProduct)
   const {
     niches, amount, scanning, classifying, error, candidates, onlyGeneric, selectedSp,
     setNiches, setAmount, setScanning, setClassifying, setError,
@@ -125,6 +128,44 @@ export default function MktAgent() {
       }
     } catch (e) {
       patchCandidate(c.productId, { diving: false, deepError: (e as Error).message })
+    }
+  }
+
+  // Thêm SP vào KHO (giống nút ở app Research): Gemini điền hồ sơ VN đầy đủ → addProduct.
+  const addToBank = async (c: SpCandidate) => {
+    if (c.bankAddedId || c.bankAdding) return
+    if (!geminiApiKey) { setError('Cần Gemini key (Cài đặt) để AI điền hồ sơ SP.'); return }
+    patchCandidate(c.productId, { bankAdding: true })
+    try {
+      const prompt = `Bạn là chuyên gia nghiên cứu sản phẩm COD/affiliate. Đọc 1 sản phẩm đang bán chạy trên TikTok Shop và SUY LUẬN viết hồ sơ ĐẦY ĐỦ bằng TIẾNG VIỆT để tạo content quảng cáo + landing page.
+SẢN PHẨM:
+- Tên gốc: ${c.title}
+- Ngách: ${c.niche ?? '—'}
+- Thị trường: Malaysia
+- Giá: ${c.price ? 'RM' + c.price : '—'} · Đã bán: ${c.sale} · Đánh giá: ${c.rating || '—'}
+Trả JSON đúng khóa (tiếng Việt, cụ thể, KHÔNG bịa chứng nhận y tế/giấy phép):
+{"productName":"tên gọn rõ","productDescription":"2-3 câu SP là gì, cho ai","targetMarket":"ĐỐI TƯỢNG KHÁCH HÀNG MỤC TIÊU cụ thể — ai nên dùng (độ tuổi/giới tính/nghề/tình trạng), 1-2 dòng. TUYỆT ĐỐI KHÔNG ghi tên quốc gia/thị trường","painPoints":"nỗi đau khách, mỗi ý 1 dòng","usps":"điểm độc nhất của SP (đặc tính/lợi thế cạnh tranh), mỗi ý 1 dòng","benefits":"lợi ích chính, mỗi ý 1 dòng","offer":"gợi ý ưu đãi/combo (vd mua 2 tặng 1, freeship COD)","ingredients":"THÀNH PHẦN chính suy luận theo tên+ngách (ước đoán hợp lý, hedge 'thường chứa…' nếu không chắc, KHÔNG bịa hàm lượng/chứng nhận) + CƠ CHẾ HOẠT ĐỘNG ngắn gọn. Chỉ ghi 'Cập nhật từ NCC' khi HOÀN TOÀN không suy luận nổi","usageGuide":"cách dùng gợi ý"}
+Suy luận hợp lý từ tên + ngách. TUYỆT ĐỐI KHÔNG đưa số lượt bán/đánh giá sao/thống kê thị trường vào usps/benefits hay bất kỳ field nào. CHỈ trả JSON.`
+      const raw = await directGeminiText({ apiKey: geminiApiKey, prompt, responseMimeType: 'application/json', temperature: 0.5 })
+      const d = JSON.parse(raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()) as Record<string, string>
+      const created = await addProduct({
+        productName: d.productName || c.title,
+        productDescription: d.productDescription || '',
+        targetMarket: d.targetMarket || '',
+        painPoints: d.painPoints || '',
+        usps: d.usps || '',
+        benefits: d.benefits || '',
+        offer: d.offer || '',
+        ingredients: d.ingredients || '',
+        usageGuide: d.usageGuide || '',
+        productImage: c.imageUrl || '',
+        productImages: c.imageUrl ? [c.imageUrl] : [],
+      })
+      if (!created) { patchCandidate(c.productId, { bankAdding: false }); return }  // addProduct đã toast lỗi
+      patchCandidate(c.productId, { bankAdding: false, bankAddedId: created.id })
+    } catch (e) {
+      patchCandidate(c.productId, { bankAdding: false })
+      setError('AI điền hồ sơ lỗi: ' + ((e as Error).message || '').slice(0, 80))
     }
   }
 
@@ -236,6 +277,7 @@ export default function MktAgent() {
                   onPick={() => selectSp(selectedSp?.productId === p.productId ? null : p)}
                   onSendToApp={sendToApp}
                   onPlay={setPlayVid}
+                  onAddBank={() => addToBank(p)}
                 />
               ))}
             </div>
@@ -272,7 +314,7 @@ export default function MktAgent() {
 }
 
 // ── 1 card SP — video reel (rip-ready) trước, phân tích sâu sau ────────────────
-function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay }: {
+function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onAddBank }: {
   p: SpCandidate
   picked: boolean
   hasKey: boolean
@@ -280,6 +322,7 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay }: {
   onPick: () => void
   onSendToApp: (a: { targetApp: string; targetField: string; data: unknown }) => void
   onPlay: (v: VidItem) => void
+  onAddBank: () => void
 }) {
   const branded = p.tier === 'brand'
   const win = computeWinScore(p)
@@ -367,6 +410,21 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay }: {
           <div className="text-[11px] text-zinc-500">🎥 0 video bán SP — chưa có creative sẵn để rip</div>
         )
       ) : null}
+
+      {/* Thêm SP vào KHO (AI điền hồ sơ) — giống app Research */}
+      {!branded && (
+        p.bankAddedId ? (
+          <button onClick={() => onSendToApp({ targetApp: 'finder', targetField: 'activeBank', data: 'products' })}
+            className="h-8 rounded-md text-[12px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/25">
+            ✅ Đã thêm vào kho · Mở kho SP →
+          </button>
+        ) : (
+          <button onClick={onAddBank} disabled={p.bankAdding || !hasKey}
+            className="h-8 rounded-md text-[12px] font-medium bg-zinc-800 text-zinc-100 border border-zinc-700 hover:bg-zinc-700 disabled:opacity-50">
+            {p.bankAdding ? '⏳ AI đang điền hồ sơ…' : '➕ Thêm vào kho SP'}
+          </button>
+        )
+      )}
 
       {branded ? (
         <span className={`px-2 py-0.5 rounded border text-[11px] self-start ${TONE.rose}`}>🔴 BRAND BẢO HỘ · bỏ (bán lậu bị gỡ){p.brand ? ` · ${p.brand}` : ''}</span>
