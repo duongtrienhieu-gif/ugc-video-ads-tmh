@@ -94,15 +94,15 @@ export default function SalaryTab({ members, teamFin, isCEO, myMember }: {
                 </div>
               ))}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(175px,1fr))', gap: 10 }}>
               {[
                 { l: '① Cứng / người', v: fmtTr(L.cung) },
-                { l: '② Thưởng / người', v: loss ? '0' : fmtTr(L.thuongNguoi), sub: loss ? 'net âm' : `pool ${fmtTr(L.pool)} /2 ${L.heLabel}` },
+                { l: '② Thưởng / người', v: loss ? '0đ' : fmtTr(L.thuongNguoi), sub: loss ? 'net âm' : `pool ${fmtTr(L.pool)} /2 ${L.heLabel}` },
                 { l: '→ LƯƠNG / người', v: fmtTr(L.luongNguoi), gold: true },
               ].map((k) => (
                 <div key={k.l} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px' }}>
                   <div style={{ fontSize: 10, letterSpacing: 0.5, color: C.muted, marginBottom: 4 }}>{k.l}</div>
-                  <div style={{ fontSize: 17, fontWeight: 600, color: k.gold ? C.gold : C.text }}>{k.v}</div>
+                  <div style={{ fontSize: k.gold ? 18 : 16, fontWeight: 700, color: k.gold ? C.gold : C.text, whiteSpace: 'nowrap' }}>{k.v}</div>
                   {k.sub && <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{k.sub}</div>}
                 </div>
               ))}
@@ -119,7 +119,7 @@ export default function SalaryTab({ members, teamFin, isCEO, myMember }: {
       {isCEO && ceo.rev > 0 && (
         <div style={{ ...panelStyle, border: `1px solid ${ceo.bufferPct < DEFAULT_CEO.buffer ? C.red : '#25324a'}` }}>
           <div style={{ ...eyebrowStyle, color: C.blue }}>🔒 BUỒNG LÁI CEO (toàn công ty · số thật)</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(168px,1fr))', gap: 10 }}>
             {[
               { l: 'Net thật', v: fmtTr(ceo.rn) },
               { l: '− Lương trả', v: fmtTr(ceo.luong) },
@@ -129,7 +129,7 @@ export default function SalaryTab({ members, teamFin, isCEO, myMember }: {
             ].map((k) => (
               <div key={k.l} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px' }}>
                 <div style={{ fontSize: 10, letterSpacing: 0.5, color: C.muted, marginBottom: 4 }}>{k.l}</div>
-                <div style={{ fontSize: 16, fontWeight: 600, color: k.c ?? C.text }}>{k.v}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: k.c ?? C.text, whiteSpace: 'nowrap' }}>{k.v}</div>
               </div>
             ))}
           </div>
@@ -175,9 +175,9 @@ function Scratch() {
         <label style={{ fontSize: 12, color: C.muted2 }}>Net team (triệu)<input type="number" value={net} step={10} onChange={(e) => setNet(+e.target.value)} style={{ ...inp, marginTop: 4 }} /></label>
         <label style={{ fontSize: 12, color: C.muted2 }}>CPQC team (%)<input type="number" value={cpqc} step={1} onChange={(e) => setCpqc(+e.target.value)} style={{ ...inp, marginTop: 4 }} /></label>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: C.panel2, borderRadius: 10 }}>
-        <span style={{ fontSize: 13, color: C.muted2 }}>Cứng {fmtTr(L.cung)} + Thưởng {net < 0 ? '0' : fmtTr(L.thuongNguoi)} ({net < 0 ? 'net âm' : `${L.heLabel}`})</span>
-        <span style={{ fontSize: 22, fontWeight: 700, color: C.gold }}>{fmtTr(L.luongNguoi)}/người</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 12px', background: C.panel2, borderRadius: 10 }}>
+        <span style={{ fontSize: 13, color: C.muted2 }}>Cứng {fmtTr(L.cung)} + Thưởng {net < 0 ? '0đ' : fmtTr(L.thuongNguoi)} ({net < 0 ? 'net âm' : `${L.heLabel}`})</span>
+        <span style={{ fontSize: 18, fontWeight: 700, color: C.gold, whiteSpace: 'nowrap' }}>{fmtTr(L.luongNguoi)} /người</span>
       </div>
     </div>
   )
