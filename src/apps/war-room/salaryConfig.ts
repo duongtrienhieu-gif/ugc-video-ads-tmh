@@ -48,3 +48,45 @@ export async function saveCeoCfg(cfg: CeoCfg, by?: string): Promise<boolean> {
     return !error
   } catch { return false }
 }
+
+// ── Tồn ế / team (giá vốn hàng >45 ngày còn kẹt + lỗ xả) — CEO nhập tay tháng 7 ──
+// Lưu board_config(id='global', ton_ele jsonb) — cột riêng, key = token team (APEX/TITAN/SUMMIT), VNĐ.
+// Cả CEO lẫn nhân viên đều ĐỌC (để phạt hiện minh bạch); chỉ CEO chỉnh/lưu.
+export type TonEleMap = Record<string, { von: number; loXa: number }>
+const LS_TON = 'tmh_ton_ele'
+
+export function cleanTonEle(raw: unknown): TonEleMap {
+  const out: TonEleMap = {}
+  if (raw && typeof raw === 'object') {
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
+      const num = (x: unknown) => (typeof x === 'number' && isFinite(x) ? Math.max(0, x) : 0)
+      out[k.toUpperCase()] = { von: num(o.von), loXa: num(o.loXa) }
+    }
+  }
+  return out
+}
+
+export async function loadTonEle(): Promise<TonEleMap> {
+  try {
+    const { data, error } = await supabase.from('board_config').select('ton_ele').eq('id', 'global').maybeSingle()
+    if (!error && data?.ton_ele && typeof data.ton_ele === 'object') {
+      const m = cleanTonEle(data.ton_ele)
+      try { localStorage.setItem(LS_TON, JSON.stringify(m)) } catch { /* ignore */ }
+      return m
+    }
+  } catch { /* fall through */ }
+  try { const s = localStorage.getItem(LS_TON); if (s) return cleanTonEle(JSON.parse(s)) } catch { /* fall through */ }
+  return {}
+}
+
+export async function saveTonEle(map: TonEleMap, by?: string): Promise<boolean> {
+  const clean = cleanTonEle(map)
+  try { localStorage.setItem(LS_TON, JSON.stringify(clean)) } catch { /* ignore */ }
+  try {
+    const { error } = await supabase.from('board_config').upsert({
+      id: 'global', ton_ele: clean, updated_by: by ?? null, updated_at: new Date().toISOString(),
+    })
+    return !error
+  } catch { return false }
+}

@@ -7,9 +7,15 @@ export interface SalaryInput {
   dtSauHoan: number // VNĐ (visible, 5800)
   net: number       // VNĐ lợi nhuận net team (visible)
   cpqc: number      // tỉ lệ 0..1 (vd 0.31)
+  vonTonEle?: number // VNĐ giá vốn hàng nhập theo đề xuất team, >45 ngày còn kẹt kho
+  loXa?: number      // VNĐ phần lỗ đã hiện thực khi bán DƯỚI vốn để xả (vốn − thực thu)
 }
 export interface SalaryOut {
-  cung: number; pool: number; thuongNguoi: number; heSo: number; heLabel: string; luongNguoi: number; luongTeam: number
+  cung: number; pool: number; heSo: number; heLabel: string
+  thuongTeamGross: number // thưởng team TRƯỚC phạt tồn ế (= pool × hệ số)
+  phatTon: number         // phạt tồn ế đã cap (trừ THƯỞNG team)
+  thuongNguoi: number     // thưởng/người SAU phạt
+  luongNguoi: number; luongTeam: number
 }
 
 // ① Cứng / NGƯỜI theo DT team sau hoàn (flat, không lũy tiến). net < 0 → sàn 8tr.
@@ -44,13 +50,27 @@ export function heSoCpqc(cpqc: number): { he: number; label: string } {
   return { he: 0.8, label: '×0.8' }
 }
 
+// ④ Phạt tồn ế (trừ THƯỞNG team, KHÔNG đụng cứng): 8%/tháng giá vốn hàng >45 ngày còn kẹt
+//    + 50% phần lỗ đã xả (bán dưới vốn → không được coi là "thoát", không có bounty).
+//    Trần = 50% thưởng team tháng đó; không bao giờ trừ xuống âm. net<0 → thưởng=0 → phạt=0.
+export function phatTonEle(inp: Pick<SalaryInput, 'vonTonEle' | 'loXa'>, thuongTeam: number): { raw: number; capped: number } {
+  const von = Math.max(0, inp.vonTonEle ?? 0)
+  const lo = Math.max(0, inp.loXa ?? 0)
+  const raw = 0.08 * von + 0.50 * lo
+  const capped = Math.min(raw, 0.50 * Math.max(0, thuongTeam))
+  return { raw, capped }
+}
+
 export function tinhLuong(inp: SalaryInput): SalaryOut {
   const cung = cungNguoi(inp.dtSauHoan, inp.net)
   const pool = thuongPool(inp.net)
   const { he, label } = heSoCpqc(inp.cpqc)
-  const thuongNguoi = inp.net < 0 ? 0 : (pool / 2) * he
+  const thuongTeamGross = inp.net < 0 ? 0 : pool * he
+  const phatTon = phatTonEle(inp, thuongTeamGross).capped
+  const thuongTeam = Math.max(0, thuongTeamGross - phatTon)
+  const thuongNguoi = thuongTeam / 2
   const luongNguoi = cung + thuongNguoi
-  return { cung, pool, thuongNguoi, heSo: he, heLabel: label, luongNguoi, luongTeam: luongNguoi * 2 }
+  return { cung, pool, heSo: he, heLabel: label, thuongTeamGross, phatTon, thuongNguoi, luongNguoi, luongTeam: luongNguoi * 2 }
 }
 
 // ── Lớp CEO ẩn (số THẬT) — chỉ CEO thấy ──────────────────────────────────────

@@ -10,6 +10,11 @@ create table if not exists board_config (
 );
 alter table board_config enable row level security;
 
+-- Cột số THẬT ẩn của CEO (tỷ giá/chi phí thật, buffer, overhead) — chỉ CEO đọc/ghi ở UI.
+alter table board_config add column if not exists ceo_cfg jsonb;
+-- Tồn ế / team (giá vốn hàng >45 ngày còn kẹt + lỗ xả) — CEO nhập, cả team đọc để hiện phạt 8%.
+alter table board_config add column if not exists ton_ele jsonb;
+
 -- Mọi user đăng nhập đọc + ghi (nội bộ — sau login). Link Sheet vốn đã công khai.
 drop policy if exists board_config_select on board_config;
 create policy board_config_select on board_config for select to authenticated using (true);
