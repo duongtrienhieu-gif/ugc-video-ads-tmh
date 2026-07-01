@@ -334,13 +334,14 @@ export async function directGeminiText(params: {
  * rate-limit (1500 RPM) is far higher than any realistic chunk count, so the
  * extra latency from sequential dispatch is negligible.
  *
- * Model fallback chain: tries the GA model first (`gemini-embedding-001`,
- * the current default since mid-2025) and falls back to `text-embedding-004`
- * if the new model returns 404 — covers regions / accounts where the GA
- * model rollout hasn't reached yet, AND vice versa for legacy keys still
- * pinned to the old endpoint.
+ * Model: `gemini-embedding-001` (GA, 3072 dims).
+ *
+ * 2026-07-01: bỏ fallback `text-embedding-004` — nó đã bị Google RETIRE
+ * (embedContent trả 404, verified live) VÀ chỉ 768 dims nên nếu có fallback
+ * sang nó thì vector lệch chiều → hỏng similarity search. Chỉ giữ 1 model GA
+ * (retry 429/503 nội bộ vẫn xử lý blip tạm thời).
  */
-const EMBED_MODELS = ['gemini-embedding-001', 'text-embedding-004']
+const EMBED_MODELS = ['gemini-embedding-001']
 const EMBED_BATCH_LIMIT = 100  // Gemini BatchEmbedContents hard cap
 
 export async function geminiEmbedBatch(params: {
