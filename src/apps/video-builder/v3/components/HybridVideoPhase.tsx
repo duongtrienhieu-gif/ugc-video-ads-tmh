@@ -987,19 +987,17 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, failMsg, prog
         <p className="text-[12px] font-medium leading-snug text-sky-700 line-clamp-3" title="Cảnh sẽ quay (giải nghĩa từ prompt) — so với thoại ở trên xem có khớp không">
           🎬 {conceptLineFor(scene, conceptGloss)}
         </p>
-        {/* A#2 — escape hatch BOTH ways: a B-roll cut that won't render → talking-head (creator nói);
-            AND a talking-head (kể cả lips do ĐẠO DIỄN gán) → cảnh quay B-roll, để rồi "Nhờ AI sửa"
-            mô tả shot mong muốn (vd cảnh đo huyết áp). Nhãn + style theo ROLE thật (không theo lipsManual,
-            nếu không cảnh lips của đạo diễn sẽ kẹt). Social-proof card không toggle. Đổi xong bấm Render lại. */}
-        {(scene.role === 'broll' || scene.role === 'lips') && (
-          <button onClick={onToggleLips} type="button"
-            title={scene.role === 'lips'
-              ? 'Muốn đây là cảnh QUAY (không phải creator nói)? Đổi sang B-roll rồi bấm "Nhờ AI sửa" để mô tả cảnh. Đổi xong bấm Render lại.'
-              : 'Cảnh khó render thành B-roll? Đổi sang creator nói trực tiếp câu này (lip-sync ổn định). Đổi xong bấm Render lại.'}
-            className={`self-start rounded px-1.5 py-0.5 text-[10px] font-semibold ${scene.role === 'lips' ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>
-            {scene.role === 'lips' ? '↩ Chuyển sang cảnh quay (B-roll)' : '🎤 Chuyển sang Lipsync (creator nói)'}
-          </button>
-        )}
+        {/* A#2 — escape hatch 2 CHIỀU cho MỌI cảnh (không khoá theo role): cảnh quay/3D/social-proof
+            khó render → creator nói thẳng (lip-sync ổn định); và ngược lại lips → cảnh quay B-roll rồi
+            "Nhờ AI sửa" mô tả shot. User tự do chỉnh bất kỳ cảnh nào. Nhãn theo ROLE hiện tại
+            (lips → về B-roll; còn lại → sang Lipsync). Đổi xong bấm Render lại. */}
+        <button onClick={onToggleLips} type="button"
+          title={scene.role === 'lips'
+            ? 'Muốn đây là cảnh QUAY (không phải creator nói)? Đổi sang B-roll rồi bấm "Nhờ AI sửa" để mô tả cảnh. Đổi xong bấm Render lại.'
+            : 'Đổi sang creator nói trực tiếp câu này (lip-sync ổn định) — hợp khi cảnh quay/3D khó render. Đổi xong bấm Render lại.'}
+          className={`self-start rounded px-1.5 py-0.5 text-[10px] font-semibold ${scene.role === 'lips' ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>
+          {scene.role === 'lips' ? '↩ Chuyển sang cảnh quay (B-roll)' : '🎤 Chuyển sang Lipsync (creator nói)'}
+        </button>
         {/* P6z — cờ nghi lệch (heuristic, không tự sửa) → bấm "Nhờ AI sửa" nếu đúng là lệch. */}
         {mismatch && (
           <p className="rounded bg-amber-50 px-1.5 py-1 text-[11px] font-semibold leading-snug text-amber-700" title="Cảnh báo tự động — không tự sửa. Kiểm tra rồi bấm Nhờ AI sửa nếu lệch thật.">
