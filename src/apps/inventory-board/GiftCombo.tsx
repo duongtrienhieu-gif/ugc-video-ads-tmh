@@ -104,7 +104,7 @@ export default function GiftCombo({ products, giftLink }: { products: Prod[]; gi
     <div>
       <div style={{ ...panelStyle, padding: '12px 16px' }}>
         <div style={eyebrowStyle}>🎁 GHÉP QUÀ & COMBO · tự đề xuất theo nhân viên</div>
-        <div style={{ fontSize: 12, color: C.muted, marginTop: 5 }}>Lấy hàng tồn chết CÙNG NGÁCH làm quà chéo → thoát kho + upsell. Vốn quà theo BẬC giá vốn của quà (0-20k→10k · 21-30k→12k · 31-40k→15k · 41-50k→20k) · tỷ giá 5.800. Đổi quà / sửa Mốc tuỳ ý — số tự tính lại.</div>
+        <div style={{ fontSize: 12, color: C.muted, marginTop: 5 }}>Lấy hàng tồn chết CÙNG NGÁCH làm quà chéo → thoát kho + upsell. Vốn quà theo BẬC giá vốn của quà (0-12k→7k · 12-20k→10k · 21-30k→12k · 31-40k→15k · 41-50k→20k · &gt;50k→25k) · tỷ giá 5.800. Đổi quà / sửa Mốc tuỳ ý — số tự tính lại.</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
           {['Tất cả', ...markets].map((m) => (
             <button key={m} onClick={() => setMkt(m)} style={{ background: mkt === m ? C.gold : 'transparent', color: mkt === m ? '#0a0a0a' : C.muted2, border: `1px solid ${mkt === m ? C.gold : C.line}`, borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{m === 'Tất cả' ? m : '👤 ' + m}</button>

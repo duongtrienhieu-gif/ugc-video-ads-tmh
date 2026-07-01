@@ -4,9 +4,10 @@
 // Trả `tone` (không hex) để UI map màu. Tier mặc định = thang Mốc như sheet 5.
 export const RATE = 5800, SHIP = 0.09, VH = 0.08, LN_TARGET = 0.10
 const GIFT_ROLES = new Set(['CỨU', 'QUÀ', 'NGỦ']) // hàng cần thoát (không lấy SCALE làm quà)
-// Vốn quà tính theo giá vốn/sp của quà: 0-20k→10k · 21-30k→12k · 31-40k→15k · 41-50k→20k · >50k→25k
+// Vốn quà theo giá vốn/sp của quà: 0-12k→7k · 12-20k→10k · 21-30k→12k · 31-40k→15k · 41-50k→20k · >50k→25k
 export function giftCostOf(vonSp: number): number {
   const k = vonSp / 1000
+  if (k <= 12) return 7000
   if (k <= 20) return 10000
   if (k <= 30) return 12000
   if (k <= 40) return 15000
