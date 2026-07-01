@@ -354,6 +354,87 @@ export async function pollGptImage2UntilDone(params: {
   throw new Error(`TIMEOUT — KIE gpt-image-2 quá ${Math.round(timeout / 1000)}s chưa xong (task có thể bị stuck queue — retry tự động hoặc refresh + thử lại)`)
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// IMAGE FALLBACK (gpt-4o-image → nano-banana-2) — chống chịu khi KIE nghẽn.
+//
+// gpt-4o-image (i2i có reference) chạy trên backend OpenAI gpt-image-1. Khi
+// backend đó quá tải, task render 300s+ thay vì 30-60s → app time-out hàng
+// loạt DÙ credit vẫn bị trừ (task xong muộn nhưng đã bị bỏ). nano-banana-2
+// chạy trên backend Google (độc lập) nên thường vẫn khỏe trong các đợt OpenAI
+// nghẽn — và nó CŨNG giữ reference mạnh (khóa product + khóa avatar) qua
+// image_input. Đo thực tế 2026-07-01 khi OpenAI nghẽn: gpt-4o-image i2i = 303s,
+// nano-banana-2 i2i = 28s (cùng ảnh reference).
+//
+// Hai đường kích:
+//   • Manual: user bật "Chế độ KIE nghẽn" trong Cài đặt → mọi ảnh đi thẳng
+//     nano-banana-2, khỏi phí thời gian dò gpt-4o.
+//   • Auto (circuit breaker): sau N lần gpt-4o time-out liên tiếp → mở breaker
+//     trong COOLDOWN, ảnh trong khoảng đó đi thẳng nano-banana-2. gpt-4o xong
+//     1 ảnh ngon → reset. KIE hồi phục thì breaker không bao giờ kích.
+// ─────────────────────────────────────────────────────────────────────────
+
+let _preferNanoFallback = false
+let _gpt4oConsecutiveTimeouts = 0
+let _gpt4oBreakerUntil = 0
+const GPT4O_BREAKER_THRESHOLD = 2
+const GPT4O_BREAKER_COOLDOWN_MS = 4 * 60 * 1000
+
+/** Bật/tắt manual override từ Cài đặt (khi user biết trước KIE đang nghẽn). */
+export function setKieImageFallbackPreferred(on: boolean): void {
+  _preferNanoFallback = on
+}
+export function getKieImageFallbackPreferred(): boolean {
+  return _preferNanoFallback
+}
+
+/** True nếu nên bỏ qua gpt-4o-image và đi thẳng nano-banana-2 ngay lúc này
+ *  (manual mode HOẶC circuit breaker đang mở). */
+export function isKieImageFallbackActive(): boolean {
+  if (_preferNanoFallback) return true
+  if (_gpt4oBreakerUntil > Date.now()) return true
+  return false
+}
+
+/** Ghi nhận 1 lần gpt-4o-image time-out/stall → có thể mở breaker. */
+export function noteKieGpt4oTimeout(): void {
+  _gpt4oConsecutiveTimeouts++
+  if (_gpt4oConsecutiveTimeouts >= GPT4O_BREAKER_THRESHOLD && _gpt4oBreakerUntil <= Date.now()) {
+    _gpt4oBreakerUntil = Date.now() + GPT4O_BREAKER_COOLDOWN_MS
+    console.warn(`[KIE_FALLBACK] gpt-4o-image time-out ${_gpt4oConsecutiveTimeouts} lần liên tiếp → MỞ breaker, ưu tiên nano-banana-2 trong ${Math.round(GPT4O_BREAKER_COOLDOWN_MS / 1000)}s`)
+  }
+}
+
+/** gpt-4o-image xong 1 ảnh ngon → reset breaker (KIE đã khỏe lại). */
+export function noteKieGpt4oSuccess(): void {
+  if (_gpt4oConsecutiveTimeouts > 0 || _gpt4oBreakerUntil > 0) {
+    console.log('[KIE_FALLBACK] gpt-4o-image khỏe lại → reset breaker')
+  }
+  _gpt4oConsecutiveTimeouts = 0
+  _gpt4oBreakerUntil = 0
+}
+
+/** Fallback: sinh 1 ảnh qua nano-banana-2 (Google) với CÙNG reference images
+ *  (giữ khóa product + khóa avatar qua image_input). Trả về URL ảnh KIE. */
+export async function generateImageNanoFallback(params: {
+  apiKey: string
+  prompt: string
+  size: Gpt4oSize
+  filesUrl?: string[]
+  signal?: AbortSignal
+  onStatusChange?: (status: ImageStatus, progress?: number) => void
+}): Promise<string> {
+  console.log(`[KIE_FALLBACK] → nano-banana-2 (refs=${params.filesUrl?.length ?? 0}, size=${params.size})`)
+  return generateNanoBanana2({
+    apiKey: params.apiKey,
+    prompt: params.prompt,
+    imageInput: params.filesUrl && params.filesUrl.length > 0 ? params.filesUrl : undefined,
+    aspectRatio: params.size,
+    resolution: '1K',
+    signal: params.signal,
+    onStatusChange: params.onStatusChange,
+  })
+}
+
 /** All-in-one: submit + poll + return final image URL. */
 export async function generateGpt4oImage(params: {
   apiKey: string
@@ -421,6 +502,18 @@ export async function generateGpt4oImageFast(params: {
   const maxAttempts    = params.maxAttempts ?? 2
   let lastError: Error | null = null
 
+  // KIE nghẽn (manual mode HOẶC circuit breaker đang mở) → đi thẳng
+  // nano-banana-2, GIỮ product + avatar lock qua filesUrl. Khỏi phí thời gian
+  // dò gpt-4o-image khi ta đã biết backend OpenAI đang chậm.
+  if (isKieImageFallbackActive()) {
+    const p0 = typeof params.prompt === 'function' ? params.prompt(1) : params.prompt
+    console.log('[FAST] KIE fallback đang bật → bỏ qua gpt-4o, dùng nano-banana-2')
+    return generateImageNanoFallback({
+      apiKey: params.apiKey, prompt: p0, size: params.size,
+      filesUrl: params.filesUrl, signal: params.signal, onStatusChange: params.onStatusChange,
+    })
+  }
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (params.signal?.aborted) throw new Error('CANCELLED — user hủy task')
     params.onAttemptChange?.(attempt, maxAttempts)
@@ -447,6 +540,7 @@ export async function generateGpt4oImageFast(params: {
         onStatusChange: params.onStatusChange,
       })
       console.log(`[FAST attempt ${attempt}/${maxAttempts}] DONE`)
+      noteKieGpt4oSuccess()
       return url
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -463,8 +557,22 @@ export async function generateGpt4oImageFast(params: {
         throw lastError
       }
 
-      // Timeout / network — abandon this task and retry with a fresh submission
-      console.warn(`[FAST attempt ${attempt}/${maxAttempts}] soft-fail: ${msg.slice(0, 120)} — ${attempt < maxAttempts ? 'submitting fresh task (will use simplified prompt if caller provided fn-form)' : 'no more attempts'}`)
+      // Timeout / network = backend gpt-4o-image (OpenAI) đang chậm. Retry
+      // gpt-4o vô ích (cùng backend, cùng đang nghẽn) → chuyển NGAY sang
+      // nano-banana-2 (Google, backend khác), GIỮ product + avatar lock qua
+      // filesUrl. Ghi nhận time-out để circuit breaker tự mở cho các ảnh sau.
+      noteKieGpt4oTimeout()
+      clearTimeout(softTimer)
+      console.warn(`[FAST attempt ${attempt}/${maxAttempts}] soft-fail: ${msg.slice(0, 100)} → fallback nano-banana-2`)
+      const pf = typeof params.prompt === 'function' ? params.prompt(attempt) : params.prompt
+      try {
+        return await generateImageNanoFallback({
+          apiKey: params.apiKey, prompt: pf, size: params.size,
+          filesUrl: params.filesUrl, signal: params.signal, onStatusChange: params.onStatusChange,
+        })
+      } catch (nanoErr) {
+        throw lastError ?? (nanoErr instanceof Error ? nanoErr : new Error('nano-banana-2 fallback thất bại'))
+      }
     } finally {
       clearTimeout(softTimer)
     }

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
+import { setKieImageFallbackPreferred } from '../utils/kieai'
 
 const STORAGE_KEY = 'ai-ugc-lab-settings'
 
@@ -96,6 +97,10 @@ interface SettingsState {
   shotstackApiKey: string
   youtubeApiKey: string
   kieCredits: number | null
+  /** Chế độ "KIE nghẽn": khi bật, mọi ảnh gpt-4o-image đi thẳng nano-banana-2
+   *  (backend Google) để né đợt OpenAI gpt-image-1 quá tải. Giữ khóa
+   *  product/avatar qua reference images. */
+  kieImageFallbackMode: boolean
   /** UGC Builder pipeline version. v1 = stable (production), v2 = AI Director beta. */
   pipelineVersion: PipelineVersion
   /** UI theme — drives `data-theme="dark"` on <html>. Default 'light'
@@ -108,6 +113,7 @@ interface SettingsState {
   setShotstackApiKey: (key: string) => void
   setYoutubeApiKey: (key: string) => void
   setKieCredits: (credits: number | null) => void
+  setKieImageFallbackMode: (on: boolean) => void
   setPipelineVersion: (v: PipelineVersion) => void
   setTheme: (t: ThemePreference) => void
   hasApiKey: () => boolean
@@ -131,6 +137,7 @@ interface StoredSettings {
   falApiKey: string
   shotstackApiKey: string
   youtubeApiKey: string
+  kieImageFallbackMode: boolean
   pipelineVersion: PipelineVersion
   theme: ThemePreference
 }
@@ -147,6 +154,7 @@ function loadFromStorage(): StoredSettings {
         falApiKey:        parsed.falApiKey        ?? '',
         shotstackApiKey:  parsed.shotstackApiKey  ?? '',
         youtubeApiKey:    parsed.youtubeApiKey    ?? '',
+        kieImageFallbackMode: parsed.kieImageFallbackMode ?? false,
         // Z37 — Auto-migrate v2 → v3. v2 cinematic pipeline is deprecated;
         // the user wants the v3 Ads Video Engine. Existing v2 users get
         // bumped forward on next load. v2 stays reachable via Legacy menu
@@ -169,7 +177,7 @@ function loadFromStorage(): StoredSettings {
     }
   } catch { /* silent */ }
   // Z30 — first-time users land on v3 (creator-first), not the legacy v1.
-  return { kieApiKey: '', geminiApiKey: '', elevenLabsApiKey: '', falApiKey: '', shotstackApiKey: '', youtubeApiKey: '', pipelineVersion: 'v3', theme: 'light' }
+  return { kieApiKey: '', geminiApiKey: '', elevenLabsApiKey: '', falApiKey: '', shotstackApiKey: '', youtubeApiKey: '', kieImageFallbackMode: false, pipelineVersion: 'v3', theme: 'light' }
 }
 
 function saveToStorage(s: StoredSettings) {
@@ -313,6 +321,7 @@ async function hydrateFromCloud(setStore: (patch: Partial<StoredSettings>) => vo
       falApiKey:        cloud.falApiKey        ?? '',
       shotstackApiKey:  cloud.shotstackApiKey  ?? '',
       youtubeApiKey:    cloud.youtubeApiKey    ?? '',
+      kieImageFallbackMode: cloud.kieImageFallbackMode ?? false,
       pipelineVersion:  (
         cloud.pipelineVersion === 'v3' ? 'v3' :
         cloud.pipelineVersion === 'v2' ? 'v3' :  // Z37 — auto-migrate
@@ -330,6 +339,7 @@ async function hydrateFromCloud(setStore: (patch: Partial<StoredSettings>) => vo
       localStorage.setItem(STORAGE_KEY, payload)  // opportunistic cache
     } catch { /* silent — IDB still has it */ }
     setStore(merged)
+    setKieImageFallbackPreferred(merged.kieImageFallbackMode)  // sync module kieai
     console.log('[SETTINGS_SYNC] hydrated from cloud · pipelineVersion=' + merged.pipelineVersion)
   } catch (err) {
     console.warn('[SETTINGS_SYNC] hydrate failed', err)
@@ -345,6 +355,7 @@ function getStored(get: () => SettingsState): StoredSettings {
     falApiKey:        s.falApiKey,
     shotstackApiKey:  s.shotstackApiKey,
     youtubeApiKey:    s.youtubeApiKey,
+    kieImageFallbackMode: s.kieImageFallbackMode,
     pipelineVersion:  s.pipelineVersion,
     theme:            s.theme,
   }
@@ -385,6 +396,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setKieCredits: (credits) => set({ kieCredits: credits }),
+
+  setKieImageFallbackMode: (on) => {
+    set({ kieImageFallbackMode: on })
+    setKieImageFallbackPreferred(on)  // sync sang module kieai (nguồn thật cho generator)
+    saveToStorage({ ...getStored(get), kieImageFallbackMode: on })
+  },
 
   setPipelineVersion: (v) => {
     set({ pipelineVersion: v })
@@ -445,6 +462,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   hasYoutubeKey: () => get().youtubeApiKey.length > 0,
 }))
 
+// Sync trạng thái "KIE nghẽn" ban đầu (từ localStorage) sang module kieai —
+// nguồn thật mà các generator đọc. IDB/cloud hydrate bên dưới sync lại nếu khác.
+setKieImageFallbackPreferred(useSettingsStore.getState().kieImageFallbackMode)
+
 // ── Z38 — Wire Supabase auth state ──────────────────────────────────────
 // When the user signs in (or page loads while already signed in), pull
 // their cloud settings + merge. When they sign out, just leave the local
@@ -468,9 +489,11 @@ if (typeof window !== 'undefined') {
           falApiKey:        parsed.falApiKey        ?? curr.falApiKey,
           shotstackApiKey:  parsed.shotstackApiKey  ?? curr.shotstackApiKey,
           youtubeApiKey:    parsed.youtubeApiKey    ?? curr.youtubeApiKey,
+          kieImageFallbackMode: parsed.kieImageFallbackMode ?? curr.kieImageFallbackMode,
           pipelineVersion:  parsed.pipelineVersion  ?? curr.pipelineVersion,
           theme:            parsed.theme            ?? curr.theme,
         }))
+        setKieImageFallbackPreferred(useSettingsStore.getState().kieImageFallbackMode)
       } catch { /* silent */ }
     } else {
       // No IDB data yet — migrate from localStorage if any. Then clear

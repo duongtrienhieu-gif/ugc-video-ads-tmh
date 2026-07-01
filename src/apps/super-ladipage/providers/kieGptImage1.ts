@@ -1,4 +1,7 @@
-import { submitGpt4oImage, pollGpt4oUntilDone, submitGptImage2, pollGptImage2UntilDone } from '../../../utils/kieai'
+import {
+  submitGpt4oImage, pollGpt4oUntilDone, submitGptImage2, pollGptImage2UntilDone,
+  isKieImageFallbackActive, noteKieGpt4oTimeout, noteKieGpt4oSuccess, generateImageNanoFallback,
+} from '../../../utils/kieai'
 import { getUrl } from '../../../utils/assetStore'
 import { saveAsset } from '../../../utils/assetStore'
 import { mapAspectToKie } from '../assembler/assembleImagePrompt'
@@ -116,6 +119,20 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
   const modelTag = useImageToImage ? 'gpt-4o-image (i2i)' : 'gpt-image-2 (text-only)'
   console.log(`[kieImage] using ${modelTag} for prompt (${prompt.length} chars, ${filesUrl?.length ?? 0} refs)`)
 
+  // KIE nghẽn (manual mode HOẶC circuit breaker) → đi thẳng nano-banana-2.
+  // Giữ khóa product qua filesUrl khi là section i2i; section text-only đi
+  // nano text-to-image (không ref) để không nhét nhầm product vào cảnh lifestyle.
+  if (isKieImageFallbackActive()) {
+    console.log('[kieGptImage1] KIE fallback đang bật → nano-banana-2')
+    const url = await generateImageNanoFallback({
+      apiKey, prompt, size: kieAspect,
+      filesUrl: useImageToImage ? filesUrl : undefined,
+      signal,
+    })
+    const assetRef = await downloadAndSaveAsset(url)
+    return { assetRef, rawUrl: url }
+  }
+
   const tryOnce = async (promptToUse: string): Promise<string> => {
     if (useImageToImage) {
       // gpt-4o-image — TRUE i2i với reference images (identity lock).
@@ -173,6 +190,7 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
     try {
       const url = await tryOnce(currentPrompt)
       const assetRef = await downloadAndSaveAsset(url)
+      noteKieGpt4oSuccess()
       return { assetRef, rawUrl: url }
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err))
@@ -193,8 +211,23 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
       // softened prompt có chance pass (~70%).
       const isTimeoutFail = msg.includes('timeout') || msg.includes('quá ') || msg.includes('150s') || msg.includes('180s')
       if (isTimeoutFail && attempt === 1) {
-        console.log(`[kieGptImage1] TIMEOUT on attempt 1 — skip retry (save credit, user can manual retry when KIE healthy)`)
-        throw lastError
+        // gpt-4o-image (OpenAI) time-out = backend đang nghẽn. Thay vì bỏ ảnh
+        // (đốt credit không có kết quả), chuyển sang nano-banana-2 (Google) —
+        // GIỮ khóa product qua filesUrl. Ghi nhận để breaker tự mở cho ảnh sau.
+        noteKieGpt4oTimeout()
+        console.log('[kieGptImage1] gpt-4o TIMEOUT → fallback nano-banana-2 (giữ product lock)')
+        try {
+          const url = await generateImageNanoFallback({
+            apiKey, prompt, size: kieAspect,
+            filesUrl: useImageToImage ? filesUrl : undefined,
+            signal,
+          })
+          const assetRef = await downloadAndSaveAsset(url)
+          return { assetRef, rawUrl: url }
+        } catch (nanoErr) {
+          console.warn(`[kieGptImage1] nano-banana-2 fallback cũng lỗi: ${nanoErr instanceof Error ? nanoErr.message.slice(0, 100) : nanoErr}`)
+          throw lastError
+        }
       }
       // Track: nếu attempt này fail vì Policy → attempt 2 sẽ dùng softened.
       // content_policy + generate_failed đều là KIE từ chối render — cả 2
