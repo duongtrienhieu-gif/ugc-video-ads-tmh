@@ -11,7 +11,7 @@ export const RUNNING_DT = 10_000_000  // ≥10tr doanh thu = đang chạy (khôn
 export const TIER1_ORDERS = 100       // ≥100 đơn sau hoàn = nhập đều
 export const WINNER_ORDERS = 500      // ≥500 đơn sau hoàn + cấu trúc dương = winner
 export const BOUNTY_PCT = 0.08        // bounty xả tồn chết = 8% vốn kẹt (chia MKT + Sale)
-export const WINNER_BONUS = 5_000_000 // thưởng winner = 5tr / team
+export const WINNER_BONUS = 4_000_000 // thưởng winner = 4tr / team (chỉ 1 lần, tháng lần đầu đạt)
 
 export interface SkuLevel {
   name: string

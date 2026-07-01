@@ -663,7 +663,7 @@ export default function InventoryBoard() {
 
         {tab === 'profit' && <ProfitTruth products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} feed={feed} cockpit={cockpit} />}
 
-        {tab === 'reward' && <RewardTab products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} teamSp={teamSp} mobile={isMobile} />}
+        {tab === 'reward' && <RewardTab products={products} inv={inv} velocity={velocity} priceVnd={priceVnd} teamSp={teamSp} isCEO={view === 'ceo'} mobile={isMobile} />}
 
         {tab === 'gift' && <GiftCombo products={products} giftLink={sources.giftplan || ''} />}
 
