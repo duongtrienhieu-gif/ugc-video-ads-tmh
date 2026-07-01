@@ -151,7 +151,7 @@ export default function SalaryTab({ members, teamFin, isCEO, myMember }: {
         {[
           { t: '① CỨNG / NGƯỜI (DT team)', rows: [['< 500tr', '8tr'], ['500tr–1 tỷ', '10tr'], ['1–1,5 tỷ', '12tr'], ['1,5–2 tỷ', '14tr'], ['2–2,5 tỷ', '16tr'], ['2,5–3 tỷ', '18tr'], ['≥ 3 tỷ', '20tr']] },
           { t: '② THƯỞNG LŨY TIẾN (net)', rows: [['0–20tr', '10%'], ['20–50tr', '15%'], ['50–100tr', '20%'], ['100tr +', '25%']] },
-          { t: '③ HỆ SỐ CPQC', rows: [['< 31%', '×1.5'], ['31–34%', '×1.2'], ['34–38%', '×1.0'], ['> 38%', '×0.8']] },
+          { t: '③ HỆ SỐ CPQC', rows: [['< 30%', '×1.2'], ['30–34%', '×1.1'], ['34–38%', '×1.0'], ['> 38%', '×0.8']] },
         ].map((tb) => (
           <div key={tb.t} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 14px' }}>
             <div style={{ fontSize: 11.5, fontWeight: 600, color: C.muted2, marginBottom: 6 }}>{tb.t}</div>

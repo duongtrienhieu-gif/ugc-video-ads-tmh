@@ -35,11 +35,11 @@ export function thuongPool(net: number): number {
     + 0.25 * Math.max(0, n - 100 * TR)
 }
 
-// ③ Hệ số CPQC team (chỉ nhân THƯỞNG): <31→1.5 · 31-34→1.2 · 34-38→1.0 · >38→0.8.
+// ③ Hệ số CPQC team (chỉ nhân THƯỞNG): <30→1.2 · 30-34→1.1 · 34-38→1.0 · >38→0.8.
 export function heSoCpqc(cpqc: number): { he: number; label: string } {
   const c = cpqc * 100
-  if (c < 31) return { he: 1.5, label: '×1.5' }
-  if (c <= 34) return { he: 1.2, label: '×1.2' }
+  if (c < 30) return { he: 1.2, label: '×1.2' }
+  if (c <= 34) return { he: 1.1, label: '×1.1' }
   if (c <= 38) return { he: 1.0, label: '×1.0' }
   return { he: 0.8, label: '×0.8' }
 }
