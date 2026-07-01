@@ -14,7 +14,7 @@ import { computeWinScore } from './services/winScore'
 import { checkProductVideos } from './services/checkVideos'
 import { KEYWORD_GROUPS, toggleGroup, isGroupActive, parseNiches } from './keywords'
 import { useBankStore } from '../../stores/bankStore'
-import { directGeminiText } from '../../utils/gemini'
+import { directGeminiText, directGeminiVision } from '../../utils/gemini'
 
 const fmt = (n: number) => new Intl.NumberFormat('en-US').format(Math.round(n))
 const compact = (n: number) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n)
@@ -42,6 +42,20 @@ function shipHint(s?: string): { label: string; cls: string } | null {
     : { label: '✈️ cross-border', cls: 'text-amber-400' }
 }
 
+// AI "Đọc video" trả về.
+type VideoRead = { transcript: string; structure: string; angle: string; howto: string }
+
+// Tải nhiều video 1 phát (anchor download, giãn nhịp để trình duyệt không chặn).
+function downloadAll(urls: string[]): void {
+  urls.filter(Boolean).forEach((u, i) => {
+    setTimeout(() => {
+      const a = document.createElement('a')
+      a.href = u; a.target = '_blank'; a.rel = 'noopener'; a.download = ''
+      document.body.appendChild(a); a.click(); a.remove()
+    }, i * 400)
+  })
+}
+
 // Pool chạy song song giới hạn n — dò video nhiều SP mà không spam API.
 async function pool<T>(items: T[], n: number, fn: (t: T) => Promise<void>): Promise<void> {
   let i = 0
@@ -64,6 +78,9 @@ export default function MktAgent() {
   const [vidScanning, setVidScanning] = useState(false)
   const [onlyWithVideo, setOnlyWithVideo] = useState(false)
   const [playVid, setPlayVid] = useState<VidItem | null>(null)
+  const [readResult, setReadResult] = useState<VideoRead | null>(null)
+  const [readBusy, setReadBusy] = useState(false)
+  const [readErr, setReadErr] = useState<string | null>(null)
 
   // Dò video bán SP cho top-N (theo số bán) chưa dò → xếp SP-có-video lên đầu.
   const runVideoRank = async (list: SpCandidate[], depth: number) => {
@@ -168,6 +185,47 @@ Suy luận hợp lý từ tên + ngách. TUYỆT ĐỐI KHÔNG đưa số lượ
       patchCandidate(c.productId, { bankAdding: false })
       setError('AI điền hồ sơ lỗi: ' + ((e as Error).message || '').slice(0, 80))
     }
+  }
+
+  // "Đọc video": Gemini xem MP4 đối thủ → kịch bản (dịch) + cấu trúc + góc bán + cách bắt chước.
+  const openVid = (v: VidItem) => { setReadResult(null); setReadErr(null); setReadBusy(false); setPlayVid(v) }
+  const closeVid = () => { setPlayVid(null); setReadResult(null); setReadErr(null); setReadBusy(false) }
+  const readVideo = async () => {
+    if (!playVid?.downloadUrl) return
+    if (!geminiApiKey) { setReadErr('Cần Gemini key (Cài đặt)'); return }
+    setReadBusy(true); setReadErr(null); setReadResult(null)
+    try {
+      const up = await fetch('/api/gemini-upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: playVid.downloadUrl, apiKey: geminiApiKey }),
+      }).then((r) => r.json())
+      if (up.error || !up.fileUri) throw new Error(up.error || 'tải/upload video thất bại')
+      let state: string = up.state, uri: string = up.fileUri, mime: string = up.mimeType || 'video/mp4'
+      const fileName: string = up.fileName
+      const t0 = Date.now()
+      while (state !== 'ACTIVE' && Date.now() - t0 < 90000) {
+        await new Promise((r) => setTimeout(r, 3000))
+        const st = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${geminiApiKey}`).then((r) => r.json()).catch(() => null)
+        if (st?.state) { state = st.state; uri = st.uri || uri; mime = st.mimeType || mime }
+        if (state === 'FAILED') throw new Error('Gemini xử lý video thất bại')
+      }
+      if (state !== 'ACTIVE') throw new Error('Gemini xử lý video quá lâu — thử lại')
+      const prompt = `Bạn đang xem 1 video TikTok BÁN HÀNG ở Malaysia (tiếng Malay/English). Người đọc là seller Việt Nam muốn HỌC cách họ bán. Trả JSON tiếng Việt:
+{"transcript":"toàn bộ lời thoại + chữ trên màn hình, DỊCH sang tiếng Việt theo trình tự","structure":"cấu trúc: hook → thân (chứng minh/cảm xúc) → CTA, mỗi ý 1 dòng","angle":"góc bán chính & vì sao video này chốt/viral","howto":"cách bắt chước cho SP của mình, mỗi ý 1 dòng cụ thể"}
+Mô tả gốc: ${playVid.desc}
+Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh. CHỈ trả JSON.`
+      const raw = await directGeminiVision({
+        apiKey: geminiApiKey,
+        parts: [{ fileData: { mimeType: mime, fileUri: uri } }, { text: prompt }],
+        responseMimeType: 'application/json',
+        responseSchema: { type: 'object', properties: { transcript: { type: 'string' }, structure: { type: 'string' }, angle: { type: 'string' }, howto: { type: 'string' } }, required: ['transcript', 'structure', 'angle', 'howto'] },
+        temperature: 0.4, maxOutputTokens: 8192,
+      })
+      const parsed = JSON.parse(raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()) as VideoRead
+      setReadResult(parsed)
+    } catch (e) {
+      setReadErr('Đọc video lỗi: ' + ((e as Error).message || '').slice(0, 110))
+    } finally { setReadBusy(false) }
   }
 
   const watchedIds = new Set(watchlist.map((w) => w.productId))
@@ -284,7 +342,7 @@ Suy luận hợp lý từ tên + ngách. TUYỆT ĐỐI KHÔNG đưa số lượ
                   onAnalyze={() => analyzeSp(p)}
                   onPick={() => selectSp(selectedSp?.productId === p.productId ? null : p)}
                   onSendToApp={sendToApp}
-                  onPlay={setPlayVid}
+                  onPlay={openVid}
                   onAddBank={() => addToBank(p)}
                   isWatched={watchedIds.has(p.productId)}
                   onWatch={() => toggleWatch(p)}
@@ -298,13 +356,13 @@ Suy luận hợp lý từ tên + ngách. TUYỆT ĐỐI KHÔNG đưa số lượ
       </div>
 
       {playVid && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-3" onClick={() => setPlayVid(null)}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-3" onClick={closeVid}>
           <div className="relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900 sm:flex-row" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setPlayVid(null)} className="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80" title="Đóng">✕</button>
+            <button onClick={closeVid} className="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80" title="Đóng">✕</button>
             <div className="flex shrink-0 items-center justify-center bg-black sm:w-[55%]">
               <video src={playVid.downloadUrl || playVid.url} controls autoPlay playsInline className="max-h-[50vh] w-full object-contain sm:max-h-[92vh]" />
             </div>
-            <div className="flex min-h-0 flex-1 flex-col p-4">
+            <div className="flex min-h-0 flex-1 flex-col p-4 overflow-y-auto">
               <p className="text-[12px] font-semibold text-zinc-100 line-clamp-3">{playVid.desc || '(video)'}</p>
               <p className="mt-1 text-[11px] text-zinc-400">{playVid.author ? `@${playVid.author} · ` : ''}👁 {compact(playVid.views)} · {playVid.durationSec}s</p>
               <div className="mt-3 flex gap-2">
@@ -317,6 +375,22 @@ Suy luận hợp lý từ tên + ngách. TUYỆT ĐỐI KHÔNG đưa số lượ
                     className="flex-1 text-center rounded-lg border border-zinc-700 bg-zinc-800 py-2 text-[12px] font-semibold text-zinc-200 hover:bg-zinc-700">↗ Mở gốc</a>
                 )}
               </div>
+
+              {playVid.downloadUrl && !readResult && (
+                <button onClick={readVideo} disabled={readBusy}
+                  className="mt-2 rounded-lg border border-amber-400/50 bg-amber-400/15 py-2 text-[12px] font-semibold text-amber-200 hover:bg-amber-400/25 disabled:opacity-50">
+                  {readBusy ? '⏳ AI đang xem & bóc kịch bản…' : '📖 Đọc video (AI bóc kịch bản + dịch)'}
+                </button>
+              )}
+              {readErr && <p className="mt-2 text-[11px] text-rose-400">{readErr}</p>}
+              {readResult && (
+                <div className="mt-3 space-y-2.5 text-[12px]">
+                  <div><p className="font-semibold text-amber-300">📝 Kịch bản (dịch VN)</p><p className="text-zinc-300 whitespace-pre-wrap">{readResult.transcript}</p></div>
+                  <div><p className="font-semibold text-amber-300">🧱 Cấu trúc</p><p className="text-zinc-300 whitespace-pre-wrap">{readResult.structure}</p></div>
+                  <div><p className="font-semibold text-amber-300">🎯 Góc bán</p><p className="text-zinc-300 whitespace-pre-wrap">{readResult.angle}</p></div>
+                  <div><p className="font-semibold text-amber-300">🛠 Cách bắt chước</p><p className="text-zinc-300 whitespace-pre-wrap">{readResult.howto}</p></div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -393,6 +467,10 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
               <p className="text-[12px] font-semibold text-emerald-300">
                 🎥 {tkN} TikTok đúng SP{fbN > 0 ? <span className="text-sky-300"> · 📣 {fbN} ad FB cùng ngách</span> : null}{p.vids.maxViews > 0 ? ` · ${compact(p.vids.maxViews)} view` : ''} <span className="font-normal text-emerald-400/80">— bấm xem / tải</span>
               </p>
+              {tkN > 1 && (
+                <button onClick={() => downloadAll(p.vids!.list.filter((v) => v.platform !== 'fb' && v.downloadUrl).map((v) => v.downloadUrl))}
+                  className="mt-0.5 text-[10px] text-violet-300 hover:text-violet-200 underline">⬇ Tải tất cả {tkN} video TikTok</button>
+              )}
               <div className="flex gap-1.5 mt-1.5 overflow-x-auto pb-1">
                 {p.vids.list.map((v) => {
                   const isFb = v.platform === 'fb'
