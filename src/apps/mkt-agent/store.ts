@@ -113,6 +113,10 @@ interface MktAgentState {
   selectedSp: SpCandidate | null
   watchlist: SpCandidate[]      // SP đã ghim — lưu qua F5 + qua các lần quét
   showWatchlist: boolean
+  seenIds: string[]             // SP đã từng thấy — để radar báo SP MỚI
+  lastRadarDate: string         // YYYY-MM-DD lần radar gần nhất (auto quét 1 lần/ngày)
+  autoRadar: boolean            // bật tự quét khi mở app (ngày mới)
+  newIds: string[]              // SP mới ở lần quét hiện tại (transient, không lưu)
   setStage: (s: AgentStage) => void
   setCheckpointMode: (m: CheckpointMode) => void
   setNiches: (s: string) => void
@@ -127,6 +131,10 @@ interface MktAgentState {
   selectSp: (p: SpCandidate | null) => void
   toggleWatch: (c: SpCandidate) => void
   setShowWatchlist: (b: boolean) => void
+  setNewIds: (ids: string[]) => void
+  markSeen: (ids: string[]) => void
+  setLastRadarDate: (d: string) => void
+  setAutoRadar: (b: boolean) => void
 }
 
 export const useMktAgentStore = create<MktAgentState>()(persist((set) => ({
@@ -142,6 +150,10 @@ export const useMktAgentStore = create<MktAgentState>()(persist((set) => ({
   selectedSp: null,
   watchlist: [],
   showWatchlist: false,
+  seenIds: [],
+  lastRadarDate: '',
+  autoRadar: false,
+  newIds: [],
   setStage: (stage) => set({ stage }),
   setCheckpointMode: (checkpointMode) => set({ checkpointMode }),
   setNiches: (niches) => set({ niches }),
@@ -165,8 +177,12 @@ export const useMktAgentStore = create<MktAgentState>()(persist((set) => ({
     return { watchlist: exists ? s.watchlist.filter((w) => w.productId !== c.productId) : [{ ...c }, ...s.watchlist] }
   }),
   setShowWatchlist: (showWatchlist) => set({ showWatchlist }),
+  setNewIds: (newIds) => set({ newIds }),
+  markSeen: (ids) => set((s) => ({ seenIds: [...new Set([...ids, ...s.seenIds])].slice(0, 3000) })),
+  setLastRadarDate: (lastRadarDate) => set({ lastRadarDate }),
+  setAutoRadar: (autoRadar) => set({ autoRadar }),
 }), {
   name: 'mkt-agent-store',
-  // Lưu kết quả quét + watchlist qua F5 (đỡ tốn call/credit quét lại). Bỏ qua cờ tạm.
-  partialize: (s) => ({ candidates: s.candidates, niches: s.niches, amount: s.amount, onlyGeneric: s.onlyGeneric, watchlist: s.watchlist }),
+  // Lưu kết quả quét + watchlist + radar qua F5 (đỡ tốn call/credit quét lại). Bỏ cờ tạm + newIds.
+  partialize: (s) => ({ candidates: s.candidates, niches: s.niches, amount: s.amount, onlyGeneric: s.onlyGeneric, watchlist: s.watchlist, seenIds: s.seenIds, lastRadarDate: s.lastRadarDate, autoRadar: s.autoRadar }),
 }))

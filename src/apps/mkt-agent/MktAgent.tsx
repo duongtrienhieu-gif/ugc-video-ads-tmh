@@ -2,7 +2,7 @@
 // Mục tiêu: SP CÓ VIDEO đối thủ sẵn = khởi đầu. Sau quét, tự dò video top-N (rẻ,
 // 1 call/SP) → xếp SP-có-video lên đầu + reel Tải no-watermark ngay trên card.
 // Phân tích sâu (ads/1688/Gemini) chỉ chạy khi chốt 1 SP. Xem MKT_AGENT_SPEC.md.
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
 import { useMktAgentStore, type SpCandidate, type VidItem } from './store'
@@ -70,13 +70,15 @@ export default function MktAgent() {
   const addProduct = useBankStore((s) => s.addProduct)
   const {
     niches, amount, scanning, classifying, error, candidates, onlyGeneric, selectedSp,
-    watchlist, showWatchlist,
+    watchlist, showWatchlist, seenIds, lastRadarDate, autoRadar, newIds,
     setNiches, setAmount, setScanning, setClassifying, setError,
     setCandidates, setBranding, patchCandidate, setOnlyGeneric, selectSp, toggleWatch, setShowWatchlist,
+    setNewIds, markSeen, setLastRadarDate, setAutoRadar,
   } = useMktAgentStore()
   const [videoDepth] = useState(40)
   const [vidScanning, setVidScanning] = useState(false)
   const [onlyWithVideo, setOnlyWithVideo] = useState(false)
+  const [onlyNew, setOnlyNew] = useState(false)
   const [playVid, setPlayVid] = useState<VidItem | null>(null)
   const [readResult, setReadResult] = useState<VideoRead | null>(null)
   const [readBusy, setReadBusy] = useState(false)
@@ -107,6 +109,10 @@ export default function MktAgent() {
     try {
       const res = await scanWinningProducts(niches.split(','), amount)
       setCandidates(res.candidates)
+      // Radar: đánh dấu SP MỚI (chưa từng thấy) so với lần trước + cập nhật ngày quét.
+      setNewIds(res.candidates.filter((c) => !seenIds.includes(c.productId)).map((c) => c.productId))
+      markSeen(res.candidates.map((c) => c.productId))
+      setLastRadarDate(new Date().toISOString().slice(0, 10))
       if (!res.candidates.length) { setError('Không tìm thấy SP — thử đổi/thêm ngách.'); return }
       // Dò video chạy nền ngay (không chặn) — ưu tiên SP có video.
       void runVideoRank(res.candidates, videoDepth)
@@ -126,6 +132,13 @@ export default function MktAgent() {
       setScanning(false)
     }
   }
+
+  // Auto-radar (Level A): mở app vào ngày mới + đã bật autoRadar → tự quét 1 lần → báo SP mới.
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    if (autoRadar && lastRadarDate !== today && niches.trim() && !scanning) void scan()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 1 NÚT phân tích sâu (chỉ khi chốt): soi sâu → giám khảo → đào spy FB.
   const analyzeSp = async (c: SpCandidate) => {
@@ -237,6 +250,7 @@ Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh.
 
   let shown = onlyGeneric ? source.filter((c) => c.tier !== 'brand') : source
   if (onlyWithVideo) shown = shown.filter((c) => (c.vids?.count ?? 0) > 0)
+  if (onlyNew) shown = shown.filter((c) => newIds.includes(c.productId))
   // Xếp: SP có video lên đầu → max view → số bán.
   shown = [...shown].sort((a, b) => {
     const aHas = (a.vids?.count ?? 0) > 0 ? 1 : 0
@@ -265,6 +279,10 @@ Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh.
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <span className="text-amber-400 font-medium">Bước 1 · Quét SP win (Malaysia)</span>
           <span className="text-[11px] text-zinc-500">tự dò video · tự lọc branded</span>
+          <label className="flex items-center gap-1.5 text-[12px] text-zinc-400 cursor-pointer ml-auto" title="Mở app vào ngày mới sẽ tự quét lại + báo SP win mới (chạy khi tab mở)">
+            <input type="checkbox" checked={autoRadar} onChange={(e) => setAutoRadar(e.target.checked)} />
+            🛰 Radar tự động (quét mỗi ngày khi mở app)
+          </label>
         </div>
 
         {/* Nhóm ngách — bấm để thêm/bớt nhanh (đã loại thời trang/giày) */}
@@ -308,6 +326,11 @@ Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh.
 
         {source.length > 0 ? (
           <div className="mt-4">
+            {!showWatchlist && newIds.length > 0 && (
+              <div className="mb-2 text-[12px] text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-md px-3 py-1.5">
+                🛰 Radar: <b>{newIds.length}</b> SP win MỚI so với lần quét trước.
+              </div>
+            )}
             <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
               <p className="text-[12px] text-zinc-500">
                 {candidates.length} SP · <span className="text-emerald-400">🎥 {withVideoCount} có video</span>
@@ -319,6 +342,12 @@ Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh.
                   <input type="checkbox" checked={onlyWithVideo} onChange={(e) => setOnlyWithVideo(e.target.checked)} />
                   Chỉ SP có video
                 </label>
+                {!showWatchlist && newIds.length > 0 && (
+                  <label className="flex items-center gap-1.5 text-[12px] text-amber-300 cursor-pointer">
+                    <input type="checkbox" checked={onlyNew} onChange={(e) => setOnlyNew(e.target.checked)} />
+                    🆕 Chỉ SP mới ({newIds.length})
+                  </label>
+                )}
                 <label className="flex items-center gap-1.5 text-[12px] text-zinc-300 cursor-pointer">
                   <input type="checkbox" checked={onlyGeneric} onChange={(e) => setOnlyGeneric(e.target.checked)} />
                   Ẩn brand bảo hộ
@@ -346,6 +375,7 @@ Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh.
                   onAddBank={() => addToBank(p)}
                   isWatched={watchedIds.has(p.productId)}
                   onWatch={() => toggleWatch(p)}
+                  isNew={newIds.includes(p.productId)}
                 />
               ))}
             </div>
@@ -400,7 +430,7 @@ Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh.
 }
 
 // ── 1 card SP — video reel (rip-ready) trước, phân tích sâu sau ────────────────
-function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onAddBank, isWatched, onWatch }: {
+function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onAddBank, isWatched, onWatch, isNew }: {
   p: SpCandidate
   picked: boolean
   hasKey: boolean
@@ -411,6 +441,7 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
   onAddBank: () => void
   isWatched: boolean
   onWatch: () => void
+  isNew: boolean
 }) {
   const branded = p.tier === 'brand'
   const win = computeWinScore(p)
@@ -441,6 +472,8 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
         <button onClick={onWatch} title={isWatched ? 'Bỏ ghim' : 'Ghim vào kho đã lưu (giữ qua F5 + qua các lần quét)'}
           className={`shrink-0 text-[15px] leading-none ${isWatched ? 'text-amber-400' : 'text-zinc-600 hover:text-amber-300'}`}>📌</button>
       </div>
+
+      {isNew && <span className="self-start text-[10px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/40 rounded px-1.5 py-0.5">🆕 MỚI</span>}
 
       {/* Metrics */}
       <div className="flex items-center justify-between text-[12px] text-zinc-400 flex-wrap gap-1">
