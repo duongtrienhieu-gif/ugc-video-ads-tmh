@@ -110,15 +110,24 @@ export async function uploadFileToGemini(params: {
  */
 // Models tried in order — newest first, more fallbacks for high-load periods.
 // gemini-2.5-pro REMOVED from cascade (Phase 10.3): free tier limit is only
-// 50 RPD which is exhausted by ~1 day of normal testing — having it in the
-// fallback chain means a single bad day's Vision attempts permanently locks
-// out pro quota and can also cascade-spam other models. The remaining 4
-// (flash + flash-lite + 2.0-flash + 2.0-flash-lite) all have 1500 RPD.
+// 50 RPD which is exhausted by ~1 day of normal testing. It ALSO rejects
+// thinkingBudget:0 (400 INVALID_ARGUMENT), so it can't be a drop-in fallback
+// for our structured-JSON callers.
+//
+// 2026-07-01 FIX: gemini-2.0-flash + gemini-2.0-flash-lite are now RETIRED —
+// generateContent returns 404 "no longer available" (verified live on paid
+// key). Chúng vẫn xuất hiện trong ListModels nhưng gọi thật là 404. Having two
+// dead models as fallbacks #3/#4 meant that whenever the two live models
+// (2.5-flash + 2.5-flash-lite) both blipped (503 "high demand" / RPM burst),
+// the cascade fell straight into two 404s → the whole call failed. Đây chính
+// là lý do "dịch VN mỗi cảnh chết" (gloss fail âm thầm khi đó). Thay bằng 2
+// alias LIVE luôn tự trỏ model flash hiện hành → không bao giờ 404, đều hỗ trợ
+// schema + thinkingBudget:0.
 const GEMINI_MODELS = [
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-lite',
+  'gemini-flash-latest',
+  'gemini-flash-lite-latest',
 ]
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -243,7 +252,9 @@ export async function directGeminiText(params: {
    *  for every existing caller). Ignored by the 2.0 models. */
   thinkingBudget?: number
 }): Promise<string> {
-  const modelsToTry = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']
+  // 2026-07-01: gemini-2.0-flash* retired (404). Dùng chung cascade LIVE với
+  // GEMINI_MODELS — alias -latest luôn còn sống, hỗ trợ schema + thinkingBudget:0.
+  const modelsToTry = GEMINI_MODELS
   const errors: string[] = []
 
   for (const model of modelsToTry) {
@@ -505,11 +516,12 @@ export function classifyGemini429(rawBody: string): {
  */
 // V3.2.3 — LITE-FIRST chain (4x daily quota vs flash). Web grounding's task
 // is summarising search results into citations — flash-lite is plenty here.
+// 2026-07-01: gemini-2.0-flash* retired (404) → thay bằng alias -latest LIVE.
 const GROUNDING_MODELS = [
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
-  'gemini-2.0-flash-lite',
-  'gemini-2.0-flash',
+  'gemini-flash-lite-latest',
+  'gemini-flash-latest',
 ]
 
 export async function searchWithGrounding(params: {

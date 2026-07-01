@@ -55,7 +55,8 @@ function fmtMSS(totalSec: number): string {
 
 const GEMINI_UPLOAD_BASE = 'https://generativelanguage.googleapis.com/upload/v1beta'
 const GEMINI_API_BASE    = 'https://generativelanguage.googleapis.com/v1beta'
-const GEMINI_MODELS      = ['gemini-2.5-flash', 'gemini-2.5-flash-preview-05-20', 'gemini-1.5-flash']
+// 2026-07-01: gemini-1.5-flash + preview-05-20 retired → alias -latest LIVE.
+const GEMINI_MODELS      = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-flash-lite-latest']
 
 // ── System instruction ────────────────────────────────────────────────────────
 
