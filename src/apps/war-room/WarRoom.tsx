@@ -326,6 +326,15 @@ function MyBoard({ members, targets, tasks, stats, profit, isCEO, myMember, user
       {/* 🧭 COACHING theo nhịp */}
       {coaching && <div style={{ ...panelStyle, padding: '10px 14px', fontSize: 12.5, color: headPace?.tone ?? C.muted2, lineHeight: 1.6 }}>🧭 {coaching}</div>}
 
+      {/* KPI THÁNG */}
+      <div style={panelStyle}>
+        <div style={eyebrowStyle}>📊 KPI THÁNG — thực tế / target</div>
+        <Bar label="Doanh thu" actual={act.dt} target={tDt} lowerBetter={false} money />
+        <Bar label="Lãi thật" actual={act.lai} target={tLai} lowerBetter={false} money />
+        <Bar label="% CPQC" actual={act.cpqc * 100} target={tCpqc} lowerBetter money={false} />
+        <Bar label="% Hoàn" actual={act.hoan * 100} target={tHoan} lowerBetter money={false} />
+      </div>
+
       {/* 🚦 SP CỦA TÔI — đèn từng mã */}
       {myProfit.length > 0 && (
         <div style={panelStyle}>
@@ -362,15 +371,6 @@ function MyBoard({ members, targets, tasks, stats, profit, isCEO, myMember, user
           ))}
         </div>
       )}
-
-      {/* KPI THÁNG */}
-      <div style={panelStyle}>
-        <div style={eyebrowStyle}>📊 KPI THÁNG — thực tế / target</div>
-        <Bar label="Doanh thu" actual={act.dt} target={tDt} lowerBetter={false} money />
-        <Bar label="Lãi thật" actual={act.lai} target={tLai} lowerBetter={false} money />
-        <Bar label="% CPQC" actual={act.cpqc * 100} target={tCpqc} lowerBetter money={false} />
-        <Bar label="% Hoàn" actual={act.hoan * 100} target={tHoan} lowerBetter money={false} />
-      </div>
 
       {/* VIỆC CỦA TÔI */}
       <div style={panelStyle}>
