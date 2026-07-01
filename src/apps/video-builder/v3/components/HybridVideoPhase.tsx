@@ -5,7 +5,7 @@
 // renders the scenes — assembling the final MP4 happens on the Export step (Bước 3).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Loader2, Wand2, RotateCcw, AlertCircle, Sparkles, Mic, User, Film, Play, ChevronRight,
   Edit3, Save, X, Pause, Volume2, Image as ImageIcon,
@@ -164,7 +164,10 @@ export default function HybridVideoPhase(_props: Props) {
   // says. The render + voice always use scene.quote — this map only feeds the grey caption under it.
   const [sceneGloss, setSceneGloss] = useState<Record<number, string>>({})     // P6x — VN của THOẠI
   const [conceptGloss, setConceptGloss] = useState<Record<number, string>>({}) // P6z — VN "cảnh quay gì" (từ conceptPrompt cuối)
-  const glossSigRef = useRef('')
+  const glossSigRef = useRef('')          // chữ ký bộ cảnh ĐÃ DỊCH THÀNH CÔNG (chỉ set khi success)
+  const glossFetchingRef = useRef('')     // chữ ký đang gọi Gemini (chống gọi trùng / phát hiện bị thay bởi bộ mới)
+  const [glossActive, setGlossActive] = useState(0)  // >0 = đang dịch (cho spinner nút)
+  const glossing = glossActive > 0
 
   const sceneCredit = (s: TimedBrollScene): number => {
     // social_proof = ONE GPT-4o FB-post card image (generateSocialProofImage), NOT an
@@ -360,24 +363,38 @@ export default function HybridVideoPhase(_props: Props) {
   // P6x — batch-translate scene quotes → VN gloss (display-only). Runs once per distinct set of
   // quotes (sig guard) so a scene fix (changes conceptPrompt, not quote) never re-calls Gemini;
   // a re-direct (new quotes) refreshes it. Best-effort: Gemini down → no gloss, never blocks.
+  // FIX #1 (bug "dịch voice bị mất"): trước đây glossSigRef set TRƯỚC khi gọi Gemini và KHÔNG gỡ
+  // khi fail => một lần dịch hụt (đợt model Gemini chết) khóa cứng, không thử lại dù Gemini đã khỏe.
+  // Giờ CHỈ khóa khi THÀNH CÔNG; fail để trống => lần sau tự dịch lại. Đọc scenes/lang tươi từ store
+  // để nút "Dịch lại" (force) và effect dùng cùng dữ liệu.
+  const runGloss = useCallback(async (force = false) => {
+    const st = useAdsVideoStore.getState().state
+    const lang = st.scriptBrain.outputLang
+    const scs = st.hybrid.scenes ?? []
+    if (lang === 'vi' || scs.length === 0 || !geminiKey) { setSceneGloss({}); setConceptGloss({}); glossSigRef.current = ''; return }
+    const items = scs.map((s) => ({ quote: s.quote ?? '', concept: (s.role === 'lips' || s.role === 'social_proof') ? '' : (s.conceptPrompt ?? '') }))
+    const sig = `${lang}|${items.map((it) => it.quote + it.concept).join('')}`
+    if (!force && (glossSigRef.current === sig || glossFetchingRef.current === sig)) return
+    glossFetchingRef.current = sig
+    setGlossActive((n) => n + 1)
+    try {
+      const res = await glossScenesToVietnamese(geminiKey, items, lang)
+      if (glossFetchingRef.current !== sig) return
+      if (res.length === 0) { glossSigRef.current = ''; return }
+      const vmap: Record<number, string> = {}, cmap: Record<number, string> = {}
+      res.forEach((r, i) => { if (r.voice) vmap[i] = r.voice; if (r.scene) cmap[i] = r.scene })
+      setSceneGloss(vmap); setConceptGloss(cmap)
+      glossSigRef.current = sig
+    } catch {
+      if (glossFetchingRef.current === sig) glossSigRef.current = ''
+    } finally {
+      if (glossFetchingRef.current === sig) glossFetchingRef.current = ''
+      setGlossActive((n) => Math.max(0, n - 1))
+    }
+  }, [geminiKey])
+
   useEffect(() => {
-    const lang = state.scriptBrain.outputLang
-    if (lang === 'vi' || scenes.length === 0 || !geminiKey) { setSceneGloss({}); setConceptGloss({}); return }
-    const items = scenes.map((s) => ({ quote: s.quote ?? '', concept: (s.role === 'lips' || s.role === 'social_proof') ? '' : (s.conceptPrompt ?? '') }))
-    const sig = `${lang}|${items.map((it) => it.quote + it.concept).join('')}`
-    if (glossSigRef.current === sig) return
-    glossSigRef.current = sig
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await glossScenesToVietnamese(geminiKey, items, lang)
-        if (cancelled || res.length === 0) return
-        const vmap: Record<number, string> = {}, cmap: Record<number, string> = {}
-        res.forEach((r, i) => { if (r.voice) vmap[i] = r.voice; if (r.scene) cmap[i] = r.scene })
-        setSceneGloss(vmap); setConceptGloss(cmap)
-      } catch { /* best-effort gloss — never block the UI */ }
-    })()
-    return () => { cancelled = true }
+    void runGloss(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scenes, state.scriptBrain.outputLang, geminiKey])
 
@@ -677,6 +694,16 @@ export default function HybridVideoPhase(_props: Props) {
         ) : null}
 
         {/* ── Scene frames (9:16, render on frame) ──────────────────────────── */}
+        {/* #2 — nút Dịch lại: ép dịch lại thoại + cảnh sang VN (gỡ kẹt khi gloss bị thiếu/sai) */}
+        {scenes.length > 0 && state.scriptBrain.outputLang !== 'vi' && (
+          <div className="flex items-center justify-end">
+            <button onClick={() => void runGloss(true)} disabled={glossing}
+              title="Dịch lại thoại + cảnh sang tiếng Việt (dùng khi phần dịch bị thiếu hoặc sai)"
+              className="flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-[11px] font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50">
+              {glossing ? 'Đang dịch…' : '🔤 Dịch lại (VN)'}
+            </button>
+          </div>
+        )}
         {scenes.length > 0 && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {scenes.map((s, i) => (
