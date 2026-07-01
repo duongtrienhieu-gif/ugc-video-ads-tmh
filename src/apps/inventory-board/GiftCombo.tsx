@@ -1,7 +1,7 @@
 // ── TAB: 🎁 GHÉP QUÀ & COMBO ─────────────────────────────────────────────────
 // Tự đề xuất kế hoạch quà chéo + combo theo NHÂN VIÊN (thay sheet 5). Sửa được.
 import { useEffect, useMemo, useState } from 'react'
-import { computePlan, cloneTiers, type Tier, type GiftMaster, type GiftCat, type Live, type Tone, type Plan } from './giftPlan'
+import { computePlan, cloneTiers, giftCostOf, type Tier, type GiftMaster, type GiftCat, type Live, type Tone, type Plan } from './giftPlan'
 
 const C = {
   panel: '#0c111c', panel2: '#0a0f19', line: '#1b2233', line2: '#161d2c',
@@ -111,6 +111,9 @@ export default function GiftCombo({ products, giftLink }: { products: Prod[]; gi
           ))}
         </div>
       </div>
+
+      <FreeCombo master={giftMaster} liveMap={liveMap} isMobile={isMobile} />
+
       {products.some((p) => p.hoanEstimated) && (
         <div style={{ ...panelStyle, padding: '9px 14px', border: '1px solid #5a4a18', background: 'rgba(245,196,81,0.07)', color: C.amber, fontSize: 12.5 }}>
           ⏳ Đầu tháng: %hoàn một số mã đang dùng <b>ước tính tháng trước</b> (đơn tháng này chưa về đủ) → lãi/đèn quà là tạm tính, tự chuẩn lại khi đơn hoàn về (~7-10 ngày).
@@ -214,6 +217,94 @@ export default function GiftCombo({ products, giftLink }: { products: Prod[]; gi
         </div>
       ))}
       {!shown.length && <div style={{ ...panelStyle, textAlign: 'center', color: C.muted, fontSize: 14 }}>Không có SP cho nhân viên này.</div>}
+    </div>
+  )
+}
+
+// ── 🆓 GHÉP TỰ DO — nhân sự tự chọn CẢ SP chính + quà, vốn 2 bên tự khớp ──────
+function FreeCombo({ master, liveMap, isMobile }: { master: GiftMaster[]; liveMap: Record<string, Live>; isMobile: boolean }) {
+  const mains = useMemo(() => [...master].filter((m) => m.name.trim()).sort((a, b) => a.name.localeCompare(b.name)), [master])
+  const [mainName, setMainName] = useState('')
+  const [giftName, setGiftName] = useState<string | undefined>(undefined)
+  const [tiers, setTiers] = useState<Tier[]>(cloneTiers())
+  const [open, setOpen] = useState(false)
+
+  const effMain = mainName || mains[0]?.name || ''
+  const mainM = master.find((m) => m.name.trim().toUpperCase() === effMain.trim().toUpperCase())
+  const cat: GiftCat | null = mainM ? { ngach: mainM.ngach, maChinh: mainM.name, quaCheo: '', vonQua: 0, tonQua: 0, marketer: '(tự chọn)' } : null
+  const plan = cat ? computePlan(cat, master, liveMap[effMain.trim().toUpperCase()], tiers, giftName) : null
+  function setTier(i: number, patch: Partial<Tier>) { setTiers((ts) => ts.map((t, j) => (j === i ? { ...t, ...patch } : t))) }
+
+  if (!mains.length) return null
+  const sel: React.CSSProperties = { background: C.panel2, border: `1px solid ${C.line}`, color: C.text, borderRadius: 8, padding: '8px 11px', fontSize: 13, width: '100%', marginTop: 4 }
+  return (
+    <div style={{ ...panelStyle, border: `1px solid ${C.gold}` }}>
+      <div style={eyebrowStyle}>🆓 GHÉP TỰ DO — tự chọn SP chính + quà (vốn 2 bên tự khớp)</div>
+      <div style={{ fontSize: 11.5, color: C.muted, margin: '5px 0 12px' }}>Chọn bất kỳ SP chính + quà bất kỳ còn tồn → hệ tự lấy đúng giá vốn mỗi bên (chính = vốn thật · quà = bậc giá vốn) rồi tính lãi/Mốc/mục tiêu ads. Không đụng kế hoạch từng nhân viên bên dưới.</div>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+        <label style={{ fontSize: 11.5, color: C.gold, flex: isMobile ? '1 1 100%' : 1, minWidth: 0 }}>SP chính
+          <select value={effMain} onChange={(e) => { setMainName(e.target.value); setGiftName(undefined) }} style={sel}>
+            {mains.map((m) => <option key={m.name} value={m.name}>{m.name} — vốn {fmtMoney(m.vonSp)} · tồn {fmtInt(m.ton)}{m.ngach ? ` · ${m.ngach}` : ''}</option>)}
+          </select>
+        </label>
+        <label style={{ fontSize: 11.5, color: C.gold, flex: isMobile ? '1 1 100%' : 1, minWidth: 0 }}>🎁 Quà
+          <select value={plan?.gift?.name ?? ''} onChange={(e) => setGiftName(e.target.value)} style={sel}>
+            {plan && plan.options.length === 0 && <option value="">(không có hàng còn tồn để làm quà)</option>}
+            {plan?.options.map((o) => <option key={o.name} value={o.name}>{o.stuck ? '🔴 ' : ''}{o.name}{o.sameNiche ? '' : ` (${o.ngach})`} — vốn quà {fmtMoney(giftCostOf(o.vonSp))} · tồn {fmtInt(o.ton)}</option>)}
+          </select>
+        </label>
+      </div>
+      {plan && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap: 8 }}>
+            {[
+              { l: 'Lãi/đơn TB', v: fmtSigned(plan.laiDonW), c: plan.laiDonW < 0 ? C.red : C.green },
+              { l: '% Lợi nhuận', v: fmtPct(plan.laiPctW), c: plan.laiPctW < 0 ? C.red : C.green },
+              { l: 'AOV TB (RM)', v: (plan.aovW / 5800).toFixed(1), c: C.gold },
+              { l: 'Quà đủ cho', v: fmtInt(plan.soDonMax) + ' đơn', c: plan.soDonMax < 300 ? C.amber : C.muted2 },
+            ].map((s) => (
+              <div key={s.l} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 9, padding: '9px 11px', minWidth: 0 }}>
+                <div style={{ fontSize: 10, letterSpacing: 0.5, color: C.muted, marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.l}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: s.c, whiteSpace: 'nowrap' }}>{s.v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 10, background: 'rgba(245,196,81,0.10)', border: '1px solid #4a4015', borderRadius: 10, padding: '10px 14px', display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: C.gold, fontWeight: 700, whiteSpace: 'nowrap' }}>🎯 MỤC TIÊU ADS (đạt lãi 10%)</span>
+            <span style={{ fontSize: 13, color: C.muted2, whiteSpace: 'nowrap' }}>%CPQC ≤ <b style={{ color: plan.cpaTarget > 0 ? C.green : C.red, fontSize: 19 }}>{fmtPct(Math.max(0, plan.cpqcTarget))}</b></span>
+            <span style={{ fontSize: 13, color: C.muted2, whiteSpace: 'nowrap' }}>CPA ≤ <b style={{ color: plan.cpaTarget > 0 ? C.green : C.red, fontSize: 19 }}>{plan.cpaTarget > 0 ? fmtMoney(plan.cpaTarget) + '/lead' : 'không khả thi'}</b></span>
+            <span style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', marginLeft: 'auto' }}>vốn chính {fmtMoney(plan.vonChinh)} · vốn quà {plan.gift ? fmtMoney(giftCostOf(plan.gift.vonSp)) : '—'}</span>
+          </div>
+          <button onClick={() => setOpen((o) => !o)} style={{ marginTop: 10, background: 'transparent', color: C.gold, border: `1px solid ${C.line}`, borderRadius: 8, padding: '6px 12px', fontSize: 12.5, cursor: 'pointer' }}>⚙ Chi tiết Mốc combo {open ? '▲' : '▼'}</button>
+          {open && (
+            <div style={{ marginTop: 10, overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 540 }}>
+                <thead>
+                  <tr style={{ color: C.muted, fontSize: 10, letterSpacing: 0.5 }}>
+                    {['MỐC', 'GIÁ RM', '%ĐƠN', 'MUA', 'TẶNG CHÍNH', 'QUÀ CHÉO', 'LÃI/ĐƠN'].map((h, i) => <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '5px 6px', fontWeight: 400 }}>{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {plan.tiers.map((t, i) => {
+                    const inp: React.CSSProperties = { width: 56, background: C.panel2, border: `1px solid ${C.line}`, color: C.text, borderRadius: 6, padding: '4px 6px', fontSize: 12.5, textAlign: 'right' }
+                    return (
+                      <tr key={i} style={{ borderTop: `1px solid ${C.line2}` }}>
+                        <td style={{ padding: '6px', color: C.muted2 }}>{t.loai}</td>
+                        <td style={{ padding: '6px', textAlign: 'right' }}><input type="number" value={tiers[i].giaRM} onChange={(e) => setTier(i, { giaRM: +e.target.value })} style={inp} /></td>
+                        <td style={{ padding: '6px', textAlign: 'right' }}><input type="number" value={+(tiers[i].pctDon * 100).toFixed(0)} onChange={(e) => setTier(i, { pctDon: +e.target.value / 100 })} style={inp} /></td>
+                        <td style={{ padding: '6px', textAlign: 'right' }}><input type="number" value={tiers[i].mua} onChange={(e) => setTier(i, { mua: +e.target.value })} style={inp} /></td>
+                        <td style={{ padding: '6px', textAlign: 'right' }}><input type="number" value={tiers[i].tangChinh} onChange={(e) => setTier(i, { tangChinh: +e.target.value })} style={inp} /></td>
+                        <td style={{ padding: '6px', textAlign: 'right' }}><input type="number" value={tiers[i].quaCheo} onChange={(e) => setTier(i, { quaCheo: +e.target.value })} style={inp} /></td>
+                        <td style={{ padding: '6px', textAlign: 'right', color: t.laiDon < 0 ? C.red : C.green, fontWeight: 500 }}>{fmtSigned(t.laiDon)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
