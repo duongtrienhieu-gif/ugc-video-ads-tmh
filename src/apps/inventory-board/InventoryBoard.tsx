@@ -454,6 +454,24 @@ export default function InventoryBoard() {
       </div>
     )
   }
+  // ── 🛒 CẦN ĐẶT HÀNG — danh sách gọn để nhân viên canh đề xuất (chỉ mã có số nhập) ──
+  const reorderList = (rows: VerdictRow[]) => (
+    <div style={{ background: C.panel2, border: `1px solid ${C.gold}`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: C.gold }}>🛒 CẦN ĐẶT HÀNG · {rows.length} mã</div>
+      {rows.length === 0
+        ? <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>Chưa mã nào tới điểm đặt lại — cứ chạy, chưa cần đặt.</div>
+        : rows.map((v) => (
+          <div key={v.name} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', padding: '8px 0 2px', borderTop: `1px solid ${C.line2}`, flexWrap: 'wrap', marginTop: 7 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 600 }}>{v.name}</span>
+            <span style={{ fontSize: 12.5, color: C.muted2 }}>
+              <b style={{ color: C.gold, fontSize: 15 }}>đặt {num(v.nhapQty)}</b>
+              {' · '}{v.kind === 'khoan' ? 'lô nhỏ (đơn tụt)' : v.cover <= 0 ? 'đang gãy hàng' : `còn ${Math.round(v.cover)} ngày`}
+              {v.von > 0 ? ` · vốn ~${fmtMoney(v.von)}` : ''}
+            </span>
+          </div>
+        ))}
+    </div>
+  )
   // ── NV: thẻ gọn — TỒN + CÒN ngày + việc (số to, ít chữ) ────────────────────
   const miniFact = (v: VerdictRow): string => {
     const tonS = Math.max(0, Math.round(v.ton)).toLocaleString('vi-VN')
@@ -608,6 +626,7 @@ export default function InventoryBoard() {
             </div>
             <div style={{ fontSize: 11, color: C.muted, marginBottom: 16, lineHeight: 1.5 }}>Đầu tháng phần lớn nằm ở <b style={{ color: C.muted2 }}>CHỜ SỐ THẬT</b> (hoàn còn lấy T6) — chỉ cắt nhóm <b style={{ color: C.red }}>CẮT THẬT</b> (bỏ hoàn ra vẫn lỗ). Vốn cần nhập ~{fmtMoney(triage.vonNhap)}.</div>
 
+            {reorderList(byGroup.nhap.filter((v) => v.nhapQty > 0))}
             {groupSection('NÊN NHẬP / VÍT — đổ tiền vào đây', C.green, byGroup.nhap.filter((v) => !v.noAction))}
             {groupSection('CẮT THẬT — tắt ads, xả tồn', C.red, byGroup.cat)}
             {groupSection('SỬA / NỢ HÀNG', C.amber, byGroup.suano)}
@@ -637,6 +656,7 @@ export default function InventoryBoard() {
             ) : !(nvByGroup.nhap.length || nvByGroup.cho.length || nvByGroup.suano.length || nvByGroup.cat.length) ? (
               <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: '8px 0' }}>Chưa có mã cho team {nvTeam} (file team chưa công khai / chưa có số). Thử team khác hoặc bấm ⟳ Tải lại.</div>
             ) : (<>
+              {reorderList(nvByGroup.nhap.filter((v) => v.nhapQty > 0))}
               {groupSectionMini('🟢 NHẬP / VÍT — đẩy mạnh', C.green, nvByGroup.nhap.filter((v) => !v.noAction))}
               {groupSectionMini('👀 THEO DÕI — chờ số thật', C.muted2, nvByGroup.cho)}
               {groupSectionMini('🟠 SỬA / NỢ HÀNG', C.amber, nvByGroup.suano)}
