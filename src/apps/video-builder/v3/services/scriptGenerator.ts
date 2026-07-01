@@ -1595,36 +1595,65 @@ export async function glossScenesToVietnamese(
   const numbered = items
     .map((it, i) => `${i + 1}. THOAI(${fromName}): "${it.quote}" | CONCEPT(EN): "${it.concept?.trim() || '(none)'}"`)
     .join('\n')
+  // FIX off-by-one: kịch bản cắt 1 CÂU thành nhiều cảnh => mảnh câu. Prompt cũ chỉ bảo "dịch câu
+  // thoại tự nhiên" nên Gemini GỘP mảnh lại dịch trọn ở item đầu rồi trượt cả loạt (mỗi cảnh hiện
+  // thoại của cảnh kế tiếp). Giờ ép: mỗi dòng là 1 MẢNH, dịch đúng mảnh, cấm gộp/nối câu; thêm "src"
+  // (chép vài chữ đầu câu gốc) để canh hàng lại phía client, chống lệch kể cả khi model lỡ trượt.
   const sys =
-`You convert ad-video scene data into Vietnamese for a REVIEW panel (so the user can verify the
-shot matches the spoken line). For EACH numbered scene return:
-- "voice": the spoken THOAI line in casual, natural spoken Vietnamese (faithful — same meaning).
-- "scene": EXPLAIN in plain natural Vietnamese WHAT THE VIEWER WILL SEE in this shot — this is a
-  MEANING explanation, NOT a word-for-word translation of CONCEPT. Rules:
+`You convert ad-video scene lines into Vietnamese for a REVIEW panel (so the user can verify each
+shot matches its spoken line).
+
+CRITICAL — each numbered THOAI is ONE fragment of speech, cut to match exactly one video shot. Many
+fragments are INCOMPLETE sentences (they start or end mid-sentence). For EACH item you MUST:
+- Translate ONLY the exact words of THAT numbered THOAI — the same fragment, nothing more.
+- NEVER merge a fragment with the previous/next line, NEVER complete or continue the sentence, NEVER
+  move content between items. If a fragment is mid-sentence, its Vietnamese is also a matching
+  partial fragment (grammatically incomplete is fine).
+
+For EACH numbered scene return:
+- "src": copy the FIRST 5 WORDS of that scene's THOAI verbatim (for order-checking; do not translate).
+- "voice": that THOAI fragment in casual, natural spoken Vietnamese (faithful — same meaning, same fragment).
+- "scene": EXPLAIN in plain natural Vietnamese WHAT THE VIEWER WILL SEE in this shot — a MEANING
+  explanation, NOT a word-for-word translation of CONCEPT. Rules:
     • IGNORE/strip all production meta-instructions in CONCEPT — do NOT translate these words:
       "DIFFERENT SHOT", "must look NOTHING like any other cut", "Render INSTEAD", "Stay on the SAME
       beat", "Same product + beat", "SHOT TYPE", and camera-jargon (macro / POV / POV-hands / wide /
       close-up / over-the-shoulder / top-down / split-screen / framing). Keep ONLY the real content.
-    • Write ONE clear, complete Vietnamese sentence (length as needed — do NOT truncate) that a
-      non-filmmaker understands: who/what is on screen + what they do + the setting. For a
-      split-screen before/after, say it as "Cảnh chia đôi: bên trái lúc [vấn đề], bên phải lúc
-      [đã đỡ]".
-    • If CONCEPT is "(none)" or empty → return "" (the visual is decided later at render time).
-Return JSON {"items":[{"voice","scene"}]} with EXACTLY ${items.length} entries, SAME order.`
+    • Write ONE clear Vietnamese sentence a non-filmmaker understands: who/what is on screen + what
+      they do + the setting. For a split-screen before/after: "Cảnh chia đôi: bên trái lúc [vấn đề],
+      bên phải lúc [đã đỡ]".
+    • If CONCEPT is "(none)" or empty → return "".
+Return JSON {"items":[{"src","voice","scene"}]} with EXACTLY ${items.length} entries, SAME order.`
   try {
     const out = await directGeminiText({
       apiKey, systemInstruction: sys, prompt: numbered,
-      maxOutputTokens: 3072, temperature: 0.3, thinkingBudget: 0,
+      maxOutputTokens: 4096, temperature: 0.3, thinkingBudget: 0,
       responseMimeType: 'application/json',
       responseSchema: {
         type: 'object',
-        properties: { items: { type: 'array', items: { type: 'object', properties: { voice: { type: 'string' }, scene: { type: 'string' } }, required: ['voice', 'scene'] } } },
+        properties: { items: { type: 'array', items: { type: 'object', properties: { src: { type: 'string' }, voice: { type: 'string' }, scene: { type: 'string' } }, required: ['src', 'voice', 'scene'] } } },
         required: ['items'],
       },
     })
-    const parsed = JSON.parse(out) as { items?: { voice?: string; scene?: string }[] }
+    const parsed = JSON.parse(out) as { items?: { src?: string; voice?: string; scene?: string }[] }
     const arr = Array.isArray(parsed.items) ? parsed.items : []
-    return items.map((_, i) => ({ voice: (arr[i]?.voice ?? '').trim(), scene: (arr[i]?.scene ?? '').trim() }))
+    // Canh hàng lại theo "src" echo: mỗi entry khớp về đúng dòng THOAI của nó theo tiền tố (mỗi entry
+    // chỉ dùng 1 lần); không khớp thì fallback theo vị trí. Sửa triệt để lệch off-by-one.
+    const normKey = (s: string) => (s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+    const used = new Set<number>()
+    return items.map((it, i) => {
+      const q = normKey(it.quote)
+      let best = -1
+      for (let j = 0; j < arr.length; j++) {
+        if (used.has(j)) continue
+        const src = normKey(String(arr[j]?.src ?? ''))
+        if (src.length >= 6 && q.length >= 6 && (q.startsWith(src.slice(0, 16)) || src.startsWith(q.slice(0, 16)))) { best = j; break }
+      }
+      if (best < 0 && !used.has(i) && arr[i]) best = i
+      if (best >= 0) used.add(best)
+      const hit = best >= 0 ? arr[best] : undefined
+      return { voice: String(hit?.voice ?? '').trim(), scene: String(hit?.scene ?? '').trim() }
+    })
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[glossScenesToVietnamese] failed, no gloss:', e)
