@@ -6,9 +6,8 @@ import {
   getAttemptsForAsset, subscribeDebug, isDebugMode,
   type DebugAttempt,
 } from '../debugStore'
-
-/** KIE gpt-image-2 @ 1K resolution ~ 6 credits per call. */
-const CREDIT_PER_IMAGE = 6
+import { useSettingsStore } from '../../../stores/settingsStore'
+import { IMAGE_MODEL_INFO } from '../../../utils/imageModelInfo'
 
 const SECTION_GLYPH: Record<SectionType, string> = {
   hero:                    '🚀',
@@ -297,6 +296,8 @@ function ImagePromptCardImpl({
   const [draftPrompt, setDraftPrompt] = useState(prompt.prompt)
   const resolvedUrl = useAssetUrl(prompt.generatedAssetRef ?? undefined)
   const debugMode = isDebugMode()
+  const imageModel = useSettingsStore((s) => s.imageModel)
+  const CREDIT_PER_IMAGE = IMAGE_MODEL_INFO[imageModel].creditsPerImage   // theo model đang chọn
 
   const wasEdited = !!prompt.originalPrompt && prompt.originalPrompt !== prompt.prompt
   const draftDiffers = draftPrompt !== prompt.prompt
