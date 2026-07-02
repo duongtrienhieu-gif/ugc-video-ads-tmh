@@ -25,6 +25,10 @@ export interface TextGenInput {
   /** Bắt buộc JSON output. Gemini dùng responseMimeType, KIE chỉ pad prompt. */
   jsonMode?:           boolean
   maxOutputTokens?:    number
+  /** Pass 0 để TẮT thinking của gemini-2.5-flash trên tác vụ JSON lớn → nhanh
+   *  hơn + không bị thinking ăn token gây truncate. Chỉ áp cho Gemini (KIE proxy
+   *  không có thinking). Undefined = giữ mặc định Gemini (thinking động). */
+  thinkingBudget?:     number
   /** Timeout cho mỗi provider riêng. */
   timeoutMs?:          number
   label?:              string
@@ -60,6 +64,7 @@ export async function textGenWithFallback(input: TextGenInput): Promise<string> 
         systemInstruction:  input.systemInstruction,
         responseMimeType:   input.jsonMode ? 'application/json' : undefined,
         maxOutputTokens:    input.maxOutputTokens,
+        thinkingBudget:     input.thinkingBudget,
       }),
       timeout,
       `${label} (Gemini)`,

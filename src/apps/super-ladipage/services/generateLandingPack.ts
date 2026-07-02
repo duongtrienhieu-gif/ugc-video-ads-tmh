@@ -250,6 +250,7 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
         systemInstruction:  systemPrompt,
         jsonMode:           true,
         maxOutputTokens:    32768, // 17 sec pack hit 64K char ≈ 16K tok limit
+        thinkingBudget:     0,     // TẮT thinking: nhanh hơn + token dồn cho output (ít truncate → ít retry)
         timeoutMs:          PACK_GEN_TIMEOUT_MS,
         label:              `pack-gen-${attempt}`,
       })
