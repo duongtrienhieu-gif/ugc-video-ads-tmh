@@ -32,6 +32,19 @@ function coreTerms(title: string): string[] {
 const NON_COD_RE = /klinik|dental|pergigi|dentist|\bclinic\b|hospital|farmasi|pharmacy|aesthetic|\bspa\b|salon|booking|appointment|temujanji/i
 interface FbAd { id?: string; page?: string; cover?: string; videoUrl?: string; text?: string; daysRunning?: number }
 
+// author (unique_id/nickname TikTok) ≈ seller (tên shop TikTok Shop)? → video của chính người bán
+// = gần như chắc ĐÚNG SP. So thận trọng: chứa nhau, hoặc từ đặc trưng ≥4 ký tự của seller có trong author.
+const SELLER_STOP = /official|store|\bshop\b|malaysia|\bmy\b|trading|enterprise|\bsdn\b|\bbhd\b|resources|beauty|global/
+function sellerMatch(author: string, seller?: string): boolean {
+  if (!author || !seller) return false
+  const na = author.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const ns = seller.toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (na.length < 3 || ns.length < 3) return false
+  if (na.includes(ns) || ns.includes(na)) return true
+  const words = seller.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !SELLER_STOP.test(w))
+  return words.some((w) => na.includes(w))
+}
+
 export async function checkProductVideos(c: SpCandidate): Promise<VideoCheck> {
   const terms = coreTerms(c.title)
   const joined = terms.slice(0, 6).join(' ')
@@ -40,16 +53,17 @@ export async function checkProductVideos(c: SpCandidate): Promise<VideoCheck> {
     : (c.title.replace(/[【[(][^】\])]*[】\])]/g, ' ').split(/[|\-–—]/)[0] || c.title).trim().split(/\s+/).filter(Boolean).slice(0, 8).join(' ')
   const termsParam = terms.join(',')
 
-  // TikTok — video bán ĐÚNG SP (rip-ready)
+  // TikTok — video bán ĐÚNG SP (rip-ready). strict=1 → chỉ giữ video khớp thật (bớt drift).
   const tk: VidItem[] = []
   try {
-    const r = await fetch(`/api/research-videos?market=MY&q=${encodeURIComponent(q)}&minSec=15&maxSec=90${termsParam ? `&terms=${encodeURIComponent(termsParam)}` : ''}`)
+    const r = await fetch(`/api/research-videos?market=MY&q=${encodeURIComponent(q)}&minSec=15&maxSec=90&strict=1${termsParam ? `&terms=${encodeURIComponent(termsParam)}` : ''}`)
     if (r.ok) {
       const j = (await r.json()) as { videos?: VidItem[] }
-      for (const v of j.videos ?? []) tk.push({ ...v, platform: 'tiktok' })
+      for (const v of j.videos ?? []) tk.push({ ...v, platform: 'tiktok', authorMatch: sellerMatch(String(v.author || ''), c.seller) })
     }
   } catch { /* bỏ qua */ }
-  tk.sort((a, b) => (Number(b.views) || 0) - (Number(a.views) || 0))
+  // author≈seller (video chính người bán) lên trước, rồi tới view.
+  tk.sort((a, b) => (Number(!!b.authorMatch) - Number(!!a.authorMatch)) || (Number(b.views) || 0) - (Number(a.views) || 0))
 
   // FB — ad ĐỐI THỦ CÙNG NGÁCH (query NGÁCH tiếng Malay; coreTerms EN không khớp ad Malay)
   const fbQ = (c.niche && c.niche.trim()) || terms[0] || q

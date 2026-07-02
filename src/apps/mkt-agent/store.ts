@@ -58,6 +58,8 @@ export interface VidItem {
   durationSec: number
   author: string
   days?: number         // FB: ad chạy bao lâu (winner signal)
+  authorMatch?: boolean // author ≈ seller SP (video của chính người bán) → gần chắc ĐÚNG SP
+  imgMatch?: boolean    // đã so ảnh cover vs ảnh SP: true=khớp · false=khác · undefined=chưa so
 }
 export interface VideoCheck {
   count: number         // # video bán SP tìm được
@@ -95,6 +97,7 @@ export interface SpCandidate {
   bankAddedId?: string   // id SP đã tạo trong bank (đã thêm)
   diving?: boolean       // đang Soi sâu
   filtering?: boolean    // đang lọc spy chính xác (vision)
+  imgMatching?: boolean  // đang so ảnh video↔SP (nút "Lọc đúng ảnh")
   deep?: DeepDive        // kết quả Soi sâu
   judge?: JudgeResult    // giám khảo Gemini (sau Soi sâu)
   deepError?: string

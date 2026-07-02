@@ -12,6 +12,8 @@ import { buildVerifyLinks, deepDive, searchKeyword } from './services/enrichStag
 import { judgeSp } from './services/judge'
 import { computeWinScore } from './services/winScore'
 import { checkProductVideos } from './services/checkVideos'
+import { expandNicheToProducts } from './services/expandTerms'
+import { matchCoversToProduct } from './services/matchSpy'
 import { KEYWORD_GROUPS, toggleGroup, isGroupActive, parseNiches } from './keywords'
 import { useBankStore } from '../../stores/bankStore'
 import { directGeminiText, directGeminiVision } from '../../utils/gemini'
@@ -76,6 +78,8 @@ export default function MktAgent() {
     setNewIds, markSeen, setLastRadarDate, setAutoRadar,
   } = useMktAgentStore()
   const [videoDepth] = useState(40)
+  const [widthN, setWidthN] = useState(15)       // độ rộng bung ngách (AI)
+  const [expanding, setExpanding] = useState(false)
   const [vidScanning, setVidScanning] = useState(false)
   const [onlyWithVideo, setOnlyWithVideo] = useState(false)
   const [onlyNew, setOnlyNew] = useState(false)
@@ -102,6 +106,35 @@ export default function MktAgent() {
       }
     })
     setVidScanning(false)
+  }
+
+  // 🪄 Bung ngách: pick ngách → AI nở rộng ra N từ khóa loại-SP phủ cả ngách → điền vào ô.
+  const expandNiches = async () => {
+    if (!geminiApiKey) { setError('Cần Gemini key (Cài đặt) để bung ngách.'); return }
+    if (!niches.trim()) { setError('Chọn 1 ngách (bấm chip) hoặc gõ ngách trước khi bung.'); return }
+    setExpanding(true); setError(null)
+    try {
+      const terms = await expandNicheToProducts(geminiApiKey, niches, widthN)
+      if (terms.length) setNiches(terms.join(', '))
+    } catch (e) {
+      setError('Bung ngách lỗi: ' + ((e as Error).message || '').slice(0, 80))
+    } finally { setExpanding(false) }
+  }
+
+  // 🎯 Lọc đúng ảnh (theo yêu cầu 1 SP): so ảnh SP vs cover TOP 10 video → gắn cờ imgMatch.
+  const runImgMatch = async (c: SpCandidate) => {
+    if (!geminiApiKey) { setError('Cần Gemini key (Cài đặt) để so ảnh.'); return }
+    if (!c.imageUrl || !c.vids?.list?.length || c.imgMatching) return
+    patchCandidate(c.productId, { imgMatching: true })
+    try {
+      const top = c.vids.list.slice(0, 10)                       // top 10 (đã ưu tiên author-match + view)
+      const covers = top.filter((v) => v.cover).map((v) => ({ id: v.id, url: v.cover }))
+      const res = await matchCoversToProduct(geminiApiKey, c.imageUrl, covers)
+      const list = c.vids.list.map((v) => res.has(v.id) ? { ...v, imgMatch: res.get(v.id)!.match } : v)
+      patchCandidate(c.productId, { vids: { ...c.vids, list }, imgMatching: false })
+    } catch {
+      patchCandidate(c.productId, { imgMatching: false })
+    }
   }
 
   const scan = async () => {
@@ -301,6 +334,23 @@ Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh.
           </div>
         </div>
 
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <button onClick={expandNiches} disabled={expanding || scanning}
+            className="px-3 py-1.5 rounded-md text-[12px] font-semibold bg-violet-500/20 text-violet-200 border border-violet-400/45 hover:bg-violet-500/30 disabled:opacity-50">
+            {expanding ? '⏳ Đang bung…' : '🪄 Bung ngách rộng (AI)'}
+          </button>
+          <label className="flex items-center gap-1 text-[12px] text-zinc-400">
+            độ rộng
+            <select value={widthN} onChange={(e) => setWidthN(Number(e.target.value))}
+              className="bg-zinc-950 border border-zinc-700 rounded-md px-2 py-1 text-zinc-100">
+              <option value={8}>8 từ (tiết kiệm)</option>
+              <option value={15}>15 từ (khuyên)</option>
+              <option value={25}>25 từ (phủ tối đa)</option>
+            </select>
+          </label>
+          <span className="text-[11px] text-zinc-500">→ pick ngách rồi bấm bung: AI nở {widthN} từ khóa loại-SP phủ cả ngách (mỗi từ = 1 credit lúc quét)</span>
+        </div>
+
         <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
           <label className="text-[13px] text-zinc-400">
             Ngách (cách nhau dấu phẩy — tiếng Malay)
@@ -373,6 +423,7 @@ Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh.
                   onSendToApp={sendToApp}
                   onPlay={openVid}
                   onAddBank={() => addToBank(p)}
+                  onImgMatch={() => runImgMatch(p)}
                   isWatched={watchedIds.has(p.productId)}
                   onWatch={() => toggleWatch(p)}
                   isNew={newIds.includes(p.productId)}
@@ -430,7 +481,7 @@ Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh.
 }
 
 // ── 1 card SP — video reel (rip-ready) trước, phân tích sâu sau ────────────────
-function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onAddBank, isWatched, onWatch, isNew }: {
+function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onAddBank, onImgMatch, isWatched, onWatch, isNew }: {
   p: SpCandidate
   picked: boolean
   hasKey: boolean
@@ -439,6 +490,7 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
   onSendToApp: (a: { targetApp: string; targetField: string; data: unknown }) => void
   onPlay: (v: VidItem) => void
   onAddBank: () => void
+  onImgMatch: () => void
   isWatched: boolean
   onWatch: () => void
   isNew: boolean
@@ -481,6 +533,12 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
         <span>{p.price > 0 ? `RM${fmt(p.price)}` : 'giá —'}{p.revenue > 0 ? ` · DT RM${fmt(p.revenue)}` : ''}</span>
       </div>
       {ship && <div className={`text-[11px] ${ship.cls}`}>{ship.label}</div>}
+      {p.url && /^https?:\/\//i.test(p.url) && (
+        <a href={p.url} target="_blank" rel="noopener noreferrer" title="Mở trang bán trên TikTok Shop — xem chi tiết, đánh giá, ảnh, biến thể"
+          className="self-start inline-flex items-center gap-1 rounded-md border border-pink-500/40 bg-pink-500/10 px-2 py-0.5 text-[11px] font-semibold text-pink-300 hover:bg-pink-500/20">
+          🛒 Xem trên TikTok Shop ↗
+        </a>
+      )}
       {(p.tier === 'oem' || p.variantRisk === 'high') && (
         <div className="flex flex-wrap gap-1">
           {p.tier === 'oem' && <span className="text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0.5">🏭 nhãn xưởng · nhập sẵn</span>}
@@ -495,11 +553,24 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
         p.vids.count > 0 ? (() => {
           const tkN = p.vids.list.filter((v) => v.platform !== 'fb').length
           const fbN = p.vids.list.filter((v) => v.platform === 'fb').length
+          const exactN = p.vids.list.filter((v) => v.imgMatch === true || v.authorMatch === true).length
+          const imgChecked = p.vids.list.some((v) => v.imgMatch != null)
           return (
             <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2">
-              <p className="text-[12px] font-semibold text-emerald-300">
-                🎥 {tkN} TikTok đúng SP{fbN > 0 ? <span className="text-sky-300"> · 📣 {fbN} ad FB cùng ngách</span> : null}{p.vids.maxViews > 0 ? ` · ${compact(p.vids.maxViews)} view` : ''} <span className="font-normal text-emerald-400/80">— bấm xem / tải</span>
-              </p>
+              <div className="flex items-start justify-between gap-1.5">
+                <p className="text-[12px] font-semibold text-emerald-300">
+                  🎥 {tkN} TikTok liên quan{fbN > 0 ? <span className="text-sky-300"> · 📣 {fbN} ad FB cùng ngách</span> : null}
+                  {exactN > 0 ? <span className="text-emerald-200"> · ✅ {exactN} đúng SP</span> : null}
+                  {p.vids.maxViews > 0 ? ` · ${compact(p.vids.maxViews)} view` : ''}
+                </p>
+                {hasKey && p.imageUrl && (
+                  <button onClick={onImgMatch} disabled={p.imgMatching} title="So ảnh SP với top 10 video → xác nhận video ĐÚNG ảnh SP"
+                    className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-50">
+                    {p.imgMatching ? '⏳ so ảnh…' : imgChecked ? '🎯 so lại' : '🎯 Lọc đúng ảnh'}
+                  </button>
+                )}
+              </div>
+              <p className="text-[10px] text-zinc-500">🟢 đúng SP (ảnh/người bán khớp) · 🟡 liên quan (theo tên)</p>
               {tkN > 1 && (
                 <button onClick={() => downloadAll(p.vids!.list.filter((v) => v.platform !== 'fb' && v.downloadUrl).map((v) => v.downloadUrl))}
                   className="mt-0.5 text-[10px] text-violet-300 hover:text-violet-200 underline">⬇ Tải tất cả {tkN} video TikTok</button>
@@ -512,6 +583,11 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
                       {v.cover ? <img src={v.cover} alt="" className="w-full h-full object-cover" loading="lazy" /> : <span className="grid place-items-center w-full h-full text-[10px]">▶</span>}
                       {v.durationSec > 0 && <span className="absolute bottom-0.5 right-0.5 bg-black/70 px-1 rounded text-[8px]">{v.durationSec}s</span>}
                       {isFb && <span className="absolute top-0.5 left-0.5 bg-sky-600/90 px-1 rounded text-[7px] font-bold text-white">FB</span>}
+                      {(v.imgMatch === true || v.authorMatch === true)
+                        ? <span className="absolute top-0.5 right-0.5 bg-emerald-500 rounded-full px-1 text-[7px] font-bold text-white" title={v.authorMatch ? 'video của người bán' : 'khớp ảnh SP'}>✓</span>
+                        : v.imgMatch === false
+                          ? <span className="absolute top-0.5 right-0.5 bg-zinc-800/90 rounded-full px-1 text-[7px] text-zinc-400" title="khác ảnh SP">≠</span>
+                          : <span className="absolute top-0.5 right-0.5 bg-amber-500/85 rounded-full px-1 text-[7px] font-bold text-zinc-950" title="liên quan theo tên (chưa xác nhận ảnh)">~</span>}
                     </>
                   )
                   return (

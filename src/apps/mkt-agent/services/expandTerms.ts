@@ -8,6 +8,38 @@ function stripFences(s: string): string {
   return s.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
 }
 
+// ── Bung 1 NGÁCH rộng → N từ khóa loại-SP (Malay) phủ cả bề rộng ngách ────────
+// Dùng khi user pick ngách (không muốn tự gõ từ khóa). Ra danh từ-SP để tìm SP bán
+// trên TikTok Shop, KHÔNG phải triệu chứng (tránh phòng khám/dịch vụ).
+export async function expandNicheToProducts(
+  apiKey: string,
+  nicheText: string,
+  count = 15,
+): Promise<string[]> {
+  const seed = nicheText.split(',').map((s) => s.trim()).filter(Boolean)
+  const n = Math.max(6, Math.min(30, count))
+  const prompt = `Ngách sản phẩm COD (Malaysia): "${nicheText}".
+Sinh ${n} TỪ KHÓA tiếng Malay để tìm SẢN PHẨM ĐANG BÁN thuộc ngách này trên TikTok Shop — phủ RỘNG các LOẠI sản phẩm khác nhau trong ngách (đa dạng, không lặp 1 loại).
+QUY TẮC:
+- Mỗi từ là DANH TỪ SẢN PHẨM / dạng SP (vd "minyak urut", "gel sendi", "brace lutut", "koyo panas") — KHÔNG phải triệu chứng trần ("sakit lutut") vì ra phòng khám/dịch vụ.
+- KHÔNG tên thương hiệu riêng. Mỗi từ 2-3 chữ. Đa dạng, không trùng nghĩa.
+CHỈ trả JSON mảng ${n} chuỗi: ["minyak urut","gel sendi",...]`
+  try {
+    const raw = await directGeminiText({ apiKey, prompt, responseMimeType: 'application/json', temperature: 0.5 })
+    const arr = JSON.parse(stripFences(raw)) as unknown
+    const terms = Array.isArray(arr) ? arr.map((x) => String(x).trim()).filter(Boolean) : []
+    const seen = new Set<string>()
+    const uniq: string[] = []
+    for (const t of [...terms, ...seed]) {
+      const k = t.toLowerCase()
+      if (!seen.has(k) && t.length >= 2 && t.length <= 40) { seen.add(k); uniq.push(t) }
+    }
+    return uniq.slice(0, n).length ? uniq.slice(0, n) : seed
+  } catch {
+    return seed
+  }
+}
+
 export async function expandSearchTerms(
   apiKey: string,
   c: { title: string; niche?: string },

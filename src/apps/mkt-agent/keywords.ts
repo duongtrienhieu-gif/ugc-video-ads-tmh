@@ -5,15 +5,29 @@
 
 export interface KeywordGroup { label: string; terms: string[] }
 
+// Seed ngắn (Malay) cho mỗi ngách — dùng làm HẠT GIỐNG. Bấm "🪄 Bung ngách (AI)"
+// để AI nở rộng phủ cả ngách (15 từ) thay vì bó vào vài từ này.
 export const KEYWORD_GROUPS: KeywordGroup[] = [
-  { label: 'Đau · Xương khớp', terms: ['minyak urut', 'sakit sendi lutut', 'sakit belakang', 'kaki kebas', 'gout', 'asid urik'] },
-  { label: 'Da · Mụn', terms: ['jerawat', 'jeragat', 'parut jerawat', 'pemutih kulit', 'pori besar', 'kedut wajah'] },
-  { label: 'Tóc', terms: ['rambut gugur', 'uban', 'kebotakan'] },
-  { label: 'Giảm cân', terms: ['kurus cepat', 'buang lemak', 'perut buncit'] },
-  { label: 'Răng miệng', terms: ['sakit gigi', 'gusi bengkak', 'pemutih gigi', 'nafas berbau'] },
-  { label: 'Sinh lý nam', terms: ['kuat lelaki', 'tahan lama', 'tenaga batin'] },
-  { label: 'Bệnh mãn', terms: ['kolesterol tinggi', 'darah tinggi', 'kencing manis', 'gastrik', 'buasir'] },
-  { label: 'Gia dụng tiện ích', terms: ['pembersih dapur', 'penghilang kerak', 'ubat nyamuk', 'penyental lantai'] },
+  { label: '💊 TPCN / Vitamin', terms: ['suplemen kesihatan', 'multivitamin', 'vitamin c'] },
+  { label: '🌸 Collagen / Đẹp da', terms: ['kolagen', 'minuman kolagen', 'kulit gebu'] },
+  { label: '🔥 Giảm cân / Detox', terms: ['kurus cepat', 'buang lemak', 'detox', 'perut buncit'] },
+  { label: '💪 Sinh lý / Sức khỏe nam', terms: ['kuat lelaki', 'tenaga batin', 'tahan lama'] },
+  { label: '💇 Tóc / Rụng tóc', terms: ['rambut gugur', 'serum rambut', 'uban', 'kebotakan'] },
+  { label: '🧴 Skincare', terms: ['serum wajah', 'pencuci muka', 'pelembap', 'sunscreen'] },
+  { label: '🦷 Răng miệng', terms: ['pemutih gigi', 'ubat gigi', 'nafas berbau'] },
+  { label: '🍼 Mẹ & bé', terms: ['vitamin kanak', 'barang baby', 'susu ibu'] },
+  { label: '🩺 Dụng cụ sức khỏe', terms: ['alat urut', 'brace lutut', 'koyo', 'alat kesihatan'] },
+  { label: '🍿 Đồ ăn vặt / Snack', terms: ['snek', 'makanan ringan', 'keropok'] },
+  { label: '🦴 Xương khớp / Đau nhức', terms: ['sakit sendi', 'minyak urut', 'sakit lutut', 'gout'] },
+  { label: '🌿 Tiêu hóa / Dạ dày / Gan', terms: ['gastrik', 'sembelit', 'probiotik', 'detox hati'] },
+  { label: '👁 Mắt / Thị lực', terms: ['mata kabur', 'lutein', 'ubat mata'] },
+  { label: '😴 Ngủ ngon / Giảm stress', terms: ['susah tidur', 'insomnia', 'kurang stress'] },
+  { label: '🌸 Vệ sinh PN / Trắng body', terms: ['pencuci wanita', 'miss v', 'pemutih badan'] },
+  { label: '🩸 Đường huyết / Tim mạch', terms: ['kencing manis', 'darah tinggi', 'kolesterol'] },
+  { label: '💧 Trị mụn / Trị nám', terms: ['jerawat', 'jeragat', 'parut jerawat'] },
+  { label: '🏠 Gia dụng / Nhà bếp', terms: ['pembersih dapur', 'penghilang kerak', 'penyental lantai'] },
+  { label: '✨ Tiện ích độc lạ / Viral', terms: ['barang viral', 'gadget rumah', 'alat serbaguna'] },
+  { label: '📱 Đồ thông minh / Điện tử', terms: ['gajet', 'smart home', 'alat elektrik'] },
 ]
 
 // Các từ trong ô ngách → mảng đã chuẩn hóa.

@@ -218,6 +218,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Video phải chứa ≥1 token trong desc → bỏ news/drift sang SP khác.
   const terms = (typeof req.query.terms === 'string' ? req.query.terms : '')
     .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean).slice(0, 6)
+  // strict=1 (MKT Agent): CHỈ giữ video khớp thật (brand/token-hit), KHÔNG bù video điểm 0 → bớt drift.
+  const strict = req.query.strict === '1'
   if (!q) return res.status(400).json({ error: 'Cần q (tên SP / từ khóa)' })
 
   try {
@@ -265,8 +267,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       chosen = scoredAll
     } else {
       const brandHits = scoredAll.filter((s) => s.brandHit)
-      if (brand && brandHits.length >= 4) {
+      if (brand && brandHits.length >= (strict ? 1 : 4)) {
         chosen = brandHits                      // đủ video đúng BRAND → chỉ giữ brand (zero drift)
+      } else if (strict) {
+        chosen = scoredAll.filter((s) => s.score > 0)   // strict: chỉ video KHỚP THẬT, không bù điểm 0
       } else {
         const hits = scoredAll.filter((s) => s.score > 0)
         // Quá ít → BÙ tối đa 12 video query (đã sạch) để không trống, nhưng không làm loãng.
