@@ -435,7 +435,13 @@ export async function generateImageNanoFallback(params: {
   })
 }
 
-/** All-in-one: submit + poll + return final image URL. */
+/** All-in-one: submit + poll + return final image URL.
+ *
+ *  KIE-nghẽn resilience (giống generateGpt4oImageFast): khi backend gpt-4o-image
+ *  (OpenAI) quá tải → time-out → tự chuyển sang nano-banana-2 (Google), GIỮ
+ *  product/avatar lock qua filesUrl. Toggle "Chế độ KIE nghẽn" + circuit breaker
+ *  đều áp dụng. Mọi caller (form-bg / gift / rebrand / tiktok-shop / character /
+ *  creative / brand-kit …) hưởng chung qua đúng 1 hàm này. */
 export async function generateGpt4oImage(params: {
   apiKey: string
   prompt: string
@@ -445,20 +451,56 @@ export async function generateGpt4oImage(params: {
   timeoutMs?: number
   signal?: AbortSignal
 }): Promise<string> {
+  // KIE nghẽn (manual toggle HOẶC circuit breaker) → đi thẳng nano-banana-2.
+  if (isKieImageFallbackActive()) {
+    console.log('[gpt4o-gen] KIE fallback đang bật → nano-banana-2')
+    return generateImageNanoFallback({
+      apiKey: params.apiKey, prompt: params.prompt, size: params.size,
+      filesUrl: params.filesUrl, signal: params.signal, onStatusChange: params.onStatusChange,
+    })
+  }
   console.log(`[gpt4o-gen] submit prompt=${params.prompt.length} chars · refs=${params.filesUrl?.length ?? 0} · size=${params.size}`)
-  const { taskId } = await submitGpt4oImage({
-    apiKey: params.apiKey,
-    prompt: params.prompt,
-    filesUrl: params.filesUrl,
-    size: params.size,
-  })
-  return await pollGpt4oUntilDone({
-    apiKey: params.apiKey,
-    taskId,
-    onStatusChange: params.onStatusChange,
-    timeoutMs: params.timeoutMs,
-    signal: params.signal,
-  })
+  try {
+    const { taskId } = await submitGpt4oImage({
+      apiKey: params.apiKey,
+      prompt: params.prompt,
+      filesUrl: params.filesUrl,
+      size: params.size,
+    })
+    const url = await pollGpt4oUntilDone({
+      apiKey: params.apiKey,
+      taskId,
+      onStatusChange: params.onStatusChange,
+      timeoutMs: params.timeoutMs,
+      signal: params.signal,
+    })
+    noteKieGpt4oSuccess()
+    return url
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    // Hard fail — không fallback (huỷ / hết credit / policy / bị từ chối render).
+    if (
+      msg.includes('CANCELLED') ||
+      msg === 'INSUFFICIENT_CREDITS' ||
+      msg.toLowerCase().includes('content_policy') ||
+      msg.includes('GENERATE_FAILED')
+    ) {
+      throw err
+    }
+    // Time-out / network = backend gpt-4o (OpenAI) đang chậm → chuyển ngay sang
+    // nano-banana-2 (Google), GIỮ product/avatar lock qua filesUrl. Ghi nhận để
+    // circuit breaker tự mở cho các ảnh sau (khỏi phí probe lại từng ảnh).
+    noteKieGpt4oTimeout()
+    console.warn(`[gpt4o-gen] soft-fail: ${msg.slice(0, 100)} → fallback nano-banana-2`)
+    try {
+      return await generateImageNanoFallback({
+        apiKey: params.apiKey, prompt: params.prompt, size: params.size,
+        filesUrl: params.filesUrl, signal: params.signal, onStatusChange: params.onStatusChange,
+      })
+    } catch (nanoErr) {
+      throw err instanceof Error ? err : (nanoErr instanceof Error ? nanoErr : new Error('nano-banana-2 fallback thất bại'))
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
