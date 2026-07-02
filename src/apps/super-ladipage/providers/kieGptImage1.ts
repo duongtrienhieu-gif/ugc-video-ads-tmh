@@ -1,7 +1,4 @@
-import {
-  submitGpt4oImage, pollGpt4oUntilDone, submitGptImage2, pollGptImage2UntilDone,
-  isKieImageFallbackActive, noteKieGpt4oTimeout, noteKieGpt4oSuccess, generateImageNanoFallback,
-} from '../../../utils/kieai'
+import { generateImagePreferred, getImageGenModel } from '../../../utils/kieai'
 import { getUrl } from '../../../utils/assetStore'
 import { saveAsset } from '../../../utils/assetStore'
 import { mapAspectToKie } from '../assembler/assembleImagePrompt'
@@ -116,129 +113,35 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
     ? await resolveRefsToUrls(referenceAssetRefs.slice(0, 5))
     : undefined
 
-  const modelTag = useImageToImage ? 'gpt-4o-image (i2i)' : 'gpt-image-2 (text-only)'
-  console.log(`[kieImage] using ${modelTag} for prompt (${prompt.length} chars, ${filesUrl?.length ?? 0} refs)`)
+  // Section i2i (có sản phẩm) → truyền refs để KHÓA product; section text-only
+  // (không sản phẩm) → không refs, để không nhét nhầm product vào cảnh lifestyle.
+  const refs = useImageToImage ? filesUrl : undefined
+  console.log(`[kieImage] model=${getImageGenModel()} i2i=${useImageToImage} (${prompt.length} chars, ${refs?.length ?? 0} refs)`)
 
-  // KIE nghẽn (manual mode HOẶC circuit breaker) → đi thẳng nano-banana-2.
-  // Giữ khóa product qua filesUrl khi là section i2i; section text-only đi
-  // nano text-to-image (không ref) để không nhét nhầm product vào cảnh lifestyle.
-  if (isKieImageFallbackActive()) {
-    console.log('[kieGptImage1] KIE fallback đang bật → nano-banana-2')
-    const url = await generateImageNanoFallback({
-      apiKey, prompt, size: kieAspect,
-      filesUrl: useImageToImage ? filesUrl : undefined,
-      signal,
-    })
-    const assetRef = await downloadAndSaveAsset(url)
-    return { assetRef, rawUrl: url }
-  }
-
-  const tryOnce = async (promptToUse: string): Promise<string> => {
-    if (useImageToImage) {
-      // gpt-4o-image — TRUE i2i với reference images (identity lock).
-      // Timeout 180s/attempt (bumped từ 150s 2026-05-21): KIE còn busy
-      // ngày nay, 180s slack cho task render xong trước khi abandon.
-      // Với smart retry (skip retry trên timeout), max wait per image
-      // = 180s (1 attempt cho timeout case). Pack 35 ảnh worst case
-      // chậm hơn ~12% so với 150s nhưng cứu được +5-10% ảnh.
-      const { taskId } = await submitGpt4oImage({
-        apiKey,
-        prompt: promptToUse,
-        size:       kieAspect,
-        filesUrl,
-        enableFallback: true,
-      })
-      return pollGpt4oUntilDone({
-        apiKey,
-        taskId,
-        timeoutMs: 180 * 1000,
-        signal,
-      })
-    } else {
-      // gpt-image-2 — text-only (sections không sản phẩm).
-      // filesUrl SILENTLY IGNORED bởi endpoint này (KIE warning).
-      // Timeout 180s/attempt giống gpt-4o-image — endpoint này thậm chí
-      // hay frozen hơn theo log [POLL_STUCK_WARN] gần đây.
-      const { taskId } = await submitGptImage2({
-        apiKey,
-        prompt: promptToUse,
-        size:       kieAspect,
-        resolution: '1K',
-      })
-      return pollGptImage2UntilDone({
-        apiKey,
-        taskId,
-        timeoutMs: 180 * 1000,
-        signal,
-      })
-    }
-  }
-
+  // Định tuyến model (nano | gpt-image-1.5) + tự đổi model kia khi time-out do
+  // generateImagePreferred lo. Ở đây chỉ giữ retry SOFTEN khi bị Policy/từ chối.
   let lastError: Error | null = null
   let lastWasPolicyFail = false
   for (let attempt = 1; attempt <= 2; attempt++) {
     if (signal?.aborted) throw new Error('CANCELLED — user hủy')
-    // Hybrid retry: attempt 2 dùng softened prompt CHỈ KHI attempt 1
-    // hit Policy / generate_failed. Còn lại (timeout / transient) thì
-    // retry với prompt gốc (giữ chất lượng visceral mạnh).
-    const currentPrompt = (attempt === 2 && lastWasPolicyFail)
-      ? softenPromptForPolicy(prompt)
-      : prompt
-    if (attempt === 2 && lastWasPolicyFail) {
-      console.log(`[kieGptImage1] attempt 2 dùng SOFTENED prompt (attempt 1 hit KIE Policy)`)
-    }
+    const currentPrompt = (attempt === 2 && lastWasPolicyFail) ? softenPromptForPolicy(prompt) : prompt
+    if (attempt === 2 && lastWasPolicyFail) console.log('[kieGptImage1] attempt 2 dùng SOFTENED prompt (attempt 1 hit Policy)')
     try {
-      const url = await tryOnce(currentPrompt)
+      const url = await generateImagePreferred({ apiKey, prompt: currentPrompt, size: kieAspect, filesUrl: refs, signal })
       const assetRef = await downloadAndSaveAsset(url)
-      noteKieGpt4oSuccess()
       return { assetRef, rawUrl: url }
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err))
       const msg = lastError.message.toLowerCase()
-      // Hard failures — không retry kể cả softened (user huỷ / hết credit)
-      if (
-        msg.includes('cancelled') ||
-        msg.includes('insufficient_credits') ||
-        msg.includes('huỷ')
-      ) {
-        throw lastError
-      }
-      // SMART RETRY (2026-05-21): TIMEOUT fail = KIE backend slow ở thời
-      // điểm này. Retry attempt 2 với SAME prompt → KIE vẫn slow → fail
-      // tiếp → tốn 12 credit/ảnh nhưng cứu hiếm khi pass. Skip retry để
-      // tiết kiệm credit (-50% waste timeout). User có thể bấm "Thử lại"
-      // manual sau khi KIE recover. POLICY/generate_failed VẪN retry vì
-      // softened prompt có chance pass (~70%).
-      const isTimeoutFail = msg.includes('timeout') || msg.includes('quá ') || msg.includes('150s') || msg.includes('180s')
-      if (isTimeoutFail && attempt === 1) {
-        // gpt-4o-image (OpenAI) time-out = backend đang nghẽn. Thay vì bỏ ảnh
-        // (đốt credit không có kết quả), chuyển sang nano-banana-2 (Google) —
-        // GIỮ khóa product qua filesUrl. Ghi nhận để breaker tự mở cho ảnh sau.
-        noteKieGpt4oTimeout()
-        console.log('[kieGptImage1] gpt-4o TIMEOUT → fallback nano-banana-2 (giữ product lock)')
-        try {
-          const url = await generateImageNanoFallback({
-            apiKey, prompt, size: kieAspect,
-            filesUrl: useImageToImage ? filesUrl : undefined,
-            signal,
-          })
-          const assetRef = await downloadAndSaveAsset(url)
-          return { assetRef, rawUrl: url }
-        } catch (nanoErr) {
-          console.warn(`[kieGptImage1] nano-banana-2 fallback cũng lỗi: ${nanoErr instanceof Error ? nanoErr.message.slice(0, 100) : nanoErr}`)
-          throw lastError
-        }
-      }
-      // Track: nếu attempt này fail vì Policy → attempt 2 sẽ dùng softened.
-      // content_policy + generate_failed đều là KIE từ chối render — cả 2
-      // đều thử softer prompt vì có thể là Policy block ngầm.
+      // Hard fail user-huỷ / hết credit → throw ngay.
+      if (msg.includes('cancelled') || msg.includes('insufficient_credits') || msg.includes('huỷ')) throw lastError
+      // Chỉ CÓ ích khi retry vì Policy/generate_failed (softened có ~70% pass).
+      // Timeout/network đã được generateImagePreferred tự đổi model → tới đây
+      // nếu không phải policy thì cứu thêm cũng vô ích → throw.
       lastWasPolicyFail = msg.includes('content_policy') || msg.includes('generate_failed')
-      const retryHint = attempt < 2
-        ? (lastWasPolicyFail ? 'retrying with softened prompt' : 'retrying with same prompt')
-        : 'giving up'
-      console.warn(`[kieGptImage1] attempt ${attempt}/2 failed: ${lastError.message.slice(0, 120)} — ${retryHint}`)
+      if (!lastWasPolicyFail) throw lastError
+      console.warn(`[kieGptImage1] attempt ${attempt}/2 policy-fail — ${attempt < 2 ? 'thử prompt softened' : 'giving up'}`)
     }
   }
-
-  throw lastError ?? new Error('KIE gpt-image-2 thất bại sau 2 lần thử')
+  throw lastError ?? new Error('Tạo ảnh thất bại sau 2 lần thử')
 }

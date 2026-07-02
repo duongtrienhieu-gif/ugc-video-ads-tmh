@@ -435,6 +435,90 @@ export async function generateImageNanoFallback(params: {
   })
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// MODEL SELECTOR (nano-banana-2 ↔ gpt-image-1.5-medium) — user chọn ở UI.
+// gpt-4o-image (gpt-image-1) đã bị KIE khai tử dần → 2 model này thay thế.
+// Cả 2 đều i2i GIỮ KHÓA product/avatar (đã verify bằng ảnh 2026-07-01):
+//   • nano-banana-2 (Google): 8cr · ~28s · chống outage OpenAI · khóa tốt.
+//   • gpt-image-1.5 medium (OpenAI): 4cr · ~53-101s · infographic/chữ đẹp hơn ·
+//     rủi ro nghẽn khi OpenAI quá tải.
+// Router: chạy model user chọn; timeout/network → tự đổi sang model kia (giữ
+// nguyên refs). Breaker (tái dùng _gpt4oBreaker*): primary time-out N lần liên
+// tiếp → tạm ưu tiên secondary trong cooldown, khỏi phí probe lại.
+// ─────────────────────────────────────────────────────────────────────────
+
+export type ImageGenChoice = 'nano' | 'gpt15'
+let _imageGenModel: ImageGenChoice = 'nano'   // default 'nano' (user chốt)
+
+/** Set model tạo ảnh mặc định toàn app (đồng bộ từ settingsStore.imageModel). */
+export function setImageGenModel(m: ImageGenChoice): void { _imageGenModel = m }
+export function getImageGenModel(): ImageGenChoice { return _imageGenModel }
+
+/** gpt-image-1.5 medium i2i (OpenAI qua KIE /jobs). Giữ khóa refs qua input_urls.
+ *  Poll dùng chung /jobs/recordInfo (state) → tái dùng pollGptImage2UntilDone. */
+export async function generateGptImage15(params: {
+  apiKey: string
+  prompt: string
+  size: Gpt4oSize
+  filesUrl?: string[]
+  signal?: AbortSignal
+  onStatusChange?: (status: ImageStatus, progress?: number) => void
+}): Promise<string> {
+  const input: Record<string, unknown> = { prompt: params.prompt, aspect_ratio: params.size, quality: 'medium' }
+  if (params.filesUrl && params.filesUrl.length > 0) input.input_urls = params.filesUrl.slice(0, 5)
+  console.log(`[gpt-image-1.5] submit (refs=${params.filesUrl?.length ?? 0}, size=${params.size})`)
+  const res = await fetch(`${KIE_BASE}/jobs/createTask`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${params.apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'gpt-image/1.5-image-to-image', input }),
+  })
+  if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+  if (!res.ok) {
+    const t = await res.text().catch(() => res.statusText)
+    throw new Error(`gpt-image-1.5 submit lỗi (${res.status}): ${t.slice(0, 200)}`)
+  }
+  const data = await res.json() as { code?: number; msg?: string; message?: string; data?: { taskId?: string } | null }
+  if (data?.code !== undefined && data.code !== 200) throw new Error(data.msg ?? data.message ?? `gpt-image-1.5 lỗi code ${data.code}`)
+  const taskId = data?.data?.taskId
+  if (!taskId) throw new Error(`gpt-image-1.5 không trả về taskId: ${JSON.stringify(data).slice(0, 160)}`)
+  return pollGptImage2UntilDone({ apiKey: params.apiKey, taskId, signal: params.signal, onStatusChange: params.onStatusChange })
+}
+
+/** Sinh 1 ảnh theo model chỉ định (nano | gpt15), i2i giữ refs. */
+async function generateImageByChoice(choice: ImageGenChoice, p: {
+  apiKey: string; prompt: string; size: Gpt4oSize; filesUrl?: string[]
+  signal?: AbortSignal; onStatusChange?: (s: ImageStatus, pr?: number) => void
+}): Promise<string> {
+  return choice === 'gpt15' ? generateGptImage15(p) : generateImageNanoFallback(p)
+}
+
+/** ROUTER CHÍNH cho mọi ảnh: chạy model user chọn; time-out/network → tự đổi
+ *  model kia (giữ nguyên refs → khóa product/avatar). Breaker: primary hỏng
+ *  liên tiếp → tạm ưu tiên secondary. Hard-fail (huỷ/hết credit/policy) → throw. */
+export async function generateImagePreferred(p: {
+  apiKey: string; prompt: string; size: Gpt4oSize; filesUrl?: string[]
+  signal?: AbortSignal; onStatusChange?: (s: ImageStatus, pr?: number) => void
+}): Promise<string> {
+  const chosen = _imageGenModel
+  const breakerOpen = _gpt4oBreakerUntil > Date.now()
+  const primary: ImageGenChoice = breakerOpen ? (chosen === 'nano' ? 'gpt15' : 'nano') : chosen
+  const secondary: ImageGenChoice = primary === 'nano' ? 'gpt15' : 'nano'
+  try {
+    const url = await generateImageByChoice(primary, p)
+    noteKieGpt4oSuccess()
+    return url
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (
+      msg.includes('CANCELLED') || msg === 'INSUFFICIENT_CREDITS' ||
+      msg.toLowerCase().includes('content_policy') || msg.includes('GENERATE_FAILED')
+    ) throw err
+    noteKieGpt4oTimeout()
+    console.warn(`[IMG] ${primary} soft-fail (${msg.slice(0, 80)}) → đổi sang ${secondary}`)
+    return generateImageByChoice(secondary, p)
+  }
+}
+
 /** All-in-one: submit + poll + return final image URL.
  *
  *  KIE-nghẽn resilience (giống generateGpt4oImageFast): khi backend gpt-4o-image
@@ -451,56 +535,14 @@ export async function generateGpt4oImage(params: {
   timeoutMs?: number
   signal?: AbortSignal
 }): Promise<string> {
-  // KIE nghẽn (manual toggle HOẶC circuit breaker) → đi thẳng nano-banana-2.
-  if (isKieImageFallbackActive()) {
-    console.log('[gpt4o-gen] KIE fallback đang bật → nano-banana-2')
-    return generateImageNanoFallback({
-      apiKey: params.apiKey, prompt: params.prompt, size: params.size,
-      filesUrl: params.filesUrl, signal: params.signal, onStatusChange: params.onStatusChange,
-    })
-  }
-  console.log(`[gpt4o-gen] submit prompt=${params.prompt.length} chars · refs=${params.filesUrl?.length ?? 0} · size=${params.size}`)
-  try {
-    const { taskId } = await submitGpt4oImage({
-      apiKey: params.apiKey,
-      prompt: params.prompt,
-      filesUrl: params.filesUrl,
-      size: params.size,
-    })
-    const url = await pollGpt4oUntilDone({
-      apiKey: params.apiKey,
-      taskId,
-      onStatusChange: params.onStatusChange,
-      timeoutMs: params.timeoutMs,
-      signal: params.signal,
-    })
-    noteKieGpt4oSuccess()
-    return url
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    // Hard fail — không fallback (huỷ / hết credit / policy / bị từ chối render).
-    if (
-      msg.includes('CANCELLED') ||
-      msg === 'INSUFFICIENT_CREDITS' ||
-      msg.toLowerCase().includes('content_policy') ||
-      msg.includes('GENERATE_FAILED')
-    ) {
-      throw err
-    }
-    // Time-out / network = backend gpt-4o (OpenAI) đang chậm → chuyển ngay sang
-    // nano-banana-2 (Google), GIỮ product/avatar lock qua filesUrl. Ghi nhận để
-    // circuit breaker tự mở cho các ảnh sau (khỏi phí probe lại từng ảnh).
-    noteKieGpt4oTimeout()
-    console.warn(`[gpt4o-gen] soft-fail: ${msg.slice(0, 100)} → fallback nano-banana-2`)
-    try {
-      return await generateImageNanoFallback({
-        apiKey: params.apiKey, prompt: params.prompt, size: params.size,
-        filesUrl: params.filesUrl, signal: params.signal, onStatusChange: params.onStatusChange,
-      })
-    } catch (nanoErr) {
-      throw err instanceof Error ? err : (nanoErr instanceof Error ? nanoErr : new Error('nano-banana-2 fallback thất bại'))
-    }
-  }
+  // Định tuyến qua model user CHỌN (nano | gpt-image-1.5-medium), tự đổi model
+  // kia khi time-out — xem generateImagePreferred. gpt-4o-image (gpt-image-1)
+  // đã bị KIE khai tử dần nên KHÔNG còn là primary. timeoutMs giữ ở chữ ký cho
+  // tương thích caller nhưng nano/gpt-15 tự quản poll timeout.
+  return generateImagePreferred({
+    apiKey: params.apiKey, prompt: params.prompt, size: params.size,
+    filesUrl: params.filesUrl, signal: params.signal, onStatusChange: params.onStatusChange,
+  })
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -539,88 +581,18 @@ export async function generateGpt4oImageFast(params: {
   onAttemptChange?: (attempt: number, total: number) => void
   onStatusChange?: (status: ImageStatus, progress?: number) => void
 }): Promise<string> {
-  const attemptTimeout = params.attemptTimeoutMs ?? 60_000
-  const softTimeout    = params.softTimeoutMs ?? 45_000
-  const maxAttempts    = params.maxAttempts ?? 2
-  let lastError: Error | null = null
-
-  // KIE nghẽn (manual mode HOẶC circuit breaker đang mở) → đi thẳng
-  // nano-banana-2, GIỮ product + avatar lock qua filesUrl. Khỏi phí thời gian
-  // dò gpt-4o-image khi ta đã biết backend OpenAI đang chậm.
-  if (isKieImageFallbackActive()) {
-    const p0 = typeof params.prompt === 'function' ? params.prompt(1) : params.prompt
-    console.log('[FAST] KIE fallback đang bật → bỏ qua gpt-4o, dùng nano-banana-2')
-    return generateImageNanoFallback({
-      apiKey: params.apiKey, prompt: p0, size: params.size,
-      filesUrl: params.filesUrl, signal: params.signal, onStatusChange: params.onStatusChange,
-    })
-  }
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    if (params.signal?.aborted) throw new Error('CANCELLED — user hủy task')
-    params.onAttemptChange?.(attempt, maxAttempts)
-    const currentPrompt = typeof params.prompt === 'function' ? params.prompt(attempt) : params.prompt
-    console.log(`[FAST attempt ${attempt}/${maxAttempts}] timeout=${Math.round(attemptTimeout / 1000)}s soft=${Math.round(softTimeout / 1000)}s promptLen=${currentPrompt.length} submit...`)
-
-    // Z18: soft timeout watcher — fires once at softTimeoutMs to log warning
-    const softTimer = setTimeout(() => {
-      console.warn(`[POLL_SOFT_TIMEOUT] attempt ${attempt}/${maxAttempts} — passed soft deadline ${Math.round(softTimeout / 1000)}s, will hard-timeout at ${Math.round(attemptTimeout / 1000)}s`)
-    }, softTimeout)
-
-    try {
-      const { taskId } = await submitGpt4oImage({
-        apiKey: params.apiKey,
-        prompt: currentPrompt,
-        filesUrl: params.filesUrl,
-        size: params.size,
-      })
-      const url = await pollGpt4oUntilDone({
-        apiKey: params.apiKey,
-        taskId,
-        timeoutMs: attemptTimeout,
-        signal: params.signal,
-        onStatusChange: params.onStatusChange,
-      })
-      console.log(`[FAST attempt ${attempt}/${maxAttempts}] DONE`)
-      noteKieGpt4oSuccess()
-      return url
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      lastError = err instanceof Error ? err : new Error(msg)
-
-      // Hard failures — never retry
-      if (
-        msg.includes('CANCELLED') ||
-        msg === 'INSUFFICIENT_CREDITS' ||
-        msg.includes('content_policy') ||
-        msg.includes('GENERATE_FAILED')
-      ) {
-        console.error(`[FAST attempt ${attempt}/${maxAttempts}] hard-fail (no retry): ${msg.slice(0, 120)}`)
-        throw lastError
-      }
-
-      // Timeout / network = backend gpt-4o-image (OpenAI) đang chậm. Retry
-      // gpt-4o vô ích (cùng backend, cùng đang nghẽn) → chuyển NGAY sang
-      // nano-banana-2 (Google, backend khác), GIỮ product + avatar lock qua
-      // filesUrl. Ghi nhận time-out để circuit breaker tự mở cho các ảnh sau.
-      noteKieGpt4oTimeout()
-      clearTimeout(softTimer)
-      console.warn(`[FAST attempt ${attempt}/${maxAttempts}] soft-fail: ${msg.slice(0, 100)} → fallback nano-banana-2`)
-      const pf = typeof params.prompt === 'function' ? params.prompt(attempt) : params.prompt
-      try {
-        return await generateImageNanoFallback({
-          apiKey: params.apiKey, prompt: pf, size: params.size,
-          filesUrl: params.filesUrl, signal: params.signal, onStatusChange: params.onStatusChange,
-        })
-      } catch (nanoErr) {
-        throw lastError ?? (nanoErr instanceof Error ? nanoErr : new Error('nano-banana-2 fallback thất bại'))
-      }
-    } finally {
-      clearTimeout(softTimer)
-    }
-  }
-
-  throw lastError ?? new Error('Hết lượt thử Fast mode — KIE backend có thể đang quá tải')
+  // Định tuyến qua model user CHỌN (nano | gpt-image-1.5-medium), tự đổi model
+  // kia khi time-out — xem generateImagePreferred. Các tham số fast
+  // (attemptTimeoutMs/softTimeoutMs/maxAttempts) giữ ở chữ ký cho tương thích
+  // caller video nhưng nano/gpt-15 tự quản poll timeout. onAttemptChange bắn 1
+  // lần để UI không treo. prompt dạng hàm → lấy bản attempt 1.
+  if (params.signal?.aborted) throw new Error('CANCELLED — user hủy task')
+  params.onAttemptChange?.(1, 1)
+  const prompt = typeof params.prompt === 'function' ? params.prompt(1) : params.prompt
+  return generateImagePreferred({
+    apiKey: params.apiKey, prompt, size: params.size,
+    filesUrl: params.filesUrl, signal: params.signal, onStatusChange: params.onStatusChange,
+  })
 }
 
 // ── Credits balance ───────────────────────────────────────────────────
