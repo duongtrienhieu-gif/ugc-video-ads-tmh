@@ -13,7 +13,7 @@ interface BoardResp {
 // Cache "số tốt gần nhất" trên máy: nếu lần load sau bị Google chặn (hoàn/aov rớt),
 // vẫn hiện số cũ thay vì để trống — nhân viên/CEO luôn có gì đó để theo dõi.
 const CACHE_KEY = 'war_spstats_v1'
-export interface SpStatsResult { stats: Record<string, SpStat>; profit: SpProfit[]; stale: boolean; at: number }
+export interface SpStatsResult { stats: Record<string, SpStat>; profit: SpProfit[]; stale: boolean; at: number; hoanByTeam?: Record<string, number>; hoanByTeamEst?: Record<string, boolean> }
 // "Tốt" = có sản phẩm + có ÍT NHẤT 1 mã ra %hoàn (QLHB tải được) + 1 mã ra AOV (SALE tải được)
 function isGood(stats: Record<string, SpStat>, profit: SpProfit[]): boolean {
   if (!profit.length) return false
@@ -31,11 +31,12 @@ export async function fetchSpStats(): Promise<SpStatsResult> {
   // Gọi SONG SONG: /api/inventory-board (5 file nhẹ) + /api/qlhb (file nặng, function riêng).
   const [boardR, qlhbR] = await Promise.allSettled([
     fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ links }), cache: 'no-store' }).then((r) => r.json() as Promise<BoardResp>),
-    fetch('/api/qlhb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link: links.qlhb ?? '' }), cache: 'no-store' }).then((r) => r.json() as Promise<{ hoanMap?: Record<string, number>; hoanEst?: Record<string, boolean> }>),
+    fetch('/api/qlhb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link: links.qlhb ?? '' }), cache: 'no-store' }).then((r) => r.json() as Promise<{ hoanMap?: Record<string, number>; hoanEst?: Record<string, boolean>; hoanByTeam?: Record<string, number>; hoanByTeamEst?: Record<string, boolean> }>),
   ])
   if (boardR.status === 'fulfilled') { const j = boardR.value; products = j.products ?? []; inv = j.inv ?? []; velocity = j.velocity ?? {}; priceVnd = j.priceVnd ?? {} }
   let hoanEst: Record<string, boolean> = {}
-  if (qlhbR.status === 'fulfilled') { hoanMap = qlhbR.value.hoanMap ?? {}; hoanEst = qlhbR.value.hoanEst ?? {} }
+  let hoanByTeam: Record<string, number> = {}, hoanByTeamEst: Record<string, boolean> = {}
+  if (qlhbR.status === 'fulfilled') { hoanMap = qlhbR.value.hoanMap ?? {}; hoanEst = qlhbR.value.hoanEst ?? {}; hoanByTeam = qlhbR.value.hoanByTeam ?? {}; hoanByTeamEst = qlhbR.value.hoanByTeamEst ?? {} }
   // Đè %hoàn từ QLHB vào products TRƯỚC khi tính lãi (computeProfit dùng pctHoan) + cờ ước tính.
   for (const p of products) { const k = p.name.trim().toUpperCase(); const h = hoanMap[k]; if (h != null) { p.pctHoan = h; p.hoanEstimated = hoanEst[k] ?? false } }
 
@@ -56,26 +57,26 @@ export async function fetchSpStats(): Promise<SpStatsResult> {
   }
 
   if (isGood(stats, profit)) {
-    const fresh: SpStatsResult = { stats, profit, stale: false, at: Date.now() }
-    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ stats, profit, at: fresh.at })) } catch { /* quota */ }
+    const fresh: SpStatsResult = { stats, profit, stale: false, at: Date.now(), hoanByTeam, hoanByTeamEst }
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ stats, profit, at: fresh.at, hoanByTeam, hoanByTeamEst })) } catch { /* quota */ }
     return fresh
   }
   // Load này thiếu (Google chặn) → dùng số tốt đã cache nếu có
   try {
     const c = localStorage.getItem(CACHE_KEY)
     if (c) {
-      const cached = JSON.parse(c) as { stats: Record<string, SpStat>; profit: SpProfit[]; at: number }
-      if (cached.profit?.length) return { stats: cached.stats, profit: cached.profit, stale: true, at: cached.at }
+      const cached = JSON.parse(c) as { stats: Record<string, SpStat>; profit: SpProfit[]; at: number; hoanByTeam?: Record<string, number>; hoanByTeamEst?: Record<string, boolean> }
+      if (cached.profit?.length) return { stats: cached.stats, profit: cached.profit, stale: true, at: cached.at, hoanByTeam: cached.hoanByTeam, hoanByTeamEst: cached.hoanByTeamEst }
     }
   } catch { /* parse lỗi */ }
-  return { stats, profit, stale: false, at: Date.now() } // chưa từng có cache → trả số hiện có (có thể thiếu)
+  return { stats, profit, stale: false, at: Date.now(), hoanByTeam, hoanByTeamEst } // chưa từng có cache → trả số hiện có (có thể thiếu)
 }
 
 // Đọc NGAY cache trên máy (đồng bộ) — để F5/mở lại hiện số liền, khỏi chờ ~1 phút tải Google.
 export function readCachedSpStats(): SpStatsResult | null {
   try {
     const c = localStorage.getItem(CACHE_KEY)
-    if (c) { const cached = JSON.parse(c) as { stats: Record<string, SpStat>; profit: SpProfit[]; at: number }; if (cached.profit?.length) return { stats: cached.stats, profit: cached.profit, stale: true, at: cached.at } }
+    if (c) { const cached = JSON.parse(c) as { stats: Record<string, SpStat>; profit: SpProfit[]; at: number; hoanByTeam?: Record<string, number>; hoanByTeamEst?: Record<string, boolean> }; if (cached.profit?.length) return { stats: cached.stats, profit: cached.profit, stale: true, at: cached.at, hoanByTeam: cached.hoanByTeam, hoanByTeamEst: cached.hoanByTeamEst } }
   } catch { /* ignore */ }
   return null
 }

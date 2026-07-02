@@ -48,15 +48,16 @@ export default function WarRoom() {
   const [tab, setTab] = useState<'me' | 'daily' | 'target' | 'viec' | 'test' | 'nhansu' | 'luong'>('me')
   const [stats, setStats] = useState<Record<string, SpStat>>({})
   const [profit, setProfit] = useState<SpProfit[]>([])
+  const [hoanByTeam, setHoanByTeam] = useState<Record<string, number>>({}) // hoàn theo team CHUẨN (sheet Tỉ lệ MKT)
   const [mktSp, setMktSp] = useState<Record<string, string[]>>({})
   const [teamFin, setTeamFin] = useState<Record<string, TeamFin>>({})
   const [stale, setStale] = useState(false)
 
-  const reloadStats = () => fetchSpStats().then((r) => { setStats(r.stats); setProfit(r.profit); setStale(r.stale) }).catch(() => {})
+  const reloadStats = () => fetchSpStats().then((r) => { setStats(r.stats); setProfit(r.profit); setStale(r.stale); setHoanByTeam(r.hoanByTeam ?? {}) }).catch(() => {})
   useEffect(() => { void load() }, [load])
   useEffect(() => {
     const cached = readCachedSpStats()
-    if (cached) { setStats(cached.stats); setProfit(cached.profit); setStale(true) } // F5 → hiện NGAY số đã cache
+    if (cached) { setStats(cached.stats); setProfit(cached.profit); setStale(true); setHoanByTeam(cached.hoanByTeam ?? {}) } // F5 → hiện NGAY số đã cache
     void reloadStats() // rồi tải mới ngầm, không chặn màn hình
     void fetchMarketerSp().then((r) => { setMktSp(r.marketerSp); setTeamFin(r.teamFin) }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,10 +122,10 @@ export default function WarRoom() {
         </div>
       )}
 
-      {effTab === 'me' && <MyBoard {...{ members, targets, tasks, stats, profit, isCEO, myMember, userEmail, updateTask, reloadStats, stale }} />}
+      {effTab === 'me' && <MyBoard {...{ members, targets, tasks, stats, profit, isCEO, myMember, userEmail, updateTask, reloadStats, stale, hoanByTeam }} />}
       {effTab === 'daily' && <DailyLog isCEO={isCEO} userEmail={userEmail} profit={profit} />}
       {isCEO && effTab === 'nhansu' && <NhanSu {...{ members, isCEO, mktSp, addMember, updateMember, deleteMember }} />}
-      {isCEO && effTab === 'target' && <TargetTab {...{ members, targets, stats, isCEO, setTarget, reloadStats }} />}
+      {isCEO && effTab === 'target' && <TargetTab {...{ members, targets, stats, isCEO, setTarget, reloadStats, hoanByTeam }} />}
       {isCEO && effTab === 'viec' && <ViecTab {...{ members, tasks, profit, spOwner, userEmail, addTask, updateTask, deleteTask }} />}
       {effTab === 'test' && <TestPipeline isCEO={isCEO} userEmail={userEmail} />}
       {effTab === 'luong' && <SalaryTab members={members} teamFin={teamFin} isCEO={isCEO} myMember={myMember} />}
@@ -140,12 +141,12 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 // ── BẢNG CỦA TÔI — buồng lái cá nhân: con số hôm nay · KPI tháng · việc của tôi ─
 // CEO chọn được từng nhân viên để soi dashboard của đứa đó. Tất cả ×5800 (qua aggregate/computeProfit), KHÔNG 6500.
-function MyBoard({ members, targets, tasks, stats, profit, isCEO, myMember, userEmail, updateTask, reloadStats, stale }: {
+function MyBoard({ members, targets, tasks, stats, profit, isCEO, myMember, userEmail, updateTask, reloadStats, stale, hoanByTeam }: {
   members: Member[]; targets: { member_id: string; period: string; metric: string; value: number }[]
   tasks: ReturnType<typeof useWarStore.getState>['tasks']; stats: Record<string, SpStat>; profit: SpProfit[]
   isCEO: boolean; myMember: Member | undefined; userEmail: string
   updateTask: (id: string, p: Partial<ReturnType<typeof useWarStore.getState>['tasks'][number]>) => Promise<void>
-  reloadStats: () => Promise<void>; stale: boolean
+  reloadStats: () => Promise<void>; stale: boolean; hoanByTeam: Record<string, number>
 }) {
   const openApp = useAppStore((s) => s.openApp)
   const [viewId, setViewId] = useState('')
@@ -162,7 +163,9 @@ function MyBoard({ members, targets, tasks, stats, profit, isCEO, myMember, user
     )
   }
 
-  const act = aggregate(view.sp_codes ?? [], stats)
+  const aggAct = aggregate(view.sp_codes ?? [], stats)
+  const thView = teamHoan(view.name, hoanByTeam) // hoàn CHUẨN theo team (sheet Tỉ lệ MKT)
+  const act = thView != null ? { ...aggAct, hoan: thView } : aggAct
   const tgt = (k: string) => targets.find((t) => t.member_id === view.id && t.period === 'month' && t.metric === k)?.value
   const tDt = tgt('dt'), tLai = tgt('lai'), tCpqc = tgt('cpqc'), tHoan = tgt('hoan')
 
@@ -252,7 +255,9 @@ function MyBoard({ members, targets, tasks, stats, profit, isCEO, myMember, user
           <div style={eyebrowStyle}>👥 TOÀN ĐỘI · {members.length} người — bấm 1 người để mở buồng lái chi tiết bên dưới</div>
           <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Số tháng tới giờ so với target tháng · nhịp = đã đi {Math.round(monthProgress * 100)}% tháng.</div>
           {members.map((m) => {
-            const a = aggregate(m.sp_codes ?? [], stats)
+            const aAgg = aggregate(m.sp_codes ?? [], stats)
+            const thM = teamHoan(m.name, hoanByTeam)
+            const a = thM != null ? { ...aAgg, hoan: thM } : aAgg
             const td = tgtOf(m.id, 'dt')
             const pb = paceBadge(a.dt, td, monthProgress)
             const sel = m.id === view.id
@@ -398,6 +403,17 @@ const TEAM_OF: Record<string, string> = {
   TUẤN: 'TITAN', TUAN: 'TITAN', ANH: 'TITAN',
   HÀ: 'SUMMIT', HA: 'SUMMIT', PHY: 'SUMMIT',
 }
+// Hoàn CHUẨN của team từ sheet "Tỉ lệ MKT" (key = APEX/SUMMIT/TITAN hoặc code MKT). Khớp tên
+// view/người → team → hoàn trực tiếp; không có thì trả undefined để caller giữ số suy-từ-product.
+function teamHoan(name: string, map: Record<string, number>): number | undefined {
+  if (!name || !Object.keys(map).length) return undefined
+  const tokens = name.toUpperCase().split(/[\s+,/]+/).filter(Boolean)
+  for (const t of tokens) {
+    if (map[t] != null) return map[t]
+    if (TEAM_OF[t] && map[TEAM_OF[t]] != null) return map[TEAM_OF[t]]
+  }
+  return undefined
+}
 // khớp tên nhân sự với data team (vd "HÀ + PHY" → team 'SUMMIT'); nhập "SUMMIT" cũng khớp.
 function spForMember(name: string, map: Record<string, string[]>): string[] {
   const tokens = name.toUpperCase().split(/[\s+,/]+/).filter(Boolean)
@@ -479,16 +495,18 @@ function TargetInput({ value, money, disabled, onSave }: { value: number | undef
       style={{ ...inp, width: money ? 150 : 90, textAlign: 'right', color: C.gold }} />
   )
 }
-function TargetTab({ members, targets, stats, isCEO, setTarget, reloadStats }: {
+function TargetTab({ members, targets, stats, isCEO, setTarget, reloadStats, hoanByTeam }: {
   members: Member[]; targets: { member_id: string; period: string; metric: string; value: number }[]
-  stats: Record<string, SpStat>; isCEO: boolean; setTarget: (m: string, p: string, k: string, v: number) => Promise<void>; reloadStats: () => Promise<void>
+  stats: Record<string, SpStat>; isCEO: boolean; setTarget: (m: string, p: string, k: string, v: number) => Promise<void>; reloadStats: () => Promise<void>; hoanByTeam: Record<string, number>
 }) {
   const [period, setPeriod] = useState('month')
   const [memberId, setMemberId] = useState('')
   const mkt = members.filter((m) => m.role === 'marketer')
   const sel = members.find((m) => m.id === memberId) || mkt[0] || members[0]
   if (!sel) return <div style={{ ...panelStyle, color: C.muted, textAlign: 'center' }}>Chưa có nhân sự. Thêm ở tab 👥 Nhân sự trước.</div>
-  const act = aggregate(sel.sp_codes ?? [], stats)
+  const aggAct = aggregate(sel.sp_codes ?? [], stats)
+  const thSel = teamHoan(sel.name, hoanByTeam)
+  const act = thSel != null ? { ...aggAct, hoan: thSel } : aggAct
   const actualOf = (k: string) => (k === 'dt' ? act.dt : k === 'lai' ? act.lai : k === 'cpqc' ? act.cpqc * 100 : act.hoan * 100)
   // CEO chỉ nhập target THÁNG; Tuần/Ngày TỰ SUY: số tiền (DT, Lãi) chia đều theo ngày trong tháng;
   // tỉ lệ (%CPQC, %Hoàn) GIỮ NGUYÊN (rate không chia theo thời gian).

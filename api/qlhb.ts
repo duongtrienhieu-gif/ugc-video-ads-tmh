@@ -72,7 +72,7 @@ function locateCols(ws: XLSX.WorkSheet): DsCols {
     headerRow,
   }
 }
-const SKIP_NAME = new Set(['', 'brand', 'product', 'province', 'tổng', 'total', 'sản phẩm', 'tỉnh'])
+const SKIP_NAME = new Set(['', 'brand', 'product', 'province', 'tổng', 'total', 'sản phẩm', 'tỉnh', 'mkt', 'project', 'team'])
 
 // QLHB "Tỉ lệ sản phẩm" → hoàn Cách A theo SP + ĐỘ CHÍN. hoàn = (return+returned)/(total−pending)[DS].
 // mature = resolved/total ≥ 0.5 (≥ nửa DS đã có kết quả giao/hoàn). Đầu tháng đơn còn đang giao →
@@ -133,9 +133,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // fetch MỘT MÌNH, timeout rộng (50s) — function này chỉ làm QLHB nên có cả 60s.
     const r = await tfetch(`https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`, 50000)
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
-    const wb = XLSX.read(Buffer.from(await r.arrayBuffer()), { type: 'buffer', sheets: ['Tỉ lệ sản phẩm', 'Tỉ lệ tỉnh'] })
+    const wb = XLSX.read(Buffer.from(await r.arrayBuffer()), { type: 'buffer', sheets: ['Tỉ lệ sản phẩm', 'Tỉ lệ tỉnh', 'Tỉ lệ MKT'] })
     const sp = wb.Sheets['Tỉ lệ sản phẩm']
     const tinh = wb.Sheets['Tỉ lệ tỉnh']
+    const mkt = wb.Sheets['Tỉ lệ MKT']
     if (!sp) throw new Error('Không thấy sheet Tỉ lệ sản phẩm')
     const live = buildHoanMap(sp)
     const cached = await cacheRead()
@@ -154,6 +155,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cacheBaseline: Record<string, number> = { ...cachedHoan }
     for (const n of live.mature) cacheBaseline[n] = live.rate[n]
 
+    // ── HOÀN THEO TEAM/MKT (sheet "Tỉ lệ MKT") — cho War Room hiện hoàn team CHUẨN,
+    // không phải suy từ product. Cùng cơ chế độ-chín + cache như hoàn sản phẩm.
+    const liveTeam = mkt ? buildHoanMap(mkt) : { rate: {}, mature: new Set<string>() }
+    const cachedTeam = (cached?.hoanByTeam as Record<string, number> | undefined) ?? {}
+    const hoanByTeam: Record<string, number> = {}
+    const hoanByTeamEst: Record<string, boolean> = {}
+    for (const [n, v] of Object.entries(cachedTeam)) { hoanByTeam[n] = v; hoanByTeamEst[n] = true }
+    for (const [n, v] of Object.entries(liveTeam.rate)) { if (!(n in hoanByTeam)) { hoanByTeam[n] = v; hoanByTeamEst[n] = true } }
+    for (const n of liveTeam.mature) { hoanByTeam[n] = liveTeam.rate[n]; hoanByTeamEst[n] = false }
+    const teamBaseline: Record<string, number> = { ...cachedTeam }
+    for (const n of liveTeam.mature) teamBaseline[n] = liveTeam.rate[n]
+
     // Dòng tiền / bom tỉnh = THÁNG HIỆN TẠI; rỗng hẳn (đầu tháng) thì lấy cache để khỏi trống.
     const liveCash = parseCashflow(sp)
     const liveProv = tinh ? parseProvinces(tinh) : []
@@ -164,10 +177,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ok = Object.keys(hoanMap).length > 0
     const estCount = Object.values(hoanEst).filter(Boolean).length
     if (ok && Object.keys(cacheBaseline).length) {
-      await cacheWrite({ hoanMap: cacheBaseline, cashflow, provinces } as unknown as Record<string, unknown>)
+      await cacheWrite({ hoanMap: cacheBaseline, hoanByTeam: teamBaseline, cashflow, provinces } as unknown as Record<string, unknown>)
     }
     res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300')
-    return res.status(200).json({ ok, hoanMap, hoanEst, estCount, cashflow, provinces, cached: false })
+    return res.status(200).json({ ok, hoanMap, hoanEst, estCount, hoanByTeam, hoanByTeamEst, cashflow, provinces, cached: false })
   } catch (e) {
     // QLHB chậm/lỗi → trả số tốt đã cache server (nếu có) để hoàn không bị trống
     const cached = await cacheRead()
