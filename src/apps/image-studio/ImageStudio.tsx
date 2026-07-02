@@ -1,9 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────
-// Xưởng Ảnh — gộp 2 mode vào 1 app (dọn sidebar):
+// Xưởng Ảnh — gộp 3 mode vào 1 app (dọn sidebar):
 //   • Quà tặng kèm     → GiftStudio
 //   • Thiết kế Form Sale → FormBgStudio
-// Wrapper chỉ thêm thanh chọn mode + ẩn header con (truyền embedded). Logic
-// 2 mode giữ nguyên trong app gốc.
+//   • Re-Brand          → RebrandStudio
+// Wrapper thêm thanh chọn mode + PICKER model tạo ảnh (nano ↔ gpt-1.5) với
+// credit CHÍNH XÁC theo số ảnh mỗi mode. Logic 2 mode giữ nguyên trong app gốc.
 // ─────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react'
@@ -13,9 +14,12 @@ import FormBgStudio from '../form-bg-studio/FormBgStudio'
 import RebrandStudio from '../rebrand-studio/RebrandStudio'
 import AppHeader from '../../components/shell/AppHeader'
 import SegmentTabs from '../../components/shell/SegmentTabs'
-import { GIFT_TOTAL_CREDITS } from '../gift-studio/types'
-import { FORM_BG_TOTAL_CREDITS } from '../form-bg-studio/types'
-import { REBRAND_TOTAL_CREDITS } from '../rebrand-studio/types'
+import ImageModelPicker from '../../components/ImageModelPicker'
+import { useSettingsStore } from '../../stores/settingsStore'
+import { imageModelCredits } from '../../utils/imageModelInfo'
+import { GIFT_TOTAL_IMAGES } from '../gift-studio/types'
+import { FORM_BG_VARIANTS } from '../form-bg-studio/types'
+import { REBRAND_AI_IMAGES } from '../rebrand-studio/types'
 
 type Mode = 'gift' | 'form' | 'rebrand'
 const MODE_KEY = 'image-studio-mode-v1'
@@ -31,13 +35,15 @@ function loadMode(): Mode {
 
 export default function ImageStudio() {
   const [mode, setMode] = useState<Mode>(loadMode)
+  const imageModel = useSettingsStore((s) => s.imageModel)
 
   function pick(m: Mode) {
     setMode(m)
     try { localStorage.setItem(MODE_KEY, m) } catch { /* ignore */ }
   }
 
-  const credit = mode === 'gift' ? GIFT_TOTAL_CREDITS : mode === 'form' ? FORM_BG_TOTAL_CREDITS : REBRAND_TOTAL_CREDITS
+  const count = mode === 'gift' ? GIFT_TOTAL_IMAGES : mode === 'form' ? FORM_BG_VARIANTS : REBRAND_AI_IMAGES
+  const credit = imageModelCredits(imageModel, count)
 
   return (
     <div className="flex h-full flex-col bg-app-base">
@@ -57,7 +63,7 @@ export default function ImageStudio() {
 
       {/* Mode switcher — the 3 sub-studios */}
       <div className="shrink-0 border-b border-app-border px-3 py-2">
-        <div className="mx-auto max-w-xl">
+        <div className="mx-auto max-w-xl space-y-2">
           <SegmentTabs
             value={mode}
             onChange={pick}
@@ -67,6 +73,8 @@ export default function ImageStudio() {
               { value: 'rebrand', label: '🏷 Re-Brand' },
             ]}
           />
+          {/* Chọn model tạo ảnh TRƯỚC khi tạo — credit hiện theo số ảnh mode này */}
+          <ImageModelPicker count={count} />
         </div>
       </div>
 
