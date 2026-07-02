@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { EyebrowLabel } from '../cinematic'
 
 interface AppHeaderProps {
   /** Lucide icon component for the accent chip. */
@@ -24,29 +23,30 @@ interface AppHeaderProps {
  * whole product reads as one studio.
  */
 export default function AppHeader({ icon: Icon, eyebrow, rec, title, subtitle, center, actions }: AppHeaderProps) {
+  // Thanh tiêu đề 1 DÒNG mỏng (~30px) — trước đây là band ~72px xếp 3 dòng
+  // eyebrow/title/subtitle chiếm cả dải ngang phía trên đẩy nội dung xuống.
+  // Gộp về 1 dòng: icon nhỏ + tên app + mô tả inline (ẩn ở mobile), actions
+  // dồn phải + wrap. Trả lại chiều cao cho vùng output ở MỌI app.
   return (
-    <header className="shrink-0 border-b border-app-border bg-app-surface px-3 py-1.5 sm:px-5 sm:py-2">
-      {/* Mobile: stack dọc (tiêu đề trên, actions xuống dòng) để actions nhiều
-          chip không ép cột tiêu đề co lại làm chữ dồn dọc + tràn phải.
-          sm+ trở lên: 1 hàng như cũ. */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-        <div className="flex min-w-0 items-center gap-2.5">
+    <header className="shrink-0 border-b border-app-border bg-app-surface px-3 sm:px-5">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 py-1.5">
+        <div className="flex min-w-0 items-center gap-2">
           {Icon && (
             <span
-              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:flex"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
               style={{ backgroundColor: 'var(--color-accent-dim)' }}
             >
-              <Icon className="h-4 w-4" style={{ color: 'var(--color-accent)' }} strokeWidth={2} />
+              <Icon className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} strokeWidth={2} />
             </span>
           )}
-          <div className="min-w-0">
-            {eyebrow && <EyebrowLabel rec={rec} className="mb-0.5">{eyebrow}</EyebrowLabel>}
-            <h1 className="truncate text-[15px] font-bold leading-tight text-app-text sm:text-base">{title}</h1>
-            {subtitle && <p className="truncate text-[11px] leading-tight text-app-subtle sm:text-xs">{subtitle}</p>}
-          </div>
+          {rec && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" style={{ backgroundColor: 'var(--color-rec)' }} />}
+          <h1 className="truncate text-sm font-bold leading-none text-app-text">{title}</h1>
+          {(subtitle || eyebrow) && (
+            <span className="hidden truncate text-[11px] leading-none text-app-subtle sm:inline">· {subtitle || eyebrow}</span>
+          )}
         </div>
         {center && <div className="hidden min-w-0 flex-1 lg:block">{center}</div>}
-        {actions && <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap sm:shrink-0">{actions}</div>}
+        {actions && <div className="ml-auto flex flex-wrap items-center gap-1.5">{actions}</div>}
       </div>
     </header>
   )
