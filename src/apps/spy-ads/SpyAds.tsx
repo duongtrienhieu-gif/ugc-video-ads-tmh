@@ -2,7 +2,7 @@
 // Khác "Video win" (organic): đây là ad MKT đối thủ đang chạy → tải về dựng lại cho FB ads.
 // Win signal: đang ACTIVE + chạy lâu + advertiser nhiều ad. AI dịch VO + bóc kịch bản cắt ghép.
 import { useState, useRef, useEffect } from 'react'
-import { Megaphone, Search, Play, Download, ExternalLink, X, Sparkles, Link2, FileText, PenLine, Target, Flame } from 'lucide-react'
+import { Megaphone, Search, Play, Download, ExternalLink, X, Sparkles, Link2, FileText, PenLine, Radio } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useBankStore } from '../../stores/bankStore'
 import { useAppStore } from '../../stores/appStore'
@@ -14,6 +14,16 @@ interface FbAd {
   advertiserAds: number; libraryUrl: string; likes?: number; ctr?: string
   variations?: number; cta?: string; platforms?: string[]; format?: string
   reach?: number; spend?: string; currency?: string; durationSec?: number
+  views?: number   // video kênh (mode channel): lượt xem
+}
+// Tách @handle / user_id từ ô nhập tự do (tên kênh · link tiktok · id số).
+function parseHandle(raw: string): { handle: string; userId: string } {
+  const s = raw.trim()
+  const at = s.match(/@[\w.]+/)                       // @user (kể cả trong link tiktok.com/@user/video/..)
+  if (at) return { handle: at[0].replace(/^@/, ''), userId: '' }
+  if (/^\d{6,}$/.test(s)) return { handle: '', userId: s }   // id số thuần
+  const bare = s.replace(/^https?:\/\/[^/]+\//i, '').split(/[/?#]/)[0]
+  return { handle: bare.replace(/^@/, ''), userId: '' }
 }
 const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : String(n))
 const fmtDur = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`
@@ -30,8 +40,6 @@ function isSpamAd(a: { page?: string; text?: string; linkUrl?: string; cta?: str
 interface AdRead { transcript: string; structure: string }
 interface LadiRead { headline: string; offer: string; structure: string; cta: string; steal: string }
 interface AdaptScript { hook: string; script: string; shots: string; caption: string }
-// SP win từ TikTok Shop (tái dùng /api/research) — Bước 1 của Radar.
-interface WinProduct { productId: string; title: string; imageUrl: string; sale: number; unitPrice: string; seller: string; url: string; niche: string }
 // 🔗 Link salepage/ladipage bóc từ ad (tab Tìm Salepage).
 interface FoundLink {
   url: string; domain: string; kindLabel: string; kindEmoji: string; web: boolean
@@ -78,9 +86,6 @@ function parseAngles(raw: string): string[] {
   for (const a of Array.isArray(obj.angles) ? obj.angles : []) push(a)
   return out.slice(0, 6)
 }
-// Ngách COD phổ biến để bấm dò nhanh (Bước 1).
-const NICHE_CHIPS = ['kurus', 'collagen', 'sakit lutut', 'sakit sendi', 'jerawat', 'gugur rambut', 'kencing manis', 'buasir', 'gastrik', 'detox', 'pemutih', 'tenaga batin']
-
 // FB hay bọc link đích trong l.facebook.com/l.php?u=... → gỡ ra link thật.
 function cleanLink(u: string): string {
   try {
@@ -128,18 +133,22 @@ export default function SpyAds() {
   const sendToApp = useAppStore((s) => s.sendToApp)
   const addToast = useAppStore((s) => s.addToast)
 
-  const [mode, setMode] = useState<'radar' | 'ads' | 'links'>('radar') // 🎯 Radar SP win | 🔍 tìm ad | 🔗 tìm salepage
+  const [mode, setMode] = useState<'channel' | 'ads' | 'links'>('channel') // 📺 Video theo kênh | 🔍 tìm ad | 🔗 tìm salepage
   // Mobile: ẩn bộ chip gợi ý từ khóa (ngách/COD) cho đỡ chiếm chỗ che output;
   // bấm "Gợi ý" để bung. Desktop (lg+) luôn hiện nên không ảnh hưởng.
   const [chipsOpen, setChipsOpen] = useState(false)
   const [platform, setPlatform] = useState<'fb' | 'tiktok'>('fb')
   const [q, setQ] = useState('')
-  // Radar SP win (Bước 1): dò TikTok Shop theo ngách
-  const [niche, setNiche] = useState('')
-  const [winners, setWinners] = useState<WinProduct[] | null>(null)
-  const [radarLoading, setRadarLoading] = useState(false)
-  const [radarErr, setRadarErr] = useState<string | null>(null)
-  const [spyingFor, setSpyingFor] = useState<string | null>(null) // tên SP đang spy ad (breadcrumb)
+  // 📺 Video theo kênh — dán tên kênh/link/id → tải TẤT CẢ video kênh (kể cả video dính giỏ TikTok Shop).
+  const [chInput, setChInput] = useState('')
+  const [chSort, setChSort] = useState<'latest' | 'popular'>('popular')
+  const [chVids, setChVids] = useState<FbAd[] | null>(null)     // dùng FbAd để tái dùng modal/tải
+  const [chLoading, setChLoading] = useState(false)
+  const [chErr, setChErr] = useState<string | null>(null)
+  const [chCursor, setChCursor] = useState<string | null>(null)
+  const [chHasMore, setChHasMore] = useState(false)
+  const [chMoreLoading, setChMoreLoading] = useState(false)
+  const [chTitle, setChTitle] = useState<string>('')           // tên kênh hiển thị
   // Phase 2a — xem tất cả ad của 1 advertiser
   const [viewPageId, setViewPageId] = useState<string | null>(null)
   const [viewPageName, setViewPageName] = useState<string | null>(null)
@@ -293,20 +302,36 @@ export default function SpyAds() {
     } finally { setMoreLoading(false) }
   }
 
-  // Bước 1 — Radar: dò SP đang bán chạy trên TikTok Shop (tái dùng /api/research).
-  const radarSearch = async (term?: string) => {
-    const nq = (term ?? niche).trim()
-    if (!nq) { setRadarErr('Nhập ngách (vd: kurus, collagen…)'); return }
-    if (term != null) setNiche(term)
-    setRadarLoading(true); setRadarErr(null); setWinners(null)
+  // 📺 Video theo kênh: dán tên kênh/link/id → /api/research-videos?mode=profile → TẤT CẢ video kênh.
+  // Map về FbAd để tái dùng modal xem + tải + tải hàng loạt. Video CDN mp4 → PC phát được dù dính giỏ.
+  interface ChVid { id: string; desc: string; author: string; handle: string; views: number; likes: number; cover: string; downloadUrl: string; url: string; durationSec: number }
+  const toFbAd = (v: ChVid, handle: string): FbAd => ({
+    id: v.id, page: v.author || (v.handle ? '@' + v.handle : handle ? '@' + handle : '(kênh)'), pageId: '',
+    text: v.desc || '', videoUrl: v.downloadUrl, cover: v.cover, linkUrl: '', country,
+    isActive: false, daysRunning: 0, advertiserAds: 0, libraryUrl: v.url || '',
+    likes: v.likes, views: v.views, durationSec: v.durationSec,
+  })
+  const fetchChannel = async (more = false) => {
+    const { handle, userId } = parseHandle(chInput)
+    if (!handle && !userId) { setChErr('Dán tên kênh / link TikTok / ID kênh'); return }
+    if (more) { if (!chCursor || chMoreLoading) return; setChMoreLoading(true) }
+    else { setChLoading(true); setChErr(null); setChVids(null); setChCursor(null); setChHasMore(false); setSelected(new Set()); setChTitle(handle ? '@' + handle : userId) }
     try {
-      const d = await fetch(`/api/research?market=${country}&niches=${encodeURIComponent(nq)}&amount=50`).then((r) => r.json())
-      if (d.error) { setRadarErr(d.error); setRadarLoading(false); return }
-      const list: WinProduct[] = Array.isArray(d.products) ? d.products : []
-      setWinners(list)
+      let u = `/api/research-videos?mode=profile&region=${country}&sort_by=${chSort}`
+      if (handle) u += `&handle=${encodeURIComponent(handle)}`
+      if (userId) u += `&user_id=${encodeURIComponent(userId)}`
+      if (more && chCursor) u += `&cursor=${encodeURIComponent(chCursor)}`
+      const d = await fetch(u).then((r) => r.json())
+      if (d.error) { setChErr(d.error); return }
+      const vids: ChVid[] = Array.isArray(d.videos) ? d.videos : []
+      const mapped = vids.map((v) => toFbAd(v, handle))
+      if (mapped[0]?.page && !more) setChTitle(mapped[0].page)
+      setChVids((prev) => (more ? [...(prev || []), ...mapped] : mapped))
+      setChCursor(d.cursor != null ? String(d.cursor) : null)
+      setChHasMore(!!d.hasMore && d.cursor != null)
       setCredits(d.credits ?? credits)
-      if (!list.length) setRadarErr('Không thấy SP — đổi ngách/nước')
-    } catch (e) { setRadarErr((e as Error).message) } finally { setRadarLoading(false) }
+      if (!more && !mapped.length) setChErr(d.note || 'Kênh không có video — kiểm tra tên kênh')
+    } catch (e) { setChErr((e as Error).message) } finally { setChLoading(false); setChMoreLoading(false) }
   }
 
   // Đổi quốc gia → BẮT BUỘC trả đúng nước đó: xoá cache 2 tab + tự tìm lại theo nước mới.
@@ -315,37 +340,14 @@ export default function SpyAds() {
     if (firstCountry.current) { firstCountry.current = false; return }
     adCache.current = { fb: { ads: null, cursor: null, hasMore: false, q: '' }, tiktok: { ads: null, cursor: null, hasMore: false, q: '' } }
     if (mode === 'ads' && q.trim()) void search()
-    else if (mode === 'radar' && niche.trim()) void radarSearch()
+    else if (mode === 'channel' && chInput.trim()) void fetchChannel()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [country])
-
-  // Bước 2 — bắc cầu: từ 1 SP win → rút lõi từ khóa → spy ad của SP đó (luồng cũ).
-  const spyProduct = async (p: WinProduct) => {
-    setSpyingFor(p.title)
-    setMode('ads')
-    setLoading(true)
-    // Tên SP TikTok Shop thường DÀI → FB Ad Library (keyword_unordered = phải chứa MỌI từ)
-    // tìm 0 kết quả. Rút về 1-2 từ khóa NGẮN: ưu tiên AI, fallback ngách đã search, rồi 2 token đầu.
-    let kw = ''
-    if (geminiApiKey) {
-      try {
-        const raw = await directGeminiText({
-          apiKey: geminiApiKey,
-          prompt: `Tên sản phẩm bán chạy trên TikTok Shop: "${p.title}" (ngách: ${p.niche || niche || '—'}). Rút 1-2 TỪ KHÓA NGẮN bằng tiếng Malay hoặc English để tìm quảng cáo Facebook cùng loại sản phẩm/ngách này (vd "sakit lutut", "collagen", "jam tangan"). CHỈ trả từ khóa, không giải thích, không ngoặc kép.`,
-          temperature: 0.3, maxOutputTokens: 30,
-        })
-        kw = raw.replace(/["\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)
-      } catch { /* fallback bên dưới */ }
-    }
-    if (!kw) kw = (p.niche || niche || '').trim()
-    if (!kw) kw = coreTerms(p.title).split(/\s+/).slice(0, 2).join(' ')
-    void search(kw)
-  }
 
   // Phase 2a — xem TẤT CẢ ad đang chạy của 1 advertiser (company/ads theo pageId).
   const viewAdvertiser = async (pageId?: string, name?: string) => {
     if (!pageId) { addToast('Ad này thiếu pageId — không xem được advertiser', 'error'); return }
-    setMode('ads'); setSpyingFor(null); setPlayAd(null)
+    setMode('ads'); setPlayAd(null)
     setViewPageId(pageId); setViewPageName(name || '(advertiser)')
     setLoading(true); setError(null); setAds(null); setCursor(null); setHasMore(false); setSelected(new Set())
     try {
@@ -538,7 +540,7 @@ CHỈ trả JSON.`
     document.body.appendChild(el); el.click(); el.remove()
   }
   const downloadSelected = async () => {
-    const list = (ads || []).filter((a) => selected.has(a.id) && a.videoUrl)
+    const list = [...(ads || []), ...(chVids || [])].filter((a) => selected.has(a.id) && a.videoUrl)
     if (!list.length) return
     addToast(`Đang tải ${list.length} video… (cho phép tải nhiều file nếu trình duyệt hỏi)`, 'success')
     for (let i = 0; i < list.length; i++) { downloadOne(list[i], i); await new Promise((r) => setTimeout(r, 900)) }
@@ -724,15 +726,15 @@ CHỈ trả JSON.`
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-100"><Megaphone className="h-4 w-4 text-rose-600" /></div>
           <div>
             <h1 className="text-base font-bold text-slate-800">Spy Ads — Quảng cáo đối thủ</h1>
-            <p className="text-[11px] text-slate-400">{mode === 'radar' ? 'Dò SP đang bán chạy (TikTok Shop) → spy ad của SP đó để clone' : (platform === 'fb' ? 'Video ads đang chạy trên Facebook Ad Library' : 'Top video ads TikTok (Creative Center)') + ' → tải về dựng lại cho FB ads'}</p>
+            <p className="text-[11px] text-slate-400">{mode === 'channel' ? 'Dán tên kênh / link / ID → xem + tải TẤT CẢ video kênh (kể cả video dính giỏ TikTok Shop, PC xem được)' : (platform === 'fb' ? 'Video ads đang chạy trên Facebook Ad Library' : 'Top video ads TikTok (Creative Center)') + ' → tải về dựng lại cho FB ads'}</p>
           </div>
           {credits != null && <span className="ml-auto text-xs text-slate-400">credit: {credits}</span>}
         </div>
         {/* Mode + nước (dùng chung 2 mode) */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
-            <button onClick={() => setMode('radar')}
-              className={`rounded-md px-3 py-1 text-xs font-semibold ${mode === 'radar' ? 'bg-rose-600 text-white' : 'text-slate-500'}`}>🎯 Radar SP win</button>
+            <button onClick={() => setMode('channel')}
+              className={`rounded-md px-3 py-1 text-xs font-semibold ${mode === 'channel' ? 'bg-rose-600 text-white' : 'text-slate-500'}`}>📺 Video theo kênh</button>
             <button onClick={() => setMode('ads')}
               className={`rounded-md px-3 py-1 text-xs font-semibold ${mode === 'ads' ? 'bg-rose-600 text-white' : 'text-slate-500'}`}>🔍 Tìm ad theo từ khóa</button>
             <button onClick={() => setMode('links')}
@@ -743,49 +745,34 @@ CHỈ trả JSON.`
           </select>
         </div>
 
-        {/* MODE: Radar SP win — dò TikTok Shop theo ngách (Bước 1) */}
-        {mode === 'radar' && (
+        {/* MODE: Video theo kênh — dán tên kênh/link/id → tất cả video kênh */}
+        {mode === 'channel' && (
           <>
             <div className="flex flex-wrap items-center gap-2">
               <input
-                value={niche} onChange={(e) => setNiche(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void radarSearch() }}
-                placeholder="ngách COD (vd: kurus, collagen, sakit lutut…) → tìm SP đang bán chạy"
+                value={chInput} onChange={(e) => setChInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void fetchChannel() }}
+                placeholder="tên kênh (@user) · link TikTok (tiktok.com/@user) · ID kênh → xem tất cả video"
                 className="min-w-[260px] flex-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm"
               />
-              <button onClick={() => void radarSearch()} disabled={radarLoading}
-                className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50">
-                <Target className="h-4 w-4" /> {radarLoading ? 'Đang dò…' : 'Dò SP win'}
-              </button>
-              {radarErr && <span className="text-xs text-red-500">{radarErr}</span>}
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-medium text-slate-400">Ngách:</span>
-              <button onClick={() => setChipsOpen((v) => !v)}
-                className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-600 lg:hidden">
-                Gợi ý {chipsOpen ? '▴' : '▾'}
-              </button>
-              <div className={`${chipsOpen ? 'contents' : 'hidden'} lg:contents`}>
-                {NICHE_CHIPS.map((c) => (
-                  <button key={c} onClick={() => void radarSearch(c)} disabled={radarLoading}
-                    className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50">
-                    {c}
-                  </button>
-                ))}
+              <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
+                <button onClick={() => { setChSort('popular'); if (chInput.trim()) void fetchChannel() }}
+                  className={`rounded-md px-3 py-1 text-xs font-semibold ${chSort === 'popular' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>🔥 Nổi bật</button>
+                <button onClick={() => { setChSort('latest'); if (chInput.trim()) void fetchChannel() }}
+                  className={`rounded-md px-3 py-1 text-xs font-semibold ${chSort === 'latest' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>🆕 Mới nhất</button>
               </div>
+              <button onClick={() => void fetchChannel()} disabled={chLoading}
+                className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50">
+                <Radio className="h-4 w-4" /> {chLoading ? 'Đang tải…' : 'Xem video kênh'}
+              </button>
+              {chErr && <span className="text-xs text-red-500">{chErr}</span>}
             </div>
+            <p className="text-[11px] text-slate-400">💡 Video dính giỏ TikTok Shop trên PC không xem được ở tiktok.com — ở đây phát + tải bình thường (file gốc, không logo). Dán <b>kênh creator</b>, không phải link gian hàng shop.</p>
           </>
         )}
 
         {/* MODE: Tìm ad theo từ khóa (luồng cũ) */}
         {mode === 'ads' && (
           <>
-            {spyingFor && (
-              <div className="flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-1.5 text-xs text-rose-700">
-                <span>🎯 Đang spy ad cho SP: <b>{spyingFor}</b></span>
-                <button onClick={() => { setSpyingFor(null); setMode('radar') }}
-                  className="ml-auto rounded-md border border-rose-200 bg-white px-2 py-0.5 font-semibold hover:bg-rose-100">← Về Radar</button>
-              </div>
-            )}
             {viewPageName && (
               <div className="flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs text-indigo-700">
                 <span>📢 Tất cả ad của advertiser: <b>{viewPageName}</b></span>
@@ -946,53 +933,60 @@ CHỈ trả JSON.`
 
       {/* Results */}
       <main className="flex-1 overflow-y-auto p-5">
-        {/* ── MODE RADAR: SP đang bán chạy ── */}
-        {mode === 'radar' && (
+        {/* ── MODE VIDEO THEO KÊNH ── */}
+        {mode === 'channel' && (
           <>
-            {!winners && !radarLoading && (
+            {!chVids && !chLoading && (
               <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-black/10 text-center text-slate-400">
-                <Target className="h-8 w-8" />
-                <p className="text-sm">Nhập ngách + chọn nước → <b>Dò SP win</b>.</p>
-                <p className="text-xs">Xếp theo <b>số đã bán</b> (sự thật bán hàng) → bấm <b>Spy ad SP này</b> để kéo creative về clone.</p>
+                <Radio className="h-8 w-8" />
+                <p className="text-sm">Dán <b>tên kênh / link TikTok / ID</b> → <b>Xem video kênh</b>.</p>
+                <p className="text-xs">Hiện <b>tất cả video</b> của kênh — kể cả video gắn giỏ TikTok Shop (PC xem được). Bấm để phát, tải lẻ hoặc tải hàng loạt.</p>
               </div>
             )}
-            {radarLoading && <div className="py-10 text-center text-sm text-slate-400">Đang dò SP bán chạy trên TikTok Shop…</div>}
-            {winners && winners.length > 0 && (
+            {chLoading && <div className="py-10 text-center text-sm text-slate-400">Đang tải video của kênh…</div>}
+            {chVids && chVids.length > 0 && (
               <>
-                <div className="mb-2 text-xs font-semibold text-slate-500">{winners.length} SP — xếp theo 🔥 đã bán</div>
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
-                  {winners.map((p, i) => (
-                    <div key={p.productId} className="flex flex-col overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm">
-                      <div className="relative aspect-square bg-slate-100">
-                        {p.imageUrl ? <img src={p.imageUrl} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
-                        {i < 3 && <span className="absolute left-1.5 top-1.5 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-900">#{i + 1}</span>}
-                        <span className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
-                          <Flame className="h-3 w-3 text-orange-400" /> {fmtK(p.sale)} bán
-                        </span>
-                      </div>
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-500">📺 {chTitle} · {chVids.length} video ({chSort === 'popular' ? '🔥 nổi bật' : '🆕 mới nhất'})</span>
+                  <button onClick={() => selectMany(chVids)}
+                    className="ml-auto rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50">✓ Chọn tất cả</button>
+                </div>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
+                  {chVids.map((a) => (
+                    <div key={a.id} className={`relative flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm ${selected.has(a.id) ? 'border-rose-400 ring-2 ring-rose-300' : 'border-black/10'}`}>
+                      <button onClick={(e) => { e.stopPropagation(); toggleSel(a.id) }} title="Chọn để tải hàng loạt"
+                        className={`absolute right-1.5 top-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold shadow ${selected.has(a.id) ? 'border-rose-500 bg-rose-500 text-white' : 'border-white/70 bg-black/40 text-white/80'}`}>
+                        {selected.has(a.id) ? '✓' : ''}
+                      </button>
+                      <button onClick={() => openAd(a)} className="relative flex aspect-[3/4] items-center justify-center bg-slate-900">
+                        {a.cover ? <img src={a.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
+                        <Play className="absolute h-10 w-10 text-white/90 drop-shadow" />
+                        {a.durationSec ? <span className="absolute bottom-1.5 right-1.5 rounded bg-black/75 px-1.5 py-0.5 text-[10px] font-bold text-white">⏱ {fmtDur(a.durationSec)}</span> : null}
+                        {a.views ? <span className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white">👁 {fmtK(a.views)}</span> : null}
+                      </button>
                       <div className="flex flex-1 flex-col gap-1 p-2.5">
-                        <p className="line-clamp-2 text-[11px] font-semibold text-slate-700">{p.title}</p>
-                        <div className="flex flex-wrap gap-x-2 text-[10px] font-medium text-slate-500">
-                          {p.unitPrice && <span>{p.unitPrice}</span>}
-                          {p.seller && <span className="line-clamp-1">🏪 {p.seller}</span>}
-                        </div>
-                        <div className="mt-auto flex gap-1.5 pt-1.5">
-                          <button onClick={() => void spyProduct(p)}
-                            className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-rose-600 py-1.5 text-[11px] font-semibold text-white hover:bg-rose-700">
-                            <Target className="h-3 w-3" /> Spy ad SP này
+                        <p className="line-clamp-2 text-[11px] text-slate-600">{a.text || '(không mô tả)'}</p>
+                        <div className="mt-auto flex items-center gap-2 pt-1">
+                          <button onClick={() => downloadOne(a)}
+                            className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-[11px] font-semibold text-violet-700 hover:bg-violet-100">
+                            <Download className="h-3 w-3" /> Tải
                           </button>
-                          {p.url && (
-                            <a href={p.url} target="_blank" rel="noopener noreferrer" title="Mở trên TikTok Shop"
-                              className="flex items-center justify-center rounded-lg border border-black/10 bg-slate-50 px-2 py-1.5 text-slate-600 hover:bg-slate-100">
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </a>
-                          )}
+                          {a.likes ? <span className="text-[10px] font-medium text-slate-400">❤️ {fmtK(a.likes)}</span> : null}
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
+                {chHasMore && (
+                  <button onClick={() => void fetchChannel(true)} disabled={chMoreLoading}
+                    className="mt-4 w-full rounded-xl border border-rose-300 bg-white py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">
+                    {chMoreLoading ? 'Đang tải…' : '↻ Tải thêm video'}
+                  </button>
+                )}
               </>
+            )}
+            {chVids && chVids.length === 0 && !chLoading && (
+              <p className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">{chErr || 'Kênh không có video.'}</p>
             )}
           </>
         )}

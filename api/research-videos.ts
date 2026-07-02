@@ -35,6 +35,8 @@ interface Aweme {
   author?: { unique_id?: string; nickname?: string }
   video?: {
     cover?: UrlList
+    dynamic_cover?: UrlList
+    origin_cover?: UrlList
     download_no_watermark_addr?: UrlList
     download_addr?: UrlList
     play_addr?: UrlList
@@ -49,10 +51,78 @@ interface KwResp {
   error?: string
   message?: string
 }
+// Profile videos (mode=profile): TẤT CẢ video 1 KÊNH (creator). Shape aweme_list[].
+interface ProfileResp {
+  aweme_list?: Aweme[]
+  max_cursor?: number | string
+  has_more?: boolean | number
+  credits_remaining?: number
+  error?: string
+  message?: string
+}
+
+// ── mode=profile — video của 1 KÊNH creator (thay Radar SP win) ──────────────
+// /api/research-videos?mode=profile&handle=<@user>&user_id=<id>&sort_by=latest|popular&region=MY&cursor=<max_cursor>
+// Trả video CDN mp4 (không logo) → phát + tải được trên PC dù video dính TikTok Shop.
+async function handleProfile(req: VercelRequest, res: VercelResponse, key: string) {
+  const marketRaw = typeof req.query.market === 'string' ? req.query.market.toUpperCase()
+    : typeof req.query.region === 'string' ? req.query.region.toUpperCase() : 'MY'
+  const region = VALID_REGIONS.has(marketRaw) ? marketRaw : 'MY'
+  const handle = (typeof req.query.handle === 'string' ? req.query.handle : '').trim().replace(/^@/, '')
+  const userId = (typeof req.query.user_id === 'string' ? req.query.user_id : '').trim()
+  const sortBy = req.query.sort_by === 'popular' ? 'popular' : 'latest'
+  const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : ''
+  if (!handle && !userId) return res.status(400).json({ error: 'Cần handle (tên kênh) hoặc user_id' })
+
+  try {
+    let u = `https://api.scrapecreators.com/v3/tiktok/profile/videos?sort_by=${sortBy}&region=${region}`
+    if (handle) u += `&handle=${encodeURIComponent(handle)}`
+    if (userId) u += `&user_id=${encodeURIComponent(userId)}`
+    if (cursor) u += `&max_cursor=${encodeURIComponent(cursor)}`
+    const r = await fetch(u, { headers: { 'x-api-key': key } })
+    const d = (await r.json()) as ProfileResp
+    const list = Array.isArray(d.aweme_list) ? d.aweme_list : []
+    const videos = list
+      .filter((a): a is Aweme => !!a && !!a.aweme_id)
+      .map((a) => ({
+        id: String(a.aweme_id),
+        desc: (a.desc ?? '').slice(0, 140),
+        author: a.author?.nickname ?? a.author?.unique_id ?? '',
+        handle: a.author?.unique_id ?? handle,
+        views: Number(a.statistics?.play_count ?? 0) || 0,
+        likes: Number(a.statistics?.digg_count ?? 0) || 0,
+        cover:
+          a.video?.dynamic_cover?.url_list?.[0] ??
+          a.video?.cover?.url_list?.[0] ??
+          a.video?.origin_cover?.url_list?.[0] ??
+          '',
+        downloadUrl:
+          a.video?.download_no_watermark_addr?.url_list?.[0] ??
+          a.video?.download_addr?.url_list?.[0] ??
+          a.video?.play_addr?.url_list?.[0] ??
+          '',
+        url: a.share_url ?? a.url ?? '',
+        durationSec: a.video?.duration ? Math.round(a.video.duration / 1000) : 0,
+      }))
+      .filter((v) => v.downloadUrl)
+    const nextCursor = d.max_cursor ?? null
+    const hasMore = d.has_more != null ? !!d.has_more : (nextCursor != null && list.length > 0)
+    res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=600')
+    return res.status(200).json({
+      videos, cursor: nextCursor, hasMore, credits: d.credits_remaining ?? null,
+      note: videos.length ? undefined : (d.error || d.message || 'Kênh không có video — kiểm tra tên kênh / @handle'),
+    })
+  } catch (e) {
+    return res.status(500).json({ error: (e as Error).message })
+  }
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const key = process.env.SC_KEY
   if (!key) return res.status(500).json({ error: 'Server thiếu SC_KEY' })
+
+  // Nhánh mới: video của 1 KÊNH creator (thay Radar SP win).
+  if (req.query.mode === 'profile') return handleProfile(req, res, key)
 
   const marketRaw = typeof req.query.market === 'string' ? req.query.market.toUpperCase() : 'MY'
   const region = VALID_REGIONS.has(marketRaw) ? marketRaw : 'MY'
