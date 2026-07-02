@@ -14,8 +14,6 @@ import FormBgStudio from '../form-bg-studio/FormBgStudio'
 import RebrandStudio from '../rebrand-studio/RebrandStudio'
 import AppHeader from '../../components/shell/AppHeader'
 import SegmentTabs from '../../components/shell/SegmentTabs'
-import ImageModelPicker from '../../components/ImageModelPicker'
-import { useSettingsStore } from '../../stores/settingsStore'
 import { imageModelCredits } from '../../utils/imageModelInfo'
 import { GIFT_TOTAL_IMAGES } from '../gift-studio/types'
 import { FORM_BG_VARIANTS } from '../form-bg-studio/types'
@@ -35,7 +33,6 @@ function loadMode(): Mode {
 
 export default function ImageStudio() {
   const [mode, setMode] = useState<Mode>(loadMode)
-  const imageModel = useSettingsStore((s) => s.imageModel)
 
   function pick(m: Mode) {
     setMode(m)
@@ -43,7 +40,7 @@ export default function ImageStudio() {
   }
 
   const count = mode === 'gift' ? GIFT_TOTAL_IMAGES : mode === 'form' ? FORM_BG_VARIANTS : REBRAND_AI_IMAGES
-  const credit = imageModelCredits(imageModel, count)
+  const credit = imageModelCredits('nano', count)   // nano là model duy nhất
 
   return (
     <div className="flex h-full flex-col bg-app-base">
@@ -63,7 +60,7 @@ export default function ImageStudio() {
 
       {/* Mode switcher — the 3 sub-studios */}
       <div className="shrink-0 border-b border-app-border px-3 py-2">
-        <div className="mx-auto max-w-xl space-y-2">
+        <div className="mx-auto max-w-xl">
           <SegmentTabs
             value={mode}
             onChange={pick}
@@ -73,8 +70,6 @@ export default function ImageStudio() {
               { value: 'rebrand', label: '🏷 Re-Brand' },
             ]}
           />
-          {/* Chọn model tạo ảnh TRƯỚC khi tạo — credit hiện theo số ảnh mode này */}
-          <ImageModelPicker count={count} />
         </div>
       </div>
 

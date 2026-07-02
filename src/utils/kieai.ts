@@ -484,39 +484,16 @@ export async function generateGptImage15(params: {
   return pollGptImage2UntilDone({ apiKey: params.apiKey, taskId, signal: params.signal, onStatusChange: params.onStatusChange })
 }
 
-/** Sinh 1 ảnh theo model chỉ định (nano | gpt15), i2i giữ refs. */
-async function generateImageByChoice(choice: ImageGenChoice, p: {
-  apiKey: string; prompt: string; size: Gpt4oSize; filesUrl?: string[]
-  signal?: AbortSignal; onStatusChange?: (s: ImageStatus, pr?: number) => void
-}): Promise<string> {
-  return choice === 'gpt15' ? generateGptImage15(p) : generateImageNanoFallback(p)
-}
-
-/** ROUTER CHÍNH cho mọi ảnh: chạy model user chọn; time-out/network → tự đổi
- *  model kia (giữ nguyên refs → khóa product/avatar). Breaker: primary hỏng
- *  liên tiếp → tạm ưu tiên secondary. Hard-fail (huỷ/hết credit/policy) → throw. */
+/** ROUTER CHÍNH cho MỌI ảnh trong app. gpt-image-1.5 ĐÃ BỎ HẲN (2026-07: trần
+ *  prompt ngắn → "text length cannot exceed maximum limit" với prompt dài của
+ *  app; drift/bịa bao bì khi multi-ref; vẽ chữ "EMPTY" vào ô trống; visual tệ).
+ *  nano-banana-2 (Google) là model DUY NHẤT: khóa product/avatar chắc, nuốt
+ *  prompt dài, nhanh ~28s, backend độc lập chống outage OpenAI. */
 export async function generateImagePreferred(p: {
   apiKey: string; prompt: string; size: Gpt4oSize; filesUrl?: string[]
   signal?: AbortSignal; onStatusChange?: (s: ImageStatus, pr?: number) => void
 }): Promise<string> {
-  const chosen = _imageGenModel
-  const breakerOpen = _gpt4oBreakerUntil > Date.now()
-  const primary: ImageGenChoice = breakerOpen ? (chosen === 'nano' ? 'gpt15' : 'nano') : chosen
-  const secondary: ImageGenChoice = primary === 'nano' ? 'gpt15' : 'nano'
-  try {
-    const url = await generateImageByChoice(primary, p)
-    noteKieGpt4oSuccess()
-    return url
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    if (
-      msg.includes('CANCELLED') || msg === 'INSUFFICIENT_CREDITS' ||
-      msg.toLowerCase().includes('content_policy') || msg.includes('GENERATE_FAILED')
-    ) throw err
-    noteKieGpt4oTimeout()
-    console.warn(`[IMG] ${primary} soft-fail (${msg.slice(0, 80)}) → đổi sang ${secondary}`)
-    return generateImageByChoice(secondary, p)
-  }
+  return generateImageNanoFallback(p)
 }
 
 /** All-in-one: submit + poll + return final image URL.

@@ -5,9 +5,7 @@ import type { ImageProgress } from '../SuperLadipage'
 import SectionCard from './SectionCard'
 import { useSuperLadipageStore } from '../store'
 import { useAppStore } from '../../../stores/appStore'
-import { useSettingsStore } from '../../../stores/settingsStore'
 import { IMAGE_MODEL_INFO } from '../../../utils/imageModelInfo'
-import ImageModelPicker from '../../../components/ImageModelPicker'
 
 interface OutputPanelProps {
   pack: LandingPagePack | null
@@ -225,8 +223,7 @@ function ImageGenerationBar({
     0,
   )
   const remaining = totalImages - generated
-  const imageModel = useSettingsStore((s) => s.imageModel)
-  const CREDIT_PER_IMAGE = IMAGE_MODEL_INFO[imageModel].creditsPerImage   // theo model đang chọn
+  const CREDIT_PER_IMAGE = IMAGE_MODEL_INFO.nano.creditsPerImage   // nano là model duy nhất
   const estCreditsAll       = totalImages * CREDIT_PER_IMAGE
   const estCreditsRemaining = remaining * CREDIT_PER_IMAGE
   const estCreditsFailed    = failedCount * CREDIT_PER_IMAGE
@@ -244,10 +241,7 @@ function ImageGenerationBar({
   const notStarted = Math.max(0, totalImages - generated - failedCount - inFlight)
 
   return (
-    <div className="space-y-2">
-      {/* Chọn model tạo ảnh TRƯỚC khi sinh — credit hiện theo số ảnh của pack */}
-      <ImageModelPicker count={totalImages} compact />
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-800">
           <ImageIcon className="h-3.5 w-3.5 text-amber-600" />
@@ -347,7 +341,6 @@ function ImageGenerationBar({
             </>
           )}
         </button>
-      </div>
       </div>
     </div>
   )

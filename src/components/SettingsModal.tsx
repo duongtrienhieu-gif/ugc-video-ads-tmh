@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { X, Eye, EyeOff, Key, Check, HardDrive, RefreshCw, ChevronDown, ExternalLink, Sun, Moon } from 'lucide-react'
-import ImageModelPicker from './ImageModelPicker'
 import { useSettingsStore, flushPendingCloudPush } from '../stores/settingsStore'
 import { useAppStore } from '../stores/appStore'
 import { useBankStore } from '../stores/bankStore'
@@ -493,15 +492,6 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 </button>
               </div>
             </div>
-          </div>
-
-          {/* Model tạo ảnh mặc định (global) — mọi app dùng chung, đổi được ngay ở từng app */}
-          <div className="border-t border-black/6 px-5 py-4">
-            <p className="mb-2 text-xs font-semibold text-gray-600">Model tạo ảnh mặc định</p>
-            <ImageModelPicker />
-            <p className="mt-2 text-[11px] text-gray-400">
-              Áp dụng cho MỌI app tạo ảnh. Khi model chọn bị lỗi/nghẽn, app tự chuyển sang model kia (giữ khóa product/avatar). gpt-4o-image cũ đã ngừng.
-            </p>
           </div>
 
           {/* Storage section */}
