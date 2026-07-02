@@ -15,6 +15,7 @@ interface FbAd {
   variations?: number; cta?: string; platforms?: string[]; format?: string
   reach?: number; spend?: string; currency?: string; durationSec?: number
   views?: number   // video kênh (mode channel): lượt xem
+  hasCart?: boolean; productUrl?: string   // video gắn giỏ TikTok Shop
 }
 // Tách @handle / user_id từ ô nhập tự do (tên kênh · link tiktok · id số).
 function parseHandle(raw: string): { handle: string; userId: string } {
@@ -141,7 +142,9 @@ export default function SpyAds() {
   const [q, setQ] = useState('')
   // 📺 Video theo kênh — dán tên kênh/link/id → tải TẤT CẢ video kênh (kể cả video dính giỏ TikTok Shop).
   const [chInput, setChInput] = useState('')
-  const [chSort, setChSort] = useState<'latest' | 'popular'>('popular')
+  const [chSort, setChSort] = useState<'latest' | 'popular'>('latest') // latest = khớp thứ tự tiktok.com
+  const [chCartOnly, setChCartOnly] = useState(false)                   // 🛒 chỉ video gắn giỏ hàng
+  const [chLinkInput, setChLinkInput] = useState('')                    // dán link 1 video lẻ
   const [chVids, setChVids] = useState<FbAd[] | null>(null)     // dùng FbAd để tái dùng modal/tải
   const [chLoading, setChLoading] = useState(false)
   const [chErr, setChErr] = useState<string | null>(null)
@@ -304,12 +307,12 @@ export default function SpyAds() {
 
   // 📺 Video theo kênh: dán tên kênh/link/id → /api/research-videos?mode=profile → TẤT CẢ video kênh.
   // Map về FbAd để tái dùng modal xem + tải + tải hàng loạt. Video CDN mp4 → PC phát được dù dính giỏ.
-  interface ChVid { id: string; desc: string; author: string; handle: string; views: number; likes: number; cover: string; downloadUrl: string; url: string; durationSec: number }
+  interface ChVid { id: string; desc: string; author: string; handle: string; views: number; likes: number; cover: string; downloadUrl: string; url: string; durationSec: number; hasCart?: boolean; productUrl?: string }
   const toFbAd = (v: ChVid, handle: string): FbAd => ({
     id: v.id, page: v.author || (v.handle ? '@' + v.handle : handle ? '@' + handle : '(kênh)'), pageId: '',
     text: v.desc || '', videoUrl: v.downloadUrl, cover: v.cover, linkUrl: '', country,
     isActive: false, daysRunning: 0, advertiserAds: 0, libraryUrl: v.url || '',
-    likes: v.likes, views: v.views, durationSec: v.durationSec,
+    likes: v.likes, views: v.views, durationSec: v.durationSec, hasCart: v.hasCart, productUrl: v.productUrl,
   })
   const fetchChannel = async (more = false) => {
     const { handle, userId } = parseHandle(chInput)
@@ -332,6 +335,22 @@ export default function SpyAds() {
       setCredits(d.credits ?? credits)
       if (!more && !mapped.length) setChErr(d.note || 'Kênh không có video — kiểm tra tên kênh')
     } catch (e) { setChErr((e as Error).message) } finally { setChLoading(false); setChMoreLoading(false) }
+  }
+  // Dán LINK 1 video → hiện riêng video đó (kể cả video dính giỏ tiktok.com ẩn trên PC).
+  const fetchVideo = async () => {
+    const link = chLinkInput.trim()
+    if (!/^https?:\/\//i.test(link)) { setChErr('Dán link video TikTok hợp lệ (https://…)'); return }
+    setChLoading(true); setChErr(null); setChVids(null); setChCursor(null); setChHasMore(false); setSelected(new Set()); setChTitle('1 video theo link')
+    try {
+      const d = await fetch(`/api/research-videos?mode=video&url=${encodeURIComponent(link)}`).then((r) => r.json())
+      if (d.error) { setChErr(d.error); return }
+      const vids: ChVid[] = Array.isArray(d.videos) ? d.videos : []
+      const mapped = vids.map((v) => toFbAd(v, ''))
+      setChVids(mapped)
+      setCredits(d.credits ?? credits)
+      if (!mapped.length) setChErr(d.note || 'Không đọc được video — kiểm tra link')
+      else openAd(mapped[0])   // mở luôn cho xem
+    } catch (e) { setChErr((e as Error).message) } finally { setChLoading(false) }
   }
 
   // Đổi quốc gia → BẮT BUỘC trả đúng nước đó: xoá cache 2 tab + tự tìm lại theo nước mới.
@@ -508,6 +527,9 @@ CHỈ trả JSON.`
   })()
   // Danh sách CTA có trong kết quả → đổ vào dropdown lọc.
   const ctaOptions = [...new Set((ads || []).map((a) => (a.cta || '').trim()).filter(Boolean))].sort()
+  // Video kênh: lọc "chỉ gắn giỏ" nếu bật; đếm số video gắn giỏ để hiện.
+  const chCartCount = (chVids || []).filter((v) => v.hasCart).length
+  const shownChVids = chCartOnly ? (chVids || []).filter((v) => v.hasCart) : (chVids || [])
 
   // Gom theo SP/advertiser: 1 brand chạy NHIỀU ad + chạy LÂU = đang scale = winner.
   const groups = (() => {
@@ -766,7 +788,21 @@ CHỈ trả JSON.`
               </button>
               {chErr && <span className="text-xs text-red-500">{chErr}</span>}
             </div>
-            <p className="text-[11px] text-slate-400">💡 Video dính giỏ TikTok Shop trên PC không xem được ở tiktok.com — ở đây phát + tải bình thường (file gốc, không logo). Dán <b>kênh creator</b>, không phải link gian hàng shop.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={chLinkInput} onChange={(e) => setChLinkInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void fetchVideo() }}
+                placeholder="…hoặc dán LINK 1 video (kể cả video gắn giỏ tiktok.com ẩn trên PC) → xem riêng video đó"
+                className="min-w-[260px] flex-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm"
+              />
+              <button onClick={() => void fetchVideo()} disabled={chLoading}
+                className="flex items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-4 py-1.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">
+                <Play className="h-4 w-4" /> Xem video lẻ
+              </button>
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-600">
+                <input type="checkbox" checked={chCartOnly} onChange={(e) => setChCartOnly(e.target.checked)} /> 🛒 Chỉ video gắn giỏ hàng
+              </label>
+            </div>
+            <p className="text-[11px] text-slate-400">💡 Video dính giỏ TikTok Shop trên PC không xem được ở tiktok.com — ở đây phát + tải bình thường (file gốc, không logo). Dán <b>kênh creator</b> (không phải link gian hàng shop), hoặc <b>link 1 video</b> để xem riêng.</p>
           </>
         )}
 
@@ -946,13 +982,17 @@ CHỈ trả JSON.`
             {chLoading && <div className="py-10 text-center text-sm text-slate-400">Đang tải video của kênh…</div>}
             {chVids && chVids.length > 0 && (
               <>
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-500">📺 {chTitle} · {chVids.length} video ({chSort === 'popular' ? '🔥 nổi bật' : '🆕 mới nhất'})</span>
-                  <button onClick={() => selectMany(chVids)}
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-500">📺 {chTitle} · {shownChVids.length}{chCartOnly ? `/${chVids.length}` : ''} video ({chSort === 'popular' ? '🔥 nổi bật' : '🆕 mới nhất'})</span>
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">🛒 {chCartCount} gắn giỏ</span>
+                  <button onClick={() => selectMany(shownChVids)}
                     className="ml-auto rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50">✓ Chọn tất cả</button>
                 </div>
+                {chCartOnly && shownChVids.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">Không thấy video nào gắn giỏ (theo cờ TikTok Shop) — bỏ tick "🛒 Chỉ video gắn giỏ" để xem tất cả.</p>
+                ) : (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
-                  {chVids.map((a) => (
+                  {shownChVids.map((a) => (
                     <div key={a.id} className={`relative flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm ${selected.has(a.id) ? 'border-rose-400 ring-2 ring-rose-300' : 'border-black/10'}`}>
                       <button onClick={(e) => { e.stopPropagation(); toggleSel(a.id) }} title="Chọn để tải hàng loạt"
                         className={`absolute right-1.5 top-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold shadow ${selected.has(a.id) ? 'border-rose-500 bg-rose-500 text-white' : 'border-white/70 bg-black/40 text-white/80'}`}>
@@ -961,6 +1001,7 @@ CHỈ trả JSON.`
                       <button onClick={() => openAd(a)} className="relative flex aspect-[3/4] items-center justify-center bg-slate-900">
                         {a.cover ? <img src={a.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
                         <Play className="absolute h-10 w-10 text-white/90 drop-shadow" />
+                        {a.hasCart && <span className="absolute left-1.5 top-1.5 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">🛒 giỏ</span>}
                         {a.durationSec ? <span className="absolute bottom-1.5 right-1.5 rounded bg-black/75 px-1.5 py-0.5 text-[10px] font-bold text-white">⏱ {fmtDur(a.durationSec)}</span> : null}
                         {a.views ? <span className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white">👁 {fmtK(a.views)}</span> : null}
                       </button>
@@ -971,13 +1012,18 @@ CHỈ trả JSON.`
                             className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-[11px] font-semibold text-violet-700 hover:bg-violet-100">
                             <Download className="h-3 w-3" /> Tải
                           </button>
+                          {a.productUrl && (
+                            <a href={a.productUrl} target="_blank" rel="noopener noreferrer" title="Mở SP trên TikTok Shop"
+                              className="flex items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-emerald-700 hover:bg-emerald-100"><ExternalLink className="h-3.5 w-3.5" /></a>
+                          )}
                           {a.likes ? <span className="text-[10px] font-medium text-slate-400">❤️ {fmtK(a.likes)}</span> : null}
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
-                {chHasMore && (
+                )}
+                {chHasMore && !chCartOnly && (
                   <button onClick={() => void fetchChannel(true)} disabled={chMoreLoading}
                     className="mt-4 w-full rounded-xl border border-rose-300 bg-white py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">
                     {chMoreLoading ? 'Đang tải…' : '↻ Tải thêm video'}

@@ -33,6 +33,13 @@ interface Aweme {
   url?: string
   statistics?: { play_count?: number; digg_count?: number }
   author?: { unique_id?: string; nickname?: string }
+  // Tín hiệu GẮN GIỎ HÀNG (TikTok Shop) — dùng để lọc video bán vs vlog.
+  shop_product_url?: string
+  products_info?: unknown
+  anchors?: unknown[]
+  anchor_info?: unknown
+  is_eligible_for_commission?: boolean
+  commerce_info?: unknown
   video?: {
     cover?: UrlList
     dynamic_cover?: UrlList
@@ -55,15 +62,59 @@ interface KwResp {
 interface ProfileResp {
   aweme_list?: Aweme[]
   max_cursor?: number | string
+  maxCursor?: number | string
+  cursor?: number | string
   has_more?: boolean | number
   credits_remaining?: number
   error?: string
   message?: string
 }
+interface VideoResp {
+  aweme_detail?: Aweme
+  aweme_info?: Aweme
+  aweme?: Aweme
+  credits_remaining?: number
+  error?: string
+  message?: string
+}
+const PROFILE_TARGET = 25   // gom đủ ~25 video/lần cho đỡ ít
+const PROFILE_MAX_PAGES = 4 // trần trang gọi SC mỗi lần (1 trang = 1 credit)
+
+// aweme → object video gọn (kèm cờ hasCart = có gắn giỏ TikTok Shop) — dùng chung profile + video lẻ.
+function mapAwemeVideo(a: Aweme, fallbackHandle: string) {
+  const hasCart = !!(a.shop_product_url)
+    || (a.products_info != null)
+    || (Array.isArray(a.anchors) && a.anchors.length > 0)
+    || (a.anchor_info != null)
+    || a.is_eligible_for_commission === true
+  return {
+    id: String(a.aweme_id),
+    desc: (a.desc ?? '').slice(0, 140),
+    author: a.author?.nickname ?? a.author?.unique_id ?? '',
+    handle: a.author?.unique_id ?? fallbackHandle,
+    views: Number(a.statistics?.play_count ?? 0) || 0,
+    likes: Number(a.statistics?.digg_count ?? 0) || 0,
+    cover:
+      a.video?.dynamic_cover?.url_list?.[0] ??
+      a.video?.cover?.url_list?.[0] ??
+      a.video?.origin_cover?.url_list?.[0] ??
+      '',
+    downloadUrl:
+      a.video?.download_no_watermark_addr?.url_list?.[0] ??
+      a.video?.download_addr?.url_list?.[0] ??
+      a.video?.play_addr?.url_list?.[0] ??
+      '',
+    url: a.share_url ?? a.url ?? '',
+    durationSec: a.video?.duration ? Math.round(a.video.duration / 1000) : 0,
+    hasCart,
+    productUrl: typeof a.shop_product_url === 'string' ? a.shop_product_url : '',
+  }
+}
 
 // ── mode=profile — video của 1 KÊNH creator (thay Radar SP win) ──────────────
 // /api/research-videos?mode=profile&handle=<@user>&user_id=<id>&sort_by=latest|popular&region=MY&cursor=<max_cursor>
-// Trả video CDN mp4 (không logo) → phát + tải được trên PC dù video dính TikTok Shop.
+// LOOP tối đa 4 trang gom ~25 video (dedup) → phân trang bền, không "10 video là hết".
+// Trả video CDN mp4 (không logo) → phát + tải được trên PC dù dính TikTok Shop.
 async function handleProfile(req: VercelRequest, res: VercelResponse, key: string) {
   const marketRaw = typeof req.query.market === 'string' ? req.query.market.toUpperCase()
     : typeof req.query.region === 'string' ? req.query.region.toUpperCase() : 'MY'
@@ -71,46 +122,77 @@ async function handleProfile(req: VercelRequest, res: VercelResponse, key: strin
   const handle = (typeof req.query.handle === 'string' ? req.query.handle : '').trim().replace(/^@/, '')
   const userId = (typeof req.query.user_id === 'string' ? req.query.user_id : '').trim()
   const sortBy = req.query.sort_by === 'popular' ? 'popular' : 'latest'
-  const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : ''
+  const debug = req.query.debug === '1'
   if (!handle && !userId) return res.status(400).json({ error: 'Cần handle (tên kênh) hoặc user_id' })
 
+  const idBase = `handle=${handle}` // (chỉ để log)
+  const seen = new Set<string>()
+  const videos: ReturnType<typeof mapAwemeVideo>[] = []
+  let cursor = typeof req.query.cursor === 'string' ? req.query.cursor : ''
+  let hasMore = true
+  let pages = 0
+  let credits: number | null = null
+  let firstErr: string | undefined
+  let dbg: { topKeys?: string[]; awemeKeys?: string[] } | undefined
+
   try {
-    let u = `https://api.scrapecreators.com/v3/tiktok/profile/videos?sort_by=${sortBy}&region=${region}`
-    if (handle) u += `&handle=${encodeURIComponent(handle)}`
-    if (userId) u += `&user_id=${encodeURIComponent(userId)}`
-    if (cursor) u += `&max_cursor=${encodeURIComponent(cursor)}`
-    const r = await fetch(u, { headers: { 'x-api-key': key } })
-    const d = (await r.json()) as ProfileResp
-    const list = Array.isArray(d.aweme_list) ? d.aweme_list : []
-    const videos = list
-      .filter((a): a is Aweme => !!a && !!a.aweme_id)
-      .map((a) => ({
-        id: String(a.aweme_id),
-        desc: (a.desc ?? '').slice(0, 140),
-        author: a.author?.nickname ?? a.author?.unique_id ?? '',
-        handle: a.author?.unique_id ?? handle,
-        views: Number(a.statistics?.play_count ?? 0) || 0,
-        likes: Number(a.statistics?.digg_count ?? 0) || 0,
-        cover:
-          a.video?.dynamic_cover?.url_list?.[0] ??
-          a.video?.cover?.url_list?.[0] ??
-          a.video?.origin_cover?.url_list?.[0] ??
-          '',
-        downloadUrl:
-          a.video?.download_no_watermark_addr?.url_list?.[0] ??
-          a.video?.download_addr?.url_list?.[0] ??
-          a.video?.play_addr?.url_list?.[0] ??
-          '',
-        url: a.share_url ?? a.url ?? '',
-        durationSec: a.video?.duration ? Math.round(a.video.duration / 1000) : 0,
-      }))
-      .filter((v) => v.downloadUrl)
-    const nextCursor = d.max_cursor ?? null
-    const hasMore = d.has_more != null ? !!d.has_more : (nextCursor != null && list.length > 0)
+    while (videos.length < PROFILE_TARGET && pages < PROFILE_MAX_PAGES && hasMore) {
+      pages++
+      let u = `https://api.scrapecreators.com/v3/tiktok/profile/videos?sort_by=${sortBy}&region=${region}`
+      if (handle) u += `&handle=${encodeURIComponent(handle)}`
+      if (userId) u += `&user_id=${encodeURIComponent(userId)}`
+      if (cursor) u += `&max_cursor=${encodeURIComponent(cursor)}`
+      const r = await fetch(u, { headers: { 'x-api-key': key } })
+      const d = (await r.json()) as ProfileResp
+      if (d.credits_remaining != null) credits = d.credits_remaining
+      const list = Array.isArray(d.aweme_list) ? d.aweme_list : []
+      if (debug && pages === 1) dbg = { topKeys: Object.keys(d), awemeKeys: list[0] ? Object.keys(list[0]) : [] }
+      if (!list.length) { if (pages === 1) firstErr = d.error || d.message; break }
+      for (const a of list) {
+        if (!a || !a.aweme_id) continue
+        const id = String(a.aweme_id)
+        if (seen.has(id)) continue
+        seen.add(id)
+        const v = mapAwemeVideo(a, handle)
+        if (v.downloadUrl) videos.push(v)
+      }
+      const nextCursor = d.max_cursor ?? d.maxCursor ?? d.cursor ?? null
+      const pageMore = d.has_more != null ? !!d.has_more : (nextCursor != null && list.length > 0)
+      if (!pageMore || nextCursor == null || String(nextCursor) === String(cursor)) { cursor = ''; hasMore = false; break }
+      cursor = String(nextCursor)   // sang trang kế
+    }
     res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=600')
     return res.status(200).json({
-      videos, cursor: nextCursor, hasMore, credits: d.credits_remaining ?? null,
-      note: videos.length ? undefined : (d.error || d.message || 'Kênh không có video — kiểm tra tên kênh / @handle'),
+      videos,
+      cursor: hasMore && cursor ? cursor : null,
+      hasMore: !!(hasMore && cursor),
+      credits,
+      note: videos.length ? undefined : (firstErr || 'Kênh không có video — kiểm tra tên kênh / @handle'),
+      ...(debug ? { pages, idBase, ...dbg } : {}),
+    })
+  } catch (e) {
+    return res.status(500).json({ error: (e as Error).message })
+  }
+}
+
+// ── mode=video — 1 video theo LINK (kể cả video dính giỏ tiktok.com ẩn trên PC) ─
+// /api/research-videos?mode=video&url=<link video tiktok>
+async function handleVideo(req: VercelRequest, res: VercelResponse, key: string) {
+  const url = (typeof req.query.url === 'string' ? req.query.url : '').trim()
+  const debug = req.query.debug === '1'
+  if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'Cần link video TikTok hợp lệ' })
+  try {
+    const r = await fetch(`https://api.scrapecreators.com/v2/tiktok/video?url=${encodeURIComponent(url)}`, { headers: { 'x-api-key': key } })
+    const d = (await r.json()) as VideoResp
+    const a = d.aweme_detail || d.aweme_info || d.aweme || (d as unknown as Aweme)
+    if (!a || !a.aweme_id) {
+      return res.status(200).json({ videos: [], cursor: null, hasMore: false, credits: d.credits_remaining ?? null, note: d.error || d.message || 'Không đọc được video — kiểm tra link', ...(debug ? { topKeys: Object.keys(d) } : {}) })
+    }
+    const v = mapAwemeVideo(a, '')
+    return res.status(200).json({
+      videos: v.downloadUrl ? [v] : [], cursor: null, hasMore: false, credits: d.credits_remaining ?? null,
+      note: v.downloadUrl ? undefined : 'Video không có link tải — thử link khác',
+      ...(debug ? { awemeKeys: Object.keys(a) } : {}),
     })
   } catch (e) {
     return res.status(500).json({ error: (e as Error).message })
@@ -121,8 +203,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const key = process.env.SC_KEY
   if (!key) return res.status(500).json({ error: 'Server thiếu SC_KEY' })
 
-  // Nhánh mới: video của 1 KÊNH creator (thay Radar SP win).
+  // Nhánh mới: video của 1 KÊNH creator (thay Radar SP win) + 1 video theo link.
   if (req.query.mode === 'profile') return handleProfile(req, res, key)
+  if (req.query.mode === 'video') return handleVideo(req, res, key)
 
   const marketRaw = typeof req.query.market === 'string' ? req.query.market.toUpperCase() : 'MY'
   const region = VALID_REGIONS.has(marketRaw) ? marketRaw : 'MY'
