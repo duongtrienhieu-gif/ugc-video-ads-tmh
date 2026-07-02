@@ -35,6 +35,30 @@ function checkContains(html: string, title: string, q: string): boolean | null {
   for (const tk of tokens) if (low.includes(tk)) hit++
   return hit >= Math.max(1, Math.ceil(tokens.length * 0.5))
 }
+// Độ dài phần CHỮ (bỏ tag) — để biết HTML thô có nghèo nội dung (LadiPage render JS) không.
+function textLen(html: string): number {
+  return html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().length
+}
+// ── Bộ dò "TRANG CÓ BÁN SẢN PHẨM" — lọc bỏ blog/dịch vụ/phòng khám chỉ nói về từ khóa ──
+// 4 tín hiệu: có GIÁ · nút MUA/COD · FORM đặt hàng (tên+SĐT) · schema Product.
+// selling = SchemaSP || (Giá && (Mua||Form)) || (Mua && Form). Trả kèm giá bắt được để hiện badge.
+function detectSelling(html: string): { selling: boolean; price: string } {
+  const low = html.toLowerCase()
+  const priceM = html.match(/\b(?:RM|Rp|VND|₫|฿)\s?\d[\d.,]*/i) || html.match(/\bharga\b[^<]{0,24}?\d[\d.,]{1,}/i)
+  const hasPrice = !!priceM
+  const price = priceM ? priceM[0].replace(/\s+/g, ' ').trim().slice(0, 20) : ''
+  // Ý-ĐỊNH-MUA rõ ràng của salepage COD (không phải blog/dịch vụ). \b để tránh khớp trong từ khác.
+  const hasBuy = /\bbeli\b|beli sekarang|order sekarang|order now|buy now|\border\b|tempah sekarang|\btempah\b|pesan sekarang|\bpesan\b|\bpesanan\b|\bhantar\b|bayar bila terima|cash on delivery|\bcod\b|add to cart|tambah ke troli|\btroli\b|checkout|đặt hàng|đặt mua|mua ngay/i.test(low)
+  // Form đặt hàng: có <form> + trường TÊN + trường SĐT (đặc trưng salepage COD).
+  const hasForm = /<form[\s>]/i.test(low)
+    && /(nama penuh|\bnama\b|full ?name|họ tên|ho ten)/i.test(low)
+    && /(no\.? ?telefon|telefon|nombor|\bphone\b|whatsapp|\bhp\b|số điện thoại|so dien thoai|\bsđt\b|\bsdt\b)/i.test(low)
+  const schema = /og:type["']?\s+content=["']product|["']@type["']\s*:\s*["']product["']|product:price:amount/i.test(html)
+  // Chốt: có schema SP, HOẶC có ý-định-mua rõ kèm (giá HOẶC form). Bỏ nhánh giá+form đơn thuần
+  // để không bắt nhầm form liên hệ / trang dịch vụ có báo giá.
+  const selling = schema || (hasBuy && (hasPrice || hasForm))
+  return { selling, price }
+}
 // Rút URL ảnh "hero/nội dung" từ HTML (ladicdn + img src + background-image), bỏ logo/icon/tracking.
 function extractImages(html: string): string[] {
   const out: string[] = []
@@ -107,6 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { html } = await fetchHtml(url, true)   // jina-html: render JS → bắt được ảnh LadiPage
       const cms = detectCms(`${url}\n${html}`)
       const contains = checkContains(html, '', String(body.q || ''))
+      const sell = detectSelling(html)
       const ref = { mime: refM[1], data: refM[2] }
       const candidates = extractImages(html)
       let match: boolean | null = candidates.length ? false : null
@@ -115,7 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!cand) continue
         if (await geminiSameProduct(body.apiKey, ref, cand)) { match = true; break }
       }
-      return res.status(200).json({ cms, contains, match })
+      return res.status(200).json({ cms, contains, match, selling: sell.selling, price: sell.price })
     } catch (e) {
       return res.status(200).json({ cms: 'Khác', contains: null, match: null, error: (e as Error).message.slice(0, 120) })
     }
@@ -126,15 +151,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const q = typeof req.query.q === 'string' ? req.query.q : ''
   if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'Thiếu url hợp lệ' })
   try {
-    const { html, finalUrl } = await fetchHtml(url, false)
-    const cms = detectCms(`${finalUrl}\n${html}`)
+    // 1) Tải HTML thô (nhanh) → nhận CMS từ marker gốc.
+    const raw = await fetchHtml(url, false)
+    const finalUrl = raw.finalUrl
+    const cms = detectCms(`${finalUrl}\n${raw.html}`)
+    // 2) LadiPage / HTML nghèo chữ (render JS) → escalate jina-html để đọc ĐÚNG giá/form/nội dung.
+    let html = raw.html
+    if (cms === 'LadiPage' || textLen(raw.html) < 800) {
+      try { const j = await fetchHtml(url, true); if (j.html && j.html.length > raw.html.length) html = j.html } catch { /* giữ thô */ }
+    }
     const titleM = html.match(/<title[^>]*>([^<]{1,200})<\/title>/i)
     const title = titleM ? titleM[1].trim() : ''
     const contains = checkContains(html, title, q)
+    const sell = detectSelling(html)
     res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=3600')
-    return res.status(200).json({ cms, finalUrl, contains, title })
+    return res.status(200).json({ cms, finalUrl, contains, title, selling: sell.selling, price: sell.price })
   } catch (e) {
     const msg = (e as Error).name === 'AbortError' ? 'Trang đích phản hồi quá lâu' : (e as Error).message
-    return res.status(200).json({ cms: 'Khác', error: msg, contains: null })
+    return res.status(200).json({ cms: 'Khác', error: msg, contains: null, selling: null, price: '' })
   }
 }

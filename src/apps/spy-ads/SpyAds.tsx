@@ -47,6 +47,7 @@ interface FoundLink {
   page: string; adText: string; platform: 'fb' | 'tiktok'
   cms?: string; contains?: boolean | null; verifying?: boolean
   matchSku?: boolean | null; matchBusy?: boolean   // đối chiếu ảnh: cùng mã hàng không
+  selling?: boolean | null; price?: string          // trang CÓ BÁN sản phẩm (giá/form/nút mua)
 }
 
 // Rút LÕI từ khóa từ tên SP (bỏ [..], (..), đơn vị, từ marketing) để mồi ô tìm ad sạch.
@@ -64,13 +65,13 @@ function coreTerms(title: string): string {
 
 // ── Tìm Salepage: sinh TỪ KHÓA ĐA GÓC (brand + đặc điểm/lợi ích/dạng) để bắt cả
 //    đối thủ rebrand cùng 1 mã hàng dưới brand khác. Output JSON {brand, angles[]}. ──
-const ANGLE_VISION_PROMPT = `Đây là ảnh 1 sản phẩm COD. Tạo TỪ KHÓA để tìm quảng cáo Facebook tại Malaysia bán CHÍNH sản phẩm này — kể cả khi các seller đặt TÊN BRAND KHÁC NHAU cho cùng 1 mã hàng. Trả JSON:
-{"brand":"tên thương hiệu IN TRÊN BAO BÌ nếu đọc rõ, không thì rỗng","angles":["4-6 từ khóa NGẮN tiếng Malay mô tả LOẠI sản phẩm + công năng + bộ phận/đối tượng + dạng — KHÔNG phải tên brand, để bắt mọi seller rebrand; mỗi cái 1-4 từ"]}
+const ANGLE_VISION_PROMPT = `Đây là ảnh 1 sản phẩm COD. Tạo TỪ KHÓA để tìm quảng cáo Facebook tại Malaysia đang BÁN sản phẩm này — kể cả khi các seller đặt TÊN BRAND KHÁC NHAU cho cùng 1 mã hàng. Trả JSON:
+{"brand":"tên thương hiệu IN TRÊN BAO BÌ nếu đọc rõ, không thì rỗng","angles":["4-6 từ khóa NGẮN tiếng Malay chỉ đúng LOẠI SẢN PHẨM ĐỂ BÁN (danh từ sản phẩm + dạng: produk/set/ubat/gel/serum/krim/supplement…), KHÔNG phải câu hỏi/triệu chứng/vấn đề (tránh ra blog/phòng khám); KHÔNG phải tên brand để bắt mọi seller rebrand; mỗi cái 1-4 từ"]}
 CHỈ JSON.`
 const ANGLE_TEXT_PROMPT = (ctx: string): string => `Sản phẩm COD (mô tả tiếng Việt):
 ${ctx}
-Tạo TỪ KHÓA tìm quảng cáo Facebook tại Malaysia bán sản phẩm này — kể cả khi seller đặt TÊN BRAND KHÁC cho cùng mã hàng. Trả JSON:
-{"brand":"tên thương hiệu rút từ tên SP nếu có, không thì rỗng","angles":["4-6 từ khóa NGẮN tiếng Malay: loại SP + công năng + bộ phận/đối tượng + dạng — KHÔNG phải brand; mỗi cái 1-4 từ"]}
+Tạo TỪ KHÓA tìm quảng cáo Facebook tại Malaysia đang BÁN sản phẩm này — kể cả khi seller đặt TÊN BRAND KHÁC cho cùng mã hàng. Trả JSON:
+{"brand":"tên thương hiệu rút từ tên SP nếu có, không thì rỗng","angles":["4-6 từ khóa NGẮN tiếng Malay chỉ đúng LOẠI SẢN PHẨM ĐỂ BÁN (danh từ sản phẩm + dạng: produk/set/ubat/gel/serum/krim/supplement…), KHÔNG phải câu hỏi/triệu chứng/vấn đề (tránh ra blog/dịch vụ); KHÔNG phải brand; mỗi cái 1-4 từ"]}
 CHỈ JSON.`
 function parseAngles(raw: string): string[] {
   let obj: { brand?: string; angles?: string[] } = {}
@@ -202,7 +203,8 @@ export default function SpyAds() {
   const [linkBusy, setLinkBusy] = useState(false)
   const [linkErr, setLinkErr] = useState<string | null>(null)
   const [onlyWeb, setOnlyWeb] = useState(true)
-  const [onlyMatched, setOnlyMatched] = useState(true)   // ẩn link xác minh KHÔNG khớp (mặc định BẬT cho sạch)
+  const [onlySelling, setOnlySelling] = useState(true)   // 🛒 chỉ trang CÓ BÁN SP (mặc định BẬT — yêu cầu chính)
+  const [onlyMatched, setOnlyMatched] = useState(false)  // ẩn link không khớp từ khóa (giờ phụ, mặc định TẮT — đã có lọc bán + sắp xếp)
   const [onlySku, setOnlySku] = useState(false)          // chỉ link "cùng SP" (theo đối chiếu ảnh)
   const [imgMatch, setImgMatch] = useState(true)         // chạy đối chiếu ảnh khi có ảnh SP
   const [linkAngles, setLinkAngles] = useState<string[]>([])   // từ khóa đa-góc AI đã dùng (hiển thị)
@@ -632,8 +634,8 @@ CHỈ trả JSON.`
         const l = queue.shift(); if (!l) break
         setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, verifying: true } : x))
         try {
-          const d = (await fetch(`/api/detect-cms?url=${encodeURIComponent(l.url)}&q=${encodeURIComponent(q)}`).then((r) => r.json())) as { cms?: string; contains?: boolean | null }
-          setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, verifying: false, cms: d.cms, contains: d.contains ?? null } : x))
+          const d = (await fetch(`/api/detect-cms?url=${encodeURIComponent(l.url)}&q=${encodeURIComponent(q)}`).then((r) => r.json())) as { cms?: string; contains?: boolean | null; selling?: boolean | null; price?: string }
+          setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, verifying: false, cms: d.cms, contains: d.contains ?? null, selling: d.selling ?? null, price: d.price || '' } : x))
         } catch {
           setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, verifying: false, contains: null } : x))
         }
@@ -651,8 +653,8 @@ CHỈ trả JSON.`
         const l = queue.shift(); if (!l) break
         setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, matchBusy: true } : x))
         try {
-          const d = (await fetch('/api/detect-cms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: l.url, refImage: linkImg, apiKey: geminiApiKey, q }) }).then((r) => r.json())) as { match?: boolean | null; cms?: string; contains?: boolean | null }
-          setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, matchBusy: false, matchSku: d.match ?? null, cms: x.cms ?? d.cms, contains: x.contains ?? (d.contains ?? null) } : x))
+          const d = (await fetch('/api/detect-cms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: l.url, refImage: linkImg, apiKey: geminiApiKey, q }) }).then((r) => r.json())) as { match?: boolean | null; cms?: string; contains?: boolean | null; selling?: boolean | null; price?: string }
+          setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, matchBusy: false, matchSku: d.match ?? null, cms: x.cms ?? d.cms, contains: x.contains ?? (d.contains ?? null), selling: x.selling ?? (d.selling ?? null), price: x.price || d.price || '' } : x))
         } catch {
           setLinks((prev) => (prev || []).map((x) => x.url === l.url ? { ...x, matchBusy: false, matchSku: null } : x))
         }
@@ -734,11 +736,17 @@ CHỈ trả JSON.`
       else { void verifyLinks(batch); if (imgMatch && linkImg) void verifyImageMatch(batch) }
     } catch (e) { addToast('Tải thêm lỗi: ' + ((e as Error).message || '').slice(0, 60), 'error') } finally { setLinkMoreBusy(false) }
   }
-  // onlyMatched: ẩn link xác minh KHÔNG khớp (giữ chưa xác minh để khỏi trống lúc đang verify).
-  // onlySku: chỉ giữ link "cùng SP" theo đối chiếu ảnh (ẩn cái đã xác nhận khác).
-  const shownLinks = (links || []).filter((l) =>
-    (!onlyWeb || l.web) && (!onlyMatched || l.contains !== false) && (!onlySku || l.matchSku !== false),
-  )
+  // Điểm tin cậy: ảnh khớp (cùng mã) > có bán > khớp từ khóa > web. Non-selling bị trừ để chìm.
+  const linkScore = (l: FoundLink) =>
+    (l.matchSku === true ? 100 : 0) + (l.selling === true ? 40 : l.selling === false ? -50 : 0) + (l.contains === true ? 10 : 0) + (l.web ? 5 : 0)
+  // onlySelling: chỉ trang CÓ BÁN (giữ chưa xác minh để khỏi trống lúc verify; trang xác nhận KHÔNG bán bị ẩn).
+  // onlyMatched: ẩn link không khớp từ khóa. onlySku: chỉ "cùng SP" theo ảnh.
+  const shownLinks = (links || [])
+    .filter((l) =>
+      (!onlyWeb || l.web) && (!onlySelling || l.selling !== false) && (!onlyMatched || l.contains !== false) && (!onlySku || l.matchSku !== false),
+    )
+    .slice()
+    .sort((a, b) => linkScore(b) - linkScore(a))
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#EEEEF2]">
@@ -950,8 +958,9 @@ CHỈ trả JSON.`
               </button>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-slate-600">
+              <label className="flex cursor-pointer items-center gap-1.5 font-semibold text-emerald-700"><input type="checkbox" checked={onlySelling} onChange={(e) => setOnlySelling(e.target.checked)} /> 🛒 Chỉ trang CÓ BÁN sản phẩm</label>
               <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={onlyWeb} onChange={(e) => setOnlyWeb(e.target.checked)} /> 🔗 Chỉ Web/Ladipage (bỏ sàn + chat)</label>
-              <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={onlyMatched} onChange={(e) => setOnlyMatched(e.target.checked)} /> ✓ Ẩn link không khớp</label>
+              <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={onlyMatched} onChange={(e) => setOnlyMatched(e.target.checked)} /> ✓ Ẩn link không khớp từ khóa</label>
               {linkImg && <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={imgMatch} onChange={(e) => setImgMatch(e.target.checked)} /> 🖼️ Đối chiếu ảnh (cùng mã hàng)</label>}
               {linkImg && imgMatch && <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={onlySku} onChange={(e) => setOnlySku(e.target.checked)} /> ✅ Chỉ cùng SP</label>}
               {linkImg && <button onClick={() => setLinkImg('')} className="text-rose-500 underline">bỏ ảnh</button>}
@@ -1156,13 +1165,13 @@ CHỈ trả JSON.`
               <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-black/10 text-center text-slate-400">
                 <Link2 className="h-8 w-8" />
                 <p className="text-sm">Nhập từ khóa / chọn SP từ Kho / tải ảnh → <b>Tìm link</b>.</p>
-                <p className="text-xs">AI tạo <b>từ khóa đa góc</b> (brand + đặc điểm/lợi ích) để bắt cả đối thủ <b>rebrand cùng mã hàng</b>. Tải ảnh + bật "Đối chiếu ảnh" để lọc đúng <b>cùng SP</b>. FB là nguồn chính; TikTok ẩn link đích nên ít.</p>
+                <p className="text-xs">AI tạo <b>từ khóa đa góc</b> để bắt cả đối thủ <b>rebrand cùng mã hàng</b>. Mặc định chỉ hiện <b className="text-emerald-600">trang CÓ BÁN sản phẩm</b> (có giá/form/nút mua) — tự loại blog/dịch vụ. Tải ảnh để lọc đúng <b>cùng SP</b>. FB là nguồn chính; TikTok ẩn link đích nên ít.</p>
               </div>
             )}
             {linkBusy && <div className="py-10 text-center text-sm text-slate-400">🔎 Đang quét ad + bóc link đích…</div>}
             {links && links.length > 0 && (
               <>
-                <div className="mb-2 text-xs font-semibold text-slate-500">{shownLinks.length} link{onlyWeb ? ' Web/Ladipage' : ''} (tổng {links.length})</div>
+                <div className="mb-2 text-xs font-semibold text-slate-500">{shownLinks.length} link{onlySelling ? ' CÓ BÁN' : ''}{onlyWeb ? ' · Web/Ladipage' : ''} (tổng {links.length}) · xếp theo độ tin</div>
                 <div className="flex flex-col gap-2">
                   {shownLinks.map((l) => (
                     <div key={l.url} className="flex flex-col gap-1.5 rounded-xl border border-black/10 bg-white p-3 shadow-sm">
@@ -1171,6 +1180,8 @@ CHỈ trả JSON.`
                         <span className="text-xs font-bold text-slate-700">{l.domain}</span>
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{l.kindLabel}</span>
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{l.platform === 'fb' ? '👍 FB' : '🎵 TikTok'}</span>
+                        {l.selling === true && <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">🛒 CÓ BÁN{l.price ? ` · ${l.price}` : ''}</span>}
+                        {l.selling === false && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500">📄 không bán (blog/dịch vụ)</span>}
                         {l.cms && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">🧱 {l.cms}</span>}
                         {l.verifying && <span className="text-[10px] text-slate-400">đang xác minh…</span>}
                         {l.contains === true && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">✓ khớp nội dung</span>}

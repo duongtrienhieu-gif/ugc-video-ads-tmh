@@ -75,14 +75,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const baseUrl = pageId
       ? `https://api.scrapecreators.com/v1/facebook/adLibrary/company/ads?pageId=${encodeURIComponent(pageId)}&country=${country}&status=${status}&media_type=${mediaType}`
       : `https://api.scrapecreators.com/v1/facebook/adLibrary/search/ads?query=${encodeURIComponent(q)}&country=${country}&status=${status}&media_type=${mediaType}&ad_type=all&search_type=${searchType}`
-    // Mỗi trang SC chỉ trả ~5 ad → GOM tới 5 trang/lần để trả ~24 ad, đỡ bấm "Tải thêm" nhiều.
+    // Mỗi trang SC chỉ trả ~5 ad → GOM nhiều trang/lần. Chế độ Tìm Salepage (links=1) dedup theo
+    // domain nên 2-3 trang đã lộ gần hết salepage khác nhau → hạ trần 3 trang để tiết kiệm ~60% credit.
+    const maxPages = linksMode ? 3 : 7
+    const maxAds = linksMode ? 18 : 40
     const allRaw: FbAd[] = []
     const seen = new Set<string>()
     let cur = cursor
     let credits: number | null = null
     let nextCursor: string | number | null = null
     let pages = 0
-    while (pages < 7 && allRaw.length < 40) {
+    while (pages < maxPages && allRaw.length < maxAds) {
       const u = baseUrl + (cur ? `&cursor=${encodeURIComponent(cur)}` : '')
       const r = await fetch(u, { headers: { 'x-api-key': key } })
       if (!r.ok) {
