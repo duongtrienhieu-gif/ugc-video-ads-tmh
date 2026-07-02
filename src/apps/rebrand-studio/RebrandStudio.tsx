@@ -227,7 +227,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
   const pxHint = draft.widthCm && draft.heightCm
     ? `${cmToPx(draft.widthCm)}×${cmToPx(draft.heightCm)} px @300DPI`
     : ''
-  const labelCredit = draft.labelModel === 'nano2k' ? 12 : 6
+  const labelCredit = draft.labelModel === 'nano2k' ? 12 : 8   // 1K nano = 8cr, 2K = 12cr
 
   return (
     <div className="flex h-full flex-col bg-[#F6F6F8]">
@@ -376,11 +376,11 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
             </div>
           </div>
 
-          {/* Model nhãn (in) */}
+          {/* Độ phân giải nhãn (để in) — cả 2 đều nano-banana-2, khác nhau ở độ nét */}
           <div className="rounded-xl border border-black/10 bg-white p-4">
-            <label className="mb-2 block text-xs font-semibold text-gray-700">Model render nhãn (để in)</label>
+            <label className="mb-2 block text-xs font-semibold text-gray-700">Độ phân giải nhãn (để in)</label>
             <div className="flex gap-2">
-              {([['gpt4o', 'GPT-4o · 1K', '6cr · look quen'], ['nano2k', 'Nano · 2K', '12cr · nét, để in']] as const).map(([m, lbl, sub]) => (
+              {([['gpt4o', '1K · nhanh', '8cr · đủ xem'], ['nano2k', '2K · nét', '12cr · để in 300DPI']] as const).map(([m, lbl, sub]) => (
                 <button key={m} onClick={() => setLabelModel(m)}
                   className={`flex-1 rounded-lg border px-2 py-2 text-left transition-colors ${draft.labelModel === m ? 'border-indigo-400 bg-indigo-50' : 'border-black/10 bg-white hover:bg-gray-50'}`}>
                   <div className={`text-xs font-medium ${draft.labelModel === m ? 'text-indigo-700' : 'text-gray-800'}`}>{lbl}</div>
@@ -388,7 +388,7 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
                 </button>
               ))}
             </div>
-            <p className="mt-1.5 text-[10px] text-gray-400">Nano 2K nét hơn cho bản in nhưng bố cục/chữ có thể khác GPT-4o — thử rồi đổi lại nếu không ưng.</p>
+            <p className="mt-1.5 text-[10px] text-gray-400">Cả 2 đều dùng nano-banana-2. Chọn 2K khi cần in nét; 1K nhanh + rẻ hơn, đủ xem trên màn hình.</p>
           </div>
 
           {/* Bước 1: phân tích + chọn tên */}
