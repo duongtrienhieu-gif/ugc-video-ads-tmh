@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { X, Eye, EyeOff, Key, Check, HardDrive, RefreshCw, ChevronDown, ExternalLink, Sun, Moon, Zap } from 'lucide-react'
+import { X, Eye, EyeOff, Key, Check, HardDrive, RefreshCw, ChevronDown, ExternalLink, Sun, Moon } from 'lucide-react'
+import ImageModelPicker from './ImageModelPicker'
 import { useSettingsStore, flushPendingCloudPush } from '../stores/settingsStore'
 import { useAppStore } from '../stores/appStore'
 import { useBankStore } from '../stores/bankStore'
@@ -145,9 +146,9 @@ const BTN_CLASS: Record<string, string> = {
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const {
     kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, youtubeApiKey,
-    kieCredits, theme, kieImageFallbackMode,
+    kieCredits, theme,
     setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setFalApiKey, setShotstackApiKey, setYoutubeApiKey,
-    setKieCredits, setTheme, setKieImageFallbackMode,
+    setKieCredits, setTheme,
   } = useSettingsStore()
   const addToast = useAppStore((s) => s.addToast)
 
@@ -494,30 +495,13 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             </div>
           </div>
 
-          {/* Chế độ KIE nghẽn — fallback gpt-4o-image → nano-banana-2 */}
+          {/* Model tạo ảnh mặc định (global) — mọi app dùng chung, đổi được ngay ở từng app */}
           <div className="border-t border-black/6 px-5 py-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">
-                  <Zap className={`h-3.5 w-3.5 ${kieImageFallbackMode ? 'text-amber-500' : 'text-gray-400'}`} />
-                  Chế độ KIE nghẽn
-                </p>
-                <p className="mt-0.5 text-[11px] text-gray-400">
-                  {kieImageFallbackMode
-                    ? 'ĐANG BẬT — mọi ảnh dùng Nano Banana (Google), né gpt-4o-image đang quá tải. Vẫn khóa product/avatar.'
-                    : 'Tắt — dùng gpt-4o-image như thường. App vẫn tự chuyển sang Nano Banana nếu phát hiện nghẽn.'}
-                </p>
-              </div>
-              <button
-                onClick={() => setKieImageFallbackMode(!kieImageFallbackMode)}
-                role="switch"
-                aria-checked={kieImageFallbackMode}
-                aria-label="Chế độ KIE nghẽn"
-                className={`relative shrink-0 h-6 w-11 rounded-full transition-colors ${kieImageFallbackMode ? 'bg-amber-500' : 'bg-gray-300'}`}
-              >
-                <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${kieImageFallbackMode ? 'translate-x-5' : ''}`} />
-              </button>
-            </div>
+            <p className="mb-2 text-xs font-semibold text-gray-600">Model tạo ảnh mặc định</p>
+            <ImageModelPicker />
+            <p className="mt-2 text-[11px] text-gray-400">
+              Áp dụng cho MỌI app tạo ảnh. Khi model chọn bị lỗi/nghẽn, app tự chuyển sang model kia (giữ khóa product/avatar). gpt-4o-image cũ đã ngừng.
+            </p>
           </div>
 
           {/* Storage section */}
