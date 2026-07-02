@@ -17,9 +17,11 @@ import { getUrl } from '../../../utils/assetStore'
 import { getKieCredits } from '../../../utils/kieai'
 import { useTikTokShopStore, checkDraftReadiness } from '../store'
 import {
-  estimateListingCredits,
+  SLOT_MAP,
   snapToPaletteFamily,
 } from '../constants'
+import { imageModelCredits } from '../../../utils/imageModelInfo'
+import ImageModelPicker from '../../../components/ImageModelPicker'
 import { useResolvedBrandKit } from '../hooks/useResolvedBrandKit'
 import { generateAllSlots } from '../services/generateAllSlots'
 import { generateDescription } from '../services/generateDescription'
@@ -75,7 +77,8 @@ export default function InputPanel() {
   const selectedProduct = draft.productId ? getProductById(draft.productId) : undefined
 
   // Phase 4: full 9-slot cost (7 AI gens + 1 text gen; slots 5,9 canvas-only free).
-  const estimatedCost = estimateListingCredits()
+  const imageModel = useSettingsStore((s) => s.imageModel)
+  const estimatedCost = imageModelCredits(imageModel, SLOT_MAP.length)   // 9 ảnh × credit model đang chọn
 
   function handleGenerate() {
     if (!readiness.ready) return
@@ -387,6 +390,8 @@ export default function InputPanel() {
 
       {/* ── Generate button ─────────────────────────────────────────── */}
       <div className="mt-auto space-y-2">
+        {/* Chọn model tạo ảnh TRƯỚC khi tạo listing (9 ảnh) */}
+        <ImageModelPicker count={SLOT_MAP.length} compact />
         {!readiness.ready && readiness.missing.length > 0 && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5">
             <p className="text-[11px] font-semibold text-amber-700">Còn thiếu:</p>
