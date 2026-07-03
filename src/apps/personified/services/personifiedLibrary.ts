@@ -53,3 +53,44 @@ export async function removeFromLibrary(id: string): Promise<void> {
   writeLocal(readLocal().filter((v) => v.id !== id))
   await deleteOutput(KIND, id)
 }
+
+// ── DỰ ÁN (kịch bản + toàn bộ tiến trình) ────────────────────────────────────
+// Khác LibVideo (chỉ mp4 cuối): LibProject lưu SNAPSHOT full state mode3
+// (script + clip/giọng/keyframe ref + tier + tiến độ) → mở lại = bung nguyên
+// tiến trình để làm tiếp (không sinh lại = đỡ credit). snapshot = PersistedState JSON.
+export interface LibProject {
+  id: string
+  title: string
+  productName: string
+  market: 'VN' | 'MY'
+  sceneCount: number
+  createdAt: number
+  snapshot: unknown   // PersistedState (Personified.tsx) — nạp lại vào CACHE_KEY rồi hydrate
+}
+
+const LS_PROJ = 'personified-projects-v1'
+const KIND_PROJ = 'personified-project' as const
+
+function readProj(): LibProject[] {
+  try { return JSON.parse(localStorage.getItem(LS_PROJ) ?? '[]') as LibProject[] } catch { return [] }
+}
+function writeProj(list: LibProject[]): void {
+  try { localStorage.setItem(LS_PROJ, JSON.stringify(list)) } catch { /* quota — non-fatal */ }
+}
+
+export function getProjectsLocal(): LibProject[] {
+  return readProj().slice().sort((a, b) => b.createdAt - a.createdAt)
+}
+export async function syncProjects(): Promise<LibProject[]> {
+  const cloud = await listOutputs<LibProject>(KIND_PROJ)
+  if (cloud) { writeProj(cloud); return cloud.slice().sort((a, b) => b.createdAt - a.createdAt) }
+  return getProjectsLocal()
+}
+export async function saveProject(item: LibProject): Promise<void> {
+  writeProj([item, ...readProj().filter((v) => v.id !== item.id)])
+  await createOutput(KIND_PROJ, item, item.title)
+}
+export async function removeProject(id: string): Promise<void> {
+  writeProj(readProj().filter((v) => v.id !== id))
+  await deleteOutput(KIND_PROJ, id)
+}

@@ -22,7 +22,8 @@ import CloneVoiceModal from '../voice-studio/components/CloneVoiceModal'
 import { listVoices, type ElevenLabsVoice } from '../../utils/elevenlabs'
 import { assemblePersonifiedVideo } from './services/personifiedAssembler'   // P2d
 import { resetFFmpeg } from '../video-builder/v3/services/ffmpegLoader'      // reset worker sau OOM
-import { type LibVideo, getLibraryLocal, syncLibrary, addToLibrary, removeFromLibrary } from './services/personifiedLibrary'   // P2e
+import { type LibVideo, getLibraryLocal, syncLibrary, addToLibrary, removeFromLibrary,
+  type LibProject, getProjectsLocal, syncProjects, saveProject, removeProject } from './services/personifiedLibrary'   // P2e + dự án
 import { useAssetUrl } from '../../hooks/useAssetUrl'
 
 // P2a — trạng thái render 1 cảnh (persist cùng kịch bản).
@@ -266,6 +267,9 @@ export default function Personified() {
   const [library, setLibrary] = useState<LibVideo[]>(getLibraryLocal())
   const [showLibrary, setShowLibrary] = useState(false)
   const [savedToLib, setSavedToLib] = useState(false)
+  // Dự án (kịch bản + tiến trình) đã lưu.
+  const [projects, setProjects] = useState<LibProject[]>(getProjectsLocal())
+  const [savingProject, setSavingProject] = useState(false)
 
   const product = useMemo(() => products.find((p) => p.id === productId), [products, productId])
   // P2a — ảnh sản phẩm để khóa fidelity (cảnh hasProduct).
@@ -404,8 +408,9 @@ export default function Personified() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [script, kieKey])
 
-  // P2e — kéo thư viện từ cloud 1 lần khi mount (degrade về local nếu chưa login).
+  // P2e — kéo thư viện + dự án từ cloud 1 lần khi mount (degrade về local nếu chưa login).
   useEffect(() => { void syncLibrary().then(setLibrary) }, [])
+  useEffect(() => { void syncProjects().then(setProjects) }, [])
 
   // Tải danh sách giọng ElevenLabs của tài khoản (để hiện tên + dropdown chọn).
   useEffect(() => {
@@ -880,6 +885,37 @@ export default function Personified() {
     setLibrary(getLibraryLocal())
   }
 
+  // ── DỰ ÁN: lưu toàn bộ kịch bản + tiến trình (snapshot = PersistedState) ──
+  async function handleSaveProject() {
+    if (!script || savingProject) { if (!script) setError('Chưa có kịch bản để lưu'); return }
+    setSavingProject(true)
+    try {
+      const snapshot: PersistedState = { v: 1, productId, market, problemHint, insight, config, script, variant, tier, clips, charBank, charVoices, finalVideoRef: finalVideo.videoRef }
+      const stamp = new Date().toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
+      const item: LibProject = {
+        id: crypto.randomUUID(),
+        title: `${product?.productName || 'Dự án'} · ${market} · ${stamp}`,
+        productName: product?.productName || '', market,
+        sceneCount: script.scenes.length, createdAt: Date.now(), snapshot,
+      }
+      await saveProject(item)
+      setProjects(getProjectsLocal())
+    } catch (e) {
+      setError('Lưu kịch bản lỗi: ' + ((e as Error).message || '').slice(0, 80))
+    } finally { setSavingProject(false) }
+  }
+  // Mở project = ghi snapshot vào CACHE_KEY rồi reload → tái dùng ĐÚNG đường hydrate đã kiểm chứng.
+  function handleOpenProject(p: LibProject) {
+    if (!confirm('Mở dự án này? Tiến trình hiện tại chưa lưu sẽ bị thay thế.')) return
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(p.snapshot)) } catch { /* quota */ }
+    window.location.reload()
+  }
+  async function handleDeleteProject(id: string) {
+    if (!confirm('Xoá vĩnh viễn dự án này?')) return
+    await removeProject(id)
+    setProjects(getProjectsLocal())
+  }
+
   // P2a — i2v + GIỌNG (song song) TẤT CẢ cảnh đã duyệt keyframe. Cảnh chưa có keyframe → bỏ qua.
   async function handleRenderAllClips() {
     if (!script || renderingAll) return
@@ -902,15 +938,38 @@ export default function Personified() {
           <h1 className="text-sm font-bold text-gray-900">Xưởng Nhân Vật Hoá 3D</h1>
           <p className="text-[11px] text-gray-500">Video nhân cách hóa vấn đề · simulator kịch bản (P1)</p>
         </div>
+        <button onClick={() => void handleSaveProject()} disabled={!script || savingProject}
+          title="Lưu toàn bộ kịch bản + tiến trình (clip/giọng đã sinh) — mở lại để làm tiếp, khỏi sinh lại"
+          className="ml-auto flex items-center gap-1 rounded-lg bg-fuchsia-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-fuchsia-700 disabled:opacity-40">
+          {savingProject ? '⏳ Đang lưu…' : '💾 Lưu kịch bản'}
+        </button>
         <button onClick={() => setShowLibrary((v) => !v)}
-          className={`ml-auto flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${showLibrary ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-          📚 Thư viện{library.length > 0 && ` (${library.length})`}
+          className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${showLibrary ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+          📚 Thư viện{(library.length + projects.length) > 0 && ` (${library.length + projects.length})`}
         </button>
       </div>
 
       {/* P2e — Thư viện video đã lưu */}
       {showLibrary && (
         <div className="mx-6 mt-4 rounded-xl border border-violet-200 bg-white p-4 shadow-sm">
+          {/* Dự án — kịch bản + toàn bộ tiến trình (mở lại làm tiếp, khỏi sinh lại) */}
+          <div className="mb-4 border-b border-black/8 pb-4">
+            <div className="mb-2 flex items-center gap-2 text-sm font-bold text-gray-900">📝 Dự án đã lưu ({projects.length})</div>
+            {projects.length === 0
+              ? <p className="text-xs text-gray-400">Chưa có dự án. Bấm "💾 Lưu kịch bản" ở trên để lưu toàn bộ tiến trình (clip/giọng đã sinh) → mở lại làm tiếp.</p>
+              : <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {projects.map((p) => (
+                    <div key={p.id} className="rounded-lg border border-fuchsia-200 bg-fuchsia-50/40 p-2.5">
+                      <p className="truncate text-xs font-bold text-gray-800" title={p.title}>{p.title}</p>
+                      <p className="text-[10px] text-gray-400">{p.market} · {p.sceneCount} cảnh · {new Date(p.createdAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}</p>
+                      <div className="mt-1.5 flex gap-1.5">
+                        <button onClick={() => handleOpenProject(p)} className="flex-1 rounded-md bg-fuchsia-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-fuchsia-700">↗ Mở làm tiếp</button>
+                        <button onClick={() => void handleDeleteProject(p.id)} className="rounded-md border border-black/10 px-2 py-1 text-[11px] text-gray-500 hover:bg-red-50 hover:text-red-600">Xoá</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>}
+          </div>
           <div className="mb-2 flex items-center gap-2 text-sm font-bold text-gray-900">📚 Thư viện video ({library.length})</div>
           {library.length === 0
             ? <p className="text-xs text-gray-400">Chưa có video nào. Ghép xong 1 video → bấm "💾 Lưu vào thư viện".</p>

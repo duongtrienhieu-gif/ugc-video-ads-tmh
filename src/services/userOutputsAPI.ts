@@ -29,6 +29,7 @@ export type OutputKind =
   | 'brand-kit'
   | 'chat-bot-config'
   | 'personified-video'
+  | 'personified-project'
 
 /** Minimum required fields any output item must expose. The full body
  *  lives in `payload_json`; the row-level fields are for fast listing
