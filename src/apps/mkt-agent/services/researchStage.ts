@@ -17,11 +17,17 @@ interface ApiProduct {
   niche?: string
 }
 
-// "RM12.90" / "RM 12.90" / "RM12.90 - RM25" / "RM1,290" → lấy số đầu tiên.
+// Giá có thể là DẢI (biến thể): "RM1.00 - RM18.50" — trong đó số nhỏ (RM1) thường
+// là option rác/đặt cọc (vd "Lalai") → lấy số đầu sẽ SAI. Cách đúng: bỏ giá quá
+// thấp (<RM3, gần như luôn là đặt cọc/sample) rồi lấy giá "từ" (min còn lại);
+// nếu tất cả đều thấp thì lấy max (SP giá rẻ thật).
 function parsePrice(s: string | number | undefined): number {
-  const m = String(s ?? '').match(/[\d][\d,]*\.?\d*/)
-  if (!m) return 0
-  return parseFloat(m[0].replace(/,/g, '')) || 0
+  const nums = String(s ?? '').match(/\d[\d,]*\.?\d*/g)
+  if (!nums) return 0
+  const vals = nums.map((n) => parseFloat(n.replace(/,/g, '')) || 0).filter((n) => n > 0)
+  if (!vals.length) return 0
+  const real = vals.filter((v) => v >= 3)
+  return real.length ? Math.min(...real) : Math.max(...vals)
 }
 
 export interface ScanResult {
