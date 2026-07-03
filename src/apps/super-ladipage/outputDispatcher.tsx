@@ -31,6 +31,8 @@ interface OutputDispatcherProps {
   onGenerateAllImages: () => void
   onGenerateRemaining: () => void
   onRetryFailed: () => void
+  onGenerateSection?: (sectionIdx: number) => void
+  onGenerateSample?: () => void
   onRegenerateImage: (sectionIdx: number, imageIdx: number) => void
   onDeleteImage: (sectionIdx: number, imageIdx: number) => void
   onUpdatePrompt?: (sectionIdx: number, imageIdx: number, newPrompt: string) => void

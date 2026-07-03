@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle, Clock, Zap, RefreshCw, FilePlus, FileDown, Copy as CopyIcon, FolderInput, X } from 'lucide-react'
 import type { LandingPagePack, SavedLandingPack } from '../types'
 import type { ImageProgress } from '../SuperLadipage'
-import SectionCard from './SectionCard'
+import SectionCard, { ImagePromptCard } from './SectionCard'
 import { useSuperLadipageStore } from '../store'
 import { useAppStore } from '../../../stores/appStore'
 import { IMAGE_MODEL_INFO } from '../../../utils/imageModelInfo'
@@ -14,6 +14,8 @@ interface OutputPanelProps {
   onGenerateAllImages: () => void
   onGenerateRemaining: () => void
   onRetryFailed: () => void
+  onGenerateSection?: (sectionIdx: number) => void
+  onGenerateSample?: () => void
   onRegenerateImage: (sectionIdx: number, imageIdx: number) => void
   onDeleteImage: (sectionIdx: number, imageIdx: number) => void
   onUpdatePrompt?: (sectionIdx: number, imageIdx: number, newPrompt: string) => void
@@ -30,6 +32,7 @@ interface OutputPanelProps {
 export default function OutputPanel({
   pack, isGenerating, onRegenerate,
   onGenerateAllImages, onGenerateRemaining, onRetryFailed,
+  onGenerateSection, onGenerateSample,
   onRegenerateImage, onDeleteImage,
   onUpdatePrompt, onRestorePrompt,
   imageProgress, isGeneratingImages,
@@ -42,6 +45,7 @@ export default function OutputPanel({
   // Vỏ hiển thị output: song ngữ + accordion (thu gọn mặc định, mở section 1).
   const [showVi, setShowVi] = useState(false)                                  // mặc định CHỈ MS → gọn nửa
   const [openMap, setOpenMap] = useState<Record<number, boolean>>({ 0: true }) // section 1 mở sẵn
+  const [viewMode, setViewMode] = useState<'content' | 'images'>('content')    // nội dung | gallery ảnh
 
   const addToStore = useSuperLadipageStore((s) => s.add)
   const addToast = useAppStore((s) => s.addToast)
@@ -121,6 +125,7 @@ export default function OutputPanel({
     const d = s.imagePrompts?.filter((p) => p.status === 'done').length ?? 0
     return { t, d }
   }
+  const totalImg = pack.sections.reduce((a, s) => a + (s.imagePrompts?.length ?? 0), 0)
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -204,6 +209,7 @@ export default function OutputPanel({
           onGenerateAll={onGenerateAllImages}
           onGenerateRemaining={onGenerateRemaining}
           onRetryFailed={onRetryFailed}
+          onGenerateSample={onGenerateSample}
           progress={imageProgress}
           isGenerating={isGeneratingImages}
         />
@@ -215,67 +221,120 @@ export default function OutputPanel({
         variant="collapsible"
       />
 
-      {/* Thanh điều khiển output: ngôn ngữ · mở/thu · copy · nhảy section */}
+      {/* Thanh điều khiển output */}
       <div className="shrink-0 border-b border-black/8 bg-white px-3 md:px-5 py-1.5">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            onClick={() => setShowVi((v) => !v)}
-            title={showVi ? 'Đang hiện cả bản dịch VN — bấm để chỉ hiện MS (gọn hơn)' : 'Đang chỉ hiện MS — bấm để hiện thêm bản dịch VN'}
-            className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${
-              showVi ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.04]'
-            }`}
-          >
-            🇻🇳 {showVi ? 'MS + VN' : 'Chỉ MS'}
-          </button>
-          <button onClick={openAll} className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-black/[0.04]">▾ Mở tất cả</button>
-          <button onClick={collapseAll} className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-black/[0.04]">▸ Thu gọn</button>
-          <button onClick={() => void copyAllMs()} className="flex items-center gap-1 rounded-full border border-violet-200 bg-white px-2.5 py-1 text-[11px] font-bold text-violet-700 hover:bg-violet-50">
-            <CopyIcon className="h-3 w-3" /> Copy toàn bộ MS
-          </button>
+        {/* Chuyển chế độ xem: Nội dung ↔ Gallery ảnh */}
+        <div className="mb-1.5 inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
+          <button onClick={() => setViewMode('content')}
+            className={`rounded-md px-2.5 py-1 text-[11px] font-bold ${viewMode === 'content' ? 'bg-violet-600 text-white' : 'text-gray-500 hover:bg-black/[0.04]'}`}>📄 Nội dung</button>
+          <button onClick={() => setViewMode('images')}
+            className={`rounded-md px-2.5 py-1 text-[11px] font-bold ${viewMode === 'images' ? 'bg-amber-600 text-white' : 'text-gray-500 hover:bg-black/[0.04]'}`}>🖼 Ảnh ({totalImg})</button>
         </div>
-        {/* Thanh nhảy section — chip số + trạng thái ảnh */}
-        <div className="mt-1.5 flex gap-1 overflow-x-auto pb-0.5">
-          {pack.sections.map((s, i) => {
-            const { t, d } = secImg(s)
-            const allDone = t > 0 && d === t
-            return (
+        {viewMode === 'content' && (
+          <>
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
-                key={i}
-                onClick={() => jumpTo(i)}
-                title={s.title}
-                className={`shrink-0 flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-                  openMap[i] ? 'border-violet-300 bg-violet-50 text-violet-700' : 'border-black/10 bg-white text-gray-500 hover:bg-black/[0.04]'
+                onClick={() => setShowVi((v) => !v)}
+                title={showVi ? 'Đang hiện cả bản dịch VN — bấm để chỉ hiện MS (gọn hơn)' : 'Đang chỉ hiện MS — bấm để hiện thêm bản dịch VN'}
+                className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                  showVi ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.04]'
                 }`}
               >
-                <span className="tabular-nums">{i + 1}</span>
-                {t > 0 && (
-                  <span className={allDone ? 'text-emerald-600' : 'text-gray-400'}>{allDone ? '✓' : `${d}/${t}`}</span>
-                )}
+                🇻🇳 {showVi ? 'MS + VN' : 'Chỉ MS'}
               </button>
-            )
-          })}
-        </div>
+              <button onClick={openAll} className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-black/[0.04]">▾ Mở tất cả</button>
+              <button onClick={collapseAll} className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-black/[0.04]">▸ Thu gọn</button>
+              <button onClick={() => void copyAllMs()} className="flex items-center gap-1 rounded-full border border-violet-200 bg-white px-2.5 py-1 text-[11px] font-bold text-violet-700 hover:bg-violet-50">
+                <CopyIcon className="h-3 w-3" /> Copy toàn bộ MS
+              </button>
+            </div>
+            {/* Thanh nhảy section — chip số + trạng thái ảnh */}
+            <div className="mt-1.5 flex gap-1 overflow-x-auto pb-0.5">
+              {pack.sections.map((s, i) => {
+                const { t, d } = secImg(s)
+                const allDone = t > 0 && d === t
+                return (
+                  <button
+                    key={i}
+                    onClick={() => jumpTo(i)}
+                    title={s.title}
+                    className={`shrink-0 flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                      openMap[i] ? 'border-violet-300 bg-violet-50 text-violet-700' : 'border-black/10 bg-white text-gray-500 hover:bg-black/[0.04]'
+                    }`}
+                  >
+                    <span className="tabular-nums">{i + 1}</span>
+                    {t > 0 && (
+                      <span className={allDone ? 'text-emerald-600' : 'text-gray-400'}>{allDone ? '✓' : `${d}/${t}`}</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
+        {viewMode === 'images' && (
+          <p className="text-[10px] text-gray-400">Gallery toàn bộ ảnh · nhóm theo section · bấm "Sinh N ảnh section này" để render từng phần cho đỡ tốn.</p>
+        )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 md:p-4 pb-20 md:pb-4">
-        <div className="space-y-3">
-          {pack.sections.map((section, i) => (
-            <SectionCard
-              key={`${section.type}-${i}`}
-              index={i}
-              section={section}
-              expanded={openMap[i] ?? false}
-              onToggleExpand={() => setOpenMap((m) => ({ ...m, [i]: !m[i] }))}
-              showVi={showVi}
-              anchorId={`slp-sec-${i}`}
-              onRegenerateImage={onRegenerateImage}
-              onDeleteImage={onDeleteImage}
-              onUpdatePrompt={onUpdatePrompt}
-              onRestorePrompt={onRestorePrompt}
-            />
-          ))}
+      {viewMode === 'content' ? (
+        <div className="flex-1 overflow-y-auto p-2 md:p-4 pb-20 md:pb-4">
+          <div className="space-y-3">
+            {pack.sections.map((section, i) => (
+              <SectionCard
+                key={`${section.type}-${i}`}
+                index={i}
+                section={section}
+                expanded={openMap[i] ?? false}
+                onToggleExpand={() => setOpenMap((m) => ({ ...m, [i]: !m[i] }))}
+                showVi={showVi}
+                anchorId={`slp-sec-${i}`}
+                onRegenerateImage={onRegenerateImage}
+                onDeleteImage={onDeleteImage}
+                onUpdatePrompt={onUpdatePrompt}
+                onRestorePrompt={onRestorePrompt}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto p-2 md:p-4 pb-20 md:pb-4">
+          <div className="space-y-4">
+            {pack.sections.map((s, si) => {
+              const prompts = s.imagePrompts ?? []
+              if (!prompts.length) return null
+              const { t, d } = secImg(s)
+              return (
+                <div key={si}>
+                  <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] font-bold text-gray-700">{si + 1}. {s.title}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${d === t ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{d}/{t} ảnh</span>
+                    {onGenerateSection && d < t && !isGeneratingImages && (
+                      <button onClick={() => onGenerateSection(si)}
+                        className="flex items-center gap-1 rounded-full border border-violet-200 bg-white px-2.5 py-0.5 text-[10px] font-bold text-violet-700 hover:bg-violet-50">
+                        <Sparkles className="h-2.5 w-2.5" /> Sinh {t - d} ảnh section này
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                    {prompts.map((p, ii) => (
+                      <ImagePromptCard
+                        key={ii}
+                        prompt={p}
+                        assetKey={`${si}:${ii}`}
+                        onRegenerate={() => onRegenerateImage(si, ii)}
+                        onDelete={() => onDeleteImage(si, ii)}
+                        onUpdatePrompt={onUpdatePrompt ? (np: string) => onUpdatePrompt(si, ii, np) : undefined}
+                        onRestorePrompt={onRestorePrompt ? () => onRestorePrompt(si, ii) : undefined}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -283,12 +342,13 @@ export default function OutputPanel({
 // ─────────────────────────────────────────────────────────────────────
 
 function ImageGenerationBar({
-  pack, onGenerateAll, onGenerateRemaining, onRetryFailed, progress, isGenerating,
+  pack, onGenerateAll, onGenerateRemaining, onRetryFailed, onGenerateSample, progress, isGenerating,
 }: {
   pack: LandingPagePack
   onGenerateAll: () => void
   onGenerateRemaining: () => void
   onRetryFailed: () => void
+  onGenerateSample?: () => void
   progress: ImageProgress | null
   isGenerating: boolean
 }) {
@@ -395,6 +455,18 @@ function ImageGenerationBar({
             <Sparkles className="h-3 w-3" />
             <span className="md:hidden">Còn {remaining}</span>
             <span className="hidden md:inline">Tạo {remaining} ảnh còn thiếu (~{estCreditsRemaining} credit)</span>
+          </button>
+        )}
+
+        {onGenerateSample && generated === 0 && totalImages > 5 && !isGenerating && (
+          <button
+            onClick={onGenerateSample}
+            title="Sinh 5 ảnh đầu để xem phong cách trước khi vít cả pack (~40 credit)"
+            className="flex items-center gap-1 rounded-full border border-amber-300 bg-white px-2.5 md:px-3 py-1.5 text-[11px] font-bold text-amber-700 hover:bg-amber-50"
+          >
+            <Sparkles className="h-3 w-3" />
+            <span className="md:hidden">5 mẫu</span>
+            <span className="hidden md:inline">Sinh 5 ảnh mẫu (thử style)</span>
           </button>
         )}
 

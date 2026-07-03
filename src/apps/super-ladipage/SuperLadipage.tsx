@@ -420,15 +420,16 @@ export default function SuperLadipage() {
     })
   }, [pack, patchImagePrompt])
 
-  const runImageSubset = async (predicate: (p: ImagePrompt) => boolean) => {
+  const runImageSubset = async (predicate: (p: ImagePrompt, si: number, ii: number) => boolean, limit?: number) => {
     if (!pack) return
     setIsGeneratingImages(true)
-    const targets: Array<[number, number]> = []
+    const collected: Array<[number, number]> = []
     pack.sections.forEach((s, si) => {
       s.imagePrompts?.forEach((p, ii) => {
-        if (predicate(p)) targets.push([si, ii])
+        if (predicate(p, si, ii)) collected.push([si, ii])
       })
     })
+    const targets = limit && limit > 0 ? collected.slice(0, limit) : collected
     if (targets.length === 0) {
       setIsGeneratingImages(false)
       return
@@ -465,6 +466,11 @@ export default function SuperLadipage() {
 
   const handleRetryFailedImages = () => runImageSubset((p) => p.status === 'failed')
   const handleGenerateRemaining  = () => runImageSubset((p) => p.status !== 'done' && p.status !== 'generating' && p.status !== 'queued')
+  const notBusy = (p: ImagePrompt) => p.status !== 'done' && p.status !== 'generating' && p.status !== 'queued'
+  // Sinh ảnh của RIÊNG 1 section (chỉ ô chưa xong) — tái dùng đúng machinery concurrency.
+  const handleGenerateSection = (sectionIdx: number) => runImageSubset((p, si) => si === sectionIdx && notBusy(p))
+  // Sinh 5 ảnh MẪU đầu tiên (chưa xong) để xem phong cách trước khi vít cả pack.
+  const handleGenerateSample  = () => runImageSubset((p) => notBusy(p), 5)
 
   // ── Mobile flow: [Thiết lập | Trang đích] segmented (replaces the FAB) ──
   const [mobileTab, setMobileTab] = useState<'setup' | 'result'>('setup')
@@ -523,6 +529,8 @@ export default function SuperLadipage() {
           onGenerateAllImages={handleGenerateAllImages}
           onGenerateRemaining={handleGenerateRemaining}
           onRetryFailed={handleRetryFailedImages}
+          onGenerateSection={handleGenerateSection}
+          onGenerateSample={handleGenerateSample}
           onRegenerateImage={handleRegenerateOneImage}
           onDeleteImage={handleDeleteOneImage}
           onUpdatePrompt={handleUpdatePrompt}

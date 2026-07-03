@@ -554,7 +554,7 @@ function ImagePromptCardImpl({
   )
 }
 
-const ImagePromptCard = memo(ImagePromptCardImpl)
+export const ImagePromptCard = memo(ImagePromptCardImpl)
 
 // ─────────────────────────────────────────────────────────────────────
 
