@@ -19,6 +19,8 @@ interface FbAd {
   hasCart?: boolean; productUrl?: string   // video gắn giỏ TikTok Shop
   tier?: 'generic' | 'oem' | 'brand'   // 🛰 Radar: generic=dễ nhập 1688 · oem=nhãn riêng · brand=bảo hộ
   brandName?: string                    // tên brand/nhãn (nếu oem/brand)
+  src?: 'checking' | 'found' | 'none'  // 🏭 dội ảnh lên 1688: found=có nguồn (nhập được) · none=không thấy
+  srcLink?: string; srcPrice?: string   // link + giá ¥ 1688 nếu found
 }
 // Tách @handle / user_id từ ô nhập tự do (tên kênh · link tiktok · id số).
 function parseHandle(raw: string): { handle: string; userId: string } {
@@ -233,6 +235,8 @@ export default function SpyAds() {
   const [radarErr, setRadarErr] = useState<string | null>(null)
   const [radarClassifying, setRadarClassifying] = useState(false)   // đang phân loại brand (Gemini)
   const [brandFilter, setBrandFilter] = useState<'hideBrand' | 'genericOnly' | 'all'>('hideBrand') // lọc hàng clone được
+  const [sourceBusy, setSourceBusy] = useState(false)   // đang dội ảnh check 1688
+  const [sourceOnly, setSourceOnly] = useState(false)   // chỉ hiện ad ĐÃ tìm được nguồn 1688
 
   const [playAd, setPlayAd] = useState<FbAd | null>(null)
   const [readBusy, setReadBusy] = useState(false)
@@ -377,6 +381,35 @@ export default function SpyAds() {
       }))
     } catch { /* phân loại lỗi → giữ nguyên, không vỡ */ }
     finally { setRadarClassifying(false) }
+  }
+
+  const patchAd = (id: string, patch: Partial<FbAd>) =>
+    setAds((prev) => (prev || []).map((a) => (a.id === id ? { ...a, ...patch } : a)))
+
+  // 🏭 Dội ẢNH cover lên 1688 (reverse-image) → có nguồn nhập thật hay không. Đây là
+  // BẰNG CHỨNG chắc chắn (không đoán qua chữ). Cover là frame video nên ảnh SP rõ mới
+  // trúng; frame cảnh/người → khó khớp (đành chịu, thử ad khác/mở video chọn ảnh đẹp).
+  const check1688One = async (ad: FbAd) => {
+    if (!ad.cover) return
+    patchAd(ad.id, { src: 'checking' })
+    try {
+      const r = await fetch('/api/rapid-1688', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrl: ad.cover }),
+      })
+      const d = (await r.json()) as { products?: { itemId?: string; price?: string; priceHigh?: string }[] }
+      const p = (d.products || []).find((x) => x.itemId)
+      if (p?.itemId) patchAd(ad.id, { src: 'found', srcLink: `https://detail.1688.com/offer/${p.itemId}.html`, srcPrice: p.price || p.priceHigh || '' })
+      else patchAd(ad.id, { src: 'none' })
+    } catch { patchAd(ad.id, { src: 'none' }) }
+  }
+
+  // Quét nguồn hàng loạt: top 20 ad đang hiện chưa check → dội 1688 (3 song song).
+  const runSourceCheck = async () => {
+    const targets = shownAds.filter((a) => a.cover && a.src == null).slice(0, 20)
+    if (!targets.length) return
+    setSourceBusy(true)
+    await poolRun(targets, 3, async (a) => { await check1688One(a) })
+    setSourceBusy(false)
   }
 
   // Nhận SP từ MKT Agent → tự chuyển chế độ "tìm ad" + search đúng SP.
@@ -651,6 +684,8 @@ CHỈ trả JSON.`
       // Lọc hàng CLONE-ĐƯỢC: bỏ brand nội địa/bảo hộ (chưa phân loại → giữ để không trống).
       if (brandFilter === 'hideBrand') r = r.filter((a) => a.tier !== 'brand')
       else if (brandFilter === 'genericOnly') r = r.filter((a) => a.tier == null || a.tier === 'generic')
+      // 🏭 Chỉ hàng ĐÃ xác nhận có nguồn 1688 (dội ảnh khớp) = chắc chắn nhập được.
+      if (sourceOnly) r = r.filter((a) => a.src === 'found')
     }
     const s = [...r]
     if (sortMode === 'days') s.sort((x, y) => (y.daysRunning || 0) - (x.daysRunning || 0))
@@ -1124,6 +1159,14 @@ CHỈ trả JSON.`
                   </select>
                 </label>
                 {radarClassifying && <span className="text-[11px] text-violet-500 animate-pulse">⏳ đang lọc brand…</span>}
+                <button onClick={() => void runSourceCheck()} disabled={sourceBusy}
+                  title="Dội ảnh 20 ad đang hiện lên 1688 → xác nhận CÓ NGUỒN NHẬP thật hay không (bằng chứng chắc chắn, không đoán qua chữ)"
+                  className="rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">
+                  🏭 {sourceBusy ? 'Đang dội 1688…' : 'Quét nguồn 1688 (20)'}
+                </button>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600" title="Chỉ hiện ad ĐÃ dội ảnh khớp 1688 = chắc chắn nhập được">
+                  <input type="checkbox" checked={sourceOnly} onChange={(e) => setSourceOnly(e.target.checked)} /> 🏭 Chỉ có nguồn 1688
+                </label>
                 <label className="flex items-center gap-1 text-xs font-medium text-slate-600">Sắp xếp
                   <select value={sortMode} onChange={(e) => setSortMode(e.target.value as typeof sortMode)} className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium text-slate-700">
                     <option value="win">🏆 Winner</option>
@@ -1399,6 +1442,17 @@ CHỈ trả JSON.`
                   <div className="flex flex-1 flex-col gap-1 p-2.5">
                     <p className="line-clamp-1 text-xs font-semibold text-slate-700">{a.page || '(advertiser)'}</p>
                     <p className="line-clamp-2 text-[11px] text-slate-500">{a.text}</p>
+                    {/* 🏭 Nguồn 1688 (dội ảnh) — bằng chứng nhập được */}
+                    {platform === 'fb' && a.cover && (
+                      a.src === 'checking' ? <span className="text-[10px] font-semibold text-violet-500">🏭 đang dội 1688…</span>
+                      : a.src === 'found' ? (
+                        <a href={a.srcLink} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                          className="self-start rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-200">
+                          🏭 CÓ nguồn 1688{a.srcPrice ? ` · ¥${a.srcPrice}` : ''} →
+                        </a>
+                      ) : a.src === 'none' ? <span className="text-[10px] font-semibold text-slate-400">🏭 1688 ✗ (không khớp ảnh)</span>
+                      : <button onClick={(e) => { e.stopPropagation(); void check1688One(a) }} className="self-start rounded border border-emerald-300 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 hover:bg-emerald-50">🏭 Tìm nguồn 1688</button>
+                    )}
                     <div className="mt-auto flex flex-wrap gap-x-2 gap-y-0.5 pt-1 text-[10px] font-medium text-slate-500">
                       {a.daysRunning > 0 && <span>⏳ {a.daysRunning}d</span>}
                       {a.advertiserAds > 1 && <span>📢 {a.advertiserAds} ad</span>}
