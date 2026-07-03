@@ -145,7 +145,7 @@ interface MktAgentState {
 export const useMktAgentStore = create<MktAgentState>()(persist((set) => ({
   stage: 'research',
   checkpointMode: 'every',
-  niches: 'minyak urut, sakit sendi lutut, jerawat, kurus cepat, sakit gigi',
+  niches: '',
   amount: 30,
   scanning: false,
   classifying: false,
@@ -190,6 +190,13 @@ export const useMktAgentStore = create<MktAgentState>()(persist((set) => ({
   setAutoDeep: (autoDeep) => set({ autoDeep }),
 }), {
   name: 'mkt-agent-store',
+  version: 1,
+  // v1: ô ngách để TRỐNG lúc đầu — xoá bộ 5 từ khoá mặc định cũ đã lỡ lưu qua F5 (nếu user chưa sửa).
+  migrate: (persisted, version) => {
+    const s = persisted as Partial<MktAgentState> | undefined
+    if (s && (version ?? 0) < 1 && s.niches === 'minyak urut, sakit sendi lutut, jerawat, kurus cepat, sakit gigi') s.niches = ''
+    return s as MktAgentState
+  },
   // Lưu kết quả quét + watchlist + radar qua F5 (đỡ tốn call/credit quét lại). Bỏ cờ tạm + newIds.
   partialize: (s) => ({ candidates: s.candidates, niches: s.niches, amount: s.amount, onlyGeneric: s.onlyGeneric, watchlist: s.watchlist, seenIds: s.seenIds, lastRadarDate: s.lastRadarDate, autoRadar: s.autoRadar, autoDeep: s.autoDeep }),
 }))
