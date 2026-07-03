@@ -146,6 +146,29 @@ async function poolRun<T>(items: T[], n: number, fn: (t: T, i: number) => Promis
   }))
 }
 
+// 🔥 Chữ ký CREATIVE cho velocity: seller COD clone winner thường COPY nguyên caption.
+// → bỏ từ chào hàng/generic Malay, lấy 3 từ đặc trưng (tần suất cao) làm khoá gộp.
+// Cùng chữ ký ở NHIỀU seller = 1 creative đang bị clone = winner mạnh.
+const CLONE_STOP = new Set([
+  'percuma', 'free', 'gift', 'cod', 'bayar', 'bila', 'terima', 'beli', 'sekarang', 'promosi', 'diskaun',
+  'tawaran', 'hebat', 'jimat', 'harga', 'runtuh', 'stok', 'terhad', 'ready', 'stock', 'terlaris', 'viral',
+  'murah', 'order', 'whatsapp', 'wasap', 'link', 'klik', 'sini', 'untuk', 'dengan', 'yang', 'anda', 'saya',
+  'kami', 'dapatkan', 'hanya', 'boleh', 'akan', 'sudah', 'tanpa', 'lebih', 'paling', 'sangat', 'dari', 'pada',
+  'adalah', 'atau', 'juga', 'semua', 'setiap', 'malaysia', 'original', 'produk', 'product', 'terbaik', 'best',
+  'sale', 'offer', 'hari', 'hubungi', 'inbox', 'telefon', 'sahaja', 'dalam', 'akan', 'kini', 'now', 'shop',
+])
+function cloneSig(text: string): string {
+  const freq = new Map<string, number>()
+  const toks = (text || '').toLowerCase()
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[^a-zÀ-ỹ ]+/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !CLONE_STOP.has(w))
+  for (const w of toks) freq.set(w, (freq.get(w) || 0) + 1)
+  const top = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map((e) => e[0]).sort()
+  return top.join(' ')
+}
+
 const COUNTRIES = [
   { c: 'MY', f: '🇲🇾' }, { c: 'ID', f: '🇮🇩' }, { c: 'TH', f: '🇹🇭' },
   { c: 'VN', f: '🇻🇳' }, { c: 'PH', f: '🇵🇭' }, { c: 'SG', f: '🇸🇬' }, { c: 'ALL', f: '🌏' },
@@ -184,7 +207,7 @@ export default function SpyAds() {
   const [country, setCountry] = useState('MY')
   const [activeOnly, setActiveOnly] = useState(true)
   const [ladiOnly, setLadiOnly] = useState(false)   // chỉ ad dẫn về web/ladipage (bỏ chat/sàn)
-  const [groupView, setGroupView] = useState(false) // gom theo advertiser/SP thay vì lưới phẳng
+  const [groupMode, setGroupMode] = useState<'grid' | 'advertiser' | 'creative'>('grid') // lưới phẳng | gom advertiser | 🔥 creative bị clone
   const [selected, setSelected] = useState<Set<string>>(new Set()) // ad đã chọn để tải hàng loạt
   // Bộ lọc nâng cao (Phase 1 — khai thác field FB Ad Library)
   const [showFilters, setShowFilters] = useState(false)
@@ -634,6 +657,31 @@ CHỈ trả JSON.`
     return arr.sort((x, y) => y.score - x.score)
   })()
 
+  // 🔥 CREATIVE bị clone (velocity): gộp ad theo chữ ký nội dung → cluster có NHIỀU
+  // SELLER khác nhau = winner đang bị nhiều đối thủ clone (tín hiệu mạnh nhất). Chỉ giữ
+  // cluster ≥2 seller khác nhau HOẶC ≥3 ad (đang scale). Xếp theo #seller giảm dần.
+  const creativeClusters = (() => {
+    const m = new Map<string, FbAd[]>()
+    for (const a of shownAds) {
+      const sig = cloneSig(a.text || '')
+      if (!sig || sig.split(' ').length < 2) continue   // text quá ngắn → không đủ chữ ký
+      const arr = m.get(sig) || []; arr.push(a); m.set(sig, arr)
+    }
+    return [...m.entries()]
+      .map(([sig, list]) => {
+        const pages = new Set(list.map((a) => (a.page || '').toLowerCase()).filter(Boolean))
+        return {
+          sig, ads: list,
+          advertisers: pages.size,
+          maxDays: list.reduce((mx, a) => Math.max(mx, a.daysRunning || 0), 0),
+          active: list.some((a) => a.isActive),
+          sample: (list.find((a) => (a.text || '').length > 20)?.text || list[0]?.text || '').slice(0, 90),
+        }
+      })
+      .filter((c) => c.advertisers >= 2 || c.ads.length >= 3)
+      .sort((x, y) => (y.advertisers - x.advertisers) || (y.ads.length - x.ads.length) || (y.maxDays - x.maxDays))
+  })()
+
   // ── Chọn + tải hàng loạt ──
   const toggleSel = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const selectMany = (list: FbAd[]) => setSelected((s) => { const n = new Set(s); list.forEach((a) => n.add(a.id)); return n })
@@ -955,10 +1003,12 @@ CHỈ trả JSON.`
                     <button onClick={() => selectMany(shownAds)}
                       className="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50">✓ Chọn tất cả</button>
                     <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
-                      <button onClick={() => setGroupView(false)}
-                        className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${!groupView ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>▦ Lưới</button>
-                      <button onClick={() => setGroupView(true)}
-                        className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${groupView ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>📦 Gom theo SP</button>
+                      <button onClick={() => setGroupMode('grid')}
+                        className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${groupMode === 'grid' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>▦ Lưới</button>
+                      <button onClick={() => setGroupMode('advertiser')}
+                        className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${groupMode === 'advertiser' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>📦 Gom theo SP</button>
+                      <button onClick={() => setGroupMode('creative')} title="SP/creative đang bị NHIỀU seller clone = winner mạnh nhất"
+                        className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${groupMode === 'creative' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>🔥 Bị clone</button>
                     </div>
                   </>
                 )}
@@ -1048,8 +1098,9 @@ CHỈ trả JSON.`
                   </select>
                 </label>
                 <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
-                  <button onClick={() => setGroupView(false)} className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${!groupView ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>▦ Lưới</button>
-                  <button onClick={() => setGroupView(true)} className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${groupView ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>📦 Gom theo SP</button>
+                  <button onClick={() => setGroupMode('grid')} className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${groupMode === 'grid' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>▦ Lưới</button>
+                  <button onClick={() => setGroupMode('advertiser')} className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${groupMode === 'advertiser' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>📦 Gom theo SP</button>
+                  <button onClick={() => setGroupMode('creative')} title="SP/creative đang bị NHIỀU seller clone = winner mạnh nhất" className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${groupMode === 'creative' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>🔥 Bị clone</button>
                 </div>
                 <button onClick={() => selectMany(shownAds)} className="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50">✓ Chọn tất cả</button>
               </div>
@@ -1186,7 +1237,8 @@ CHỈ trả JSON.`
           <>
             <div className="mb-2 text-xs font-semibold text-slate-500">
               {shownAds.length} ad{ladiOnly && platform === 'fb' ? ' có Ladipage/Sale page' : ''}
-              {groupView && shownAds.length > 0 ? ` · ${groups.length} SP/advertiser` : ''}
+              {groupMode === 'advertiser' && shownAds.length > 0 ? ` · ${groups.length} SP/advertiser` : ''}
+              {groupMode === 'creative' && shownAds.length > 0 ? ` · 🔥 ${creativeClusters.length} creative bị clone` : ''}
               {mode === 'radar' ? ` · đã quét ${radarDone}/${RADAR_SEEDS.length} ngách` : ''}
             </div>
             {ladiOnly && platform === 'fb' && shownAds.length === 0 && (
@@ -1194,7 +1246,7 @@ CHỈ trả JSON.`
                 Lượt này không có ad nào dẫn về web/ladipage (đa số đi WhatsApp/Shopee). Bỏ tick lọc hoặc bấm "Tải thêm".
               </p>
             )}
-            {groupView ? (
+            {groupMode === 'advertiser' ? (
               <div className="flex flex-col gap-3">
                 <p className="text-[11px] text-slate-400">SP/brand chạy <b>nhiều video-ad + lâu</b> = đang scale = winner. Xếp trên cùng là mạnh nhất.</p>
                 {groups.map((g, gi) => (
@@ -1241,6 +1293,49 @@ CHỈ trả JSON.`
                   </div>
                 ))}
               </div>
+            ) : groupMode === 'creative' ? (
+              creativeClusters.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
+                  Chưa thấy creative bị nhiều seller clone trong lượt này (cần ≥2 seller cùng nội dung). Thử "Quét Radar" thêm hoặc bỏ lọc ladipage.
+                </p>
+              ) : (
+              <div className="flex flex-col gap-3">
+                <p className="text-[11px] text-slate-400">🔥 Creative/SP <b>nhiều SELLER khác nhau cùng chạy</b> = winner đang bị clone hàng loạt = nên test trước. Xếp theo số seller giảm dần.</p>
+                {creativeClusters.map((c, ci) => (
+                  <div key={c.sig} className="rounded-xl border border-rose-200 bg-white p-3 shadow-sm">
+                    <div className="mb-2 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                      {ci === 0 && <span className="text-sm">🏆</span>}
+                      <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[11px] font-bold text-white">🔥 {c.advertisers} seller cùng chạy</span>
+                      <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700">🎬 {c.ads.length} video</span>
+                      {c.maxDays > 0 && <span className="text-[11px] font-medium text-slate-500">⏳ lâu nhất {c.maxDays}d</span>}
+                      {c.active && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">● đang chạy</span>}
+                      <button onClick={() => selectMany(c.ads)}
+                        className="ml-auto rounded-md border border-rose-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-rose-600 hover:bg-rose-50">
+                        ✓ Chọn cả cụm
+                      </button>
+                    </div>
+                    {c.sample && <p className="mb-2 line-clamp-1 text-[11px] italic text-slate-400">“{c.sample}…”</p>}
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {c.ads.map((a) => (
+                        <div key={a.id} className={`relative aspect-[3/4] w-[104px] shrink-0 overflow-hidden rounded-lg bg-slate-900 ${selected.has(a.id) ? 'ring-2 ring-rose-400' : ''}`}>
+                          <button onClick={(e) => { e.stopPropagation(); toggleSel(a.id) }} title="Chọn để tải"
+                            className={`absolute right-1 top-1 z-10 flex h-5 w-5 items-center justify-center rounded border text-[10px] font-bold ${selected.has(a.id) ? 'border-rose-500 bg-rose-500 text-white' : 'border-white/70 bg-black/40 text-white/80'}`}>
+                            {selected.has(a.id) ? '✓' : ''}
+                          </button>
+                          <button onClick={() => openAd(a)} className="block h-full w-full">
+                            {a.cover ? <img src={a.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
+                            <Play className="absolute inset-0 m-auto h-6 w-6 text-white/90 drop-shadow" />
+                            <div className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/70 to-transparent px-1 py-0.5 text-[9px] font-semibold text-white">
+                              {a.page || 'seller'}{a.daysRunning > 0 ? ` ⏳${a.daysRunning}d` : ''}
+                            </div>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              )
             ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
               {shownAds.map((a) => (
