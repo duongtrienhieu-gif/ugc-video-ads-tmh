@@ -39,6 +39,9 @@ export default function OutputPanel({
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [title, setTitle] = useState('')
+  // Vỏ hiển thị output: song ngữ + accordion (thu gọn mặc định, mở section 1).
+  const [showVi, setShowVi] = useState(false)                                  // mặc định CHỈ MS → gọn nửa
+  const [openMap, setOpenMap] = useState<Record<number, boolean>>({ 0: true }) // section 1 mở sẵn
 
   const addToStore = useSuperLadipageStore((s) => s.add)
   const addToast = useAppStore((s) => s.addToast)
@@ -87,6 +90,36 @@ export default function OutputPanel({
         <SavedHistorySection onLoadProject={onLoadProject} loadedFromId={loadedFromId} />
       </div>
     )
+  }
+
+  // Toàn bộ MS (để dán 1 phát vào LadiPage).
+  const buildMsText = () => pack.sections.map((s, i) => {
+    const L: string[] = [`## ${i + 1}. ${s.title}`]
+    if (s.headline) L.push(s.headline)
+    if (s.subheadline) L.push(s.subheadline)
+    if (s.cta) L.push(`[CTA] ${s.cta}`)
+    if (s.offerStrip) L.push(`[ƯU ĐÃI] ${s.offerStrip}`)
+    if (s.urgencyText) L.push(`[GẤP] ${s.urgencyText}`)
+    if (s.copy) L.push(s.copy)
+    if (s.bullets?.length) L.push(...s.bullets.map((b) => `• ${b}`))
+    if (s.faqs?.length) L.push(...s.faqs.map((f) => `Q: ${f.question}\nA: ${f.answer}`))
+    if (s.reviews?.length) L.push(...s.reviews.map((r) => `"${r.quote}" — ${r.author}`))
+    return L.join('\n')
+  }).join('\n\n')
+  const copyAllMs = async () => {
+    try { await navigator.clipboard.writeText(buildMsText()); addToast('✓ Đã chép toàn bộ nội dung MS') }
+    catch { addToast('Chép lỗi — thử lại') }
+  }
+  const openAll = () => setOpenMap(Object.fromEntries(pack.sections.map((_, i) => [i, true])))
+  const collapseAll = () => setOpenMap({})
+  const jumpTo = (i: number) => {
+    setOpenMap((m) => ({ ...m, [i]: true }))
+    setTimeout(() => document.getElementById(`slp-sec-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 40)
+  }
+  const secImg = (s: LandingPagePack['sections'][number]) => {
+    const t = s.imagePrompts?.length ?? 0
+    const d = s.imagePrompts?.filter((p) => p.status === 'done').length ?? 0
+    return { t, d }
   }
 
   return (
@@ -182,6 +215,48 @@ export default function OutputPanel({
         variant="collapsible"
       />
 
+      {/* Thanh điều khiển output: ngôn ngữ · mở/thu · copy · nhảy section */}
+      <div className="shrink-0 border-b border-black/8 bg-white px-3 md:px-5 py-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => setShowVi((v) => !v)}
+            title={showVi ? 'Đang hiện cả bản dịch VN — bấm để chỉ hiện MS (gọn hơn)' : 'Đang chỉ hiện MS — bấm để hiện thêm bản dịch VN'}
+            className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+              showVi ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.04]'
+            }`}
+          >
+            🇻🇳 {showVi ? 'MS + VN' : 'Chỉ MS'}
+          </button>
+          <button onClick={openAll} className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-black/[0.04]">▾ Mở tất cả</button>
+          <button onClick={collapseAll} className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-black/[0.04]">▸ Thu gọn</button>
+          <button onClick={() => void copyAllMs()} className="flex items-center gap-1 rounded-full border border-violet-200 bg-white px-2.5 py-1 text-[11px] font-bold text-violet-700 hover:bg-violet-50">
+            <CopyIcon className="h-3 w-3" /> Copy toàn bộ MS
+          </button>
+        </div>
+        {/* Thanh nhảy section — chip số + trạng thái ảnh */}
+        <div className="mt-1.5 flex gap-1 overflow-x-auto pb-0.5">
+          {pack.sections.map((s, i) => {
+            const { t, d } = secImg(s)
+            const allDone = t > 0 && d === t
+            return (
+              <button
+                key={i}
+                onClick={() => jumpTo(i)}
+                title={s.title}
+                className={`shrink-0 flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                  openMap[i] ? 'border-violet-300 bg-violet-50 text-violet-700' : 'border-black/10 bg-white text-gray-500 hover:bg-black/[0.04]'
+                }`}
+              >
+                <span className="tabular-nums">{i + 1}</span>
+                {t > 0 && (
+                  <span className={allDone ? 'text-emerald-600' : 'text-gray-400'}>{allDone ? '✓' : `${d}/${t}`}</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       <div className="flex-1 overflow-y-auto p-2 md:p-4 pb-20 md:pb-4">
         <div className="space-y-3">
           {pack.sections.map((section, i) => (
@@ -189,6 +264,10 @@ export default function OutputPanel({
               key={`${section.type}-${i}`}
               index={i}
               section={section}
+              expanded={openMap[i] ?? false}
+              onToggleExpand={() => setOpenMap((m) => ({ ...m, [i]: !m[i] }))}
+              showVi={showVi}
+              anchorId={`slp-sec-${i}`}
               onRegenerateImage={onRegenerateImage}
               onDeleteImage={onDeleteImage}
               onUpdatePrompt={onUpdatePrompt}

@@ -71,14 +71,24 @@ const NEW_SECTION_BADGE: Partial<Record<SectionType, string>> = {
 interface SectionCardProps {
   index: number
   section: LandingSection
+  /** Điều khiển đóng/mở từ ngoài (accordion). Không truyền → tự quản (default mở — cho drawer). */
+  expanded?: boolean
+  onToggleExpand?: () => void
+  /** Hiện bản dịch VN không. Default true (giữ hành vi cũ cho drawer). */
+  showVi?: boolean
+  /** id neo để thanh nhảy section cuộn tới. */
+  anchorId?: string
   onRegenerateImage?: (sectionIdx: number, imageIdx: number) => void
   onDeleteImage?: (sectionIdx: number, imageIdx: number) => void
   onUpdatePrompt?: (sectionIdx: number, imageIdx: number, newPrompt: string) => void
   onRestorePrompt?: (sectionIdx: number, imageIdx: number) => void
 }
 
-function SectionCardImpl({ index, section, onRegenerateImage, onDeleteImage, onUpdatePrompt, onRestorePrompt }: SectionCardProps) {
-  const [expanded, setExpanded] = useState(true)
+function SectionCardImpl({ index, section, expanded: expandedProp, onToggleExpand, showVi = true, anchorId, onRegenerateImage, onDeleteImage, onUpdatePrompt, onRestorePrompt }: SectionCardProps) {
+  const controlled = onToggleExpand !== undefined
+  const [localExpanded, setLocalExpanded] = useState(true)   // uncontrolled (drawer) giữ MỞ như cũ
+  const expanded = controlled ? !!expandedProp : localExpanded
+  const toggleExpand = controlled ? onToggleExpand! : () => setLocalExpanded((v) => !v)
   const [showViTranslation, setShowViTranslation] = useState(false)
   const glyph = SECTION_GLYPH[section.type] ?? '📄'
   const accent = SECTION_ACCENT[section.type] ?? 'border-black/10 bg-white'
@@ -92,11 +102,11 @@ function SectionCardImpl({ index, section, onRegenerateImage, onDeleteImage, onU
     section.type === 'web-authority-proof'
 
   return (
-    <div className={`rounded-xl border ${accent} shadow-sm overflow-hidden`}>
+    <div id={anchorId} className={`scroll-mt-2 rounded-xl border ${accent} shadow-sm overflow-hidden`}>
       <div className="flex w-full items-start justify-between gap-2 px-4 py-3">
         <button
           type="button"
-          onClick={() => setExpanded((v) => !v)}
+          onClick={toggleExpand}
           className="flex flex-1 items-start gap-2 text-left min-w-0"
         >
           <span className="mt-0.5 shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-gray-500 shadow-sm">
@@ -112,12 +122,16 @@ function SectionCardImpl({ index, section, onRegenerateImage, onDeleteImage, onU
                 </span>
               )}
             </div>
-            {section.titleVi
+            {showVi && section.titleVi
               && section.titleVi.trim().toLowerCase() !== section.title.trim().toLowerCase() && (
               <p className="mt-0.5 flex items-start gap-1 text-[11px] italic leading-snug text-blue-700/85">
                 <span className="shrink-0 text-[10px] pt-px">🇻🇳</span>
                 <span>{section.titleVi}</span>
               </p>
+            )}
+            {/* Preview headline khi thu gọn — biết section nói gì mà khỏi bung */}
+            {!expanded && section.headline && (
+              <p className="mt-0.5 truncate text-[11px] text-gray-500">{section.headline}</p>
             )}
           </div>
         </button>
@@ -129,7 +143,7 @@ function SectionCardImpl({ index, section, onRegenerateImage, onDeleteImage, onU
           />
           <button
             type="button"
-            onClick={() => setExpanded((v) => !v)}
+            onClick={toggleExpand}
             className="rounded-md p-1 text-gray-400 hover:bg-black/[0.04]"
           >
             <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
@@ -146,26 +160,26 @@ function SectionCardImpl({ index, section, onRegenerateImage, onDeleteImage, onU
           )}
 
           {section.headline && (
-            <FieldRow label="Headline" value={section.headline} valueVi={section.headlineVi} />
+            <FieldRow label="Headline" value={section.headline} valueVi={showVi ? section.headlineVi : undefined} />
           )}
           {section.subheadline && (
-            <FieldRow label="Subheadline" value={section.subheadline} valueVi={section.subheadlineVi} />
+            <FieldRow label="Subheadline" value={section.subheadline} valueVi={showVi ? section.subheadlineVi : undefined} />
           )}
           {section.cta && (
-            <FieldRow label="CTA button" value={section.cta} valueVi={section.ctaVi} highlight="orange" />
+            <FieldRow label="CTA button" value={section.cta} valueVi={showVi ? section.ctaVi : undefined} highlight="orange" />
           )}
           {section.offerStrip && (
-            <FieldRow label="Offer strip" value={section.offerStrip} valueVi={section.offerStripVi} highlight="rose" />
+            <FieldRow label="Offer strip" value={section.offerStrip} valueVi={showVi ? section.offerStripVi : undefined} highlight="rose" />
           )}
           {section.urgencyText && (
-            <FieldRow label="Urgency" value={section.urgencyText} valueVi={section.urgencyTextVi} highlight="amber" />
+            <FieldRow label="Urgency" value={section.urgencyText} valueVi={showVi ? section.urgencyTextVi : undefined} highlight="amber" />
           )}
 
           {section.copy && (
             <BlockField label="Copy chính" body={section.copy} />
           )}
 
-          {section.viTranslation && (
+          {showVi && section.viTranslation && (
             <div className="rounded-lg border border-blue-100 bg-blue-50/40">
               <button
                 type="button"
@@ -191,7 +205,7 @@ function SectionCardImpl({ index, section, onRegenerateImage, onDeleteImage, onU
           )}
 
           {section.bullets && section.bullets.length > 0 && (
-            section.bulletsVi && section.bulletsVi.length > 0
+            showVi && section.bulletsVi && section.bulletsVi.length > 0
               ? <BilingualBullets bullets={section.bullets} bulletsVi={section.bulletsVi} />
               : <BlockField label="Bullets" body={section.bullets.map((b) => `• ${b}`).join('\n')} />
           )}
@@ -208,7 +222,7 @@ function SectionCardImpl({ index, section, onRegenerateImage, onDeleteImage, onU
                     key={i}
                     question={f.question}
                     answer={f.answer}
-                    vi={section.faqsVi?.[i]}
+                    vi={showVi ? section.faqsVi?.[i] : undefined}
                   />
                 ))}
               </div>
