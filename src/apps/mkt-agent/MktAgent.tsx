@@ -8,7 +8,7 @@ import { useAppStore } from '../../stores/appStore'
 import { useMktAgentStore, type SpCandidate, type VidItem } from './store'
 import { scanWinningProducts } from './services/researchStage'
 import { classifyBranding } from './services/brandingFilter'
-import { buildVerifyLinks, deepDive, searchKeyword } from './services/enrichStage'
+import { buildVerifyLinks, deepDive } from './services/enrichStage'
 import { judgeSp } from './services/judge'
 import { computeWinScore } from './services/winScore'
 import { checkProductVideos } from './services/checkVideos'
@@ -656,6 +656,22 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
         )
       )}
 
+      {/* Quyết định — LUÔN hiện ngay bước quét (không đợi Phân tích sâu) */}
+      {!branded && (
+        <>
+          <div className="flex flex-wrap gap-1.5">
+            <button onClick={onPick}
+              className={`h-8 px-3 rounded-md text-[12px] font-medium ${picked ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-slate-700 hover:bg-gray-200 border border-slate-300'}`}>
+              {picked ? '✅ Đã chốt test' : '✅ Chốt test SP này'}
+            </button>
+            <button title="Mở Tìm nguồn 1688 + tự điền ảnh SP"
+              onClick={() => onSendToApp({ targetApp: 'research', targetField: 'source', data: { name: p.title, imageUrl: p.imageUrl } })}
+              className="h-8 px-2.5 rounded-md bg-sky-500/15 hover:bg-sky-500/25 text-[12px] text-sky-600 border border-sky-500/40">🏭 Tìm nguồn</button>
+          </div>
+          {picked && <p className="text-[10px] text-emerald-500/80">Đã chốt — bước sản xuất content ở bản sau.</p>}
+        </>
+      )}
+
       {branded ? (
         <span className={`px-2 py-0.5 rounded border text-[11px] self-start ${TONE.rose}`}>🔴 BRAND BẢO HỘ · bỏ (bán lậu bị gỡ){p.brand ? ` · ${p.brand}` : ''}</span>
       ) : !hasDeep ? (
@@ -695,22 +711,6 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
             {risks.slice(0, 3).map((r, i) => <div key={`k${i}`} className="text-[10px] text-rose-300/90">⚠ {r}</div>)}
             {d!.on1688 && d!.link1688 && <a href={d!.link1688} target="_blank" rel="noopener noreferrer" className="text-[10px] text-sky-400 underline">xem nguồn 1688 →</a>}
           </div>
-
-          {!busy && (
-            <div className="flex flex-wrap gap-1.5 pt-0.5 border-t border-slate-200 mt-0.5">
-              <button onClick={onPick}
-                className={`h-8 px-3 rounded-md text-[12px] font-medium ${picked ? 'bg-emerald-500 text-zinc-950' : 'bg-gray-100 text-slate-700 hover:bg-gray-200'}`}>
-                {picked ? '✅ Đã chốt test' : '✅ Chốt test SP này'}
-              </button>
-              <button title="Mở Tìm nguồn 1688 + tự điền ảnh SP"
-                onClick={() => onSendToApp({ targetApp: 'research', targetField: 'source', data: { name: p.title, imageUrl: p.imageUrl } })}
-                className="h-8 px-2.5 rounded-md bg-sky-500/15 hover:bg-sky-500/25 text-[12px] text-sky-300 border border-sky-500/40">🏭 Tìm nguồn</button>
-              <button title="Mở Spy Ads + tự search ad đối thủ"
-                onClick={() => onSendToApp({ targetApp: 'spy-ads', targetField: 'query', data: d!.terms?.[0] || searchKeyword(p) })}
-                className="h-8 px-2.5 rounded-md bg-sky-500/15 hover:bg-sky-500/25 text-[12px] text-sky-300 border border-sky-500/40">📣 Spy thêm</button>
-            </div>
-          )}
-          {picked && <p className="text-[10px] text-emerald-400/80">Đã chốt — bước sản xuất content ở bản sau.</p>}
         </>
       )}
     </div>
