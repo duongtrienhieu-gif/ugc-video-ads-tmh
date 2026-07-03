@@ -190,14 +190,14 @@ export const CREDIT_USD = 0.005
 export const V3_CREDIT_COST = {
   /** ElevenLabs TTS for a ~30s script */
   tts: 5,
-  /** KIE gpt-4o-image keyframe still */
-  keyframe: 6,
+  /** KIE nano-banana-2 keyframe still @ 1K */
+  keyframe: 8,
   /** Optional 1-2s Kling motion pre-flight */
   previewMotion: 10,
   /** KIE Kling Avatar Std full talking-head lipsync */
   lipsync: 70,
-  /** One action insert = 1 keyframe (6) + 1 Kling 5s clip (70) */
-  insert: 76,
+  /** One action insert = 1 keyframe (8) + 1 Kling 5s clip (70) */
+  insert: 78,
 } as const
 
 // Z38/Z72 — KIE-credit estimate for the creator-video lipsync, billed PER

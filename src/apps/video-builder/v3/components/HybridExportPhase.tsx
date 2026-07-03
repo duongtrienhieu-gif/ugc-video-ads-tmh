@@ -442,8 +442,8 @@ function AiThumbCard({ thumb, picked, onPick, onRegen }: { thumb: AiThumbnail; p
       <div className="p-1.5">
         <div className="flex items-center justify-between gap-1">
           <p className="truncate text-[10px] font-bold text-gray-800">{cfg.emoji} {cfg.labelVi}{picked && ' ✓'}</p>
-          {/* P6c — tạo lại riêng ảnh này (ra biến thể mới / retry khi lỗi). ~6cr */}
-          <button onClick={onRegen} disabled={busy} title="Tạo lại ảnh này (~6cr)"
+          {/* P6c — tạo lại riêng ảnh này (ra biến thể mới / retry khi lỗi). ~8cr */}
+          <button onClick={onRegen} disabled={busy} title="Tạo lại ảnh này (~8cr)"
             className="flex shrink-0 items-center gap-0.5 rounded border border-gray-200 bg-white px-1 py-0.5 text-[9px] font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
             <RotateCcw className="h-2.5 w-2.5" /> Tạo lại
           </button>

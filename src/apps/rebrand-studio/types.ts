@@ -164,7 +164,7 @@ export function rebrandSig(d: { productId: string | null; originalImageRefs: str
   return `v6|${d.productId ?? ''}|${d.market}|${d.originalImageRefs.join(',')}`
 }
 
-/** 4 ảnh (nhãn gộp + product + set + combo) qua gpt-4o-image (6 mỗi ảnh; nhãn
- *  có thể nano 2K = 12). REBRAND_TOTAL_CREDITS chỉ là ước tính header (gpt-4o). */
+/** 4 ảnh (nhãn gộp + product + set + combo) qua nano-banana-2 @ 1K (8 mỗi ảnh;
+ *  nhãn có thể 2K = 12). REBRAND_TOTAL_CREDITS chỉ là ước tính header. */
 export const REBRAND_AI_IMAGES = 4
-export const REBRAND_TOTAL_CREDITS = 6 * REBRAND_AI_IMAGES
+export const REBRAND_TOTAL_CREDITS = 8 * REBRAND_AI_IMAGES

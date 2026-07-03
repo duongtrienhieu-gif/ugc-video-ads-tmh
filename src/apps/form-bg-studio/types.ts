@@ -112,5 +112,5 @@ export function defaultPalette(preset: FormBgPreset): FormBgPalette {
   }
 }
 
-export const FORM_BG_CREDITS_PER_IMAGE = 6
+export const FORM_BG_CREDITS_PER_IMAGE = 8   // nano-banana-2 @ 1K
 export const FORM_BG_TOTAL_CREDITS = FORM_BG_CREDITS_PER_IMAGE * FORM_BG_VARIANTS

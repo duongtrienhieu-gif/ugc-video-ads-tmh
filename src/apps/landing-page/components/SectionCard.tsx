@@ -7,8 +7,8 @@ import {
   type DebugAttempt,
 } from '../debugStore'
 
-/** KIE gpt-image-2 @ 1K resolution ~ 6 credits per call. */
-const CREDIT_PER_IMAGE = 6
+/** nano-banana-2 @ 1K ~ 8 credits per call. */
+const CREDIT_PER_IMAGE = 8
 
 const SECTION_GLYPH: Record<SectionType, string> = {
   hero:                    '🚀',

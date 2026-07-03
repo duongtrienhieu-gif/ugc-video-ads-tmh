@@ -447,11 +447,13 @@ export default function RebrandStudio({ embedded = false }: { embedded?: boolean
             {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {busy ? 'Đang tạo…' : `2 · Tạo Nhãn (ảnh 1) · ~${labelCredit} credit`}
           </button>
-          <p className="text-[10px] text-gray-400">Tạo <b>Nhãn</b> trước (~{labelCredit}cr). Sau đó bấm <b>Tạo ảnh này</b> trên từng ô bên phải để làm 3 ảnh còn lại (mỗi ảnh ~6cr) theo thứ tự: Sản phẩm → Bao bì → Tháp combo. Nhãn tải về đưa bên in (~{draft.widthCm ?? '?'}×{draft.heightCm ?? '?'}cm). ⚠️ Số bảng dinh dưỡng là AI ước lượng — kiểm tra lại trước khi in.</p>
+          <p className="text-[10px] text-gray-400">Tạo <b>Nhãn</b> trước (~{labelCredit}cr). Sau đó bấm <b>Tạo ảnh này</b> trên từng ô bên phải để làm 3 ảnh còn lại (mỗi ảnh ~8cr) theo thứ tự: Sản phẩm → Bao bì → Tháp combo. Nhãn tải về đưa bên in (~{draft.widthCm ?? '?'}×{draft.heightCm ?? '?'}cm). ⚠️ Số bảng dinh dưỡng là AI ước lượng — kiểm tra lại trước khi in.</p>
         </div>
 
-        {/* Output */}
-        <div className="grid min-w-0 flex-1 grid-cols-1 gap-4 sm:grid-cols-2">
+        {/* Output — w-full luôn; desktop flex-1 (full width) + self-start (cao tự
+            nhiên, KHÔNG kéo giãn → card không cắt ảnh dài, hết khoảng trống thừa).
+            content-start để hàng grid không giãn đều. Outer overflow-y-auto lo cuộn. */}
+        <div className="grid min-w-0 w-full grid-cols-1 content-start gap-4 sm:grid-cols-2 lg:flex-1 lg:self-start">
           {images.map((im) => (
             <RebrandCell key={im.kind} kind={im.kind} status={im.status} assetRef={im.assetRef} error={im.error}
               busy={busy} hint={CELL_ORDER_HINT[im.kind]} onGenerate={() => handleGenerateCell(im.kind)} onDownload={handleDownload} />

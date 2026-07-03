@@ -340,7 +340,7 @@ export default function ExportPhase() {
             >
               {ev.isGeneratingThumbnails
                 ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang tạo 4 thumbnail...</>
-                : <><Sparkles className="h-3 w-3" /> {ev.aiThumbnails.length ? 'Tạo lại 4 thumbnail' : 'Tạo 4 thumbnail'} (~24cr)</>}
+                : <><Sparkles className="h-3 w-3" /> {ev.aiThumbnails.length ? 'Tạo lại 4 thumbnail' : 'Tạo 4 thumbnail'} (~32cr)</>}
             </button>
           </div>
           {ev.aiThumbnails.length === 0 ? (

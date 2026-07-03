@@ -180,7 +180,7 @@ export default function VariantsModal({ model, onClose }: Props) {
                 AI tự gen 4 angles: 3/4 trái, 3/4 phải, smile, side profile. Nano Banana 2 + identity lock prompt.
               </p>
               <p className="mb-3 rounded bg-violet-100 px-2 py-1 text-[11px] text-violet-700">
-                Cost: <strong>~24 KIE credit ($0.12)</strong> · Thời gian: ~40-80s
+                Cost: <strong>~32 KIE credit ($0.16)</strong> · Thời gian: ~40-80s
               </p>
               <button
                 onClick={handleGen4Angles}

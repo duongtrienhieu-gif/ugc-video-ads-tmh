@@ -135,7 +135,7 @@ export function offerSig(offerText: string, lang: Market): string {
   return `${offerText.trim()}|${lang}`
 }
 
-/** Credit gpt-4o-image: 6/ảnh × 3 ảnh = 18. (Hằng số hiển thị cho user.) */
-export const GIFT_CREDITS_PER_IMAGE = 6
+/** Credit nano-banana-2 @ 1K: 8/ảnh × 3 ảnh = 24. (Hằng số hiển thị cho user.) */
+export const GIFT_CREDITS_PER_IMAGE = 8
 export const GIFT_TOTAL_IMAGES = GIFT_IMAGE_KINDS.length
 export const GIFT_TOTAL_CREDITS = GIFT_CREDITS_PER_IMAGE * GIFT_TOTAL_IMAGES

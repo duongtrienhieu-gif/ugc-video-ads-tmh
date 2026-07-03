@@ -17,7 +17,7 @@ import { isAssetRef, getUrl } from '../../../utils/assetStore'
 import { generateGpt4oImage, generateVideoJob, pollVideoJobUntilDone } from '../../../utils/kieai'
 
 // Credit costs (kie.ai) — surfaced in the UI so the operator approves before paying.
-export const CTA_IMAGE_CREDITS = 6        // gpt-4o-image @ 1K
+export const CTA_IMAGE_CREDITS = 8        // nano-banana-2 @ 1K
 export const CTA_VIDEO_CREDITS = 7        // Seedance 480p × 4s (1.75 cr/s)
 
 const SEEDANCE_MODEL = 'bytedance/seedance-1.5-pro'

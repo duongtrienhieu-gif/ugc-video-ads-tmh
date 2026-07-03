@@ -145,12 +145,12 @@ export const COMPOSITION_FAMILY_LABELS: Record<CompositionFamily, string> = {
 // while gpt-4o-image honors them properly.
 // ─────────────────────────────────────────────────────────────────────────
 
-export const CREDIT_COST_PER_IMAGE_1K = 6
-export const CREDIT_COST_PER_IMAGE_2K = 10
+export const CREDIT_COST_PER_IMAGE_1K = 8   // nano-banana-2 @ 1K
+export const CREDIT_COST_PER_IMAGE_2K = 12  // nano-banana-2 @ 2K
 export const ESTIMATED_TEXT_CREDITS = 1
 
-// Combo thumbnails (Phase 7B) — same gpt-4o-image cost as 1K main slot.
-export const CREDIT_COST_PER_COMBO = 6
+// Combo thumbnails (Phase 7B) — same nano-banana-2 1K cost as main slot.
+export const CREDIT_COST_PER_COMBO = 8
 export const MAX_COMBOS = 12
 
 export function estimateListingCredits(slots: SlotConfig[] = SLOT_MAP): number {
