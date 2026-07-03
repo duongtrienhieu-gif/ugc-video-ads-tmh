@@ -124,6 +124,28 @@ const COD_CHIPS = [
   'terlaris', 'viral', 'beli 1 percuma 1', 'beli 2 percuma 1',
 ]
 
+// 🛰 RADAR — bộ mồi quét đối thủ MY KHÔNG cần từ khóa. Gồm 2 lớp:
+//  (1) NGÔN NGỮ COD (niche-agnostic): bắt mọi ad có funnel đặt hàng COD bất kể ngách.
+//  (2) NGÁCH EVERGREEN vật lý: đảm bảo phủ các nhóm SP luôn win ở Malaysia.
+// → sweep song song → gộp → xếp winner. User bổ sung thêm ở đây khi cần.
+const RADAR_SEEDS = [
+  // (1) funnel COD
+  'cod', 'bayar bila terima', 'percuma', 'free gift', 'beli 1 percuma 1', 'beli 2 percuma 1',
+  'promosi', 'tawaran hebat', 'ready stock', 'order sekarang',
+  // (2) ngách vật lý evergreen
+  'collagen', 'jerawat', 'sakit lutut', 'sakit sendi', 'kurus', 'minyak urut', 'rambut gugur',
+  'gastrik', 'kolesterol', 'kencing manis', 'serum wajah', 'whitening', 'korset', 'postur',
+  'buasir', 'sakit gigi', 'tumbuh rambut', 'slimming', 'detox', 'gout',
+]
+
+// Chạy fn cho từng item, tối đa `n` việc song song (không spam API khi sweep nhiều seed).
+async function poolRun<T>(items: T[], n: number, fn: (t: T, i: number) => Promise<void>): Promise<void> {
+  let idx = 0
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (idx < items.length) { const i = idx++; await fn(items[i], i) }
+  }))
+}
+
 const COUNTRIES = [
   { c: 'MY', f: '🇲🇾' }, { c: 'ID', f: '🇮🇩' }, { c: 'TH', f: '🇹🇭' },
   { c: 'VN', f: '🇻🇳' }, { c: 'PH', f: '🇵🇭' }, { c: 'SG', f: '🇸🇬' }, { c: 'ALL', f: '🌏' },
@@ -135,7 +157,7 @@ export default function SpyAds() {
   const sendToApp = useAppStore((s) => s.sendToApp)
   const addToast = useAppStore((s) => s.addToast)
 
-  const [mode, setMode] = useState<'channel' | 'ads' | 'links'>('channel') // 📺 Video theo kênh | 🔍 tìm ad | 🔗 tìm salepage
+  const [mode, setMode] = useState<'channel' | 'ads' | 'links' | 'radar'>('channel') // 📺 kênh | 🔍 tìm ad | 🔗 salepage | 🛰 radar
   // Mobile: ẩn bộ chip gợi ý từ khóa (ngách/COD) cho đỡ chiếm chỗ che output;
   // bấm "Gợi ý" để bung. Desktop (lg+) luôn hiện nên không ảnh hưởng.
   const [chipsOpen, setChipsOpen] = useState(false)
@@ -179,6 +201,10 @@ export default function SpyAds() {
   const [moreLoading, setMoreLoading] = useState(false)
   const [credits, setCredits] = useState<number | null>(null)
   const [durMap, setDurMap] = useState<Record<string, number>>({}) // thời lượng FB đo ở client (id→giây)
+  // 🛰 Radar (sweep nhiều seed, không cần từ khóa)
+  const [radarBusy, setRadarBusy] = useState(false)
+  const [radarDone, setRadarDone] = useState(0)         // # seed đã quét xong
+  const [radarErr, setRadarErr] = useState<string | null>(null)
 
   const [playAd, setPlayAd] = useState<FbAd | null>(null)
   const [readBusy, setReadBusy] = useState(false)
@@ -259,6 +285,51 @@ export default function SpyAds() {
       setCredits(d.credits ?? null)
       if (!d.ads?.length) setError(d.note ? `Không có ad video (${d.note})` : 'Không tìm thấy ad video — đổi từ khóa/nước')
     } catch (e) { setError((e as Error).message) } finally { setLoading(false) }
+  }
+
+  // 🛰 RADAR — quét đối thủ MY KHÔNG cần từ khóa: sweep bộ seed COD → gộp → xếp winner.
+  // status=ALL (cả đang win + từng win), pages=3/seed (tiết kiệm credit), song song 4.
+  // Kết quả đổ vào `ads` → tái dùng nguyên lưới + bộ lọc (ladipage/sort/gom SP) sẵn có.
+  const rankRadar = (list: FbAd[]): FbAd[] => {
+    // Đếm advertiserAds TOÀN CỤC (1 seller xuất hiện ở nhiều seed) → tín hiệu scale thật.
+    const byPage = new Map<string, number>()
+    for (const a of list) { const p = a.page || a.pageId || ''; if (p) byPage.set(p, (byPage.get(p) || 0) + 1) }
+    const score = (a: FbAd) =>
+      (a.isActive ? 40 : 0) + Math.min(a.daysRunning || 0, 180) * 0.4 +
+      Math.log10((byPage.get(a.page || a.pageId || '') || 1) + 1) * 25 +
+      Math.log10((a.variations || 0) + 1) * 20
+    return list
+      .map((a) => ({ ...a, advertiserAds: byPage.get(a.page || a.pageId || '') || a.advertiserAds || 1 }))
+      .sort((x, y) => score(y) - score(x))
+  }
+
+  const runRadar = async () => {
+    if (radarBusy) return
+    setMode('radar'); setPlatform('fb')
+    setRadarBusy(true); setRadarErr(null); setRadarDone(0)
+    setAds([]); setCursor(null); setHasMore(false); setSelected(new Set()); setError(null)
+    setViewPageId(null); setViewPageName(null)
+    setLadiOnly(true)   // mặc định chỉ ad có ladipage/salepage (đúng funnel COD)
+    const acc = new Map<string, FbAd>()
+    let lastCredits: number | null = null
+    let anyOk = false
+    await poolRun(RADAR_SEEDS, 4, async (seed) => {
+      try {
+        const r = await fetch(`/api/fb-ads?q=${encodeURIComponent(seed)}&country=MY&status=ALL&pages=3`)
+        const d = (await r.json()) as { ads?: FbAd[]; credits?: number | null; error?: string }
+        if (Array.isArray(d.ads)) {
+          anyOk = true
+          for (const a of d.ads) { const id = String(a.id ?? ''); if (id && !acc.has(id)) acc.set(id, a) }
+          if (d.credits != null) lastCredits = d.credits
+        }
+      } catch { /* 1 seed lỗi → bỏ qua, seed khác vẫn chạy */ }
+      setRadarDone((n) => n + 1)
+      setAds(rankRadar([...acc.values()]))   // cập nhật dần cho user thấy tiến độ
+    })
+    if (lastCredits != null) setCredits(lastCredits)
+    if (!anyOk) setRadarErr('Quét lỗi — thử lại (kiểm tra mạng/credit SC).')
+    else if (acc.size === 0) setRadarErr('Không thấy ad nào — thử lại sau.')
+    setRadarBusy(false)
   }
 
   // Nhận SP từ MKT Agent → tự chuyển chế độ "tìm ad" + search đúng SP.
@@ -779,6 +850,8 @@ CHỈ trả JSON.`
               className={`rounded-md px-3 py-1 text-xs font-semibold ${mode === 'ads' ? 'bg-rose-600 text-white' : 'text-slate-500'}`}>🔍 Tìm ad theo từ khóa</button>
             <button onClick={() => setMode('links')}
               className={`rounded-md px-3 py-1 text-xs font-semibold ${mode === 'links' ? 'bg-rose-600 text-white' : 'text-slate-500'}`}>🔗 Tìm Salepage</button>
+            <button onClick={() => setMode('radar')}
+              className={`rounded-md px-3 py-1 text-xs font-semibold ${mode === 'radar' ? 'bg-rose-600 text-white' : 'text-slate-500'}`}>🛰 Radar MY</button>
           </div>
           <select value={country} onChange={(e) => setCountry(e.target.value)} className="rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-sm font-medium">
             {COUNTRIES.map((x) => <option key={x.c} value={x.c}>{x.f} {x.c}</option>)}
@@ -940,6 +1013,50 @@ CHỈ trả JSON.`
           </>
         )}
 
+        {/* MODE: 🛰 RADAR — quét đối thủ MY KHÔNG cần từ khóa (sweep seed COD) */}
+        {mode === 'radar' && (
+          <>
+            <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <button onClick={() => void runRadar()} disabled={radarBusy}
+                  className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">
+                  🛰 {radarBusy ? `Đang quét… ${radarDone}/${RADAR_SEEDS.length} ngách` : 'Quét Radar MY'}
+                </button>
+                <p className="min-w-[220px] flex-1 text-[11px] text-slate-500">
+                  Không cần từ khóa — tự quét <b>{RADAR_SEEDS.length} ngách COD</b> ở Malaysia (cả <b>đang win + từng win</b>),
+                  lọc ad video có <b>ladipage/nút đặt hàng</b>, đẩy <b>đối thủ chạy nhiều video</b> lên đầu → tải về clone test.
+                </p>
+              </div>
+              {radarBusy && (
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-rose-100">
+                  <div className="h-full rounded-full bg-rose-500 transition-all" style={{ width: `${Math.round((radarDone / RADAR_SEEDS.length) * 100)}%` }} />
+                </div>
+              )}
+              {radarErr && <p className="mt-2 text-xs text-red-500">{radarErr}</p>}
+            </div>
+            {ads && ads.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                  <input type="checkbox" checked={ladiOnly} onChange={(e) => setLadiOnly(e.target.checked)} /> 🔗 Chỉ ad có Ladipage/Sale page
+                </label>
+                <label className="flex items-center gap-1 text-xs font-medium text-slate-600">Sắp xếp
+                  <select value={sortMode} onChange={(e) => setSortMode(e.target.value as typeof sortMode)} className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                    <option value="win">🏆 Winner</option>
+                    <option value="days">⏳ Chạy lâu nhất</option>
+                    <option value="variations">📑 Nhiều biến thể</option>
+                    <option value="new">🆕 Mới nhất</option>
+                  </select>
+                </label>
+                <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
+                  <button onClick={() => setGroupView(false)} className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${!groupView ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>▦ Lưới</button>
+                  <button onClick={() => setGroupView(true)} className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${groupView ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>📦 Gom theo SP</button>
+                </div>
+                <button onClick={() => selectMany(shownAds)} className="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50">✓ Chọn tất cả</button>
+              </div>
+            )}
+          </>
+        )}
+
         {/* MODE: Tìm Salepage/Link — bóc link đích từ ad theo từ khóa / SP Kho / ảnh */}
         {mode === 'links' && (
           <>
@@ -1065,11 +1182,12 @@ CHỈ trả JSON.`
           </div>
         )}
         {mode === 'ads' && loading && <div className="py-10 text-center text-sm text-slate-400">{platform === 'fb' ? 'Đang quét Facebook Ad Library…' : 'Đang quét TikTok Top Ads…'}</div>}
-        {mode === 'ads' && ads && ads.length > 0 && (
+        {(mode === 'ads' || mode === 'radar') && ads && ads.length > 0 && (
           <>
             <div className="mb-2 text-xs font-semibold text-slate-500">
               {shownAds.length} ad{ladiOnly && platform === 'fb' ? ' có Ladipage/Sale page' : ''}
               {groupView && shownAds.length > 0 ? ` · ${groups.length} SP/advertiser` : ''}
+              {mode === 'radar' ? ` · đã quét ${radarDone}/${RADAR_SEEDS.length} ngách` : ''}
             </div>
             {ladiOnly && platform === 'fb' && shownAds.length === 0 && (
               <p className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
