@@ -9,6 +9,7 @@ export interface BrandingResult {
   tier: 'generic' | 'oem' | 'brand'
   brand?: string
   variantRisk: 'high' | 'low'
+  labelLang: 'malay' | 'cn-en' | 'mixed'
 }
 
 function stripFences(s: string): string {
@@ -29,17 +30,21 @@ Mỗi SP trả 3 trường:
    - "brand": THƯƠNG HIỆU NỔI TIẾNG / ĐĂNG KÝ thật (vd COSRX, SKINTIFIC, Cetaphil, Garnier, Hada Labo, Watsons, Blackmores, dược phẩm chính hãng...) → bán lậu bị kiện/gỡ/ban. BỎ.
 2. "brand": tên thương hiệu/nhãn nếu có (oem hoặc brand), bỏ trống nếu generic.
 3. "variantRisk": "high" nếu là THỜI TRANG/GIÀY/PHỤ KIỆN nhiều size-màu (áo, quần, giày, túi, đồng hồ, váy, tudung...) → nhiều biến thể, sai số, hoàn cao. "low" nếu SP đơn (mỹ phẩm, TPCN, gia dụng, miếng dán, máy nhỏ...).
+4. "labelLang": ngôn ngữ NHÃN sản phẩm (đoán từ tên + kiểu SP) — QUAN TRỌNG:
+   - "malay": nhãn/thương hiệu TIẾNG MALAY, hàng LOCAL Malaysia (tên có herba/ubat/minyak/asli/air/kuning/rambut kiểu bản địa, hoặc brand MY) → nội địa, KHÓ nhập 1688.
+   - "cn-en": nhãn tiếng TRUNG/ANH chung chung kiểu hàng xưởng TQ (mô tả tính năng bằng tiếng Anh, tên lạ kiểu CN) → 1688 có sẵn, NHẬP ĐƯỢC ngay.
+   - "mixed": không rõ / lẫn lộn.
 
 PHÂN BIỆT oem vs brand: oem = tên lạ/nhãn xưởng AI CŨNG NHẬP ĐƯỢC; brand = thương hiệu có tiếng/đăng ký mà bán lậu sẽ bị xử lý. Nếu phân vân tên lạ không rõ nổi tiếng → ưu tiên "oem" (nhập được).
 
 Danh sách:
 ${list}
 
-CHỈ trả JSON: {"results":[{"i":0,"tier":"generic","variantRisk":"low"},{"i":1,"tier":"oem","brand":"QUSTERE","variantRisk":"low"}]}`
+CHỈ trả JSON: {"results":[{"i":0,"tier":"generic","variantRisk":"low","labelLang":"malay"},{"i":1,"tier":"oem","brand":"QUSTERE","variantRisk":"low","labelLang":"cn-en"}]}`
   const raw = await directGeminiText({ apiKey, prompt, responseMimeType: 'application/json', temperature: 0 })
   const out: Record<string, BrandingResult> = {}
   try {
-    const parsed = JSON.parse(stripFences(raw)) as { results?: { i: number; tier?: string; brand?: string; variantRisk?: string }[] }
+    const parsed = JSON.parse(stripFences(raw)) as { results?: { i: number; tier?: string; brand?: string; variantRisk?: string; labelLang?: string }[] }
     for (const r of parsed.results ?? []) {
       const it = items[r.i]
       if (!it) continue
@@ -48,6 +53,7 @@ CHỈ trả JSON: {"results":[{"i":0,"tier":"generic","variantRisk":"low"},{"i":
         tier,
         brand: r.brand?.trim() || undefined,
         variantRisk: r.variantRisk === 'high' ? 'high' : 'low',
+        labelLang: r.labelLang === 'malay' ? 'malay' : r.labelLang === 'cn-en' ? 'cn-en' : 'mixed',
       }
     }
   } catch { /* parse fail → batch này để chưa-lọc, không vỡ */ }

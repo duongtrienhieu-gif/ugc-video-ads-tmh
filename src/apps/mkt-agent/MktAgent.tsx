@@ -36,13 +36,6 @@ function judgeTone(verdict: string): Tone {
   return 'zinc'
 }
 
-function shipHint(s?: string): { label: string; cls: string } | null {
-  if (!s) return null
-  const local = /\b(MY|malaysia|kuala|selangor|johor)\b/i.test(s)
-  return local
-    ? { label: '📦 nội địa', cls: 'text-emerald-400' }
-    : { label: '✈️ cross-border', cls: 'text-amber-400' }
-}
 
 // AI "Đọc video" trả về.
 type VideoRead = { transcript: string; structure: string; angle: string; howto: string }
@@ -519,7 +512,6 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
 }) {
   const branded = p.tier === 'brand'
   const win = computeWinScore(p)
-  const ship = shipHint(p.shipFrom)
   const d = p.deep
   const busy = p.diving || p.filtering
   const hasDeep = !!d
@@ -559,7 +551,9 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
         <span>{fmt(p.sale)} bán{p.rating ? ` · ⭐${p.rating.toFixed(1)}` : ''}</span>
         <span>{p.price > 0 ? `RM${fmt(p.price)}` : 'giá —'}{p.revenue > 0 ? ` · DT RM${fmt(p.revenue)}` : ''}</span>
       </div>
-      {ship && <div className={`text-[11px] ${ship.cls}`}>{ship.label}</div>}
+      {p.labelLang === 'malay' ? <div className="text-[11px] text-amber-400">🇲🇾 nội địa · nhãn Malay (local MY, khó nhập)</div>
+        : p.labelLang === 'cn-en' ? <div className="text-[11px] text-emerald-400">🀄 hàng TQ · nhãn Anh/Trung (1688 nhập sẵn)</div>
+        : null}
       {p.url && /^https?:\/\//i.test(p.url) && (
         <a href={p.url} target="_blank" rel="noopener noreferrer" title="Mở trang bán trên TikTok Shop — xem chi tiết, đánh giá, ảnh, biến thể"
           className="self-start inline-flex items-center gap-1 rounded-md border border-pink-500/40 bg-pink-500/10 px-2 py-0.5 text-[11px] font-semibold text-pink-300 hover:bg-pink-500/20">

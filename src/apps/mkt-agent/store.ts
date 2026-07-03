@@ -90,6 +90,7 @@ export interface SpCandidate {
   source: 'tiktok' | 'fb'
   tier?: 'generic' | 'oem' | 'brand'  // generic=clone tự do · oem=nhãn xưởng nhập-sẵn (giữ) · brand=bảo hộ (bỏ) · undefined=chưa lọc
   variantRisk?: 'high' | 'low'        // high=thời trang/giày nhiều biến thể (sai số/hoàn)
+  labelLang?: 'malay' | 'cn-en' | 'mixed'  // ngôn ngữ NHÃN: malay=nội địa (local MY) · cn-en=hàng Trung nhập sẵn 1688
   brand?: string
   vids?: VideoCheck      // dò video bán SP (lite, sau quét) — rip-ready
   videoChecking?: boolean // đang dò video
@@ -129,7 +130,7 @@ interface MktAgentState {
   setClassifying: (b: boolean) => void
   setError: (s: string | null) => void
   setCandidates: (c: SpCandidate[]) => void
-  setBranding: (map: Record<string, { tier: 'generic' | 'oem' | 'brand'; brand?: string; variantRisk?: 'high' | 'low' }>) => void
+  setBranding: (map: Record<string, { tier: 'generic' | 'oem' | 'brand'; brand?: string; variantRisk?: 'high' | 'low'; labelLang?: 'malay' | 'cn-en' | 'mixed' }>) => void
   patchCandidate: (id: string, patch: Partial<SpCandidate>) => void
   setOnlyGeneric: (b: boolean) => void
   selectSp: (p: SpCandidate | null) => void
@@ -170,7 +171,7 @@ export const useMktAgentStore = create<MktAgentState>()(persist((set) => ({
   setCandidates: (candidates) => set({ candidates }),
   setBranding: (map) => set((s) => ({
     candidates: s.candidates.map((c) => map[c.productId]
-      ? { ...c, tier: map[c.productId].tier, brand: map[c.productId].brand, variantRisk: map[c.productId].variantRisk }
+      ? { ...c, tier: map[c.productId].tier, brand: map[c.productId].brand, variantRisk: map[c.productId].variantRisk, labelLang: map[c.productId].labelLang }
       : c),
   })),
   patchCandidate: (id, patch) => set((s) => ({

@@ -30,8 +30,8 @@ export function computeWinScore(c: SpCandidate): WinScore {
   // Cầu — số bán (0-28) — LUÔN tính.
   score += c.sale >= 100000 ? 28 : c.sale >= 50000 ? 22 : c.sale >= 10000 ? 15 : c.sale >= 3000 ? 8 : 3
 
-  // Rủi ro nền (luôn tính).
-  if (c.shipFrom && !/MY|malaysia/i.test(c.shipFrom)) risks.push('Cross-border — hoàn cao hơn')
+  // Rủi ro nền (luôn tính). (Bỏ phạt "cross-border theo nơi ship" — sai bản chất;
+  // nội địa/nhập-sẵn giờ xét theo NGÔN NGỮ NHÃN, không phạt điểm.)
   if (c.rating && c.rating > 0 && c.rating < 4.3) risks.push(`Rating ${c.rating.toFixed(1)} — coi chừng hoàn`)
 
   // ── FULL (sau Soi sâu): dùng số thật ads/1688/margin ──
