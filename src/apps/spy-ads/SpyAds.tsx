@@ -21,6 +21,7 @@ interface FbAd {
   brandName?: string                    // tên brand/nhãn (nếu oem/brand)
   src?: 'checking' | 'found' | 'none'  // 🏭 dội ảnh lên 1688: found=có nguồn (nhập được) · none=không thấy
   srcLink?: string; srcPrice?: string   // link + giá ¥ 1688 nếu found
+  dupCount?: number                     // gộp trùng: SP/advertiser này có bao nhiêu video (rep + phần còn lại)
 }
 // Tách @handle / user_id từ ô nhập tự do (tên kênh · link tiktok · id số).
 function parseHandle(raw: string): { handle: string; userId: string } {
@@ -234,9 +235,11 @@ export default function SpyAds() {
   const [radarDone, setRadarDone] = useState(0)         // # seed đã quét xong
   const [radarErr, setRadarErr] = useState<string | null>(null)
   const [radarClassifying, setRadarClassifying] = useState(false)   // đang phân loại brand (Gemini)
-  const [brandFilter, setBrandFilter] = useState<'hideBrand' | 'genericOnly' | 'all'>('hideBrand') // lọc hàng clone được
+  const [brandFilter, setBrandFilter] = useState<'hideBrand' | 'genericOnly' | 'all'>('all') // lọc theo brand (phụ — mục tiêu chính là 1688)
   const [sourceBusy, setSourceBusy] = useState(false)   // đang dội ảnh check 1688
-  const [sourceOnly, setSourceOnly] = useState(false)   // chỉ hiện ad ĐÃ tìm được nguồn 1688
+  const [sourceDone, setSourceDone] = useState(0)       // # ad đã dội 1688 (auto)
+  const [sourceOnly, setSourceOnly] = useState(true)    // MẶC ĐỊNH chỉ hiện SP có nguồn 1688 (mục tiêu cuối)
+  const [dedupe, setDedupe] = useState(true)            // gộp trùng theo SP/advertiser (1 SP = 1 thẻ)
 
   const [playAd, setPlayAd] = useState<FbAd | null>(null)
   const [readBusy, setReadBusy] = useState(false)
@@ -362,7 +365,9 @@ export default function SpyAds() {
     if (!anyOk) setRadarErr('Quét lỗi — thử lại (kiểm tra mạng/credit SC).')
     else if (acc.size === 0) setRadarErr('Không thấy ad nào — thử lại sau.')
     setRadarBusy(false)
-    // Phân loại brand để LỌC hàng clone-được (generic/xưởng) khỏi brand nội địa.
+    const ranked = rankRadar([...acc.values()])
+    // AUTO dội 1688 top SP (mục tiêu chính) + phân loại brand (phụ, cho badge).
+    void autoSourceCheck(ranked)
     void classifyRadar([...acc.values()])
   }
 
@@ -409,6 +414,23 @@ export default function SpyAds() {
     if (!targets.length) return
     setSourceBusy(true)
     await poolRun(targets, 3, async (a) => { await check1688One(a) })
+    setSourceBusy(false)
+  }
+
+  // AUTO sau quét: gộp trùng theo advertiser (1 SP = 1 đại diện, tránh dội 14 frame
+  // cùng SP JointLief) → dội 1688 top N SP điểm cao nhất → mặc định lọc còn hàng 1688.
+  const autoSourceCheck = async (ranked: FbAd[], topN = 28) => {
+    const seen = new Set<string>()
+    const reps: FbAd[] = []
+    for (const a of ranked) {
+      const key = (a.page || a.id).toLowerCase()
+      if (seen.has(key) || !a.cover) continue
+      seen.add(key); reps.push(a)
+      if (reps.length >= topN) break
+    }
+    if (!reps.length) return
+    setSourceBusy(true); setSourceDone(0)
+    await poolRun(reps, 3, async (a) => { await check1688One(a); setSourceDone((n) => n + 1) })
     setSourceBusy(false)
   }
 
@@ -685,13 +707,27 @@ CHỈ trả JSON.`
       if (brandFilter === 'hideBrand') r = r.filter((a) => a.tier !== 'brand')
       else if (brandFilter === 'genericOnly') r = r.filter((a) => a.tier == null || a.tier === 'generic')
       // 🏭 Chỉ hàng ĐÃ xác nhận có nguồn 1688 (dội ảnh khớp) = chắc chắn nhập được.
-      if (sourceOnly) r = r.filter((a) => a.src === 'found')
+      // Chỉ áp ở Radar (tab Tìm ad theo từ khóa giữ nguyên toàn bộ kết quả).
+      if (sourceOnly && mode === 'radar') r = r.filter((a) => a.src === 'found')
     }
     const s = [...r]
     if (sortMode === 'days') s.sort((x, y) => (y.daysRunning || 0) - (x.daysRunning || 0))
     else if (sortMode === 'new') s.sort((x, y) => (x.daysRunning || 0) - (y.daysRunning || 0))
     else if (sortMode === 'variations') s.sort((x, y) => (y.variations || 0) - (x.variations || 0))
     return s   // 'win' = giữ thứ tự server (đã chấm điểm)
+  })()
+  // GỘP TRÙNG (Radar): 1 SP/advertiser = 1 thẻ đại diện (video top), gắn dupCount.
+  // Chỉ dùng cho LƯỚI phẳng — view Gom SP/Bị clone vẫn cần đủ ad để nhóm.
+  const gridAds = (() => {
+    if (!(dedupe && mode === 'radar')) return shownAds
+    const seen = new Map<string, FbAd>()
+    for (const a of shownAds) {
+      const key = (a.page || a.id).toLowerCase()
+      const ex = seen.get(key)
+      if (!ex) seen.set(key, { ...a, dupCount: 1 })
+      else ex.dupCount = (ex.dupCount || 1) + 1
+    }
+    return [...seen.values()]
   })()
   // Danh sách CTA có trong kết quả → đổ vào dropdown lọc.
   const ctaOptions = [...new Set((ads || []).map((a) => (a.cta || '').trim()).filter(Boolean))].sort()
@@ -1135,8 +1171,8 @@ CHỈ trả JSON.`
                   🛰 {radarBusy ? `Đang quét… ${radarDone}/${RADAR_SEEDS.length} ngách` : 'Quét Radar MY'}
                 </button>
                 <p className="min-w-[220px] flex-1 text-[11px] text-slate-500">
-                  Không cần từ khóa — tự quét <b>{RADAR_SEEDS.length} ngách COD</b> ở Malaysia (cả <b>đang win + từng win</b>),
-                  lọc ad video có <b>ladipage/nút đặt hàng</b>, đẩy <b>đối thủ chạy nhiều video</b> lên đầu → tải về clone test.
+                  Không cần từ khóa — tự quét <b>{RADAR_SEEDS.length} ngách COD</b> MY → gộp trùng theo SP →
+                  <b className="text-emerald-700"> tự dội ảnh lên 1688</b>, mặc định chỉ hiện <b>SP có nguồn 1688</b> (nhập + clone bán ngay).
                 </p>
               </div>
               {radarBusy && (
@@ -1159,14 +1195,17 @@ CHỈ trả JSON.`
                   </select>
                 </label>
                 {radarClassifying && <span className="text-[11px] text-violet-500 animate-pulse">⏳ đang lọc brand…</span>}
-                <button onClick={() => void runSourceCheck()} disabled={sourceBusy}
-                  title="Dội ảnh 20 ad đang hiện lên 1688 → xác nhận CÓ NGUỒN NHẬP thật hay không (bằng chứng chắc chắn, không đoán qua chữ)"
-                  className="rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">
-                  🏭 {sourceBusy ? 'Đang dội 1688…' : 'Quét nguồn 1688 (20)'}
-                </button>
-                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600" title="Chỉ hiện ad ĐÃ dội ảnh khớp 1688 = chắc chắn nhập được">
-                  <input type="checkbox" checked={sourceOnly} onChange={(e) => setSourceOnly(e.target.checked)} /> 🏭 Chỉ có nguồn 1688
+                <label className="flex items-center gap-1.5 text-xs font-bold text-emerald-700" title="MẶC ĐỊNH: chỉ hiện SP đã dội ảnh khớp 1688 = chắc chắn nhập được. Bỏ tick để xem tất cả.">
+                  <input type="checkbox" checked={sourceOnly} onChange={(e) => setSourceOnly(e.target.checked)} /> 🏭 Chỉ hàng có 1688
                 </label>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600" title="Gộp trùng: 1 SP/seller = 1 thẻ (bấm 🎬 N video để xem hết)">
+                  <input type="checkbox" checked={dedupe} onChange={(e) => setDedupe(e.target.checked)} /> 🎬 Gộp trùng SP
+                </label>
+                <button onClick={() => void runSourceCheck()} disabled={sourceBusy}
+                  title="Dội thêm 20 ad đang hiện lên 1688 (ngoài nhóm auto sau quét)"
+                  className="rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">
+                  🏭 {sourceBusy ? `Đang dội 1688… ${sourceDone}` : 'Dội thêm 1688 (20)'}
+                </button>
                 <label className="flex items-center gap-1 text-xs font-medium text-slate-600">Sắp xếp
                   <select value={sortMode} onChange={(e) => setSortMode(e.target.value as typeof sortMode)} className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium text-slate-700">
                     <option value="win">🏆 Winner</option>
@@ -1314,15 +1353,23 @@ CHỈ trả JSON.`
         {(mode === 'ads' || mode === 'radar') && ads && ads.length > 0 && (
           <>
             <div className="mb-2 text-xs font-semibold text-slate-500">
-              {shownAds.length} ad{ladiOnly && platform === 'fb' ? ' có Ladipage/Sale page' : ''}
+              {(dedupe && mode === 'radar' ? gridAds.length : shownAds.length)} {dedupe && mode === 'radar' ? 'SP' : 'ad'}{ladiOnly && platform === 'fb' ? ' · có Ladipage' : ''}
+              {mode === 'radar' && sourceOnly ? <span className="text-emerald-600"> · 🏭 có nguồn 1688</span> : ''}
               {groupMode === 'advertiser' && shownAds.length > 0 ? ` · ${groups.length} SP/advertiser` : ''}
               {groupMode === 'creative' && shownAds.length > 0 ? ` · 🔥 ${creativeClusters.length} creative bị clone` : ''}
               {mode === 'radar' ? ` · đã quét ${radarDone}/${RADAR_SEEDS.length} ngách` : ''}
-              {mode === 'radar' && (ads || []).some((a) => a.tier) ? (
-                <span className="ml-1 text-slate-400">· <span className="text-emerald-600">{(ads || []).filter((a) => a.tier === 'generic').length} generic</span> · <span className="text-rose-500">{(ads || []).filter((a) => a.tier === 'brand').length} brand</span></span>
-              ) : ''}
+              {mode === 'radar' && (ads || []).some((a) => a.src === 'found') ? <span className="ml-1 text-emerald-600">· {(ads || []).filter((a) => a.src === 'found').length} khớp 1688</span> : ''}
             </div>
-            {ladiOnly && platform === 'fb' && shownAds.length === 0 && (
+            {mode === 'radar' && sourceBusy && (
+              <p className="mb-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 animate-pulse">🏭 Đang dội ảnh lên 1688 để tìm nguồn nhập… {sourceDone > 0 ? `(${sourceDone} SP)` : ''}</p>
+            )}
+            {mode === 'radar' && sourceOnly && !sourceBusy && (dedupe ? gridAds : shownAds).length === 0 && (
+              <p className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/40 p-4 text-center text-xs text-slate-500">
+                Nhóm auto chưa thấy SP nào khớp ảnh 1688 (cover FB là frame video nên có thể trượt).
+                Bấm <b>"🏭 Dội thêm 1688"</b> để check tiếp, hoặc bỏ tick <b>"Chỉ hàng có 1688"</b> để xem tất cả.
+              </p>
+            )}
+            {ladiOnly && platform === 'fb' && shownAds.length === 0 && !(mode === 'radar' && sourceOnly) && (
               <p className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
                 Lượt này không có ad nào dẫn về web/ladipage (đa số đi WhatsApp/Shopee). Bỏ tick lọc hoặc bấm "Tải thêm".
               </p>
@@ -1419,7 +1466,7 @@ CHỈ trả JSON.`
               )
             ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
-              {shownAds.map((a) => (
+              {gridAds.map((a) => (
                 <div key={a.id} className={`relative flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm ${selected.has(a.id) ? 'border-rose-400 ring-2 ring-rose-300' : 'border-black/10'}`}>
                   <button onClick={(e) => { e.stopPropagation(); toggleSel(a.id) }} title="Chọn để tải hàng loạt"
                     className={`absolute right-1.5 top-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold shadow ${selected.has(a.id) ? 'border-rose-500 bg-rose-500 text-white' : 'border-white/70 bg-black/40 text-white/80'}`}>
@@ -1454,6 +1501,7 @@ CHỈ trả JSON.`
                       : <button onClick={(e) => { e.stopPropagation(); void check1688One(a) }} className="self-start rounded border border-emerald-300 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 hover:bg-emerald-50">🏭 Tìm nguồn 1688</button>
                     )}
                     <div className="mt-auto flex flex-wrap gap-x-2 gap-y-0.5 pt-1 text-[10px] font-medium text-slate-500">
+                      {a.dupCount && a.dupCount > 1 ? <button onClick={(e) => { e.stopPropagation(); void viewAdvertiser(a.pageId, a.page) }} title="Xem tất cả video của SP này" className="rounded bg-rose-100 px-1 font-bold text-rose-600 hover:bg-rose-200">🎬 {a.dupCount} video</button> : null}
                       {a.daysRunning > 0 && <span>⏳ {a.daysRunning}d</span>}
                       {a.advertiserAds > 1 && <span>📢 {a.advertiserAds} ad</span>}
                       {a.variations && a.variations > 1 ? <span>📑 {a.variations}</span> : null}
