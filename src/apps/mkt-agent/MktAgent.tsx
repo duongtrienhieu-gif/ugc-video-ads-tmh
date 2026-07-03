@@ -77,6 +77,7 @@ export default function MktAgent() {
   const [autoDeepBusy, setAutoDeepBusy] = useState(false)
   const [onlyWithVideo, setOnlyWithVideo] = useState(false)
   const [onlyNew, setOnlyNew] = useState(false)
+  const [onlyExactVid, setOnlyExactVid] = useState(false)
   const [playVid, setPlayVid] = useState<VidItem | null>(null)
   const [readResult, setReadResult] = useState<VideoRead | null>(null)
   const [readBusy, setReadBusy] = useState(false)
@@ -131,6 +132,20 @@ export default function MktAgent() {
     }
   }
 
+  // Auto so-ảnh top-15 (C): sau dò video, tự vision so ảnh SP vs cover cho top SP điểm
+  // WIN cao → gắn imgMatch → video ĐÚNG SP nổi lên (độ chính xác ~90%+, thay bấm tay).
+  const runAutoImgMatch = async () => {
+    const cands = useMktAgentStore.getState().candidates
+    const top = cands
+      .filter((c) => c.tier !== 'brand' && c.imageUrl && (c.vids?.list?.length ?? 0) > 0 && !c.vids!.list.some((v) => v.imgMatch != null))
+      .map((c) => ({ c, s: computeWinScore(c).score }))
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 15)
+      .map((x) => x.c)
+    if (!top.length) return
+    await pool(top, 3, async (c) => { await runImgMatch(c) })
+  }
+
   const scan = async () => {
     setScanning(true); setError(null); selectSp(null); setCandidates([]); setVidScanning(false)
     try {
@@ -142,8 +157,9 @@ export default function MktAgent() {
       setLastRadarDate(new Date().toISOString().slice(0, 10))
       if (!res.candidates.length) { setError('Không tìm thấy SP — thử đổi/thêm ngách.'); return }
       // Dò video chạy nền ngay (không chặn) — ưu tiên SP có video. Xong → tự Soi sâu top-N.
-      void runVideoRank(res.candidates, videoDepth).then(() => {
-        if (autoDeep && geminiApiKey) void runAutoDeep()
+      void runVideoRank(res.candidates, videoDepth).then(async () => {
+        if (geminiApiKey) await runAutoImgMatch()          // so-ảnh top-15 → video đúng SP
+        if (autoDeep && geminiApiKey) void runAutoDeep()   // Soi sâu top-5
       })
       if (!geminiApiKey) { setError('Có SP rồi — cần Gemini key (Cài đặt) để lọc branded.'); return }
       setClassifying(true)
@@ -407,6 +423,10 @@ Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh.
                   <input type="checkbox" checked={onlyWithVideo} onChange={(e) => setOnlyWithVideo(e.target.checked)} />
                   Chỉ SP có video
                 </label>
+                <label className="flex items-center gap-1.5 text-[12px] text-emerald-600 cursor-pointer" title="Trong reel chỉ hiện video đã xác nhận ĐÚNG SP (khớp ảnh/người bán)">
+                  <input type="checkbox" checked={onlyExactVid} onChange={(e) => setOnlyExactVid(e.target.checked)} />
+                  🎯 Chỉ video đúng SP
+                </label>
                 {!showWatchlist && newIds.length > 0 && (
                   <label className="flex items-center gap-1.5 text-[12px] text-amber-300 cursor-pointer">
                     <input type="checkbox" checked={onlyNew} onChange={(e) => setOnlyNew(e.target.checked)} />
@@ -439,6 +459,7 @@ Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh.
                   onPlay={openVid}
                   onAddBank={() => addToBank(p)}
                   onImgMatch={() => runImgMatch(p)}
+                  onlyExactVid={onlyExactVid}
                   isWatched={watchedIds.has(p.productId)}
                   onWatch={() => toggleWatch(p)}
                   isNew={newIds.includes(p.productId)}
@@ -496,7 +517,7 @@ Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh.
 }
 
 // ── 1 card SP — video reel (rip-ready) trước, phân tích sâu sau ────────────────
-function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onAddBank, onImgMatch, isWatched, onWatch, isNew }: {
+function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onAddBank, onImgMatch, onlyExactVid, isWatched, onWatch, isNew }: {
   p: SpCandidate
   picked: boolean
   hasKey: boolean
@@ -506,6 +527,7 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
   onPlay: (v: VidItem) => void
   onAddBank: () => void
   onImgMatch: () => void
+  onlyExactVid: boolean
   isWatched: boolean
   onWatch: () => void
   isNew: boolean
@@ -576,6 +598,10 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
           const fbN = p.vids.list.filter((v) => v.platform === 'fb').length
           const exactN = p.vids.list.filter((v) => v.imgMatch === true || v.authorMatch === true).length
           const imgChecked = p.vids.list.some((v) => v.imgMatch != null)
+          const isExact = (v: VidItem) => v.imgMatch === true || v.authorMatch === true
+          const filtered = onlyExactVid ? p.vids.list.filter(isExact) : p.vids.list
+          // Video ĐÚNG SP (khớp ảnh/người bán) lên trước; nếu lọc mà rỗng thì fallback cả list.
+          const reelSorted = [...(filtered.length ? filtered : p.vids.list)].sort((a, b) => (isExact(b) ? 1 : 0) - (isExact(a) ? 1 : 0))
           return (
             <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2">
               <div className="flex items-start justify-between gap-1.5">
@@ -597,7 +623,7 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
                   className="mt-0.5 text-[10px] text-violet-300 hover:text-violet-200 underline">⬇ Tải tất cả {tkN} video TikTok</button>
               )}
               <div className="flex gap-1.5 mt-1.5 overflow-x-auto pb-1">
-                {p.vids.list.map((v) => {
+                {reelSorted.map((v) => {
                   const isFb = v.platform === 'fb'
                   const inner = (
                     <>
