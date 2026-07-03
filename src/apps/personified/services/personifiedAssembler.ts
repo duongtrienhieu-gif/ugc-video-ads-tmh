@@ -22,8 +22,8 @@ export interface PersonifiedAssembleClip {
 export interface PersonifiedAssembleParams {
   /** Clip theo ĐÚNG thứ tự cảnh. Cảnh chưa render nên bỏ khỏi danh sách (caller lọc). */
   clips: PersonifiedAssembleClip[]
-  /** Độ phân giải XUẤT (upscale khi ghép). Mặc định 720p. */
-  resolution?: '720p' | '1080p'
+  /** Độ phân giải XUẤT (upscale khi ghép). Mặc định 720p. 480p = fallback nhẹ RAM khi OOM. */
+  resolution?: '480p' | '720p' | '1080p'
   onStage?: (msg: string) => void
   onProgress?: (ratio: number) => void
 }
@@ -45,7 +45,7 @@ export async function assemblePersonifiedVideo(
 ): Promise<PersonifiedAssembleResult> {
   if (!params.clips.length) throw new Error('Chưa có clip nào để ghép')
   const t0 = nowMs()
-  const outH = params.resolution === '1080p' ? 1080 : 720
+  const outH = params.resolution === '1080p' ? 1080 : params.resolution === '480p' ? 480 : 720
   const evenH = outH % 2 === 0 ? outH : outH + 1
   const rawW = Math.round((outH * 9) / 16)        // 9:16 dọc (TikTok)
   const evenW = rawW % 2 === 0 ? rawW : rawW + 1
@@ -55,7 +55,7 @@ export async function assemblePersonifiedVideo(
     onLog: (msg) => { if (msg.length > 4 && !msg.startsWith('frame=')) console.log('[FFMPEG]', msg) },
   })
 
-  const crf = params.resolution === '1080p' ? '19' : '20'
+  const crf = params.resolution === '1080p' ? '19' : params.resolution === '480p' ? '22' : '20'
   const preset = 'veryfast'
   // PAD-FIT 9:16 nền BLUR (KHÔNG crop → không cắt rìa/caption). Clip 2:3 (cảnh câm) fit
   // nguyên vào giữa, nền là bản blur phóng to. Clip đã 9:16 (cảnh có giọng) → fit khít.
@@ -107,6 +107,11 @@ export async function assemblePersonifiedVideo(
           '-ar', '44100', '-ac', '2', '-c:a', 'aac', '-f', 'mpegts', '-y', ats,
         ])
       }
+      // FIX OOM (Z98 pattern): GIẢI PHÓNG file nguồn cảnh này NGAY sau khi tạo .ts.
+      // Nếu không, cả 9 clip Seedance nằm chồng trong MEMFS → wasm 32-bit (~2GB) tràn
+      // ở cảnh cuối → "memory access out of bounds". .ts thì tí xíu, giữ để concat.
+      await ffmpeg.deleteFile(vin).catch(() => {})
+      await ffmpeg.deleteFile(`pain_${i}.mp3`).catch(() => {})
     } catch (err) {
       console.warn(`[PERS_ASM] cảnh ${i} encode lỗi — bỏ qua`, err)
       failedIdx.push(i)

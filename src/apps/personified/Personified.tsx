@@ -21,6 +21,7 @@ import VoiceLibraryModal from '../voice-studio/components/VoiceLibraryModal'
 import CloneVoiceModal from '../voice-studio/components/CloneVoiceModal'
 import { listVoices, type ElevenLabsVoice } from '../../utils/elevenlabs'
 import { assemblePersonifiedVideo } from './services/personifiedAssembler'   // P2d
+import { resetFFmpeg } from '../video-builder/v3/services/ffmpegLoader'      // reset worker sau OOM
 import { type LibVideo, getLibraryLocal, syncLibrary, addToLibrary, removeFromLibrary } from './services/personifiedLibrary'   // P2e
 import { useAssetUrl } from '../../hooks/useAssetUrl'
 
@@ -829,15 +830,33 @@ export default function Personified() {
       })
     if (!list.length) { setError('Chưa cảnh nào có clip — render clip trước khi ghép'); return }
     setFinalVideo({ status: 'running', stage: 'Bắt đầu…' })
+    const run = (resolution: '720p' | '480p') => assemblePersonifiedVideo({
+      clips: list, resolution,
+      onStage: (m) => setFinalVideo((p) => ({ ...p, status: 'running', stage: m })),
+    })
     try {
-      const res = await assemblePersonifiedVideo({
-        clips: list, resolution: '720p',
-        onStage: (m) => setFinalVideo((p) => ({ ...p, status: 'running', stage: m })),
-      })
+      const res = await run('720p')
       setFinalVideo({ status: 'done', videoRef: res.videoRef })
       setSavedToLib(false)   // video mới → cho lưu lại
     } catch (e) {
-      setFinalVideo({ status: 'failed', error: e instanceof Error ? e.message : String(e) })
+      const msg = e instanceof Error ? e.message : String(e)
+      const isOom = /memory access out of bounds|out of memory|\boom\b|abort\(\)|table index is out of bounds/i.test(msg)
+      // Worker wasm có thể đã CHẾT sau OOM → reset để không "bấm lại vẫn lỗi tới khi F5".
+      await resetFFmpeg().catch(() => {})
+      if (isOom) {
+        try {
+          setFinalVideo({ status: 'running', stage: 'RAM đầy ở 720p — tự ghép lại ở 480p…' })
+          const res = await run('480p')
+          setFinalVideo({ status: 'done', videoRef: res.videoRef })
+          setSavedToLib(false)
+          return
+        } catch (e2) {
+          await resetFFmpeg().catch(() => {})
+          setFinalVideo({ status: 'failed', error: (e2 instanceof Error ? e2.message : String(e2)) + ' (đã thử cả 480p)' })
+          return
+        }
+      }
+      setFinalVideo({ status: 'failed', error: msg })
     }
   }
 
