@@ -91,19 +91,19 @@ export function buildFormBgPrompt(params: BuildFormBgPromptParams): string {
   const fomoLinesText = picked.map(q).join(' and ')
 
   return [
-    `TASK: Design ONE TALL PORTRAIT (2:3) order-form BACKGROUND, stacked top-to-bottom: (1) header banner, (2) an urgency FOMO band containing an EMPTY countdown slot, (3) a LARGE EMPTY form area, (4) footer. High-converting Malaysian COD marketing infographic.`,
+    `TASK: Design ONE TALL PORTRAIT (2:3) order-form BACKGROUND, stacked top-to-bottom: (1) header banner, (2) an urgency FOMO band with a blank gap left in its centre, (3) a large blank solid-colour region, (4) footer. High-converting Malaysian COD marketing infographic. TWO regions are intentionally left blank for later overlays — draw absolutely nothing in them (no text, no boxes, no outlines).`,
     headerLayout(preset, d, lang, hasGift),
     `FOMO BAND (directly below header): a bold urgency strip in the accent colour. Top label ${q(d.fomoTitle)}. ` +
-      `Then a RESERVED EMPTY countdown SLOT sized to fit a 4-cell countdown timer (4 number boxes + a label under each, like Hari/Jam/Minit/Saat) PLUS one short caption line directly BENEATH the timer: make it MODERATELY NARROW — about 75% of the strip width, centred — and noticeably TALLER (roughly 2.2:1 width-to-height) so both the timer AND the caption line below it fit inside the slot. Keep clear vertical spacing ABOVE and BELOW it. ` +
-      `Leave the slot COMPLETELY EMPTY: render NO clock, NO numbers, NO digits, NO boxes, NO labels, NO text inside it (a real countdown widget is overlaid there later). ` +
-      `Below the slot (with clearance, NOT overlapping it), show these ${picked.length} DISTINCT urgency lines (each visually punchy): ${fomoLinesText}.`,
-    `FORM SAFE ZONE (below the FOMO band): a LARGE area (~40% of the height) that is a FLAT SOLID ${bg} colour, COMPLETELY EMPTY — no card, no border, no fields, no buttons, no icons, no text. One uniform solid colour so it crops cleanly into a form area.`,
+      `Centred within the strip, leave a CLEAN BLANK GAP — about 75% of the strip width, centred, roughly 2.2:1 wide-to-tall — filled with the SAME flat accent colour and nothing else, so it reads as a smooth uninterrupted patch of colour. Keep clear vertical spacing above and below this gap. ` +
+      `Inside this gap draw ABSOLUTELY NOTHING: no clock, no numbers, no digits, no timer, no cells, no boxes, no squares, no outlines, no borders, no frames, no labels, no caption, no placeholder marks, and no text of any kind (a real countdown widget is overlaid there later, so it must stay a bare patch of colour). ` +
+      `Below the gap (with clearance, NOT overlapping it), show these ${picked.length} DISTINCT urgency lines (each visually punchy): ${fomoLinesText}.`,
+    `LOWER REGION (below the FOMO band): a LARGE area (~40% of the height) that is ONE FLAT SOLID ${bg} colour and totally blank — no card, no frame, no border, no outline, no fields, no buttons, no icons, no placeholder, no labels and no text of any kind. A single uniform colour block so it crops cleanly for a form overlay added later.`,
     footerLayout(preset, d),
     identityBlock(d),
     giftBlock(hasGift, lang),
     paletteBlock(d),
     textRules(langName),
     variantBlock(variantIndex),
-    `STRICT: render only the specified marketing text. The TWO reserved areas (countdown slot + form area) MUST contain absolutely nothing.`,
+    `STRICT: render only the specified marketing text. The blank gap inside the FOMO band and the large lower colour block MUST stay completely empty — bare flat colour with zero text, digits, boxes, outlines, borders or placeholder marks. Never write words like "reserved", "empty", "countdown", "slot", "form" or "safe zone" anywhere in the image.`,
   ].filter(Boolean).join('\n\n')
 }
