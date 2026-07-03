@@ -7,6 +7,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useBankStore } from '../../stores/bankStore'
 import { useAppStore } from '../../stores/appStore'
 import { directGeminiVision, directGeminiText } from '../../utils/gemini'
+import { classifyBranding } from '../mkt-agent/services/brandingFilter'
 
 interface FbAd {
   id: string; page: string; pageId?: string; text: string; videoUrl: string; cover: string
@@ -16,6 +17,8 @@ interface FbAd {
   reach?: number; spend?: string; currency?: string; durationSec?: number
   views?: number   // video kênh (mode channel): lượt xem
   hasCart?: boolean; productUrl?: string   // video gắn giỏ TikTok Shop
+  tier?: 'generic' | 'oem' | 'brand'   // 🛰 Radar: generic=dễ nhập 1688 · oem=nhãn riêng · brand=bảo hộ
+  brandName?: string                    // tên brand/nhãn (nếu oem/brand)
 }
 // Tách @handle / user_id từ ô nhập tự do (tên kênh · link tiktok · id số).
 function parseHandle(raw: string): { handle: string; userId: string } {
@@ -228,6 +231,8 @@ export default function SpyAds() {
   const [radarBusy, setRadarBusy] = useState(false)
   const [radarDone, setRadarDone] = useState(0)         // # seed đã quét xong
   const [radarErr, setRadarErr] = useState<string | null>(null)
+  const [radarClassifying, setRadarClassifying] = useState(false)   // đang phân loại brand (Gemini)
+  const [brandFilter, setBrandFilter] = useState<'hideBrand' | 'genericOnly' | 'all'>('hideBrand') // lọc hàng clone được
 
   const [playAd, setPlayAd] = useState<FbAd | null>(null)
   const [readBusy, setReadBusy] = useState(false)
@@ -353,6 +358,25 @@ export default function SpyAds() {
     if (!anyOk) setRadarErr('Quét lỗi — thử lại (kiểm tra mạng/credit SC).')
     else if (acc.size === 0) setRadarErr('Không thấy ad nào — thử lại sau.')
     setRadarBusy(false)
+    // Phân loại brand để LỌC hàng clone-được (generic/xưởng) khỏi brand nội địa.
+    void classifyRadar([...acc.values()])
+  }
+
+  // Phân loại từng ad → generic/oem/brand (Gemini, từ tên page + copy) → tag vào `ads`.
+  // generic = hàng xưởng mô tả theo công dụng (dễ tìm 1688) · oem = có nhãn riêng ·
+  // brand = brand nội địa/nổi (JointLief, Labrich…) không clone/nhập được.
+  const classifyRadar = async (list: FbAd[]) => {
+    if (!geminiApiKey || !list.length) return
+    setRadarClassifying(true)
+    try {
+      const items = list.map((a) => ({ id: a.id, title: `${a.page || ''} — ${(a.text || '').slice(0, 90)}`.trim() }))
+      const map = await classifyBranding(geminiApiKey, items)
+      setAds((prev) => (prev || []).map((a) => {
+        const c = map[a.id]
+        return c ? { ...a, tier: c.tier, brandName: c.brand } : a
+      }))
+    } catch { /* phân loại lỗi → giữ nguyên, không vỡ */ }
+    finally { setRadarClassifying(false) }
   }
 
   // Nhận SP từ MKT Agent → tự chuyển chế độ "tìm ad" + search đúng SP.
@@ -624,6 +648,9 @@ CHỈ trả JSON.`
       if (minDays > 0) r = r.filter((a) => (a.daysRunning || 0) >= minDays)
       if (platformFilter) r = r.filter((a) => (a.platforms || []).some((p) => p.toUpperCase().includes(platformFilter)))
       if (ctaFilter) r = r.filter((a) => (a.cta || '').toLowerCase() === ctaFilter.toLowerCase())
+      // Lọc hàng CLONE-ĐƯỢC: bỏ brand nội địa/bảo hộ (chưa phân loại → giữ để không trống).
+      if (brandFilter === 'hideBrand') r = r.filter((a) => a.tier !== 'brand')
+      else if (brandFilter === 'genericOnly') r = r.filter((a) => a.tier == null || a.tier === 'generic')
     }
     const s = [...r]
     if (sortMode === 'days') s.sort((x, y) => (y.daysRunning || 0) - (x.daysRunning || 0))
@@ -1089,6 +1116,14 @@ CHỈ trả JSON.`
                 <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
                   <input type="checkbox" checked={ladiOnly} onChange={(e) => setLadiOnly(e.target.checked)} /> 🔗 Chỉ ad có Ladipage/Sale page
                 </label>
+                <label className="flex items-center gap-1 text-xs font-medium text-slate-600" title="Bỏ brand nội địa MY (không nhập/clone được) — giữ hàng xưởng generic dễ tìm 1688">🏭 Loại hàng
+                  <select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value as typeof brandFilter)} className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                    <option value="hideBrand">Ẩn brand bảo hộ</option>
+                    <option value="genericOnly">Chỉ generic (dễ nhập 1688)</option>
+                    <option value="all">Tất cả</option>
+                  </select>
+                </label>
+                {radarClassifying && <span className="text-[11px] text-violet-500 animate-pulse">⏳ đang lọc brand…</span>}
                 <label className="flex items-center gap-1 text-xs font-medium text-slate-600">Sắp xếp
                   <select value={sortMode} onChange={(e) => setSortMode(e.target.value as typeof sortMode)} className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium text-slate-700">
                     <option value="win">🏆 Winner</option>
@@ -1240,6 +1275,9 @@ CHỈ trả JSON.`
               {groupMode === 'advertiser' && shownAds.length > 0 ? ` · ${groups.length} SP/advertiser` : ''}
               {groupMode === 'creative' && shownAds.length > 0 ? ` · 🔥 ${creativeClusters.length} creative bị clone` : ''}
               {mode === 'radar' ? ` · đã quét ${radarDone}/${RADAR_SEEDS.length} ngách` : ''}
+              {mode === 'radar' && (ads || []).some((a) => a.tier) ? (
+                <span className="ml-1 text-slate-400">· <span className="text-emerald-600">{(ads || []).filter((a) => a.tier === 'generic').length} generic</span> · <span className="text-rose-500">{(ads || []).filter((a) => a.tier === 'brand').length} brand</span></span>
+              ) : ''}
             </div>
             {ladiOnly && platform === 'fb' && shownAds.length === 0 && (
               <p className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
@@ -1348,6 +1386,9 @@ CHỈ trả JSON.`
                     {a.cover ? <img src={a.cover} alt="" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /> : null}
                     <Play className="absolute h-10 w-10 text-white/90 drop-shadow" />
                     {a.isActive && <span className="absolute left-1.5 top-1.5 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">● ĐANG CHẠY</span>}
+                    {a.tier === 'generic' && <span className="absolute bottom-1.5 left-1.5 rounded bg-emerald-600/90 px-1.5 py-0.5 text-[10px] font-bold text-white" title="Hàng xưởng generic — dễ tìm nguồn 1688">🟢 dễ nhập</span>}
+                    {a.tier === 'oem' && <span className="absolute bottom-1.5 left-1.5 rounded bg-amber-500/90 px-1.5 py-0.5 text-[10px] font-bold text-white" title="Có nhãn riêng — tìm 1688 bằng ẢNH, không bằng tên">🏭 nhãn riêng</span>}
+                    {a.tier === 'brand' && <span className="absolute bottom-1.5 left-1.5 rounded bg-rose-600/90 px-1.5 py-0.5 text-[10px] font-bold text-white" title="Brand nội địa/bảo hộ — không clone/nhập được">🔴 brand</span>}
                     {(() => { const d = a.durationSec ?? durMap[a.id]; return d ? <span className="absolute bottom-1.5 right-1.5 rounded bg-black/75 px-1.5 py-0.5 text-[10px] font-bold text-white">⏱ {fmtDur(d)}</span> : null })()}
                   </button>
                   {/* Probe đo thời lượng FB (API không trả) — ẩn, load metadata rồi tự rớt nếu >3 phút. */}
