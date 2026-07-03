@@ -545,6 +545,8 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
         <div className="min-w-0 flex-1">
           <p className="text-[13px] text-slate-800 line-clamp-2">{p.title}</p>
           <p className="text-[11px] text-slate-400 mt-1 truncate">{p.seller || '—'}{p.brand ? ` · ${p.brand}` : ''}</p>
+          <a href={links.tiktokShop} target="_blank" rel="noopener noreferrer"
+            className="inline-block mt-0.5 text-[11px] text-sky-500 hover:text-sky-400" title="Mở sản phẩm trên TikTok Shop">🛒 Xem trên TikTok Shop →</a>
         </div>
         <button onClick={onWatch} title={isWatched ? 'Bỏ ghim' : 'Ghim vào kho đã lưu (giữ qua F5 + qua các lần quét)'}
           className={`shrink-0 text-[15px] leading-none ${isWatched ? 'text-amber-400' : 'text-slate-500 hover:text-amber-300'}`}>📌</button>
