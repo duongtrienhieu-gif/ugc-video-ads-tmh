@@ -49,17 +49,16 @@ export default function ImageStudio() {
           <Images className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} strokeWidth={2} />
         </span>
         <span className="truncate text-sm font-bold text-app-text">Xưởng Ảnh</span>
-        <div className="mx-auto max-w-xl">
-          <SegmentTabs
-            value={mode}
-            onChange={pick}
-            options={[
-              { value: 'gift', label: '🎁 Quà tặng' },
-              { value: 'form', label: '🖼 Form Sale' },
-              { value: 'rebrand', label: '🏷 Re-Brand' },
-            ]}
-          />
-        </div>
+        <SegmentTabs
+          className="min-w-[260px] flex-1 sm:max-w-md"
+          value={mode}
+          onChange={pick}
+          options={[
+            { value: 'gift', label: '🎁 Quà tặng' },
+            { value: 'form', label: '🖼 Form Sale' },
+            { value: 'rebrand', label: '🏷 Re-Brand' },
+          ]}
+        />
         <span
           className="ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold"
           style={{ backgroundColor: 'var(--color-accent-dim)', color: 'var(--color-accent)' }}
