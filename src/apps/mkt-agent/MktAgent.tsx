@@ -11,7 +11,7 @@ import { scanWinningProducts } from './services/researchStage'
 import { classifyBranding } from './services/brandingFilter'
 import { buildVerifyLinks } from './services/enrichStage'
 import { computeWinScore } from './services/winScore'
-import { checkProductVideos } from './services/checkVideos'
+import { checkProductVideos, productSpyQuery } from './services/checkVideos'
 import { expandNicheToProducts } from './services/expandTerms'
 import { matchCoversToProduct } from './services/matchSpy'
 import { KEYWORD_GROUPS, toggleGroup, isGroupActive, parseNiches } from './keywords'
@@ -632,14 +632,16 @@ function SpCard({ p, picked, hasKey, onPick, onSendToApp, onPlay, onAddBank, onI
               className="text-[10px] text-slate-400 hover:text-slate-700 underline" title="Google Lens — soi branding/1688">🔍 kiểm tay</a>
           </div>
           <div className="flex gap-1.5">
-            <a href={links.tiktokVideo} target="_blank" rel="noopener noreferrer" title="Spy TikTok — mở video/quảng cáo đối thủ cùng ngách"
+            <button title="Spy TikTok — mở app Spy Ads, tìm ad TikTok ĐÚNG SP này"
+              onClick={() => onSendToApp({ targetApp: 'spy-ads', targetField: 'query', data: { q: productSpyQuery(p.title), platform: 'tiktok' } })}
               className="flex-1 h-8 grid place-items-center rounded-md text-[12px] font-semibold bg-slate-900 text-white hover:bg-slate-800 border border-slate-700">
               🎵 Spy TikTok
-            </a>
-            <a href={links.fbAds} target="_blank" rel="noopener noreferrer" title="Spy FB — Thư viện quảng cáo Facebook (Malaysia) đối thủ cùng ngách"
+            </button>
+            <button title="Spy FB — mở app Spy Ads, tìm ad Facebook ĐÚNG SP này"
+              onClick={() => onSendToApp({ targetApp: 'spy-ads', targetField: 'query', data: { q: productSpyQuery(p.title), platform: 'fb' } })}
               className="flex-1 h-8 grid place-items-center rounded-md text-[12px] font-semibold bg-[#1877F2] text-white hover:bg-[#0f66d0] border border-[#1877F2]">
               📘 Spy FB
-            </a>
+            </button>
           </div>
         </>
       )}

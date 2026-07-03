@@ -28,6 +28,17 @@ function coreTerms(title: string): string[] {
   return out
 }
 
+// Từ khóa spy ĐÚNG SP (tên sản phẩm cốt lõi, KHÔNG phải ngách rộng) — dùng cho
+// nút "Spy TikTok/FB" nhảy sang app Spy Ads: coreTerms(tên) → tìm ad/video của
+// CHÍNH SP này. Fallback: cắt tên tới đoạn đầu (bỏ ngoặc/khuyến mãi) nếu quá ngắn.
+export function productSpyQuery(title: string): string {
+  const terms = coreTerms(title)
+  const joined = terms.slice(0, 6).join(' ')
+  if (joined.length >= 4) return joined
+  return (title.replace(/[【[(][^】\])]*[】\])]/g, ' ').split(/[|\-–—]/)[0] || title)
+    .trim().split(/\s+/).filter(Boolean).slice(0, 8).join(' ')
+}
+
 // Advertiser KHÔNG phải đối thủ COD (phòng khám/nha/dịch vụ/nhà thuốc) → loại.
 const NON_COD_RE = /klinik|dental|pergigi|dentist|\bclinic\b|hospital|farmasi|pharmacy|aesthetic|\bspa\b|salon|booking|appointment|temujanji/i
 interface FbAd { id?: string; page?: string; cover?: string; videoUrl?: string; text?: string; daysRunning?: number }
@@ -47,10 +58,7 @@ function sellerMatch(author: string, seller?: string): boolean {
 
 export async function checkProductVideos(c: SpCandidate): Promise<VideoCheck> {
   const terms = coreTerms(c.title)
-  const joined = terms.slice(0, 6).join(' ')
-  const q = joined.length >= 4
-    ? joined
-    : (c.title.replace(/[【[(][^】\])]*[】\])]/g, ' ').split(/[|\-–—]/)[0] || c.title).trim().split(/\s+/).filter(Boolean).slice(0, 8).join(' ')
+  const q = productSpyQuery(c.title)
   const termsParam = terms.join(',')
 
   // TikTok — video bán ĐÚNG SP (rip-ready). strict=1 → chỉ giữ video khớp thật (bớt drift).

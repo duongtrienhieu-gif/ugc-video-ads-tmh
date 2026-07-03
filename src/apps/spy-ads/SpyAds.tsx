@@ -231,23 +231,27 @@ export default function SpyAds() {
     setViewPageId(null); setViewPageName(null)                 // advertiser view là FB-only
   }
 
-  const buildUrl = (query: string, cur?: string, pageId?: string) => {
-    const st = platform === 'fb' ? `&status=${activeOnly ? 'ACTIVE' : 'ALL'}` : ''
+  const buildUrl = (query: string, cur?: string, pageId?: string, plat: 'fb' | 'tiktok' = platform) => {
+    const st = plat === 'fb' ? `&status=${activeOnly ? 'ACTIVE' : 'ALL'}` : ''
     const curP = cur ? `&cursor=${encodeURIComponent(cur)}` : ''
-    if (platform === 'fb' && pageId) return `/api/fb-ads?pageId=${encodeURIComponent(pageId)}&country=${country}${st}${curP}`
-    const base = platform === 'fb' ? '/api/fb-ads' : '/api/tiktok-ads'
-    const ex = platform === 'fb' && exact ? '&exact=1' : ''
+    if (plat === 'fb' && pageId) return `/api/fb-ads?pageId=${encodeURIComponent(pageId)}&country=${country}${st}${curP}`
+    const base = plat === 'fb' ? '/api/fb-ads' : '/api/tiktok-ads'
+    const ex = plat === 'fb' && exact ? '&exact=1' : ''
     return `${base}?q=${encodeURIComponent(query.trim())}&country=${country}${st}${ex}${curP}`
   }
 
-  const search = async (term?: string) => {
+  // platOverride: khi mở từ app khác (MKT Agent) cần search NGAY nền tảng chỉ định,
+  // không đợi setPlatform (state async → buildUrl sẽ đọc platform cũ).
+  const search = async (term?: string, platOverride?: 'fb' | 'tiktok') => {
     const query = (term ?? q).trim()
     if (!query) { setError('Nhập từ khóa / ngách'); return }
     if (term != null) setQ(term)
+    if (platOverride) setPlatform(platOverride)
+    const plat = platOverride ?? platform
     setViewPageId(null); setViewPageName(null)   // tìm từ khóa = thoát chế độ xem advertiser
     setLoading(true); setError(null); setAds(null); setCursor(null); setHasMore(false); setSelected(new Set())
     try {
-      const d = await fetch(buildUrl(query)).then((r) => r.json())
+      const d = await fetch(buildUrl(query, undefined, undefined, plat)).then((r) => r.json())
       if (d.error) { setError(d.error); setLoading(false); return }
       setAds(Array.isArray(d.ads) ? d.ads : [])
       setCursor(d.cursor != null ? String(d.cursor) : null)
@@ -257,14 +261,20 @@ export default function SpyAds() {
     } catch (e) { setError((e as Error).message) } finally { setLoading(false) }
   }
 
-  // Nhận SP từ MKT Agent → tự chuyển chế độ "tìm ad" (FB) + search keyword.
+  // Nhận SP từ MKT Agent → tự chuyển chế độ "tìm ad" + search đúng SP.
+  // data: string (mặc định FB) HOẶC { q, platform } để chỉ định TikTok/FB.
   const interAppPayload = useAppStore((s) => s.interAppPayload)
   const consumePayload = useAppStore((s) => s.consumePayload)
   useEffect(() => {
     if (!interAppPayload || interAppPayload.targetApp !== 'spy-ads') return
-    if (interAppPayload.targetField === 'query' && typeof interAppPayload.data === 'string') {
-      setMode('ads'); setPlatform('fb')
-      void search(interAppPayload.data)
+    if (interAppPayload.targetField === 'query') {
+      const raw = interAppPayload.data
+      const query = typeof raw === 'string' ? raw : (raw as { q?: string })?.q
+      const plat: 'fb' | 'tiktok' = typeof raw === 'object' && raw && (raw as { platform?: string }).platform === 'tiktok' ? 'tiktok' : 'fb'
+      if (query && query.trim()) {
+        setMode('ads')
+        void search(query, plat)
+      }
     }
     consumePayload()
     // eslint-disable-next-line react-hooks/exhaustive-deps
