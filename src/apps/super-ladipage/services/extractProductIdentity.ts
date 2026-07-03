@@ -177,6 +177,13 @@ export async function extractProductIdentity(input: ExtractInput): Promise<Produ
           parts,
           systemInstruction:  SYSTEM_PROMPT_IDENTITY,
           responseMimeType:   'application/json',
+          // FIX: ProductIdentity là JSON DÀI (packagingDescription + 4 tầng pain/
+          // transformation + comboDeals). Mặc định vision maxOutputTokens=4096 +
+          // thinking BẬT → gemini-2.5-flash tiêu token vào "thinking" → JSON bị cắt
+          // giữa string ("Unterminated string") → fail cả 2 lần → KHÔNG tạo được pack.
+          // TẮT thinking + nâng trần token (khớp pattern generateLandingPack đã dùng).
+          thinkingBudget:     0,
+          maxOutputTokens:    8192,
         }),
         VISION_TIMEOUT_MS,
         '[extractProductIdentity]',
