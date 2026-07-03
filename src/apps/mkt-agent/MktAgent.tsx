@@ -72,15 +72,16 @@ export default function MktAgent() {
   const addProduct = useBankStore((s) => s.addProduct)
   const {
     niches, amount, scanning, classifying, error, candidates, onlyGeneric, selectedSp,
-    watchlist, showWatchlist, seenIds, lastRadarDate, autoRadar, newIds,
+    watchlist, showWatchlist, seenIds, lastRadarDate, autoRadar, newIds, autoDeep,
     setNiches, setAmount, setScanning, setClassifying, setError,
     setCandidates, setBranding, patchCandidate, setOnlyGeneric, selectSp, toggleWatch, setShowWatchlist,
-    setNewIds, markSeen, setLastRadarDate, setAutoRadar,
+    setNewIds, markSeen, setLastRadarDate, setAutoRadar, setAutoDeep,
   } = useMktAgentStore()
   const [videoDepth] = useState(40)
   const [widthN, setWidthN] = useState(15)       // độ rộng bung ngách (AI)
   const [expanding, setExpanding] = useState(false)
   const [vidScanning, setVidScanning] = useState(false)
+  const [autoDeepBusy, setAutoDeepBusy] = useState(false)
   const [onlyWithVideo, setOnlyWithVideo] = useState(false)
   const [onlyNew, setOnlyNew] = useState(false)
   const [playVid, setPlayVid] = useState<VidItem | null>(null)
@@ -147,8 +148,10 @@ export default function MktAgent() {
       markSeen(res.candidates.map((c) => c.productId))
       setLastRadarDate(new Date().toISOString().slice(0, 10))
       if (!res.candidates.length) { setError('Không tìm thấy SP — thử đổi/thêm ngách.'); return }
-      // Dò video chạy nền ngay (không chặn) — ưu tiên SP có video.
-      void runVideoRank(res.candidates, videoDepth)
+      // Dò video chạy nền ngay (không chặn) — ưu tiên SP có video. Xong → tự Soi sâu top-N.
+      void runVideoRank(res.candidates, videoDepth).then(() => {
+        if (autoDeep && geminiApiKey) void runAutoDeep()
+      })
       if (!geminiApiKey) { setError('Có SP rồi — cần Gemini key (Cài đặt) để lọc branded.'); return }
       setClassifying(true)
       try {
@@ -193,6 +196,22 @@ export default function MktAgent() {
     } catch (e) {
       patchCandidate(c.productId, { diving: false, deepError: (e as Error).message })
     }
+  }
+
+  // Auto Soi sâu TOP-5 (C): sau quét + dò video → tự Soi sâu 5 SP điểm WIN cao nhất
+  // → có luôn 1688 + biên lời + đối thủ paid + verdict Gemini cho nhóm ngon nhất.
+  const runAutoDeep = async () => {
+    const cands = useMktAgentStore.getState().candidates
+    const top = cands
+      .filter((c) => c.tier !== 'brand' && c.vids && !c.deep && c.imageUrl)
+      .map((c) => ({ c, s: computeWinScore(c).score }))
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 5)
+      .map((x) => x.c)
+    if (!top.length) return
+    setAutoDeepBusy(true)
+    await pool(top, 2, async (c) => { await analyzeSp(c) })
+    setAutoDeepBusy(false)
   }
 
   // Thêm SP vào KHO (giống nút ở app Research): Gemini điền hồ sơ VN đầy đủ → addProduct.
@@ -308,10 +327,16 @@ Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh.
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <span className="text-amber-400 font-medium">Bước 1 · Quét SP win (Malaysia)</span>
           <span className="text-[11px] text-slate-400">tự dò video · tự lọc branded</span>
-          <label className="flex items-center gap-1.5 text-[12px] text-slate-500 cursor-pointer ml-auto" title="Mở app vào ngày mới sẽ tự quét lại + báo SP win mới (chạy khi tab mở)">
-            <input type="checkbox" checked={autoRadar} onChange={(e) => setAutoRadar(e.target.checked)} />
-            🛰 Radar tự động (quét mỗi ngày khi mở app)
-          </label>
+          <div className="flex items-center gap-3 ml-auto flex-wrap">
+            <label className="flex items-center gap-1.5 text-[12px] text-slate-500 cursor-pointer" title="Sau quét, tự Soi sâu 5 SP điểm cao nhất: 1688 + biên lời + đối thủ paid + verdict Gemini">
+              <input type="checkbox" checked={autoDeep} onChange={(e) => setAutoDeep(e.target.checked)} />
+              🤖 Tự đánh giá top 5
+            </label>
+            <label className="flex items-center gap-1.5 text-[12px] text-slate-500 cursor-pointer" title="Mở app vào ngày mới sẽ tự quét lại + báo SP win mới (chạy khi tab mở)">
+              <input type="checkbox" checked={autoRadar} onChange={(e) => setAutoRadar(e.target.checked)} />
+              🛰 Radar tự động
+            </label>
+          </div>
         </div>
 
         {/* Nhóm ngách — bấm để thêm/bớt nhanh (đã loại thời trang/giày) */}
@@ -382,6 +407,7 @@ Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh.
                 {candidates.length} SP · <span className="text-emerald-400">🎥 {withVideoCount} có video</span>
                 {' · '}{classifying ? 'đang lọc…' : <><span className="text-emerald-400">{genericCount} generic</span> · <span className="text-amber-300">{oemCount} nhãn-xưởng</span> · <span className="text-rose-400">{brandCount} bảo hộ</span></>}
                 {vidScanning && <span className="text-amber-300 animate-pulse"> · đang dò video…</span>}
+                {autoDeepBusy && <span className="text-violet-300 animate-pulse"> · 🤖 đang tự đánh giá top 5…</span>}
               </p>
               <div className="flex items-center gap-2.5 flex-wrap">
                 <label className="flex items-center gap-1.5 text-[12px] text-slate-700 cursor-pointer">

@@ -120,6 +120,7 @@ interface MktAgentState {
   lastRadarDate: string         // YYYY-MM-DD lần radar gần nhất (auto quét 1 lần/ngày)
   autoRadar: boolean            // bật tự quét khi mở app (ngày mới)
   newIds: string[]              // SP mới ở lần quét hiện tại (transient, không lưu)
+  autoDeep: boolean             // tự Soi sâu top-N SP điểm cao nhất sau quét
   setStage: (s: AgentStage) => void
   setCheckpointMode: (m: CheckpointMode) => void
   setNiches: (s: string) => void
@@ -138,6 +139,7 @@ interface MktAgentState {
   markSeen: (ids: string[]) => void
   setLastRadarDate: (d: string) => void
   setAutoRadar: (b: boolean) => void
+  setAutoDeep: (b: boolean) => void
 }
 
 export const useMktAgentStore = create<MktAgentState>()(persist((set) => ({
@@ -157,6 +159,7 @@ export const useMktAgentStore = create<MktAgentState>()(persist((set) => ({
   lastRadarDate: '',
   autoRadar: false,
   newIds: [],
+  autoDeep: true,
   setStage: (stage) => set({ stage }),
   setCheckpointMode: (checkpointMode) => set({ checkpointMode }),
   setNiches: (niches) => set({ niches }),
@@ -184,8 +187,9 @@ export const useMktAgentStore = create<MktAgentState>()(persist((set) => ({
   markSeen: (ids) => set((s) => ({ seenIds: [...new Set([...ids, ...s.seenIds])].slice(0, 3000) })),
   setLastRadarDate: (lastRadarDate) => set({ lastRadarDate }),
   setAutoRadar: (autoRadar) => set({ autoRadar }),
+  setAutoDeep: (autoDeep) => set({ autoDeep }),
 }), {
   name: 'mkt-agent-store',
   // Lưu kết quả quét + watchlist + radar qua F5 (đỡ tốn call/credit quét lại). Bỏ cờ tạm + newIds.
-  partialize: (s) => ({ candidates: s.candidates, niches: s.niches, amount: s.amount, onlyGeneric: s.onlyGeneric, watchlist: s.watchlist, seenIds: s.seenIds, lastRadarDate: s.lastRadarDate, autoRadar: s.autoRadar }),
+  partialize: (s) => ({ candidates: s.candidates, niches: s.niches, amount: s.amount, onlyGeneric: s.onlyGeneric, watchlist: s.watchlist, seenIds: s.seenIds, lastRadarDate: s.lastRadarDate, autoRadar: s.autoRadar, autoDeep: s.autoDeep }),
 }))
