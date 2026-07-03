@@ -284,14 +284,10 @@ Nếu không có lời thoại thì đọc chữ trên màn hình + hình ảnh.
   let shown = onlyGeneric ? source.filter((c) => c.tier !== 'brand') : source
   if (onlyWithVideo) shown = shown.filter((c) => (c.vids?.count ?? 0) > 0)
   if (onlyNew) shown = shown.filter((c) => newIds.includes(c.productId))
-  // Xếp: SP có video lên đầu → max view → số bán.
-  shown = [...shown].sort((a, b) => {
-    const aHas = (a.vids?.count ?? 0) > 0 ? 1 : 0
-    const bHas = (b.vids?.count ?? 0) > 0 ? 1 : 0
-    if (aHas !== bHas) return bHas - aHas
-    if (aHas) { const d = (b.vids!.maxViews) - (a.vids!.maxViews); if (d) return d }
-    return b.sale - a.sale
-  })
+  // Xếp theo ĐIỂM WIN (đã gồm video đúng SP + author-match + đối thủ ngách lúc quét)
+  // → SP đáng test nhất lên đầu; hòa điểm thì số bán cao hơn trước.
+  const scoreOf = new Map(shown.map((c) => [c.productId, computeWinScore(c).score]))
+  shown = [...shown].sort((a, b) => (scoreOf.get(b.productId)! - scoreOf.get(a.productId)!) || (b.sale - a.sale))
 
   return (
     <div className="min-h-full bg-[#EEEEF2] text-slate-800 p-4 md:p-6">
@@ -505,6 +501,9 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
 
   const verdictText = p.judge?.verdict || (win.tier === 'strong' ? 'NÊN TEST' : 'CÂN NHẮC')
   const tone: Tone = branded ? 'rose' : p.judge ? judgeTone(p.judge.verdict) : win.tier === 'strong' ? 'emerald' : win.tier === 'good' ? 'amber' : 'zinc'
+  // Nhãn phán quyết GỘP lúc quét (chưa Soi sâu) — từ điểm WIN lite.
+  const liteTone: Tone = win.tier === 'strong' ? 'emerald' : win.tier === 'good' ? 'amber' : 'zinc'
+  const liteLabel = win.tier === 'strong' ? '🟢 Đáng test' : win.tier === 'good' ? '🟡 Cân nhắc' : win.tier === 'weak' ? '⚪ Yếu' : 'Sơ bộ'
   const reasons = p.judge?.reasons ?? []
   const risks = [...new Set([...(p.judge?.risks ?? []), ...win.risks])]
   const costRM = d?.cost1688 ? parseFloat(d.cost1688) * 0.65 : 0
@@ -635,7 +634,7 @@ function SpCard({ p, picked, hasKey, onAnalyze, onPick, onSendToApp, onPlay, onA
         // Triage — WIN sơ bộ + nút Phân tích sâu (tùy chọn)
         <>
           <div className="flex items-center justify-between gap-2">
-            <span className={`px-2 py-0.5 rounded border text-[11px] ${TONE.zinc}`}>WIN ~{win.score} · sơ bộ</span>
+            <span className={`px-2 py-0.5 rounded border text-[11px] ${TONE[liteTone]}`} title="Điểm gộp lúc quét: cầu (bán) + video đúng SP + author-match + đối thủ ngách. Soi sâu để chấm đủ 1688/biên lời.">{liteLabel} · WIN {win.score} sơ bộ</span>
             <a href={links.googleLens} target="_blank" rel="noopener noreferrer"
               className="text-[10px] text-slate-400 hover:text-slate-700 underline" title="Google Lens — soi branding/1688">🔍 kiểm tay</a>
           </div>
