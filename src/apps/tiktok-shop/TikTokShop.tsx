@@ -10,7 +10,6 @@ import { ShoppingBag } from 'lucide-react'
 import InputPanel from './components/InputPanel'
 import ImageGrid from './components/ImageGrid'
 import DescriptionEditor from './components/DescriptionEditor'
-import AppHeader from '../../components/shell/AppHeader'
 import SegmentTabs from '../../components/shell/SegmentTabs'
 import { useTikTokShopStore } from './store'
 import { useTikTokShopListingsStore } from './listingsStore'
@@ -79,8 +78,6 @@ export default function TikTokShop() {
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-app-card">
-      <AppHeader icon={ShoppingBag} eyebrow="TIKTOK SHOP · LISTING" title="Listing 9 ảnh + mô tả" />
-
       <div className="shrink-0 border-b border-app-border px-3 py-2 lg:hidden">
         <SegmentTabs
           value={mobileTab}
@@ -94,8 +91,16 @@ export default function TikTokShop() {
       </div>
 
       <div className="flex min-h-0 w-full flex-1 overflow-hidden">
-        <div className={`${mobileTab === 'input' ? 'flex' : 'hidden'} min-h-0 w-full lg:flex lg:w-[320px] lg:shrink-0`}>
-          <InputPanel />
+        <div className={`${mobileTab === 'input' ? 'flex' : 'hidden'} min-h-0 w-full flex-col lg:flex lg:w-[320px] lg:shrink-0`}>
+          {/* Ô tiêu đề GÓC NHỎ (thay dải header full-width) — nhờ vậy cột giữa
+              + panel phải kéo lên sát đỉnh, không bị dải ngang đẩy xuống. */}
+          <div className="flex shrink-0 items-center gap-2 border-b border-app-border bg-app-surface px-3 py-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-md" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+              <ShoppingBag className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} strokeWidth={2} />
+            </span>
+            <span className="truncate text-sm font-bold text-app-text">Listing 9 ảnh + mô tả</span>
+          </div>
+          <div className="min-h-0 flex-1"><InputPanel /></div>
         </div>
         <div className={`${mobileTab === 'images' ? 'flex' : 'hidden'} min-h-0 w-full min-w-0 lg:flex lg:flex-1`}>
           <ImageGrid />
