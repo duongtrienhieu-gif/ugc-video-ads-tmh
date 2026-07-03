@@ -29,7 +29,6 @@ import {
 } from 'lucide-react'
 import { useAppStore } from '../../../stores/appStore'
 import { useAdsVideoStore } from './stores/adsVideoStore'
-import AppHeader from '../../../components/shell/AppHeader'
 import ScriptVoicePhase from './components/ScriptVoicePhase'
 import HybridVideoPhase from './components/HybridVideoPhase'
 import HybridExportPhase from './components/HybridExportPhase'
@@ -275,29 +274,31 @@ export default function AdsVideoEngine(_props: Props) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* ── App header (replaces the old gradient banner) ─────────────────── */}
-      <AppHeader
-        icon={Film}
-        eyebrow="VIDEO ENGINE · HYBRID"
-        title="Xưởng Video AI"
-        center={<PhaseStepper phase={state.phase} reachable={reachable} onPhaseClick={setPhase} />}
-        actions={
-          <>
-            <HdrBtn onClick={saveActiveProject} disabled={!hasWork} icon={Save} label="Lưu"
-              title="Lưu project video hiện tại (kịch bản + cảnh + clip đã render + giọng). Mở lại sửa được." />
-            <HdrBtn onClick={() => { refreshProjects(); setRestoreOpen(true) }} icon={FolderOpen} label="Dự án"
-              title="Mở / sửa các project video đã lưu (đồng bộ trên cloud)" />
-            <HdrBtn onClick={handleNewProject} icon={Plus} label="Mới"
-              title="Lưu project hiện tại rồi mở một project MỚI (trống)" />
-            <HdrBtn onClick={() => setLibraryOpen(true)} icon={Film} label="Đã xuất"
-              title="Thư viện video đã ghép hoàn chỉnh — tải lại 0 credit" />
-            <HdrBtn onClick={() => setResetConfirmOpen(true)} icon={RotateCcw} label="Tạo lại" danger
-              title="Xoá sạch tiến trình ĐANG mở + bắt đầu lại từ bước 1 (KHÔNG đụng các project đã lưu)" />
-          </>
-        }
-      />
+      {/* ── Thanh tiêu đề MỎNG 1 hàng thay dải header full-width — icon+tên +
+          stepper + nút cùng 1 dòng, kéo nội dung lên sát đỉnh. ───────────── */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-app-border bg-app-surface px-3 py-1.5">
+        <span className="flex h-6 w-6 items-center justify-center rounded-md" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+          <Film className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} strokeWidth={2} />
+        </span>
+        <span className="truncate text-sm font-bold text-app-text">Xưởng Video AI</span>
+        <div className="hidden min-w-0 flex-1 lg:block">
+          <PhaseStepper phase={state.phase} reachable={reachable} onPhaseClick={setPhase} />
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <HdrBtn onClick={saveActiveProject} disabled={!hasWork} icon={Save} label="Lưu"
+            title="Lưu project video hiện tại (kịch bản + cảnh + clip đã render + giọng). Mở lại sửa được." />
+          <HdrBtn onClick={() => { refreshProjects(); setRestoreOpen(true) }} icon={FolderOpen} label="Dự án"
+            title="Mở / sửa các project video đã lưu (đồng bộ trên cloud)" />
+          <HdrBtn onClick={handleNewProject} icon={Plus} label="Mới"
+            title="Lưu project hiện tại rồi mở một project MỚI (trống)" />
+          <HdrBtn onClick={() => setLibraryOpen(true)} icon={Film} label="Đã xuất"
+            title="Thư viện video đã ghép hoàn chỉnh — tải lại 0 credit" />
+          <HdrBtn onClick={() => setResetConfirmOpen(true)} icon={RotateCcw} label="Tạo lại" danger
+            title="Xoá sạch tiến trình ĐANG mở + bắt đầu lại từ bước 1 (KHÔNG đụng các project đã lưu)" />
+        </div>
+      </div>
 
-      {/* ── Phase stepper — mobile only (desktop shows it inline in AppHeader) ── */}
+      {/* ── Phase stepper — mobile only (desktop shows it inline in header bar) ── */}
       <div className="shrink-0 border-b border-app-border bg-app-surface px-4 py-2 lg:hidden">
         <PhaseStepper
           phase={state.phase}

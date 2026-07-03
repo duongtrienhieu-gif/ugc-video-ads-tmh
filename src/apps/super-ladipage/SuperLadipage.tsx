@@ -12,7 +12,6 @@ import { generateLandingPack } from './formDispatcher'
 import { generatePackImages, regenerateSingleImage } from './services/generateImages'
 import { useSessionPersist } from '../../services/sessionPersistence'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
-import AppHeader from '../../components/shell/AppHeader'
 import SegmentTabs from '../../components/shell/SegmentTabs'
 import InputPanel from './components/InputPanel'
 // OutputPanel giờ đi qua outputDispatcher để route StorytellingPack sang
@@ -477,14 +476,6 @@ export default function SuperLadipage() {
 
   return (
     <div className="flex h-full flex-col">
-      <AppHeader
-        icon={Rocket}
-        eyebrow="SUPER LADIPAGE · LANDING PACK"
-        title="Super Ladipage"
-        subtitle="Trang đích bán hàng đầy đủ section + ảnh AI"
-        actions={<AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />}
-      />
-
       {/* Mobile segmented — replaces the floating FAB */}
       <div className="shrink-0 border-b border-app-border px-3 py-2 lg:hidden">
         <SegmentTabs
@@ -501,12 +492,25 @@ export default function SuperLadipage() {
         <div
           className={`${mobileTab === 'setup' ? 'flex' : 'hidden'} w-full shrink-0 flex-col lg:flex lg:w-[360px] lg:border-r lg:border-app-border`}
         >
-          <InputPanel
-            selectedProduct={selectedProduct}
-            onProductSelect={setSelectedProduct}
-            onGenerate={runGeneration}
-            isGenerating={isGenerating}
-          />
+          {/* Ô tiêu đề GÓC NHỎ (thay dải header full-width) — nhờ vậy cột
+              trang đích kéo lên sát đỉnh, không bị dải ngang đẩy xuống. */}
+          <div className="flex shrink-0 items-center gap-2 border-b border-app-border bg-app-surface px-3 py-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-md" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+              <Rocket className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} strokeWidth={2} />
+            </span>
+            <span className="truncate text-sm font-bold text-app-text">Super Ladipage</span>
+            <div className="ml-auto flex flex-wrap items-center gap-1.5">
+              <AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
+            <InputPanel
+              selectedProduct={selectedProduct}
+              onProductSelect={setSelectedProduct}
+              onGenerate={runGeneration}
+              isGenerating={isGenerating}
+            />
+          </div>
         </div>
 
         {/* min-w-0 + overflow-x-hidden REQUIRED on the flex-1 child so the wide

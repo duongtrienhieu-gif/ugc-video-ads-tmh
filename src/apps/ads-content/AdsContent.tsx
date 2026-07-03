@@ -9,7 +9,6 @@ import type {
 import { generateAdsContent } from './services/generateAdsContent'
 import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
-import AppHeader from '../../components/shell/AppHeader'
 import SegmentTabs from '../../components/shell/SegmentTabs'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
@@ -116,14 +115,6 @@ export default function AdsContent() {
 
   return (
     <div className="flex h-full flex-col">
-      <AppHeader
-        icon={Megaphone}
-        eyebrow="ADS CONTENT · CAPTION"
-        title="Ads Content"
-        subtitle="Caption quảng cáo thực chiến — song ngữ MY / VN"
-        actions={<AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />}
-      />
-
       {/* Mobile segmented control — replaces the floating FAB */}
       <div className="shrink-0 border-b border-app-border px-3 py-2 lg:hidden">
         <SegmentTabs
@@ -139,16 +130,28 @@ export default function AdsContent() {
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* Config rail */}
         <div className={`${mobileTab === 'setup' ? 'flex' : 'hidden'} w-full shrink-0 flex-col lg:flex lg:w-[380px] lg:border-r lg:border-app-border`}>
-          <InputPanel
-            selectedProduct={selectedProduct}
-            onProductSelect={setSelectedProduct}
-            onGenerate={runGeneration}
-            isGenerating={isGenerating}
-            presetId={presetId}
-            onPresetIdChange={setPresetId}
-            langMode={langMode}
-            onLangModeChange={setLangMode}
-          />
+          {/* Ô tiêu đề GÓC NHỎ thay dải header full-width */}
+          <div className="flex shrink-0 items-center gap-2 border-b border-app-border bg-app-surface px-3 py-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-md" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+              <Megaphone className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} strokeWidth={2} />
+            </span>
+            <span className="truncate text-sm font-bold text-app-text">Ads Content</span>
+            <div className="ml-auto flex flex-wrap items-center gap-1.5">
+              <AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
+            <InputPanel
+              selectedProduct={selectedProduct}
+              onProductSelect={setSelectedProduct}
+              onGenerate={runGeneration}
+              isGenerating={isGenerating}
+              presetId={presetId}
+              onPresetIdChange={setPresetId}
+              langMode={langMode}
+              onLangModeChange={setLangMode}
+            />
+          </div>
         </div>
 
         {/* Result canvas */}

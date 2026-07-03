@@ -12,7 +12,6 @@ import { Images, Zap } from 'lucide-react'
 import GiftStudio from '../gift-studio/GiftStudio'
 import FormBgStudio from '../form-bg-studio/FormBgStudio'
 import RebrandStudio from '../rebrand-studio/RebrandStudio'
-import AppHeader from '../../components/shell/AppHeader'
 import SegmentTabs from '../../components/shell/SegmentTabs'
 import { imageModelCredits } from '../../utils/imageModelInfo'
 import { GIFT_TOTAL_IMAGES } from '../gift-studio/types'
@@ -44,22 +43,12 @@ export default function ImageStudio() {
 
   return (
     <div className="flex h-full flex-col bg-app-base">
-      <AppHeader
-        icon={Images}
-        eyebrow="IMAGE STUDIO · AI"
-        title="Xưởng Ảnh"
-        actions={
-          <span
-            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold"
-            style={{ backgroundColor: 'var(--color-accent-dim)', color: 'var(--color-accent)' }}
-          >
-            <Zap className="h-3 w-3" /> ~{credit} credit / lần
-          </span>
-        }
-      />
-
-      {/* Mode switcher — the 3 sub-studios */}
-      <div className="shrink-0 border-b border-app-border px-3 py-2">
+      {/* Ô tiêu đề GÓC NHỎ gộp vào hàng chọn mode (thay dải header full-width). */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-app-border px-3 py-2">
+        <span className="flex h-6 w-6 items-center justify-center rounded-md" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+          <Images className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} strokeWidth={2} />
+        </span>
+        <span className="truncate text-sm font-bold text-app-text">Xưởng Ảnh</span>
         <div className="mx-auto max-w-xl">
           <SegmentTabs
             value={mode}
@@ -71,6 +60,12 @@ export default function ImageStudio() {
             ]}
           />
         </div>
+        <span
+          className="ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold"
+          style={{ backgroundColor: 'var(--color-accent-dim)', color: 'var(--color-accent)' }}
+        >
+          <Zap className="h-3 w-3" /> ~{credit} credit / lần
+        </span>
       </div>
 
       <div className="min-h-0 flex-1">

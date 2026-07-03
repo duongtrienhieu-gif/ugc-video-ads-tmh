@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import { Bot, Plus, Send, Sparkles, X, Loader2, MessageSquarePlus, KeyRound, Download, Film, History, Trash2 } from 'lucide-react'
-import AppHeader from '../../components/shell/AppHeader'
 import { useAppStore } from '../../stores/appStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -196,8 +195,13 @@ export default function AiChat() {
 
   return (
     <div className="flex h-full flex-col">
-      <AppHeader icon={Bot} eyebrow="TRỢ LÝ AI · NỘI BỘ" title="Trợ lý AI" actions={
-        <>
+      {/* Ô tiêu đề mảnh (thay dải header full-width) — chat kéo lên sát đỉnh. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-app-border bg-app-surface px-3 py-1.5">
+        <span className="flex h-6 w-6 items-center justify-center rounded-md" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+          <Bot className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} strokeWidth={2} />
+        </span>
+        <span className="truncate text-sm font-bold text-app-text">Trợ lý AI</span>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <button onClick={() => setHistoryOpen(true)} title="Lịch sử trò chuyện"
             className="flex items-center gap-1.5 rounded-lg border border-app-border bg-app-card px-2.5 py-1.5 text-xs font-bold text-app-muted hover:text-app-text">
             <History className="h-3.5 w-3.5" /> Lịch sử{convos.length > 0 ? ` (${convos.length})` : ''}
@@ -227,8 +231,8 @@ export default function AiChat() {
             className="flex items-center gap-1.5 rounded-lg border border-app-border bg-app-card px-2.5 py-1.5 text-xs font-bold text-app-muted hover:text-app-text">
             <MessageSquarePlus className="h-3.5 w-3.5" /> Trò chuyện mới
           </button>
-        </>
-      } />
+        </div>
+      </div>
 
       {/* Khung chat */}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6">

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Plus, Trash2, Pencil, Eye, Loader2, AlertCircle, Palette } from 'lucide-react'
-import AppHeader from '../../components/shell/AppHeader'
 import { useBrandKitStore } from '../../stores/brandKitStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
@@ -78,12 +77,14 @@ export default function StudioBrandKit() {
   // List view
   return (
     <div className="flex h-full flex-col bg-app-base">
-      <AppHeader
-        icon={Palette}
-        eyebrow="BRAND KIT · NHẬN DIỆN"
-        title="Studio Brand Kit"
-        subtitle="AI suy luận trọn bộ nhận diện từ 2 trường — đồng bộ TikTok Shop"
-        actions={
+      {/* Dải tiêu đề MỎNG một dòng (thay dải header full-width) — grid card
+          kéo lên sát đỉnh. */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-app-border bg-app-surface px-3 py-1.5">
+        <span className="flex h-6 w-6 items-center justify-center rounded-md" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+          <Palette className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} strokeWidth={2} />
+        </span>
+        <span className="truncate text-sm font-bold text-app-text">Studio Brand Kit</span>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <button
             onClick={openCreate}
             className="ui-accent-solid flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold shadow-sm transition-colors"
@@ -92,8 +93,8 @@ export default function StudioBrandKit() {
             <span className="hidden sm:inline">Tạo Brand Kit mới</span>
             <span className="sm:hidden">Mới</span>
           </button>
-        }
-      />
+        </div>
+      </div>
 
       {/* List */}
       <div className="flex-1 overflow-y-auto px-6 py-5">

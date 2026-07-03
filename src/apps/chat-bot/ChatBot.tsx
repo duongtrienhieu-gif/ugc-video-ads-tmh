@@ -5,7 +5,6 @@ import { useBankStore } from '../../stores/bankStore'
 import ConfigPanel from './components/ConfigPanel'
 import ConfigList from './components/ConfigList'
 import Simulator from './components/Simulator'
-import AppHeader from '../../components/shell/AppHeader'
 import SegmentTabs from '../../components/shell/SegmentTabs'
 
 type Tab = 'config' | 'simulator'
@@ -26,12 +25,13 @@ export default function ChatBot() {
 
   return (
     <div className="flex h-full flex-col bg-app-base">
-      <AppHeader
-        icon={MessageCircle}
-        eyebrow="CHAT BOT · SALES BRAIN"
-        title="Chat Bot"
-        subtitle="Bộ não bán hàng — tư vấn & chốt đơn qua tin nhắn (WhatsApp / Pancake)"
-      />
+      {/* Ô tiêu đề mỏng 1 dòng thay dải header full-width (chat không có cột trái) */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-app-border bg-app-surface px-3 py-1.5">
+        <span className="flex h-6 w-6 items-center justify-center rounded-md" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+          <MessageCircle className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} strokeWidth={2} />
+        </span>
+        <span className="truncate text-sm font-bold text-app-text">Chat Bot</span>
+      </div>
 
       {/* Config ↔ Simulator switcher */}
       <div className="shrink-0 border-b border-app-border px-3 py-2">

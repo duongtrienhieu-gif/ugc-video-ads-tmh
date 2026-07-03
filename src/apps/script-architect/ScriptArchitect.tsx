@@ -10,7 +10,6 @@ import type {
 import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
 import ShotPlanPanel from './components/ShotPlanPanel'
-import AppHeader from '../../components/shell/AppHeader'
 import SegmentTabs from '../../components/shell/SegmentTabs'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
@@ -205,14 +204,6 @@ export default function ScriptArchitect() {
 
   return (
     <div className="flex h-full flex-col">
-      <AppHeader
-        icon={PenLine}
-        eyebrow="KỊCH BẢN UGC"
-        title="Script Architect"
-        subtitle="Script video ads theo công thức quảng cáo thực chiến"
-        actions={<AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />}
-      />
-
       {view === 'shots' ? (
         shotPlan ? (
           <ShotPlanPanel
@@ -250,22 +241,35 @@ export default function ScriptArchitect() {
           <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
             {/* Config rail */}
             <div className={`${mobileTab === 'setup' ? 'flex' : 'hidden'} w-full shrink-0 flex-col lg:flex lg:w-[360px] lg:border-r lg:border-app-border`}>
-              <InputPanel
-                selectedProduct={selectedProduct}
-                onProductSelect={setSelectedProduct}
-                onGenerate={runGeneration}
-                isGenerating={isGenerating}
-                presetId={presetId}
-                onPresetIdChange={setPresetId}
-                lengthSec={lengthSec}
-                onLengthSecChange={setLengthSec}
-                hookStrength={hookStrength}
-                onHookStrengthChange={setHookStrength}
-                toneModifiers={toneModifiers}
-                onToneModifiersChange={setToneModifiers}
-                educationalMode={educationalMode}
-                onEducationalModeChange={setEducationalMode}
-              />
+              {/* Ô tiêu đề GÓC NHỎ (thay dải header full-width) — nhờ vậy cột
+                  kết quả kéo lên sát đỉnh, không bị dải ngang đẩy xuống. */}
+              <div className="flex shrink-0 items-center gap-2 border-b border-app-border bg-app-surface px-3 py-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-md" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+                  <PenLine className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} strokeWidth={2} />
+                </span>
+                <span className="truncate text-sm font-bold text-app-text">Script Architect</span>
+                <div className="ml-auto flex flex-wrap items-center gap-1.5">
+                  <AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
+                <InputPanel
+                  selectedProduct={selectedProduct}
+                  onProductSelect={setSelectedProduct}
+                  onGenerate={runGeneration}
+                  isGenerating={isGenerating}
+                  presetId={presetId}
+                  onPresetIdChange={setPresetId}
+                  lengthSec={lengthSec}
+                  onLengthSecChange={setLengthSec}
+                  hookStrength={hookStrength}
+                  onHookStrengthChange={setHookStrength}
+                  toneModifiers={toneModifiers}
+                  onToneModifiersChange={setToneModifiers}
+                  educationalMode={educationalMode}
+                  onEducationalModeChange={setEducationalMode}
+                />
+              </div>
             </div>
 
             {/* Result canvas */}

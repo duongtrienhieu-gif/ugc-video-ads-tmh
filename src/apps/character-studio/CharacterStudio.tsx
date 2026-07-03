@@ -9,7 +9,6 @@ import { createEmptyProfile, TABS } from './types'
 import ControlsPanel from './components/ControlsPanel'
 import OutputPanel from './components/OutputPanel'
 import CloneStudio from './components/CloneStudio'
-import AppHeader from '../../components/shell/AppHeader'
 import SegmentTabs from '../../components/shell/SegmentTabs'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
@@ -149,15 +148,14 @@ export default function CharacterStudio() {
 
   return (
     <div className="flex h-full flex-col">
-      <AppHeader
-        icon={User}
-        eyebrow="CHARACTER STUDIO · KOL"
-        title="Avatar AI"
-        actions={<AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />}
-      />
-
-      {/* ── Mode toggle: Random (attribute-driven) vs Clone (keep uploaded face) ── */}
-      <div className="shrink-0 border-b border-app-border px-4 py-2">
+      {/* Ô tiêu đề GÓC NHỎ gộp vào hàng chọn mode (thay dải header full-width) —
+          nhờ vậy khung tùy chỉnh + output kéo lên sát đỉnh. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-app-border px-4 py-2">
+        <span className="flex h-6 w-6 items-center justify-center rounded-md" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+          <User className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} strokeWidth={2} />
+        </span>
+        <span className="truncate text-sm font-bold text-app-text">Avatar AI</span>
+        {/* ── Mode toggle: Random (attribute-driven) vs Clone (keep uploaded face) ── */}
         <div className="inline-flex rounded-xl border border-app-border bg-app-card p-0.5">
           {([['random', 'Tạo Avatar Random'], ['clone', 'Tạo Avatar Clone'], ['library', 'Thư viện Avatar']] as const).map(([m, label]) => (
             <button
@@ -168,6 +166,9 @@ export default function CharacterStudio() {
               {label}
             </button>
           ))}
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />
         </div>
       </div>
 

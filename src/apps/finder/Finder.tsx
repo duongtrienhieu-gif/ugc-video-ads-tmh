@@ -1,7 +1,6 @@
 ﻿import { useState, useEffect, useCallback } from 'react'
 import { Plus, Package, UserRound, FileText, Mic, Film, Megaphone, LayoutGrid } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
-import AppHeader from '../../components/shell/AppHeader'
 import { useBankStore } from '../../stores/bankStore'
 import { useAdsContentStore } from '../ads-content/store'
 import type { BankType } from '../../utils/constants'
@@ -146,10 +145,17 @@ export default function Finder() {
 
   return (
     <div className="flex h-full flex-col bg-app-base">
-      <AppHeader icon={LayoutGrid} eyebrow="PROJECT · DỮ LIỆU" title="Dự án" />
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
       {/* Sidebar — horizontal scrollable pills on mobile, vertical on desktop */}
-      <div className="flex lg:w-52 shrink-0 flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible border-b lg:border-b-0 lg:border-r border-app-border bg-app-surface py-2 lg:py-3 px-2 lg:px-0 gap-1 lg:gap-0">
+      <div className="flex lg:w-52 shrink-0 flex-col border-b lg:border-b-0 lg:border-r border-app-border bg-app-surface">
+        {/* Ô tiêu đề GÓC NHỎ thay dải header full-width */}
+        <div className="flex shrink-0 items-center gap-2 border-b border-app-border bg-app-surface px-3 py-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md" style={{ backgroundColor: 'var(--color-accent-dim)' }}>
+            <LayoutGrid className="h-3.5 w-3.5" style={{ color: 'var(--color-accent)' }} strokeWidth={2} />
+          </span>
+          <span className="truncate text-sm font-bold text-app-text">Dự án</span>
+        </div>
+        <div className="flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible py-2 lg:py-3 px-2 lg:px-0 gap-1 lg:gap-0">
         <span className="hidden lg:block mb-3 px-4 text-[11px] font-medium uppercase tracking-widest text-gray-400">
           Project dữ liệu
         </span>
@@ -171,6 +177,7 @@ export default function Finder() {
             </button>
           )
         })}
+        </div>
       </div>
 
       {/* Main content */}
