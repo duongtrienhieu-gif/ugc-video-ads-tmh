@@ -11,7 +11,7 @@ import { scanWinningProducts } from './services/researchStage'
 import { classifyBranding } from './services/brandingFilter'
 import { buildVerifyLinks } from './services/enrichStage'
 import { computeWinScore } from './services/winScore'
-import { checkProductVideos, productSpyQuery } from './services/checkVideos'
+import { checkProductVideos, productSpyQuery, productFbQuery } from './services/checkVideos'
 import { expandNicheToProducts } from './services/expandTerms'
 import { matchCoversToProduct } from './services/matchSpy'
 import { KEYWORD_GROUPS, toggleGroup, isGroupActive, parseNiches } from './keywords'
@@ -637,8 +637,8 @@ function SpCard({ p, picked, hasKey, onPick, onSendToApp, onPlay, onAddBank, onI
               className="flex-1 h-8 grid place-items-center rounded-md text-[12px] font-semibold bg-slate-900 text-white hover:bg-slate-800 border border-slate-700">
               🎵 Spy TikTok
             </button>
-            <button title="Spy FB — mở app Spy Ads, tìm ad Facebook ĐÚNG SP này"
-              onClick={() => onSendToApp({ targetApp: 'spy-ads', targetField: 'query', data: { q: productSpyQuery(p.title), platform: 'fb' } })}
+            <button title="Spy FB — mở Spy Ads, tìm ad Facebook theo NGÁCH (FB khớp copy Malay, tên SP dài ra 0 ad)"
+              onClick={() => onSendToApp({ targetApp: 'spy-ads', targetField: 'query', data: { q: productFbQuery(p.niche, p.title), platform: 'fb' } })}
               className="flex-1 h-8 grid place-items-center rounded-md text-[12px] font-semibold bg-[#1877F2] text-white hover:bg-[#0f66d0] border border-[#1877F2]">
               📘 Spy FB
             </button>

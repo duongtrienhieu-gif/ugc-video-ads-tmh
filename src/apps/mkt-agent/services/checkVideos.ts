@@ -39,6 +39,14 @@ export function productSpyQuery(title: string): string {
     .trim().split(/\s+/).filter(Boolean).slice(0, 8).join(' ')
 }
 
+// FB Ad Library khớp theo COPY tiếng Malay → query NGẮN theo ngách (không dùng tên SP dài
+// kèm brand/số → 0 ad). Ưu tiên `niche` (Malay), fallback 2 từ cốt lõi của tên SP.
+export function productFbQuery(niche: string | undefined, title: string): string {
+  if (niche && niche.trim()) return niche.trim()
+  const t = coreTerms(title).slice(0, 2).join(' ')
+  return t || productSpyQuery(title)
+}
+
 // Advertiser KHÔNG phải đối thủ COD (phòng khám/nha/dịch vụ/nhà thuốc) → loại.
 const NON_COD_RE = /klinik|dental|pergigi|dentist|\bclinic\b|hospital|farmasi|pharmacy|aesthetic|\bspa\b|salon|booking|appointment|temujanji/i
 interface FbAd { id?: string; page?: string; cover?: string; videoUrl?: string; text?: string; daysRunning?: number }

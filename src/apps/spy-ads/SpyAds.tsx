@@ -124,10 +124,12 @@ function linkKind(u: string): { label: string; emoji: string; web: boolean } {
 }
 
 // Từ khóa CHUNG (tín hiệu ad COD, mọi ngách) — bấm là quét rộng rồi lọc mắt.
+// NGÁCH gợi ý (Malay) — FB Ad Library khớp theo CHỮ trong copy quảng cáo Malay, nên
+// từ khóa phải là NGÁCH ngắn 2-3 từ, KHÔNG phải tên SP dài hay từ chào hàng (percuma/cod…).
 const COD_CHIPS = [
-  'percuma', 'free gift', 'beli', 'beli sekarang', 'cod', 'bayar bila terima', 'promosi',
-  'diskaun', 'tawaran hebat', 'jimat', 'harga runtuh', 'stok terhad', 'ready stock',
-  'terlaris', 'viral', 'beli 1 percuma 1', 'beli 2 percuma 1',
+  'sakit lutut', 'sakit sendi', 'sakit pinggang', 'jerawat', 'kurus', 'minyak urut',
+  'rambut gugur', 'gastrik', 'kolesterol', 'kencing manis', 'krim mata', 'mata panda',
+  'kolagen', 'buasir', 'sakit gigi', 'gout', 'batuk', 'detox', 'pemutih', 'lelaki',
 ]
 
 // 🛰 RADAR — bộ mồi quét đối thủ MY KHÔNG cần từ khóa. Gồm 2 lớp:
@@ -143,6 +145,18 @@ const RADAR_SEEDS = [
   'gastrik', 'kolesterol', 'kencing manis', 'serum wajah', 'whitening', 'korset', 'postur',
   'buasir', 'sakit gigi', 'tumbuh rambut', 'slimming', 'detox', 'gout',
 ]
+
+// FB Ad Library khớp theo CHỮ trong copy Malay → tên SP dài (kèm số/đơn vị/brand) ra 0 ad.
+// Bỏ số + đơn vị (15g, 30ml…) khỏi query; đếm từ để cảnh báo nếu quá cụ thể.
+function cleanQuery(s: string): string {
+  const out = s
+    .replace(/\b\d+(?:[.,]\d+)?\s?(?:g|gm|ml|kg|mg|cm|mm|pcs|pc|pack|set|x|pack)\b/gi, ' ')
+    .replace(/\b\d+(?:[.,]\d+)?\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return out || s.trim()
+}
+const wordCount = (s: string) => s.trim().split(/\s+/).filter(Boolean).length
 
 // Chạy fn cho từng item, tối đa `n` việc song song (không spam API khi sweep nhiều seed).
 async function poolRun<T>(items: T[], n: number, fn: (t: T, i: number) => Promise<void>): Promise<void> {
@@ -212,6 +226,7 @@ export default function SpyAds() {
   const [cmsBusy, setCmsBusy] = useState(false)
   const [country, setCountry] = useState('MY')
   const [activeOnly, setActiveOnly] = useState(true)
+  const [includeImages, setIncludeImages] = useState(false)  // gồm cả ad ẢNH/carousel (ngách ít video)
   const [ladiOnly, setLadiOnly] = useState(false)   // chỉ ad dẫn về web/ladipage (bỏ chat/sàn)
   const [groupMode, setGroupMode] = useState<'grid' | 'advertiser' | 'creative'>('grid') // lưới phẳng | gom advertiser | 🔥 creative bị clone
   const [selected, setSelected] = useState<Set<string>>(new Set()) // ad đã chọn để tải hàng loạt
@@ -295,20 +310,23 @@ export default function SpyAds() {
   const buildUrl = (query: string, cur?: string, pageId?: string, plat: 'fb' | 'tiktok' = platform) => {
     const st = plat === 'fb' ? `&status=${activeOnly ? 'ACTIVE' : 'ALL'}` : ''
     const curP = cur ? `&cursor=${encodeURIComponent(cur)}` : ''
-    if (plat === 'fb' && pageId) return `/api/fb-ads?pageId=${encodeURIComponent(pageId)}&country=${country}${st}${curP}`
+    const media = plat === 'fb' && includeImages ? '&media=all' : ''
+    if (plat === 'fb' && pageId) return `/api/fb-ads?pageId=${encodeURIComponent(pageId)}&country=${country}${st}${media}${curP}`
     const base = plat === 'fb' ? '/api/fb-ads' : '/api/tiktok-ads'
     const ex = plat === 'fb' && exact ? '&exact=1' : ''
-    return `${base}?q=${encodeURIComponent(query.trim())}&country=${country}${st}${ex}${curP}`
+    return `${base}?q=${encodeURIComponent(query.trim())}&country=${country}${st}${ex}${media}${curP}`
   }
 
   // platOverride: khi mở từ app khác (MKT Agent) cần search NGAY nền tảng chỉ định,
   // không đợi setPlatform (state async → buildUrl sẽ đọc platform cũ).
   const search = async (term?: string, platOverride?: 'fb' | 'tiktok') => {
-    const query = (term ?? q).trim()
-    if (!query) { setError('Nhập từ khóa / ngách'); return }
+    const raw = (term ?? q).trim()
+    if (!raw) { setError('Nhập từ khóa / ngách'); return }
     if (term != null) setQ(term)
     if (platOverride) setPlatform(platOverride)
     const plat = platOverride ?? platform
+    // FB: bỏ số/đơn vị khỏi tên SP dài (TikTok search theo tên SP nên giữ nguyên).
+    const query = plat === 'fb' ? cleanQuery(raw) : raw
     setViewPageId(null); setViewPageName(null)   // tìm từ khóa = thoát chế độ xem advertiser
     setLoading(true); setError(null); setAds(null); setCursor(null); setHasMore(false); setSelected(new Set())
     try {
@@ -318,7 +336,16 @@ export default function SpyAds() {
       setCursor(d.cursor != null ? String(d.cursor) : null)
       setHasMore(!!d.hasMore && d.cursor != null)
       setCredits(d.credits ?? null)
-      if (!d.ads?.length) setError(d.note ? `Không có ad video (${d.note})` : 'Không tìm thấy ad video — đổi từ khóa/nước')
+      if (!d.ads?.length) {
+        const rc = Number(d.rawCount) || 0
+        if (plat === 'fb' && rc > 0 && !includeImages) {
+          setError(`Tìm thấy ${rc} ad nhưng KHÔNG có video — ngách này chạy ad ẢNH. Tick "🖼 Gồm cả ad ảnh" rồi tìm lại.`)
+        } else if (plat === 'fb' && wordCount(query) > 4) {
+          setError('0 ad — từ khóa quá dài/cụ thể. FB khớp theo copy tiếng Malay: thử 2-3 từ NGÁCH (vd "sakit lutut", "krim mata", "kurus").')
+        } else {
+          setError(d.note ? `Không tìm thấy ad (${d.note}) — thử từ khóa ngách ngắn hơn.` : 'Không tìm thấy ad — thử từ khóa ngách ngắn hơn (tiếng Malay).')
+        }
+      }
     } catch (e) { setError((e as Error).message) } finally { setLoading(false) }
   }
 
@@ -1077,12 +1104,18 @@ CHỈ trả JSON.`
                   <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
                     <input type="checkbox" checked={ladiOnly} onChange={(e) => setLadiOnly(e.target.checked)} /> 🔗 Chỉ ad có Ladipage/Sale page
                   </label>
+                  <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600" title="Ngách nào đối thủ chạy ad ẢNH (không video) → tick để thấy chúng">
+                    <input type="checkbox" checked={includeImages} onChange={(e) => setIncludeImages(e.target.checked)} /> 🖼 Gồm cả ad ảnh
+                  </label>
                 </>
               )}
               {error && <span className="text-xs text-red-500">{error}</span>}
             </div>
+            {platform === 'fb' && wordCount(q) > 4 && (
+              <p className="-mt-1 text-[11px] font-medium text-amber-600">⚠️ Từ khóa hơi dài — FB khớp theo copy tiếng Malay. Gõ <b>2-3 từ ngách</b> (vd "sakit lutut", "krim mata") sẽ ra nhiều ad hơn tên SP đầy đủ.</p>
+            )}
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-medium text-slate-400">Từ khóa COD:</span>
+              <span className="text-[11px] font-medium text-slate-400">Ngách gợi ý:</span>
               <button onClick={() => setChipsOpen((v) => !v)}
                 className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-600 lg:hidden">
                 Gợi ý {chipsOpen ? '▴' : '▾'}
@@ -1605,7 +1638,11 @@ CHỈ trả JSON.`
           <div className="relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white lg:flex-row" onClick={(e) => e.stopPropagation()}>
             <button onClick={closeAd} className="absolute right-2 top-2 z-10 rounded-full bg-black/50 p-1.5 text-white hover:bg-black/70"><X className="h-5 w-5" /></button>
             <div className="flex shrink-0 items-center justify-center bg-black lg:w-[44%]">
-              <video src={playAd.videoUrl} controls autoPlay playsInline className="max-h-[40vh] w-full object-contain lg:max-h-[92vh]" />
+              {playAd.videoUrl
+                ? <video src={playAd.videoUrl} controls autoPlay playsInline className="max-h-[40vh] w-full object-contain lg:max-h-[92vh]" />
+                : playAd.cover
+                  ? <img src={playAd.cover} alt="" className="max-h-[40vh] w-full object-contain lg:max-h-[92vh]" />
+                  : <div className="flex h-40 w-full items-center justify-center text-xs text-white/60">Ad ảnh — mở Ad Library để xem</div>}
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
               <p className="text-xs font-semibold text-slate-700">{playAd.page}</p>

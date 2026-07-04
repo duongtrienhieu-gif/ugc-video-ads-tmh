@@ -68,7 +68,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // links=1 → chế độ TÌM SALEPAGE: lấy MỌI loại ad (kể cả ảnh/carousel) và giữ ad CÓ LINK ĐÍCH
   // (salepage/ladipage phần lớn ở ad ảnh — media_type=VIDEO mặc định bỏ sót gần hết).
   const linksMode = req.query.links === '1'
-  const mediaType = linksMode ? 'ALL' : 'VIDEO'
+  // media=all → lấy CẢ ad ảnh/carousel (ngách nào đối thủ chạy ad ảnh, media_type=VIDEO bỏ sót hết).
+  const allMedia = req.query.media === 'all'
+  const mediaType = (linksMode || allMedia) ? 'ALL' : 'VIDEO'
 
   try {
     // 2 chế độ: pageId → company/ads (tất cả ad 1 advertiser) ; q → search/ads (theo từ khóa).
@@ -152,7 +154,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           libraryUrl: a.ad_archive_id ? `https://www.facebook.com/ads/library/?id=${a.ad_archive_id}` : '',
         }
       })
-      .filter((a) => a.id && (linksMode ? a.linkUrl : a.videoUrl))   // links mode: giữ ad CÓ LINK ĐÍCH; thường: AD CÓ VIDEO
+      .filter((a) => a.id && (linksMode ? a.linkUrl : (allMedia ? (a.videoUrl || a.cover) : a.videoUrl)))   // links: có link đích · allMedia: có video HOẶC ảnh · thường: có video
       .filter((a) => !SPAM_RE.test(`${a.page} ${a.text} ${a.linkUrl}`) && !/\binstall\b/i.test(a.cta))   // chặn phim ngắn / cài app
       // WIN: active + chạy lâu + advertiser nhiều ad + nhiều biến thể (đang scale). Điểm xếp hạng.
       .map((a) => ({
