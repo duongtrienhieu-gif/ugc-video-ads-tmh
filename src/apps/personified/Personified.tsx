@@ -868,33 +868,33 @@ export default function Personified() {
       })
     if (!list.length) { setError('Chưa cảnh nào có clip — render clip trước khi ghép'); return }
     setFinalVideo({ status: 'running', stage: 'Bắt đầu…' })
-    const run = (resolution: '720p' | '480p') => assemblePersonifiedVideo({
-      clips: list, resolution,
+    const run = (resolution: '720p' | '480p', padMode: 'blur' | 'plain') => assemblePersonifiedVideo({
+      clips: list, resolution, padMode,
       onStage: (m) => setFinalVideo((p) => ({ ...p, status: 'running', stage: m })),
     })
+    const done = (ref: string) => { setFinalVideo({ status: 'done', videoRef: ref }); setSavedToLib(false) }
+    const isOom = (e: unknown) => /memory access out of bounds|out of memory|\boom\b|abort\(\)|table index is out of bounds/i
+      .test(e instanceof Error ? e.message : String(e))
     try {
-      const res = await run('720p')
-      setFinalVideo({ status: 'done', videoRef: res.videoRef })
-      setSavedToLib(false)   // video mới → cho lưu lại
+      // Tối ưu: 720p nền blur đẹp nhất.
+      done((await run('720p', 'blur')).videoRef)
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      const isOom = /memory access out of bounds|out of memory|\boom\b|abort\(\)|table index is out of bounds/i.test(msg)
-      // Worker wasm có thể đã CHẾT sau OOM → reset để không "bấm lại vẫn lỗi tới khi F5".
+      // Worker wasm có thể CHẾT sau OOM → reset để bấm lại không lỗi tới khi F5.
       await resetFFmpeg().catch(() => {})
-      if (isOom) {
-        try {
-          setFinalVideo({ status: 'running', stage: 'RAM đầy ở 720p — tự ghép lại ở 480p…' })
-          const res = await run('480p')
-          setFinalVideo({ status: 'done', videoRef: res.videoRef })
-          setSavedToLib(false)
-          return
-        } catch (e2) {
-          await resetFFmpeg().catch(() => {})
-          setFinalVideo({ status: 'failed', error: (e2 instanceof Error ? e2.message : String(e2)) + ' (đã thử cả 480p)' })
-          return
-        }
+      if (!isOom(e)) { setFinalVideo({ status: 'failed', error: e instanceof Error ? e.message : String(e) }); return }
+      // Fallback 1: GIỮ 720p, bỏ nền blur (viền đen) → nhẹ RAM, VẪN NÉT (không hạ độ phân giải cho mờ).
+      try {
+        setFinalVideo({ status: 'running', stage: 'RAM đầy — ghép lại 720p viền đen (vẫn nét)…' })
+        done((await run('720p', 'plain')).videoRef); return
+      } catch { await resetFFmpeg().catch(() => {}) }
+      // Fallback 2 (cuối cùng): 480p viền đen — chỉ khi 720p viền vẫn tràn.
+      try {
+        setFinalVideo({ status: 'running', stage: 'Vẫn đầy RAM — hạ 480p…' })
+        done((await run('480p', 'plain')).videoRef); return
+      } catch (e3) {
+        await resetFFmpeg().catch(() => {})
+        setFinalVideo({ status: 'failed', error: (e3 instanceof Error ? e3.message : String(e3)) + ' (đã thử 720p viền + 480p)' })
       }
-      setFinalVideo({ status: 'failed', error: msg })
     }
   }
 

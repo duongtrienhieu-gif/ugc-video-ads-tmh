@@ -24,6 +24,8 @@ export interface PersonifiedAssembleParams {
   clips: PersonifiedAssembleClip[]
   /** Độ phân giải XUẤT (upscale khi ghép). Mặc định 720p. 480p = fallback nhẹ RAM khi OOM. */
   resolution?: '480p' | '720p' | '1080p'
+  /** Kiểu lấp 9:16: 'blur' = nền blur đẹp (nặng RAM) · 'plain' = viền đen (nhẹ RAM, VẪN NÉT — fallback khi OOM). */
+  padMode?: 'blur' | 'plain'
   onStage?: (msg: string) => void
   onProgress?: (ratio: number) => void
 }
@@ -57,9 +59,13 @@ export async function assemblePersonifiedVideo(
 
   const crf = params.resolution === '1080p' ? '19' : params.resolution === '480p' ? '22' : '20'
   const preset = 'veryfast'
-  // PAD-FIT 9:16 nền BLUR (KHÔNG crop → không cắt rìa/caption). Clip 2:3 (cảnh câm) fit
-  // nguyên vào giữa, nền là bản blur phóng to. Clip đã 9:16 (cảnh có giọng) → fit khít.
-  const vf = `split=2[a][b];[a]scale=${evenW}:${evenH}:force_original_aspect_ratio=increase,crop=${evenW}:${evenH},boxblur=24:4[bg];[b]scale=${evenW}:${evenH}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1`
+  // PAD-FIT 9:16 (KHÔNG crop → không cắt rìa/caption). Clip đã 9:16 → fit khít (nét).
+  // blur: nền blur phóng to (đẹp nhưng split+boxblur NẶNG RAM → dễ OOM ở 720p pack dài).
+  // plain: viền đen — nhẹ RAM HƠN NHIỀU, foreground VẪN NÉT NGUYÊN (fallback khi OOM, giữ 720p).
+  // boxblur hạ 24:4 → 10:2 để bớt ngốn RAM mà nền vẫn đủ mờ.
+  const vf = params.padMode === 'plain'
+    ? `scale=${evenW}:${evenH}:force_original_aspect_ratio=decrease,pad=${evenW}:${evenH}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`
+    : `split=2[a][b];[a]scale=${evenW}:${evenH}:force_original_aspect_ratio=increase,crop=${evenW}:${evenH},boxblur=10:2[bg];[b]scale=${evenW}:${evenH}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1`
 
   const vSegs: string[] = []   // đoạn VIDEO câm (.ts) theo thứ tự
   const aSegs: string[] = []   // đoạn AUDIO (.ts) cùng thứ tự, cùng độ dài
