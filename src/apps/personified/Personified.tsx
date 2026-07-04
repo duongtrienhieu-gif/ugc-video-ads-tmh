@@ -71,21 +71,26 @@ async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promis
 
 // #1 — Editor kịch bản liền mạch: dựng text có nhãn [Cảnh N] để user sửa thoại tự do,
 // rồi parse ngược về map idx→thoại. Nhãn [Cảnh N] là mỏ neo (giữ nhãn = khớp đúng cảnh).
+// Nhãn dựng theo VỊ TRÍ (i+1), KHÔNG theo s.idx — để editor luôn khớp số cảnh storyboard
+// (idx gốc AI có thể trùng/nhảy). Số trong nhãn chỉ để user đọc.
 function buildReadDraft(scenes: PersonifiedScene[]): string {
-  return scenes.map((s) => `[Cảnh ${s.idx}] ${s.dialoguePrimary ?? ''}`.trimEnd()).join('\n\n')
+  return scenes.map((s, i) => `[Cảnh ${i + 1}] ${s.dialoguePrimary ?? ''}`.trimEnd()).join('\n\n')
 }
 function parseReadDraft(text: string, scenes: PersonifiedScene[]): Record<number, string> {
   const out: Record<number, string> = {}
-  // Tách theo nhãn [Cảnh N]; phần text tới nhãn kế tiếp là thoại của cảnh đó.
-  const re = /\[\s*Cảnh\s*(\d+)\s*\]/gi
-  const marks: { idx: number; start: number; end: number }[] = []
+  // Tách theo nhãn [Cảnh N] — nhưng MAP THEO THỨ TỰ: nhãn thứ i → cảnh thứ i (scenes[i]).
+  // Không tin số trong nhãn → 2 cảnh trùng idx KHÔNG còn đè nhau (chống nuốt thoại).
+  const re = /\[\s*Cảnh\s*\d+\s*\]/gi
+  const marks: { start: number; end: number }[] = []
   let m: RegExpExecArray | null
-  while ((m = re.exec(text)) !== null) marks.push({ idx: parseInt(m[1], 10), start: m.index, end: re.lastIndex })
+  while ((m = re.exec(text)) !== null) marks.push({ start: m.index, end: re.lastIndex })
   for (let i = 0; i < marks.length; i++) {
+    const scene = scenes[i]
+    if (!scene) break   // nhiều nhãn hơn cảnh → bỏ dư
     const body = text.slice(marks[i].end, i + 1 < marks.length ? marks[i + 1].start : undefined)
-    out[marks[i].idx] = body.replace(/\s+/g, ' ').trim()
+    out[scene.idx] = body.replace(/\s+/g, ' ').trim()
   }
-  // Cảnh không xuất hiện trong draft → giữ thoại cũ (đừng xóa).
+  // Cảnh không có nhãn tương ứng (ít nhãn hơn cảnh) → giữ thoại cũ (đừng xóa).
   for (const s of scenes) if (!(s.idx in out)) out[s.idx] = s.dialoguePrimary ?? ''
   return out
 }
@@ -527,12 +532,15 @@ export default function Personified() {
     })
   }
 
-  // #1 — Giữ editor "Đọc liền mạch" khớp kịch bản hiện tại. Chạy khi script đổi
-  // (tạo mới / sửa bảng cảnh / resync). User gõ trong tab này → script chưa đổi →
-  // effect KHÔNG chạy → không đè chữ đang gõ.
+  // #1 — Giữ editor "Đọc liền mạch" khớp kịch bản hiện tại. Rebuild khi NỘI DUNG CẢNH
+  // thật sự đổi (số cảnh / thoại) — không phải mỗi lần script re-render. Chữ ký = idx+thoại
+  // mỗi cảnh: user gõ trong editor → scenes chưa đổi → chữ ký giữ nguyên → KHÔNG đè chữ đang
+  // gõ; regen/resync đổi số cảnh → chữ ký đổi → rebuild → hết lệch 8/9.
+  const readSig = script ? script.scenes.map((s) => `${s.idx}:${s.dialoguePrimary ?? ''}`).join('|') : ''
   useEffect(() => {
     setReadDraft(script ? buildReadDraft(script.scenes) : '')
-  }, [script])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readSig])
 
   // #1 — LƯU & ĐỒNG BỘ: user sửa thoại tự do ở "Đọc liền mạch" → giữ NGUYÊN VĂN thoại,
   // gọi AI vẽ lại hình (action/i2v/setting) cho khớp → prompt chính xác. Dọn render cũ
@@ -1393,11 +1401,22 @@ export default function Personified() {
                         ↩ Hoàn tác
                       </button>
                     )}
+                    <button onClick={() => setReadDraft(buildReadDraft(script.scenes))}
+                      title="Dựng lại editor từ bảng cảnh hiện tại (dùng khi thấy lệch số cảnh)"
+                      className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-50">
+                      🔄 Dựng lại từ bảng cảnh ({script.scenes.length})
+                    </button>
                     {dirty
                       ? <span className="text-[11px] font-semibold text-amber-600">● Đã sửa — chưa lưu</span>
                       : <span className="text-[11px] text-gray-400">Khớp storyboard</span>}
                     {!geminiKey && <span className="text-[11px] text-rose-600">cần Gemini key để đồng bộ</span>}
                   </div>
+                  {(() => {
+                    const labelCount = (readDraft.match(/\[\s*Cảnh\s*\d+\s*\]/gi) || []).length
+                    return labelCount !== script.scenes.length
+                      ? <p className="text-[11px] font-semibold text-rose-600">⚠ Editor có {labelCount} nhãn cảnh nhưng bảng cảnh {script.scenes.length} — bấm "🔄 Dựng lại từ bảng cảnh" cho khớp.</p>
+                      : null
+                  })()}
                   {!isVN && (
                     <>
                       <p className="pt-1 text-xs font-semibold text-gray-600">↳ Nghĩa VN (tự cập nhật sau khi Lưu)</p>

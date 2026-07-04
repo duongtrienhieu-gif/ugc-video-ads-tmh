@@ -475,10 +475,15 @@ XUẤT JSON: { scenes: [ { idx, dialogueVi, emotion, camera, sfx[], action, sett
 
   const parsed = JSON.parse(stripFence(raw)) as { scenes?: Array<Partial<ResyncSceneOut>> }
   const out: Record<number, ResyncSceneOut> = {}
-  for (const r of parsed.scenes ?? []) {
-    if (typeof r.idx !== 'number') continue
-    out[r.idx] = {
-      idx: r.idx,
+  const returned = parsed.scenes ?? []
+  // MAP THEO THỨ TỰ: cảnh input thứ i ← kết quả AI thứ i. KHÔNG tin r.idx (LLM hay trả
+  // trùng/nhảy idx → key theo idx làm 2 cảnh đè nhau, nuốt update). Input p.scenes cùng
+  // thứ tự với sceneBlocks đã gửi cho AII → position khớp 1-1.
+  p.scenes.forEach((inputScene, i) => {
+    const r = returned[i]
+    if (!r) return
+    out[inputScene.idx] = {
+      idx: inputScene.idx,   // giữ idx GỐC của cảnh, bỏ r.idx sai
       dialogueVi: r.dialogueVi ?? '',
       emotion: r.emotion ?? '',
       camera: r.camera ?? '',
@@ -487,6 +492,6 @@ XUẤT JSON: { scenes: [ { idx, dialogueVi, emotion, camera, sfx[], action, sett
       setting: r.setting ?? '',
       videoPromptEn: r.videoPromptEn ?? '',
     }
-  }
+  })
   return out
 }
