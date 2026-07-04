@@ -532,6 +532,31 @@ export default function Personified() {
     })
   }
 
+  // XÓA 1 CẢNH: bỏ cảnh + ĐÁNH SỐ LẠI idx=i+1 + REMAP clips theo idx mới (đừng để render lệch cảnh).
+  function handleDeleteScene(delIdx: number) {
+    if (!script) return
+    if (script.scenes.length <= 1) { setError('Phải còn ít nhất 1 cảnh'); return }
+    const sc = script.scenes.find((s) => s.idx === delIdx)
+    const rendered = !!(clips[delIdx]?.keyframeRef || clips[delIdx]?.clipRef)
+    if (!window.confirm(`Xóa cảnh ${delIdx}${sc ? ` (${SCENE_TYPE_LABEL[sc.sceneType]})` : ''}?${rendered ? ' Cảnh này đã render — ảnh/clip sẽ mất.' : ''}`)) return
+    const remaining = script.scenes.filter((s) => s.idx !== delIdx)
+    const remap = new Map<number, number>()            // idx cũ → idx mới
+    const renumbered = remaining.map((s, i) => { remap.set(s.idx, i + 1); return { ...s, idx: i + 1 } })
+    const newClips: Record<number, SceneRender> = {}   // dời render theo idx mới, bỏ cảnh xóa
+    for (const [k, v] of Object.entries(clips)) {
+      const ni = remap.get(Number(k))
+      if (ni != null) newClips[ni] = v
+    }
+    setScript({
+      ...script, scenes: renumbered,
+      fullVoiceScriptPrimary: renumbered.map((s) => s.dialoguePrimary).filter(Boolean).join('\n'),
+      fullVoiceScriptVi: renumbered.map((s) => s.dialogueVi).filter(Boolean).join('\n'),
+      totalSec: renumbered.reduce((sum, s) => sum + s.clipDuration, 0),
+    })
+    setClips(newClips)
+    setExpandedScene(null)
+  }
+
   // #1 — Giữ editor "Đọc liền mạch" khớp kịch bản hiện tại. Rebuild khi NỘI DUNG CẢNH
   // thật sự đổi (số cảnh / thoại) — không phải mỗi lần script re-render. Chữ ký = idx+thoại
   // mỗi cảnh: user gõ trong editor → scenes chưa đổi → chữ ký giữ nguyên → KHÔNG đè chữ đang
@@ -1368,6 +1393,13 @@ export default function Personified() {
                             </div>
                           )
                         })()}
+                        <div className="flex justify-end border-t border-black/5 pt-2">
+                          <button onClick={() => handleDeleteScene(s.idx)}
+                            title="Xóa hẳn cảnh này khỏi kịch bản (đánh số lại + dọn render)"
+                            className="flex items-center gap-1 rounded border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50">
+                            🗑 Xóa cảnh {s.idx}
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

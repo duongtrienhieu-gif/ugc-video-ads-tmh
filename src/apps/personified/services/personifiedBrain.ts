@@ -263,6 +263,7 @@ ${HERO_FORMFACTOR_RULE}
 9. VILLAIN BIẾN HÌNH theo arc cảm xúc: vênh → panic → tan → tí-hon-băng-bó/dỗi. Thoại = CÁ TÍNH + slang bản địa DÀY (VN: đầu má/muối mặt/bay màu/game là dễ // MY: weh/kot/power/bersepah — theo block giọng Mã); CẤM tường thuật chức năng phẳng ("tao làm mày đau").
 10. RESULT = CON NGƯỜI sống lại đúng KHOẢNH KHẮC đã mất ở hook (BOOKEND): leo cầu thang nhẹ tênh / ngủ ngon mỉm cười / mặc áo 2 dây tự tin.
 11. CTA TRONG VAI theo style đã chọn (villain xách vali "tao cút đây tìm đứa khác" / reverse "tao CẤM bấm giỏ" / sidekick imp nói nhanh) + 1 benefit + disclaimer "hiệu quả tùy cơ địa"(VN)/"hasil mungkin berbeza"(MY). CẤM giọng marketer phẳng.
+12. ⚠️ CHỈ 1 CÂU KÊU MUA DUY NHẤT trong TOÀN kịch bản — đặt ĐÚNG cảnh cta CUỐI. Các cảnh trước (destruction/result/…) TUYỆT ĐỐI KHÔNG chứa lời kêu mua ("beli/pesan/order/mua … sekarang/ngay/bây giờ"): destruction = villain khai thua, result = con người sống lại. CẤM đẻ 2 cảnh chốt đơn trùng lời mua (không tách "tan rã" + "chốt đơn" cùng câu "beli sekarang").
 
 INSIGHT (đã phân tích):
 - Sản phẩm: ${insight.productInsight}
