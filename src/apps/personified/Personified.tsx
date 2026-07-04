@@ -1237,8 +1237,9 @@ export default function Personified() {
                 </div>
                 {script.scenes.map((s) => (
                   <div key={s.idx} className="border-t border-black/5">
+                    <div className="flex items-stretch">
                     <button onClick={() => setExpandedScene(expandedScene === s.idx ? null : s.idx)}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-violet-50/40">
+                      className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left hover:bg-violet-50/40">
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[10px] font-bold text-violet-700">{s.idx}</span>
                       {/* Thumbnail: có clip → video auto-loop; chưa có → keyframe ảnh. Bấm = xem TO. */}
                       {(() => {
@@ -1284,6 +1285,9 @@ export default function Personified() {
                           : clips[s.idx]?.status === 'failed' ? '❌' : ''}
                       </span>
                     </button>
+                    <button onClick={() => handleDeleteScene(s.idx)} title={`Xóa cảnh ${s.idx} (kể cả khi đã render)`}
+                      className="flex w-9 shrink-0 items-center justify-center text-rose-300 transition-colors hover:bg-rose-50 hover:text-rose-600">🗑</button>
+                    </div>
                     {expandedScene === s.idx && (
                       <div className="space-y-1.5 bg-gray-50/70 px-3 pb-3 pl-10 pt-1 text-xs">
                         <label className="block">
@@ -1393,13 +1397,6 @@ export default function Personified() {
                             </div>
                           )
                         })()}
-                        <div className="flex justify-end border-t border-black/5 pt-2">
-                          <button onClick={() => handleDeleteScene(s.idx)}
-                            title="Xóa hẳn cảnh này khỏi kịch bản (đánh số lại + dọn render)"
-                            className="flex items-center gap-1 rounded border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50">
-                            🗑 Xóa cảnh {s.idx}
-                          </button>
-                        </div>
                       </div>
                     )}
                   </div>
