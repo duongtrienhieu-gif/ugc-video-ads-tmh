@@ -258,12 +258,13 @@ ${HERO_FORMFACTOR_RULE}
 4. KHOE CƠ CHẾ HẠI = gamified + GỌI TÊN THÓI XẤU thật của chủ (ăn cay, nuốt không nhai, thức khuya, nốc cà phê) + hình ảnh VISCERAL cụ thể (vd "đổ bê tông lấp lỗ chân lông").
 5. NEO ĐỜI THẬT: nỗi đau là 1 khoảnh khắc CỤ THỂ, hơi quê/ngại (leo 3 bậc đã thở dốc, nghe con nói "hả" 5 lần) — CẤM "đời mày tiêu / khổ lắm".
 6. FALSE-SOLUTION: đồ thường làm villain MẠNH THÊM / biến hình XẤU HƠN ("càng bôi tao càng khoái", "nước muối à? nhạt!") — KHÔNG để villain im.
-7. HERO VÀO = villain HOANG MANG TỰ CẢM NHẬN (CẤM hero hô khẩu hiệu kiểu "SP tới tiêu diệt mày"): "Ơ… cái gì mát lạnh thấm sâu vậy?!".
+7. HERO VÀO = villain HOANG MANG TỰ CẢM NHẬN ("Ơ… cái gì mát lạnh thấm sâu vậy?!") + hero được PHÉP 1 CÂU NGẮN CÓ CÁ TÍNH khi ra mặt (thần thái tự tin/lạnh/1 câu chất riêng — vd "Trốn đâu cho thoát." / "Aku dah sampai, kau siap tak?"). CẤM khẩu hiệu quảng cáo phẳng ("SP tới tiêu diệt mày").
 8. DEFEAT = villain TỰ KHAI thua, đọc TÊN SẢN PHẨM + hoạt chất + LỢI ÍCH lúc TRÚNG ĐÒN; MỖI hoạt chất = 1 VŨ KHÍ có HÌNH (khiên/xích/hơi xanh/đạo quân/lốc xoáy). Benefit ra từ MIỆNG VILLAIN + có "hỗ trợ"(VN)/"bantu"(MY).
 9. VILLAIN BIẾN HÌNH theo arc cảm xúc: vênh → panic → tan → tí-hon-băng-bó/dỗi. Thoại = CÁ TÍNH + slang bản địa DÀY (VN: đầu má/muối mặt/bay màu/game là dễ // MY: weh/kot/power/bersepah — theo block giọng Mã); CẤM tường thuật chức năng phẳng ("tao làm mày đau").
-10. RESULT = CON NGƯỜI sống lại đúng KHOẢNH KHẮC đã mất ở hook (BOOKEND): leo cầu thang nhẹ tênh / ngủ ngon mỉm cười / mặc áo 2 dây tự tin.
-11. CTA TRONG VAI theo style đã chọn (villain xách vali "tao cút đây tìm đứa khác" / reverse "tao CẤM bấm giỏ" / sidekick imp nói nhanh) + 1 benefit + disclaimer "hiệu quả tùy cơ địa"(VN)/"hasil mungkin berbeza"(MY). CẤM giọng marketer phẳng.
+10. RESULT = CON NGƯỜI sống lại đúng KHOẢNH KHẮC đã mất ở hook (BOOKEND): leo cầu thang nhẹ tênh / ngủ ngon mỉm cười / mặc áo 2 dây tự tin — KÈM 1 câu CHỐT NIỀM TIN ngắn về SP (nhắc cơ chế/thành phần chính "hỗ trợ", KHÔNG hứa tuyệt đối) để khán giả TIN chứ không chỉ cười.
+11. CTA TRONG VAI theo style đã chọn (villain xách vali / reverse "tao CẤM bấm giỏ" / sidekick imp) NHƯNG PHẢI CÓ SỨC BÁN: recap 1 BENEFIT chính + lý do tin ("hỗ trợ"(VN)/"bantu"(MY)) + URGENCY/KHAN HIẾM ("stok terhad"/"jangan teragak-agak"/"đừng chần chừ") + lời KÊU MUA rõ. ⚠️ GIÁ/COMBO cụ thể KHÔNG đọc vào giọng (để OVERLAY màn hình — video tái dùng qua nhiều đợt giá). CẤM giọng marketer phẳng — nhưng CŨNG CẤM CTA nhạt chỉ "bỏ chạy" mà không chốt được đơn.
 12. ⚠️ CHỈ 1 CÂU KÊU MUA DUY NHẤT trong TOÀN kịch bản — đặt ĐÚNG cảnh cta CUỐI. Các cảnh trước (destruction/result/…) TUYỆT ĐỐI KHÔNG chứa lời kêu mua ("beli/pesan/order/mua … sekarang/ngay/bây giờ"): destruction = villain khai thua, result = con người sống lại. CẤM đẻ 2 cảnh chốt đơn trùng lời mua (không tách "tan rã" + "chốt đơn" cùng câu "beli sekarang").
+13. HERO CÓ MẶT (đừng để SP thành vũ khí CÂM): nếu hero là 1 nhân vật của KB, cho hero 2-3 câu CÓ CÁ TÍNH (1 lúc ra đòn/xuất hiện + 1 ở result/CTA), thần thái riêng nhất quán. Benefit CHÍNH vẫn ra từ MIỆNG VILLAIN (luật 8) — hero thêm SẮC THÁI + chốt niềm tin, KHÔNG thao thao thay villain (villain vẫn là người dẫn). Riêng KB3 (organ độc thoại): hero có thể chỉ 1 câu ở CTA.
 
 INSIGHT (đã phân tích):
 - Sản phẩm: ${insight.productInsight}
