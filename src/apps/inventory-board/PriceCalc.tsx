@@ -21,7 +21,6 @@ const eyebrowStyle: React.CSSProperties = { fontSize: 13, fontWeight: 700, lette
 const simGroupStyle: React.CSSProperties = { background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.22)', borderRadius: 16, padding: '14px 14px 1px', marginBottom: 14 }
 const calcGroupStyle: React.CSSProperties = { background: 'rgba(245,196,81,0.045)', border: '1px solid rgba(245,196,81,0.18)', borderRadius: 16, padding: '14px 14px 4px', marginBottom: 4 }
 const groupTagStyle: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, letterSpacing: 1.2, marginBottom: 10, textTransform: 'uppercase' }
-const PACK_FACTOR = (name: string) => (name.trim().toUpperCase() === 'KNEE PAD' ? 2 : 1)
 
 interface Channel { name: string; chot: number; hoan: number }
 const DEFAULT_CHANNELS: Channel[] = [
@@ -94,7 +93,9 @@ export default function PriceCalc({ products, priceVnd, inv, velocity, saleStats
     if (!name) return
     const key = name.trim().toUpperCase()
     const it = inv.find((x) => x.ten.trim().toUpperCase() === key)
-    const gv = (priceVnd[key] ?? 0) / PACK_FACTOR(key) || it?.giaVonVnd || (it ? it.giaVonRM * tyGia : 0)
+    // priceVnd = giá vốn / 1 SP (theo NHẬP HÀNG). Máy tính giá đếm theo SP (combo spGiao = số SP),
+    // nên KHÔNG chia PACK_FACTOR ở đây (÷2/×2 chỉ dùng cho KHO đếm theo CÁI lẻ ở profitCalc/verdict).
+    const gv = (priceVnd[key] ?? 0) || it?.giaVonVnd || (it ? it.giaVonRM * tyGia : 0)
     if (gv > 0) setGiaVonSp(Math.round(gv))
     const p = products.find((x) => x.name.trim().toUpperCase() === key)
     if (p && p.pctHoan > 0) setHoanPct(+p.pctHoan.toFixed(3)) // hoàn Cách A (QLHB)
