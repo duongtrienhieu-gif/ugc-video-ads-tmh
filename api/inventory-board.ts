@@ -302,6 +302,18 @@ const MKT_FILES: { token: string; linkKey: string; id: string; legacy: string[] 
   { token: 'SUMMIT', linkKey: 'team_summit', id: '1A4Mz7aRWM9hYLE9ISqlIyAJoLKY8fjN_XiHtB7czLtQ',
     legacy: ['18c_BtFLdGB7EBaN06rWKJiFLiZogdDNS_O_0xVccV6s'] }, // HÀ
 ]
+// ── COCKPIT (Quản trị owner-only) — 5 FILE MARKETER RIÊNG (port từ dashboard bao-cao-cty) ──
+// Dashboard công ty hiển thị theo 5 marketer (không phải 3 team). Đọc file cá nhân từng người.
+// Link tháng mới dán ở ⚙ Cấu hình của Cockpit → body.links (key m_HANT... / tong / luongsale).
+const COCKPIT_MKT: { name: string; key: string; id: string }[] = [
+  { name: 'HANT', key: 'm_HANT', id: '18c_BtFLdGB7EBaN06rWKJiFLiZogdDNS_O_0xVccV6s' },
+  { name: 'DUYNG', key: 'm_DUYNG', id: '1LRsxCJ4JVxlN9yBIdAVtndxggfAem9wf58BE2iMdAKM' },
+  { name: 'KHANHTQ', key: 'm_KHANHTQ', id: '1vHiLS3V85wL6rWvnmCOZB8bfR5lu_sw0ZAuy8xUczSA' },
+  { name: 'TUANNV', key: 'm_TUANNV', id: '1cKMfUPJ67Q6b1TGynqjyCZm5GTupbQ_sNO1J4eDxl9I' },
+  { name: 'ANHND', key: 'm_ANHND', id: '1gUG9JgO0cC-zYkvTePXfcFYIlS2CXzMUL4n0o8mmDbA' },
+]
+const COCKPIT_TONG = '19KaRjRgg0YhT8RBFfDbI25iF9wp7HKxaFZaqiS6ObfU'   // file TỔNG (MAR_TH · MAR_NGÀY · SẢN PHẨM_TH)
+const COCKPIT_SALARY = '1E5SDrQ78IwYzs4NCaJSU2G0slR2Dx8TMBagCS5eNkzk' // file LƯƠNG SALE (sheet Salary table)
 // Sheet TỔNG HỢP "BÁO CÁO SẢN PHẨM" (server đọc qua gviz csv): cột B(1) = TÊN SP,
 // cột D(3) = doanh thu RM. Lấy SP có doanh thu > 0. (Verify cả 5 file qua fetch y hệt server.)
 function parseMarketerSp(rows: string[][]): string[] {
@@ -358,6 +370,104 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (fin) teamFin[j.token] = fin
     }
     return res.status(200).json({ ok: Object.keys(marketerSp).length > 0, marketerSp, teamFin })
+  }
+
+  // ── Nhánh COCKPIT (Quản trị owner-only): data / daily / salary — port nguyên văn route bao-cao ──
+  const cockpitMode = req.body && (req.body as { cockpit?: string }).cockpit
+  if (cockpitMode) {
+    const mid = (f: { key: string; id: string }) => { const v = bodyLinks[f.key]; return v ? extractId(v) : f.id }
+    const tongId = bodyLinks.tong ? extractId(bodyLinks.tong) : COCKPIT_TONG
+
+    if (cockpitMode === 'data') {
+      // Mỗi file marketer: dòng tổng (rows[1]) BÁO CÁO SẢN PHẨM + LƯƠNG (TỔNG NHẬN) + giá vốn thật/SP (cột M).
+      const readOne = async (f: (typeof COCKPIT_MKT)[number]) => {
+        try {
+          const [bc, lg] = await Promise.all([
+            fetchCsv(mid(f), 'BÁO CÁO SẢN PHẨM').catch(() => null),
+            fetchCsv(mid(f), 'LƯƠNG').catch(() => null),
+          ])
+          if (!bc) return null
+          const t = bc[1]; if (!t) return null
+          const rmRevenue = viNum(t[3]); if (rmRevenue <= 0) return null
+          let luong = 0
+          if (lg) for (const row of lg) { if (String(row[1] ?? '').toUpperCase().includes('TỔNG NHẬN')) { luong = viNum(row[2]); break } }
+          const cogs: Record<string, number> = {}
+          for (let i = 2; i < bc.length; i++) { const nm = String(bc[i][1] ?? '').trim(); if (!nm || nm === 'Product') continue; const von = viNum(bc[i][12]); if (von > 0) cogs[nm.toUpperCase()] = (cogs[nm.toUpperCase()] || 0) + von }
+          return { entity: { name: f.name, rmRevenue, cpqc: viNum(t[5]), cogs: viNum(t[12]), hoanRateOverride: viNum(t[15]) / 100, contact: viNum(t[6]), c2: viNum(t[7]), luong }, cogs }
+        } catch { return null }
+      }
+      const results = (await Promise.all(COCKPIT_MKT.map(readOne))).filter((x): x is NonNullable<typeof x> => x !== null)
+      const mkts = results.map((r) => r.entity)
+      const cogsByProduct: Record<string, number> = {}
+      for (const r of results) for (const [k, v] of Object.entries(r.cogs)) cogsByProduct[k] = (cogsByProduct[k] || 0) + v
+      // CPQC đầy đủ (gồm ads test) từ MAR_TH file TỔNG (cột H(7))
+      try {
+        const rows = await fetchCsv(tongId, 'MAR_TH')
+        const cpqcMap: Record<string, number> = {}
+        for (const r of rows) { const nm = String(r[0] ?? '').trim().toUpperCase(); if (nm) cpqcMap[nm] = viNum(r[7]) }
+        for (const m of mkts) { const v = cpqcMap[m.name.toUpperCase()]; if (v > 0) m.cpqc = v }
+      } catch { /* giữ cpqc file cá nhân */ }
+      // Danh sách SP (SẢN PHẨM_TH): A=tên C=DT_RM H=cpqc L=%cpqc O=%hoàn J=c2 (hoàn override do frontend gọi /api/qlhb)
+      const products: { name: string; rmRevenue: number; cpqc: number; pctCpqc: number; pctHoan: number; c2: number }[] = []
+      try {
+        const pwb = await fetchXlsx(tongId, ['SẢN PHẨM_TH'])
+        const ws = pwb.Sheets['SẢN PHẨM_TH']
+        if (ws) {
+          const cell = (col: string, r: number) => ws[`${col}${r}`]?.v
+          const skip = new Set(['', 'TEST', 'Product', 'Tổng tiền'])
+          let blanks = 0
+          for (let r = 5; r <= 200; r++) {
+            const name = String(cell('A', r) ?? '').trim()
+            if (!name) { if (++blanks > 6) break; continue }
+            blanks = 0
+            if (skip.has(name)) continue
+            const rm = num(cell('C', r)); if (rm <= 0) continue
+            products.push({ name, rmRevenue: rm, cpqc: num(cell('H', r)), pctCpqc: pct(cell('L', r)), pctHoan: pct(cell('O', r)), c2: num(cell('J', r)) })
+          }
+          products.sort((a, b) => b.rmRevenue - a.rmRevenue)
+        }
+      } catch { /* thiếu products vẫn trả mkts */ }
+      mkts.sort((a, b) => b.rmRevenue - a.rmRevenue)
+      return res.status(200).json({ ok: mkts.length > 0, mkts, cogsByProduct, products })
+    }
+
+    if (cockpitMode === 'daily') {
+      const readDaily = async (fid: string, sheet: string) => {
+        try {
+          const rows = await fetchCsv(fid, sheet)
+          const out: { date: string; rm: number; cpqc: number; contact: number; c2: number }[] = []
+          for (const r of rows) { const d = String(r[0] ?? '').trim(); if (!/^\d{2}\/\d{2}\/\d{4}/.test(d)) continue; const rm = viNum(r[1]), cpqc = viNum(r[6]); if (rm === 0 && cpqc === 0) continue; out.push({ date: d.slice(0, 10), rm, cpqc, contact: viNum(r[7]), c2: viNum(r[8]) }) }
+          return out
+        } catch { return [] }
+      }
+      const [company, ...mks] = await Promise.all([readDaily(tongId, 'MAR_NGÀY'), ...COCKPIT_MKT.map((f) => readDaily(mid(f), 'BÁO CÁO NGÀY'))])
+      const marketers: Record<string, { date: string; rm: number; cpqc: number; contact: number; c2: number }[]> = {}
+      COCKPIT_MKT.forEach((f, i) => { if (mks[i].length) marketers[f.name] = mks[i] })
+      return res.status(200).json({ ok: company.length > 0, company, marketers })
+    }
+
+    if (cockpitMode === 'salary') {
+      const sid = bodyLinks.luongsale ? extractId(bodyLinks.luongsale) : COCKPIT_SALARY
+      try {
+        const wb = await fetchXlsx(sid, ['Salary table'])
+        const ws = wb.Sheets['Salary table']
+        if (!ws) return res.status(200).json({ ok: false, sales: [], error: 'Không thấy sheet Salary table' })
+        const cell = (col: string, r: number) => ws[`${col}${r}`]?.v
+        const sales: { ten: string; base: number; workday: number; tele: number; revenue: number; returnPct: number; data: number; c2: number; advance: number; rmFile: number }[] = []
+        let blanks = 0
+        for (let r = 4; r <= 200; r++) {
+          const name = String(cell('C', r) ?? '').trim()
+          if (!name) { if (++blanks > 6) break; continue }
+          blanks = 0
+          const revenue = num(cell('M', r)), base = num(cell('F', r))
+          if (revenue <= 0 && base <= 0) continue
+          sales.push({ ten: name, base, workday: num(cell('J', r)), tele: num(cell('L', r)), revenue, returnPct: num(cell('N', r)), data: num(cell('P', r)), c2: num(cell('Q', r)), advance: num(cell('U', r)), rmFile: num(cell('Y', r)) })
+        }
+        return res.status(200).json({ ok: sales.length > 0, sales })
+      } catch (e) { return res.status(200).json({ ok: false, sales: [], error: (e as Error).message }) }
+    }
+
+    return res.status(400).json({ ok: false, error: 'cockpit mode không hợp lệ' })
   }
 
   const errors: string[] = []

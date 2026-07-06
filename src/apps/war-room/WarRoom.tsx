@@ -8,6 +8,11 @@ import { fetchSpStats, fetchMarketerSp, readCachedSpStats, aggregate, type SpSta
 import TestPipeline from './TestPipeline'
 import DailyLog from './DailyLog'
 import SalaryTab from './SalaryTab'
+import Cockpit from './cockpit/Cockpit'
+
+// 🛰 Cockpit (số lãi thật 6500 + lương CEO/cổ đông) CHỈ các email này thấy — KHÓA CỨNG,
+// KHÔNG dùng role team (role 'ceo' hay bootstrap !hasCeo vẫn KHÔNG mở được).
+const OWNER_EMAILS = ['duongtrienhieu@gmail.com']
 
 const C = {
   bg: '#070a12', panel: '#0c111c', panel2: '#0a0f19', line: '#1b2233', line2: '#161d2c',
@@ -45,7 +50,8 @@ function paceBadge(actDt: number, targetDt: number | undefined, monthProgress: n
 export default function WarRoom() {
   const { members, targets, tasks, loaded, error, load, addMember, updateMember, deleteMember, setTarget, addTask, updateTask, deleteTask } = useWarStore()
   const userEmail = useAuthStore((s) => s.user?.email ?? '')
-  const [tab, setTab] = useState<'me' | 'daily' | 'target' | 'viec' | 'test' | 'nhansu' | 'luong'>('me')
+  const isOwner = OWNER_EMAILS.includes(userEmail.trim().toLowerCase())
+  const [tab, setTab] = useState<'me' | 'daily' | 'target' | 'viec' | 'test' | 'nhansu' | 'luong' | 'cockpit'>('me')
   const [stats, setStats] = useState<Record<string, SpStat>>({})
   const [profit, setProfit] = useState<SpProfit[]>([])
   const [hoanByTeam, setHoanByTeam] = useState<Record<string, number>>({}) // hoàn theo team CHUẨN (sheet Tỉ lệ MKT)
@@ -96,9 +102,13 @@ export default function WarRoom() {
   // Nhân viên chỉ được "Bảng của tôi" + "Test SP" (tự đề xuất test, CEO theo dõi cùng).
   // Target/Việc/Nhân sự là quản lý xem chéo → CHỈ CEO.
   const ALL_TABS = [['me', '🎯 Bảng của tôi'], ['daily', '📒 Nhật ký'], ['target', '📊 Target'], ['viec', '✅ Việc'], ['test', '🧪 Test SP'], ['luong', '💰 Lương'], ['nhansu', '👥 Nhân sự']] as const
+  const OWNER_TAB = ['cockpit', '🛰 Điều hành'] as const
   const EMP_TABS = new Set(['me', 'daily', 'test', 'luong'])
-  const visibleTabs = isCEO ? ALL_TABS : ALL_TABS.filter(([k]) => EMP_TABS.has(k))
-  const effTab = isCEO || EMP_TABS.has(tab) ? tab : 'me' // nhân viên bấm tab cấm → ép về 'me'
+  const canSee = (k: string) => (k === 'cockpit' ? isOwner : isCEO || EMP_TABS.has(k))
+  const baseTabs = isCEO ? [...ALL_TABS] : ALL_TABS.filter(([k]) => EMP_TABS.has(k))
+  // Cockpit (owner-only) đứng ĐẦU thanh tab, chỉ hiện với email chủ.
+  const visibleTabs = isOwner ? [OWNER_TAB, ...baseTabs] : baseTabs
+  const effTab = canSee(tab) ? tab : 'me' // bấm tab không có quyền → ép về 'me'
 
   return (
     <Shell>
@@ -116,12 +126,13 @@ export default function WarRoom() {
         ))}
       </div>
 
-      {isCEO && effTab !== 'me' && (
+      {isCEO && effTab !== 'me' && effTab !== 'cockpit' && (
         <div style={{ ...panelStyle, padding: '10px 14px', fontSize: 12.5, color: C.muted2, lineHeight: 1.7 }}>
           <b style={{ color: C.gold }}>Cách dùng — 3 bước:</b> ① <b>👥 Nhân sự</b>: thêm người (email Gmail họ đăng nhập) → bấm <b>🪄 Tự gán mã SP</b> (app tự biết marketer nào ôm mã nào từ data). ② <b>📊 Target</b>: gõ chỉ tiêu tháng cho từng người → cột THỰC TẾ <b>tự lên số</b> + đèn. ③ <b>✅ Việc</b>: app <b>tự gợi ý việc</b> từ số thật (cắt mã lỗ / giảm hoàn / đẩy mã ngon) gán sẵn đúng người → bấm Nhận; hoặc tự giao việc tay.
         </div>
       )}
 
+      {effTab === 'cockpit' && isOwner && <Cockpit />}
       {effTab === 'me' && <MyBoard {...{ members, targets, tasks, stats, profit, isCEO, myMember, userEmail, updateTask, reloadStats, stale, hoanByTeam }} />}
       {effTab === 'daily' && <DailyLog isCEO={isCEO} userEmail={userEmail} profit={profit} />}
       {isCEO && effTab === 'nhansu' && <NhanSu {...{ members, isCEO, mktSp, addMember, updateMember, deleteMember }} />}
