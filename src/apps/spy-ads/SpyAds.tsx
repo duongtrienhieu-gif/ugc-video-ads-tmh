@@ -1789,7 +1789,16 @@ CHỈ trả JSON.`
             <button onClick={closeAd} className="absolute right-2 top-2 z-10 rounded-full bg-black/50 p-1.5 text-white hover:bg-black/70"><X className="h-5 w-5" /></button>
             <div className="flex shrink-0 items-center justify-center bg-black lg:w-[44%]">
               {playAd.youtubeId
-                ? <iframe title="yt" src={`https://www.youtube.com/embed/${playAd.youtubeId}?autoplay=1&rel=0`} allow="autoplay; encrypted-media" allowFullScreen className="aspect-[9/16] max-h-[40vh] w-full lg:max-h-[92vh]" />
+                ? <button onClick={() => window.open(`https://www.youtube.com/watch?v=${playAd.youtubeId}`, '_blank', 'noopener')}
+                    className="group relative flex w-full items-center justify-center" title="Video ad là YouTube (chặn nhúng) — bấm xem trên YouTube">
+                    {playAd.cover
+                      ? <img src={playAd.cover} alt="" className="max-h-[40vh] w-full object-cover lg:max-h-[92vh]" />
+                      : <div className="h-64 w-full" />}
+                    <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/30 group-hover:bg-black/40">
+                      <span className="rounded-full bg-red-600 px-5 py-2.5 text-sm font-bold text-white">▶ Xem trên YouTube</span>
+                      <span className="text-[11px] text-white/80">(ad YouTube chặn nhúng — mở tab mới)</span>
+                    </span>
+                  </button>
                 : playAd.videoUrl
                   ? <video src={playAd.videoUrl} controls autoPlay playsInline className="max-h-[40vh] w-full object-contain lg:max-h-[92vh]" />
                   : playAd.cover
