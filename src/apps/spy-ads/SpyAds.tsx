@@ -359,9 +359,10 @@ export default function SpyAds() {
   }
 
   // 🔴 GOOGLE bước 1 — tìm advertiser theo từ khóa (RẺ ~1cr). Nếu gõ domain thì mở ads thẳng.
-  const searchGoogle = async () => {
-    const raw = q.trim()
+  const searchGoogle = async (term?: string) => {
+    const raw = (term ?? q).trim()
     if (!raw) { setError('Nhập tên đối thủ / domain (vd: nexta, shopee.com.my)'); return }
+    if (term != null) setQ(term)
     setViewPageId(null); setViewPageName(null); setAds(null); setCursor(null); setHasMore(false)
     // domain-like (có dấu chấm, không khoảng trắng) → kéo ads thẳng theo domain
     if (/^[^\s]+\.[^\s]+$/.test(raw)) { await openGoogleAdvertiser('', raw, raw); return }
@@ -1168,7 +1169,7 @@ CHỈ trả JSON.`
               </button>
               <div className={`${chipsOpen ? 'contents' : 'hidden'} lg:contents`}>
                 {COD_CHIPS.map((c) => (
-                  <button key={c} onClick={() => void search(c)} disabled={loading}
+                  <button key={c} onClick={() => void (platform === 'google' ? searchGoogle(c) : search(c))} disabled={loading || gBusy}
                     className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50">
                     {c}
                   </button>
