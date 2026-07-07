@@ -368,11 +368,11 @@ export default function SpyAds() {
     if (/^[^\s]+\.[^\s]+$/.test(raw)) { await openGoogleAdvertiser('', raw, raw); return }
     setGBusy(true); setError(null); setGAdvertisers(null); setGView('list')
     try {
-      const d = await fetch(`/api/fb-ads?source=google&op=advertisers&q=${encodeURIComponent(raw)}&region=MY`).then((r) => r.json())
+      const d = await fetch(`/api/fb-ads?source=google&op=advertisers&q=${encodeURIComponent(raw)}&region=${country}`).then((r) => r.json())
       if (d.error) { setError(d.error); return }
       setGAdvertisers(Array.isArray(d.advertisers) ? d.advertisers : [])
       setCredits(d.credits ?? credits)
-      if (!d.advertisers?.length) setError('Không thấy advertiser nào chạy ở MY — thử tên brand/đối thủ khác.')
+      if (!d.advertisers?.length) setError(`Không thấy advertiser (${country === 'ALL' ? 'mọi nước' : country}) — thử tên brand khác, hoặc đổi nước sang 🌏 ở góc trên.`)
     } catch (e) { setError((e as Error).message) } finally { setGBusy(false) }
   }
 
@@ -382,7 +382,7 @@ export default function SpyAds() {
     setGBusy(true); setError(null); setLoading(true)
     try {
       const p = advId ? `advertiserId=${encodeURIComponent(advId)}` : `domain=${encodeURIComponent(domain || '')}`
-      const d = await fetch(`/api/fb-ads?source=google&op=ads&${p}&region=MY`).then((r) => r.json())
+      const d = await fetch(`/api/fb-ads?source=google&op=ads&${p}&region=${country}`).then((r) => r.json())
       if (d.error) { setError(d.error); return }
       setAds(Array.isArray(d.ads) ? d.ads : [])
       setViewPageName(d.advertiserName || name); setViewPageId(advId || null)

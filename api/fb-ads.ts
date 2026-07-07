@@ -88,12 +88,14 @@ function toMs(v: unknown): number {
 //  op=ads         : kéo creative của 1 advertiser (get_ad_details=true → 25cr/lần).
 async function handleGoogle(req: VercelRequest, res: VercelResponse, key: string) {
   const op = req.query.op === 'ads' ? 'ads' : 'advertisers'
-  const region = (typeof req.query.region === 'string' ? req.query.region.toUpperCase() : 'MY') || 'MY'
+  const regionRaw = (typeof req.query.region === 'string' ? req.query.region.toUpperCase() : 'MY') || 'MY'
+  const region = regionRaw === 'ALL' ? '' : regionRaw   // ALL → BỎ lọc nước (xem toàn kho advertiser, kể cả VN/mọi vị trí)
+  const regionQ = region ? `&region=${region}` : ''
   try {
     if (op === 'advertisers') {
       const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
       if (!q) return res.status(400).json({ error: 'Cần q (tên advertiser)' })
-      const u = `https://api.scrapecreators.com/v1/google/adLibrary/advertisers/search?query=${encodeURIComponent(q)}&region=${region}`
+      const u = `https://api.scrapecreators.com/v1/google/adLibrary/advertisers/search?query=${encodeURIComponent(q)}${regionQ}`
       const r = await fetchSC(u, key)
       if (!r.ok) { const b = await r.text().catch(() => ''); return res.status(502).json({ error: `Google advertiser search lỗi ${r.status}: ${b.slice(0, 180)}` }) }
       const d = (await r.json()) as Record<string, unknown>
@@ -111,7 +113,8 @@ async function handleGoogle(req: VercelRequest, res: VercelResponse, key: string
     const domain = typeof req.query.domain === 'string' ? req.query.domain.trim() : ''
     if (!advertiserId && !domain) return res.status(400).json({ error: 'Cần advertiserId hoặc domain' })
     const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : ''
-    const p = new URLSearchParams({ region, get_ad_details: 'true' })
+    const p = new URLSearchParams({ get_ad_details: 'true' })
+    if (region) p.set('region', region)
     if (advertiserId) p.set('advertiser_id', advertiserId)
     if (domain) p.set('domain', domain)
     if (cursor) p.set('cursor', cursor)
@@ -142,7 +145,7 @@ async function handleGoogle(req: VercelRequest, res: VercelResponse, key: string
           videoUrl,
           cover,
           linkUrl: firstStr(v.destinationUrl, v.destination_url, a.destinationUrl),
-          country: region,
+          country: region || regionRaw,   // ALL → 'ALL' để lưới không lọc nhầm theo nước
           isActive: lastMs ? (now - lastMs) < 14 * 86400000 : true,   // Google không có cờ active → suy từ lastShown (≤14 ngày = còn sống)
           daysRunning,
           startTs: firstMs,
