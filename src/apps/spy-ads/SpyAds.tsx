@@ -393,7 +393,7 @@ export default function SpyAds() {
       setGView('ads')
       setCredits(d.credits ?? credits)
       setCursor(null); setHasMore(false)   // Google 1-shot: KHÔNG auto load-more (tránh đốt 25cr/lần bấm)
-      setGDebug(d.sample || null)           // schema thô để chỉnh field khi chưa dò ra video
+      setGDebug(d.debug || null)            // keys+urls+sample thô để chỉnh đúng field video/tải
       if (!list.length) {
         setError(Number(d.rawCount) === 0
           ? `Advertiser này 0 ad ở "${country}". Thử đổi nước sang 🌏 (Mọi vị trí) rồi mở lại.`
@@ -1524,7 +1524,7 @@ CHỈ trả JSON.`
         {mode === 'ads' && loading && <div className="py-10 text-center text-sm text-slate-400">{platform === 'fb' ? 'Đang quét Facebook Ad Library…' : platform === 'google' ? 'Đang kéo kho ad Google (25cr)…' : 'Đang quét TikTok Top Ads…'}</div>}
         {mode === 'ads' && platform === 'google' && gDebug && (
           <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs">
-            <div className="mb-1 font-semibold text-amber-700">🔧 Chưa dò ra link video của Google — copy đoạn dưới gửi Hiếu để fix đúng field:</div>
+            <div className="mb-1 font-semibold text-amber-700">🔧 Video Google không phát/tải được? Copy đoạn dưới gửi Hiếu để chỉnh đúng field:</div>
             <textarea readOnly value={gDebug} onClick={(e) => e.currentTarget.select()} className="h-24 w-full rounded border border-amber-200 bg-white p-2 font-mono text-[10px] text-slate-600" />
             <button onClick={() => { void navigator.clipboard.writeText(gDebug); addToast('Đã copy debug schema', 'success') }}
               className="mt-1 rounded bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-700">📋 Copy gửi Hiếu</button>

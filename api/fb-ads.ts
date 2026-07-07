@@ -84,6 +84,14 @@ function deepFind(obj: unknown, test: (s: string) => boolean, depth = 0): string
   return ''
 }
 const isVideoUrl = (s: string) => /^https?:\/\//i.test(s) && /\.mp4|googlevideo|videoplayback|\.m3u8|youtube\.com\/(watch|embed|shorts)|youtu\.be\/|\/video[_/]|tpc\.googlesyndication.*video/i.test(s)
+// Gom MỌI url trong 1 ad thô → debug: biết chính xác field nào là video/ảnh/đích.
+function collectUrls(obj: unknown, out: string[] = [], depth = 0): string[] {
+  if (depth > 7 || obj == null || out.length > 60) return out
+  if (typeof obj === 'string') { if (/^https?:\/\//i.test(obj)) out.push(obj.slice(0, 220)); return out }
+  if (Array.isArray(obj)) { for (const x of obj) collectUrls(x, out, depth + 1); return out }
+  if (typeof obj === 'object') { for (const k in obj as Record<string, unknown>) collectUrls((obj as Record<string, unknown>)[k], out, depth + 1); return out }
+  return out
+}
 const isImageUrl = (s: string) => /^https?:\/\//i.test(s) && /\.(jpe?g|png|webp|gif)(\?|$)|googleusercontent|tpc\.googlesyndication|ggpht/i.test(s)
 function toMs(v: unknown): number {
   if (v == null) return 0
@@ -168,12 +176,13 @@ async function handleGoogle(req: VercelRequest, res: VercelResponse, key: string
       })
       .filter((a) => a.id)   // GIỮ MỌI ad (kể cả chưa dò ra video) → luôn hiện lưới; video dò sau nếu thiếu
     const withVideo = ads.filter((a) => a.videoUrl).length
+    const first = arr[0] as Record<string, unknown> | undefined
     return res.status(200).json({
       ads: ads.slice(0, 120), advertiserName: advName, cursor: null, hasMore: false,
       credits: (d.credits_remaining as number | undefined) ?? null, creditCost: 25,
       rawCount: arr.length, withVideo,
-      // debug schema: nếu dò không ra video, gửi kèm 1 ad thô để chỉnh field cho đúng (không tốn thêm credit).
-      sample: withVideo === 0 && arr.length ? JSON.stringify(arr[0]).slice(0, 1800) : undefined,
+      // debug schema (LUÔN kèm): keys + MỌI url + 1 ad thô → chỉ đúng field video/tải, KHÔNG tốn thêm credit.
+      debug: first ? JSON.stringify({ keys: Object.keys(first), urls: collectUrls(first).slice(0, 50), sample: JSON.stringify(first).slice(0, 2500) }) : undefined,
     })
   } catch (e) {
     return res.status(500).json({ error: (e as Error).message })
