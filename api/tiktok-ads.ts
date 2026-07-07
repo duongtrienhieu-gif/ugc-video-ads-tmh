@@ -11,6 +11,19 @@ const MAX_AD_SEC = 180   // CẤM video dài: chỉ giữ ad < 3 phút
 // Chặn phim ngắn / ad cài app (mọi thị trường) — bắt theo tên brand + tiêu đề.
 const SPAM_RE = /short\s?(tv|max|drama)|drama\s?box|reel\s?short|good\s?short|net\s?short|flex\s?tv|mobo\s?reels|quick\s?short|shortty|shorttv|play\.google\.com|apps\.apple\.com|playstore|w2a\.|web2app|fbweb/i
 
+// ScrapeCreators hay 502/429/timeout ở trang sâu → thử lại có backoff (chỉ lỗi tạm thời).
+async function fetchSC(url: string, key: string, tries = 3): Promise<Response> {
+  let last: Response | null = null
+  for (let i = 0; i < tries; i++) {
+    const r = await fetch(url, { headers: { 'x-api-key': key } })
+    if (r.ok) return r
+    last = r
+    if (![429, 500, 502, 503, 504].includes(r.status)) return r
+    if (i < tries - 1) await new Promise((res) => setTimeout(res, 500 * (i + 1)))
+  }
+  return last as Response
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const key = process.env.SC_KEY
   if (!key) return res.status(500).json({ error: 'Server thiếu SC_KEY' })
@@ -31,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let pages = 0
     while (pages < 5 && raw.length < 40) {
       const u = baseUrl + (cur ? `&cursor=${encodeURIComponent(cur)}` : '')
-      const r = await fetch(u, { headers: { 'x-api-key': key } })
+      const r = await fetchSC(u, key)
       const body = await r.text()
       if (!r.ok) {
         if (pages === 0) return res.status(502).json({ error: `TikTok Ad Library lỗi ${r.status}: ${body.slice(0, 200)}` })

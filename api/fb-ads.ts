@@ -53,6 +53,20 @@ function pickAds(d: Record<string, unknown>): FbAd[] {
   return []
 }
 
+// ScrapeCreators hay 502/429/timeout ở trang sâu (load-more) → thử lại có backoff.
+// Chỉ retry lỗi TẠM THỜI (429/5xx); lỗi cứng (400/401/403) trả ngay khỏi phí thời gian.
+async function fetchSC(url: string, key: string, tries = 3): Promise<Response> {
+  let last: Response | null = null
+  for (let i = 0; i < tries; i++) {
+    const r = await fetch(url, { headers: { 'x-api-key': key } })
+    if (r.ok) return r
+    last = r
+    if (![429, 500, 502, 503, 504].includes(r.status)) return r
+    if (i < tries - 1) await new Promise((res) => setTimeout(res, 500 * (i + 1)))
+  }
+  return last as Response
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const key = process.env.SC_KEY
   if (!key) return res.status(500).json({ error: 'Server thiếu SC_KEY' })
@@ -81,7 +95,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // domain nên 2-3 trang đã lộ gần hết salepage khác nhau → hạ trần 3 trang để tiết kiệm ~60% credit.
     // pages=N (1-7): giảm số trang/seed cho chế độ Radar (sweep nhiều từ khóa) → tiết kiệm credit.
     const pagesOv = Number(req.query.pages)
-    const maxPages = Number.isFinite(pagesOv) && pagesOv >= 1 && pagesOv <= 7 ? Math.floor(pagesOv) : (linksMode ? 3 : 7)
+    // Hạ trần 7→4 trang/lần: ít call SC/lần bấm hơn → giảm timeout Vercel + rate-limit
+    // (mỗi trang ~5 ad; 4 trang ~20 ad đủ 1 lượt, "Tải thêm" lấy tiếp từ cursor).
+    const maxPages = Number.isFinite(pagesOv) && pagesOv >= 1 && pagesOv <= 7 ? Math.floor(pagesOv) : (linksMode ? 3 : 4)
     const maxAds = linksMode ? 18 : 40
     const allRaw: FbAd[] = []
     const seen = new Set<string>()
@@ -91,7 +107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let pages = 0
     while (pages < maxPages && allRaw.length < maxAds) {
       const u = baseUrl + (cur ? `&cursor=${encodeURIComponent(cur)}` : '')
-      const r = await fetch(u, { headers: { 'x-api-key': key } })
+      const r = await fetchSC(u, key)
       if (!r.ok) {
         if (pages === 0) { const b = await r.text().catch(() => ''); return res.status(502).json({ error: `FB Ad Library lỗi ${r.status}: ${b.slice(0, 180)}` }) }
         break
@@ -143,6 +159,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           country: a.country_iso_code || country,
           isActive: a.is_active !== false,
           daysRunning,
+          startTs: startMs,                              // mốc bắt đầu THẬT → sort "Mới nhất" chuẩn
           advertiserAds: adCountByPage.get(page) || 1,
           variations: Number(a.collation_count ?? 0) || 0,
           cta,

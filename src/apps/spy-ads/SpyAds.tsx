@@ -12,6 +12,7 @@ import { classifyBranding } from '../mkt-agent/services/brandingFilter'
 interface FbAd {
   id: string; page: string; pageId?: string; text: string; videoUrl: string; cover: string
   linkUrl: string; country: string; isActive: boolean; daysRunning: number
+  startTs?: number   // mốc bắt đầu chạy (ms) — sort "Mới nhất" chuẩn hơn daysRunning
   advertiserAds: number; libraryUrl: string; likes?: number; ctr?: string
   variations?: number; cta?: string; platforms?: string[]; format?: string
   reach?: number; spend?: string; currency?: string; durationSec?: number
@@ -739,7 +740,8 @@ CHỈ trả JSON.`
     }
     const s = [...r]
     if (sortMode === 'days') s.sort((x, y) => (y.daysRunning || 0) - (x.daysRunning || 0))
-    else if (sortMode === 'new') s.sort((x, y) => (x.daysRunning || 0) - (y.daysRunning || 0))
+    // Mới nhất: theo mốc bắt đầu THẬT (startTs) giảm dần; thiếu startTs thì fallback daysRunning nhỏ trước.
+    else if (sortMode === 'new') s.sort((x, y) => (y.startTs || 0) - (x.startTs || 0) || (x.daysRunning || 0) - (y.daysRunning || 0))
     else if (sortMode === 'variations') s.sort((x, y) => (y.variations || 0) - (x.variations || 0))
     return s   // 'win' = giữ thứ tự server (đã chấm điểm)
   })()
@@ -1131,6 +1133,14 @@ CHỈ trả JSON.`
               <div className="ml-auto flex items-center gap-2">
                 {ads && ads.length > 0 && (
                   <>
+                    <label className="flex items-center gap-1 text-[11px] font-medium text-slate-600" title="Mạnh nhất = đang scale · Chạy lâu = đã proven · Mới nhất = vừa lên">Sắp xếp
+                      <select value={sortMode} onChange={(e) => setSortMode(e.target.value as typeof sortMode)} className="rounded-lg border border-black/10 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700">
+                        <option value="win">🏆 Mạnh nhất</option>
+                        <option value="days">⏳ Chạy lâu nhất</option>
+                        <option value="variations">📑 Nhiều biến thể</option>
+                        <option value="new">🆕 Mới nhất</option>
+                      </select>
+                    </label>
                     <button onClick={() => selectMany(shownAds)}
                       className="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50">✓ Chọn tất cả</button>
                     <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
