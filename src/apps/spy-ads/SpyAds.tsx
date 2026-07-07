@@ -216,6 +216,10 @@ export default function SpyAds() {
   const [gRadarBusy, setGRadarBusy] = useState(false)          // 🛰 quét advertiser MY (sweep seed → gom tên)
   const [gRadarDone, setGRadarDone] = useState(0)
   const [gDebug, setGDebug] = useState<string | null>(null)    // ad thô khi chưa dò ra video → copy gửi fix schema
+  // 🔴↔👍 Cầu domain FB→Google: check domain seller COD (từ FB) có chạy Google không → ra agency mới.
+  const [gBridge, setGBridge] = useState<{ domain: string; advertiserId?: string; advertiserName?: string; count?: number }[] | null>(null)
+  const [gBridgeBusy, setGBridgeBusy] = useState(false)
+  const [gBridgeDone, setGBridgeDone] = useState(0)
   // 📺 Video theo kênh — dán tên kênh/link/id → tải TẤT CẢ video kênh (kể cả video dính giỏ TikTok Shop).
   const [chInput, setChInput] = useState('')
   const [chSort, setChSort] = useState<'latest' | 'popular'>('latest') // latest = khớp thứ tự tiktok.com
@@ -403,6 +407,39 @@ export default function SpyAds() {
         setError(`Kéo được ${list.length} ad nhưng CHƯA dò ra link video — schema Google. Copy ô debug bên dưới gửi Hiếu để fix.`)
       }
     } catch (e) { setError((e as Error).message) } finally { setGBusy(false); setLoading(false) }
+  }
+
+  // 🔴↔👍 CẦU FB→Google: gom domain web/ladipage từ kết quả FB đang hiện → check từng domain
+  // có chạy Google không (rẻ ~1cr/domain) → ra danh sách seller vừa chạy FB vừa chạy Google = agency mới.
+  const runGoogleBridge = async () => {
+    const domains = [...new Set(
+      (shownAds || [])
+        .map((a) => a.linkUrl).filter(Boolean)
+        .filter((u) => linkKind(cleanLink(u)).web)
+        .map((u) => domainOf(cleanLink(u))),
+    )].filter(Boolean).slice(0, 25)
+    if (!domains.length) { addToast('Không có domain web/ladipage trong kết quả để check (đa số đi WhatsApp/Shopee)', 'error'); return }
+    if (!window.confirm(`Check ${domains.length} domain trên Google (~${domains.length} credit)?\nDomain nào chạy Google → hiện ra để kéo video.`)) return
+    setGBridgeBusy(true); setGBridgeDone(0); setGBridge(null)
+    const found: { domain: string; advertiserId?: string; advertiserName?: string; count?: number }[] = []
+    try {
+      await poolRun(domains, 4, async (dm) => {
+        try {
+          const d = await fetch(`/api/fb-ads?source=google&op=check&domain=${encodeURIComponent(dm)}&region=${country}`).then((r) => r.json())
+          if (d?.found) found.push({ domain: dm, advertiserId: d.advertiserId || '', advertiserName: d.advertiserName || '', count: d.count })
+          if (d?.credits != null) setCredits(d.credits)
+        } catch { /* 1 domain lỗi → bỏ qua */ }
+        setGBridgeDone((n) => n + 1)
+      })
+      setGBridge(found)
+      if (!found.length) addToast('Không domain nào trong lượt này chạy Google (dân MY chủ yếu FB/TikTok)', 'success')
+      else addToast(`${found.length} domain CŨNG chạy Google — bấm để kéo video`, 'success')
+    } catch (e) { addToast('Lỗi cầu Google: ' + ((e as Error).message || '').slice(0, 60), 'error') } finally { setGBridgeBusy(false) }
+  }
+  // Từ 1 domain đã xác nhận chạy Google → nhảy sang tab Google + kéo kho video (25cr).
+  const openGoogleFromBridge = (advId: string, name: string, domain: string) => {
+    setPlatform('google'); setMode('ads'); setGBridge(null)
+    void openGoogleAdvertiser(advId || '', name || domain, domain)
   }
 
   // 🛰 GOOGLE RADAR — KHÔNG cần biết tên đối thủ: sweep bộ seed ngách qua "tìm advertiser"
@@ -1231,6 +1268,13 @@ CHỈ trả JSON.`
                     </label>
                     <button onClick={() => selectMany(shownAds)}
                       className="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50">✓ Chọn tất cả</button>
+                    {platform === 'fb' && (
+                      <button onClick={() => void runGoogleBridge()} disabled={gBridgeBusy}
+                        title="Check domain ladipage trong kết quả FB xem ai CŨNG chạy Google/YouTube → ra agency mới (~1cr/domain)"
+                        className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50">
+                        🔴 {gBridgeBusy ? `Check Google… ${gBridgeDone}` : 'Ai chạy Google?'}
+                      </button>
+                    )}
                     <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
                       <button onClick={() => setGroupMode('grid')}
                         className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${groupMode === 'grid' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>▦ Lưới</button>
@@ -1351,6 +1395,11 @@ CHỈ trả JSON.`
                   <button onClick={() => setGroupMode('creative')} title="SP/creative đang bị NHIỀU seller clone = winner mạnh nhất" className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${groupMode === 'creative' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>🔥 Bị clone</button>
                 </div>
                 <button onClick={() => selectMany(shownAds)} className="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50">✓ Chọn tất cả</button>
+                <button onClick={() => void runGoogleBridge()} disabled={gBridgeBusy}
+                  title="Check domain trong kết quả Radar xem ai CŨNG chạy Google/YouTube → agency mới (~1cr/domain)"
+                  className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50">
+                  🔴 {gBridgeBusy ? `Check Google… ${gBridgeDone}` : 'Ai chạy Google?'}
+                </button>
               </div>
             )}
           </>
@@ -1778,6 +1827,32 @@ CHỈ trả JSON.`
             </button>
             <button onClick={() => setSelected(new Set())}
               className="rounded-xl border border-black/10 px-3 py-1.5 text-sm font-semibold text-slate-500 hover:bg-slate-50">Bỏ chọn</button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: kết quả CẦU FB→Google — seller vừa chạy FB vừa chạy Google */}
+      {gBridge && gBridge.length > 0 && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4" onClick={() => setGBridge(null)}>
+          <div className="relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setGBridge(null)} className="absolute right-2 top-2 z-10 rounded-full bg-black/50 p-1.5 text-white hover:bg-black/70"><X className="h-5 w-5" /></button>
+            <div className="border-b border-black/5 p-4">
+              <h3 className="text-sm font-bold text-slate-800">🔴 {gBridge.length} seller CŨNG chạy Google/YouTube</h3>
+              <p className="text-[11px] text-slate-500">Đây là agency/seller vừa chạy FB vừa chạy Google — bấm để kéo kho video Google của họ (25cr).</p>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3">
+              {gBridge.map((b) => (
+                <button key={b.domain} onClick={() => openGoogleFromBridge(b.advertiserId || '', b.advertiserName || '', b.domain)}
+                  className="mb-2 flex w-full items-center gap-3 rounded-xl border border-black/10 bg-white p-3 text-left hover:border-red-300 hover:bg-red-50">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-100 text-red-600">🔴</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-slate-700">{b.advertiserName || b.domain}</div>
+                    <div className="truncate text-[11px] text-slate-400">{b.domain}{b.count ? ` · ${b.count}+ ad Google` : ''}</div>
+                  </div>
+                  <span className="shrink-0 text-[11px] font-semibold text-red-600">🎬 25cr</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}

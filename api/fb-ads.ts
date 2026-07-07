@@ -101,15 +101,34 @@ function toMs(v: unknown): number {
   return 0
 }
 
-// ── GOOGLE Ad Transparency (ScrapeCreators) — 2 op TIẾT KIỆM credit ──
+// ── GOOGLE Ad Transparency (ScrapeCreators) — 3 op TIẾT KIỆM credit ──
 //  op=advertisers : tìm advertiser theo từ khóa (~1cr) → trả danh sách để người chọn.
+//  op=check       : domain này CÓ chạy Google không (get_ad_details=false → ~1cr) — cầu FB→Google.
 //  op=ads         : kéo creative của 1 advertiser (get_ad_details=true → 25cr/lần).
 async function handleGoogle(req: VercelRequest, res: VercelResponse, key: string) {
-  const op = req.query.op === 'ads' ? 'ads' : 'advertisers'
+  const op = req.query.op === 'ads' ? 'ads' : req.query.op === 'check' ? 'check' : 'advertisers'
   const regionRaw = (typeof req.query.region === 'string' ? req.query.region.toUpperCase() : 'MY') || 'MY'
   const region = regionRaw === 'ALL' ? '' : regionRaw   // ALL → BỎ lọc nước (xem toàn kho advertiser, kể cả VN/mọi vị trí)
   const regionQ = region ? `&region=${region}` : ''
   try {
+    // op=check — CẦU domain FB→Google: domain này có chạy Google/YT không? (rẻ ~1cr, không lấy chi tiết)
+    if (op === 'check') {
+      const domain = (typeof req.query.domain === 'string' ? req.query.domain.trim() : '').replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+      if (!domain) return res.status(400).json({ error: 'Cần domain' })
+      const pc = new URLSearchParams({ domain, get_ad_details: 'false' })
+      if (region) pc.set('region', region)
+      const r = await fetchSC(`https://api.scrapecreators.com/v1/google/company/ads?${pc.toString()}`, key)
+      if (!r.ok) return res.status(200).json({ domain, found: false, err: r.status })   // lỗi 1 domain → coi như không có, KHÔNG vỡ batch
+      const dc = (await r.json()) as Record<string, unknown>
+      const arrc = pickArr(dc, ['ads', 'creatives', 'results', 'data'])
+      const f0 = arrc[0] as Record<string, unknown> | undefined
+      return res.status(200).json({
+        domain, found: arrc.length > 0, count: arrc.length,
+        advertiserId: f0 ? firstStr(f0.advertiserId, f0.advertiser_id) : '',
+        advertiserName: firstStr(dc.advertiserName, dc.advertiser_name, f0?.advertiserName),
+        credits: (dc.credits_remaining as number | undefined) ?? null,
+      })
+    }
     if (op === 'advertisers') {
       const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
       if (!q) return res.status(400).json({ error: 'Cần q (tên advertiser)' })
