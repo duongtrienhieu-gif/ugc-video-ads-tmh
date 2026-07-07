@@ -141,7 +141,8 @@ export default function Cockpit() {
     // 1) HIỆN NGAY từ cache (dùng chung cache Bảng của tôi + cache riêng daily/salary/cashflow)
     const cached = readCachedSpStats()
     if (cached) { setStats(cached.stats); setProfit(cached.profit); setHoanByTeam(cached.hoanByTeam ?? {}); setStale(true) }
-    try { const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); if (c) { setDaily(c.daily ?? { company: [], marketers: {} }); setSaleSalary(c.saleSalary ?? []); setCashflow(c.cashflow ?? null) } } catch { /* ignore */ }
+    let prevDaily: { company: Day[]; marketers: Record<string, Day[]> } = { company: [], marketers: {} }
+    try { const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); if (c) { prevDaily = c.daily ?? prevDaily; setDaily(prevDaily); setSaleSalary(c.saleSalary ?? []); setCashflow(c.cashflow ?? null) } } catch { /* ignore */ }
     setStatus('loading')
     // 2) Số THẬT per-SP + team→SP (engine chung, giá vốn thật)
     try {
@@ -159,8 +160,12 @@ export default function Cockpit() {
         POST({ cockpit: 'salary', links }),
         fetch('/api/qlhb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link: all.qlhb || '' }), cache: 'no-store' }).then((r) => r.json()),
       ])
-      const nextDaily = day?.ok ? { company: day.company || [], marketers: day.marketers || {} } : daily
-      const nextSal = sal?.ok ? (sal.sales || []) : saleSalary
+      // MERGE với cache: 1 sheet team bị Google chặn (về rỗng) KHÔNG làm rớt team đó khỏi bảng.
+      const freshM: Record<string, Day[]> = day?.ok ? (day.marketers || {}) : {}
+      const mergedM: Record<string, Day[]> = { ...prevDaily.marketers }
+      for (const [k, v] of Object.entries(freshM)) if (Array.isArray(v) && v.length) mergedM[k] = v
+      const nextDaily = { company: day?.ok && day.company?.length ? day.company : prevDaily.company, marketers: mergedM }
+      const nextSal = sal?.ok && sal.sales?.length ? sal.sales : saleSalary
       const nextCash = ql?.cashflow ?? cashflow
       setDaily(nextDaily); setSaleSalary(nextSal); setCashflow(nextCash)
       try { localStorage.setItem(CACHE_KEY, JSON.stringify({ daily: nextDaily, saleSalary: nextSal, cashflow: nextCash })) } catch { /* quota */ }
