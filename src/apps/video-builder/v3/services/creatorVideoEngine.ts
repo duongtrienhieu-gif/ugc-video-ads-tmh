@@ -30,6 +30,7 @@ import {
   generateLipSync, pollLipSyncUntilDone,
 } from '../../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
+import { submitInfiniteTalkFast, pollWavespeedVideoUrl } from '../../../../utils/wavespeed'
 import { getFFmpeg } from './ffmpegLoader'
 import type { Model, Product } from '../../../../stores/types'
 import type {
@@ -564,25 +565,40 @@ export async function renderLipsyncSegment(params: {
   if (!keyframePublicUrl || !segAudioPublicUrl) {
     throw new Error('Không lấy được URL công khai (keyframe / segment audio)')
   }
-  // FIX — segments are SHORT (0.5–6s). Kling Avatar Standard is the LONG-FORM model
-  // (max 5 min) and consistently fails ("internal error, please try again later") on
-  // these micro-clips. InfiniteTalk is the SHORT-audio lip-sync model (≤15s, ~3cr/s)
-  // and is the right tool for per-scene segments. The FULL creator video keeps Kling
-  // Avatar (renderCreatorLipsync) — only the hybrid segment path switches here.
-  const job = await generateLipSync({
-    apiKey: params.kieApiKey,
-    modelId: 'infinitalk/from-audio',
-    imageUrl: keyframePublicUrl,
-    audioUrl: segAudioPublicUrl,
-    prompt: buildLipsyncPrompt({ config: params.config }),
-    resolution: '480p',   // rẻ (~3 cr/s); bản cuối assembler nâng 720p
-  })
-  console.log(`[LIPSYNC-SEG] infinitalk job ${job.taskId} submitted (dur≈${durSec.toFixed(1)}s, audio=${outArr.byteLength}B)`)
-  const videoRef = await pollAndSaveLipsync({
-    apiKey: params.kieApiKey,
-    taskId: job.taskId,
-    timeoutMs: 15 * 60 * 1000,
-  })
+  // FIX — segments are SHORT (0.5–6s). InfiniteTalk là model lip-sync audio-ngắn (≤15s) đúng
+  // cho segment/cảnh. NHÀ CUNG CẤP: KIE `infinitalk/from-audio` đã NGHẼN DÀI (>7 ngày,
+  // "generate task timeout") → mặc định chuyển sang WaveSpeed `infinitetalk-fast` (CÙNG model,
+  // cùng giá ~$0.015/s, hạ tầng chạy được) khi có WaveSpeed key; KHÔNG có key thì fallback KIE.
+  // (Full creator video vẫn dùng Kling Avatar ở renderCreatorLipsync — chỉ path segment đổi.)
+  const lipPrompt = buildLipsyncPrompt({ config: params.config })
+  const { useSettingsStore } = await import('../../../../stores/settingsStore')
+  const wsKey = (useSettingsStore.getState().wavespeedApiKey || '').trim()
+
+  let videoRef: string
+  if (wsKey) {
+    const { requestId } = await submitInfiniteTalkFast({
+      apiKey: wsKey, imageUrl: keyframePublicUrl, audioUrl: segAudioPublicUrl, prompt: lipPrompt,
+    })
+    console.log(`[LIPSYNC-SEG] WaveSpeed infinitetalk-fast req ${requestId} (dur≈${durSec.toFixed(1)}s, audio=${outArr.byteLength}B)`)
+    const videoUrl = await pollWavespeedVideoUrl({ apiKey: wsKey, requestId, timeoutMs: 15 * 60 * 1000 })
+    const blob = await fetch(videoUrl).then((r) => r.blob())
+    videoRef = await saveAsset(blob, blob.type || 'video/mp4')
+  } else {
+    const job = await generateLipSync({
+      apiKey: params.kieApiKey,
+      modelId: 'infinitalk/from-audio',
+      imageUrl: keyframePublicUrl,
+      audioUrl: segAudioPublicUrl,
+      prompt: lipPrompt,
+      resolution: '480p',   // rẻ (~3 cr/s); bản cuối assembler nâng 720p
+    })
+    console.log(`[LIPSYNC-SEG] KIE infinitalk job ${job.taskId} submitted (dur≈${durSec.toFixed(1)}s, audio=${outArr.byteLength}B)`)
+    videoRef = await pollAndSaveLipsync({
+      apiKey: params.kieApiKey,
+      taskId: job.taskId,
+      timeoutMs: 15 * 60 * 1000,
+    })
+  }
   return { videoRef, segVoiceRef, durSec }
 }
 
