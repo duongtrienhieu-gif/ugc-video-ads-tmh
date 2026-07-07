@@ -67,9 +67,102 @@ async function fetchSC(url: string, key: string, tries = 3): Promise<Response> {
   return last as Response
 }
 
+// ── Helper chung cho parse response ScrapeCreators (schema hay đổi key giữa endpoint) ──
+function pickArr(d: Record<string, unknown>, keys: string[]): Record<string, unknown>[] {
+  for (const k of keys) if (Array.isArray(d[k])) return d[k] as Record<string, unknown>[]
+  if (Array.isArray(d)) return d as unknown as Record<string, unknown>[]
+  for (const k in d) { const v = d[k]; if (Array.isArray(v) && v.length && typeof v[0] === 'object') return v as Record<string, unknown>[] }
+  return []
+}
+function firstStr(...xs: unknown[]): string { for (const x of xs) if (typeof x === 'string' && x) return x; return '' }
+function toMs(v: unknown): number {
+  if (v == null) return 0
+  if (typeof v === 'number') return v > 1e12 ? v : v * 1000
+  if (typeof v === 'string') { const t = Date.parse(v); return Number.isFinite(t) ? t : 0 }
+  if (typeof v === 'object') { const o = v as Record<string, unknown>; return toMs(o.seconds ?? o.time ?? o.date ?? o.value ?? o.iso) }
+  return 0
+}
+
+// ── GOOGLE Ad Transparency (ScrapeCreators) — 2 op TIẾT KIỆM credit ──
+//  op=advertisers : tìm advertiser theo từ khóa (~1cr) → trả danh sách để người chọn.
+//  op=ads         : kéo creative của 1 advertiser (get_ad_details=true → 25cr/lần).
+async function handleGoogle(req: VercelRequest, res: VercelResponse, key: string) {
+  const op = req.query.op === 'ads' ? 'ads' : 'advertisers'
+  const region = (typeof req.query.region === 'string' ? req.query.region.toUpperCase() : 'MY') || 'MY'
+  try {
+    if (op === 'advertisers') {
+      const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+      if (!q) return res.status(400).json({ error: 'Cần q (tên advertiser)' })
+      const u = `https://api.scrapecreators.com/v1/google/adLibrary/advertisers/search?query=${encodeURIComponent(q)}&region=${region}`
+      const r = await fetchSC(u, key)
+      if (!r.ok) { const b = await r.text().catch(() => ''); return res.status(502).json({ error: `Google advertiser search lỗi ${r.status}: ${b.slice(0, 180)}` }) }
+      const d = (await r.json()) as Record<string, unknown>
+      const advertisers = pickArr(d, ['advertisers', 'results', 'data'])
+        .map((a) => ({
+          id: firstStr(a.advertiserId, a.advertiser_id, a.id),
+          name: firstStr(a.advertiserName, a.advertiser_name, a.name) || '(không tên)',
+          domain: firstStr(a.domain, a.website) || undefined,
+        }))
+        .filter((a) => a.id)
+      return res.status(200).json({ advertisers, credits: (d.credits_remaining as number | undefined) ?? null })
+    }
+    // op === 'ads'
+    const advertiserId = typeof req.query.advertiserId === 'string' ? req.query.advertiserId.trim() : ''
+    const domain = typeof req.query.domain === 'string' ? req.query.domain.trim() : ''
+    if (!advertiserId && !domain) return res.status(400).json({ error: 'Cần advertiserId hoặc domain' })
+    const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : ''
+    const p = new URLSearchParams({ region, get_ad_details: 'true' })
+    if (advertiserId) p.set('advertiser_id', advertiserId)
+    if (domain) p.set('domain', domain)
+    if (cursor) p.set('cursor', cursor)
+    const u = `https://api.scrapecreators.com/v1/google/company/ads?${p.toString()}`
+    const r = await fetchSC(u, key)
+    if (!r.ok) { const b = await r.text().catch(() => ''); return res.status(502).json({ error: `Google company ads lỗi ${r.status}: ${b.slice(0, 180)}` }) }
+    const d = (await r.json()) as Record<string, unknown>
+    const arr = pickArr(d, ['ads', 'creatives', 'results', 'data'])
+    const advName = firstStr(d.advertiserName, d.advertiser_name, (arr[0] as Record<string, unknown> | undefined)?.advertiserName)
+    const now = Date.now()
+    const ads = arr
+      .map((a, i) => {
+        const vars = Array.isArray(a.variations) ? (a.variations as Record<string, unknown>[]) : []
+        const v = (vars[0] || (a.variation as Record<string, unknown>) || {}) as Record<string, unknown>
+        const videoUrl = firstStr(a.videoUrl, a.video_url, a.video, v.videoUrl, v.video_url, v.video)
+        const cover = firstStr(v.imageUrl, v.image_url, a.imageUrl, a.image_url, a.thumbnail)
+        const firstMs = toMs(a.firstShown ?? a.first_shown)
+        const lastMs = toMs(a.lastShown ?? a.last_shown)
+        const daysRunning = firstMs && lastMs ? Math.max(0, Math.floor((lastMs - firstMs) / 86400000))
+          : (firstMs ? Math.max(0, Math.floor((now - firstMs) / 86400000)) : 0)
+        const advId = firstStr(a.advertiserId, a.advertiser_id) || advertiserId
+        const creativeId = firstStr(a.creativeId, a.creative_id, a.id) || `${advId}-${i}`
+        return {
+          id: creativeId,
+          page: advName || 'advertiser',
+          pageId: advId,
+          text: firstStr(v.headline, v.description, v.allText, a.text).slice(0, 300),
+          videoUrl,
+          cover,
+          linkUrl: firstStr(v.destinationUrl, v.destination_url, a.destinationUrl),
+          country: region,
+          isActive: lastMs ? (now - lastMs) < 14 * 86400000 : true,   // Google không có cờ active → suy từ lastShown (≤14 ngày = còn sống)
+          daysRunning,
+          startTs: firstMs,
+          advertiserAds: arr.length,
+          variations: vars.length,
+          format: firstStr(a.format),
+          libraryUrl: advId && creativeId ? `https://adstransparency.google.com/advertiser/${advId}/creative/${creativeId}?region=${region}` : '',
+        }
+      })
+      .filter((a) => a.id && (a.videoUrl || a.cover))   // giữ ad có video HOẶC ảnh (bỏ ad text trần)
+    return res.status(200).json({ ads: ads.slice(0, 80), advertiserName: advName, cursor: null, hasMore: false, credits: (d.credits_remaining as number | undefined) ?? null, creditCost: 25 })
+  } catch (e) {
+    return res.status(500).json({ error: (e as Error).message })
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const key = process.env.SC_KEY
   if (!key) return res.status(500).json({ error: 'Server thiếu SC_KEY' })
+  if (req.query.source === 'google') return handleGoogle(req, res, key)
 
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
   const pageId = typeof req.query.pageId === 'string' ? req.query.pageId.trim() : ''  // chế độ "tất cả ad của 1 advertiser"

@@ -205,8 +205,13 @@ export default function SpyAds() {
   // Mobile: ẩn bộ chip gợi ý từ khóa (ngách/COD) cho đỡ chiếm chỗ che output;
   // bấm "Gợi ý" để bung. Desktop (lg+) luôn hiện nên không ảnh hưởng.
   const [chipsOpen, setChipsOpen] = useState(false)
-  const [platform, setPlatform] = useState<'fb' | 'tiktok'>('fb')
+  const [platform, setPlatform] = useState<'fb' | 'tiktok' | 'google'>('fb')
   const [q, setQ] = useState('')
+  // 🔴 Google/YouTube spy (ScrapeCreators Google Ad Transparency) — 2 bước TIẾT KIỆM credit:
+  // tìm advertiser (rẻ ~1cr) → bấm advertiser mới kéo creative (25cr/advertiser).
+  const [gAdvertisers, setGAdvertisers] = useState<{ id: string; name: string; domain?: string }[] | null>(null)
+  const [gView, setGView] = useState<'list' | 'ads'>('list')   // list = danh sách advertiser · ads = creative của 1 advertiser
+  const [gBusy, setGBusy] = useState(false)
   // 📺 Video theo kênh — dán tên kênh/link/id → tải TẤT CẢ video kênh (kể cả video dính giỏ TikTok Shop).
   const [chInput, setChInput] = useState('')
   const [chSort, setChSort] = useState<'latest' | 'popular'>('latest') // latest = khớp thứ tự tiktok.com
@@ -294,11 +299,12 @@ export default function SpyAds() {
 
   // Cache kết quả RIÊNG theo platform → đổi tab FB↔TikTok không mất kết quả cũ.
   type AdCache = { ads: FbAd[] | null; cursor: string | null; hasMore: boolean; q: string }
-  const adCache = useRef<Record<'fb' | 'tiktok', AdCache>>({
+  const adCache = useRef<Record<'fb' | 'tiktok' | 'google', AdCache>>({
     fb: { ads: null, cursor: null, hasMore: false, q: '' },
     tiktok: { ads: null, cursor: null, hasMore: false, q: '' },
+    google: { ads: null, cursor: null, hasMore: false, q: '' },
   })
-  const switchPlatform = (p: 'fb' | 'tiktok') => {
+  const switchPlatform = (p: 'fb' | 'tiktok' | 'google') => {
     if (p === platform) return
     adCache.current[platform] = { ads, cursor, hasMore, q }   // lưu tab hiện tại
     const c = adCache.current[p]                               // nạp tab đích
@@ -306,9 +312,11 @@ export default function SpyAds() {
     setAds(c.ads); setCursor(c.cursor); setHasMore(c.hasMore); setQ(c.q)
     setSelected(new Set()); setError(null)
     setViewPageId(null); setViewPageName(null)                 // advertiser view là FB-only
+    if (p === 'google') { setGView('list'); setGAdvertisers(null) }
   }
 
-  const buildUrl = (query: string, cur?: string, pageId?: string, plat: 'fb' | 'tiktok' = platform) => {
+  // buildUrl chỉ dùng cho FB/TikTok (Google có handler riêng) → coerce google→fb cho an toàn type.
+  const buildUrl = (query: string, cur?: string, pageId?: string, plat: 'fb' | 'tiktok' = (platform === 'tiktok' ? 'tiktok' : 'fb')) => {
     const st = plat === 'fb' ? `&status=${activeOnly ? 'ACTIVE' : 'ALL'}` : ''
     const curP = cur ? `&cursor=${encodeURIComponent(cur)}` : ''
     const media = plat === 'fb' && includeImages ? '&media=all' : ''
@@ -325,7 +333,7 @@ export default function SpyAds() {
     if (!raw) { setError('Nhập từ khóa / ngách'); return }
     if (term != null) setQ(term)
     if (platOverride) setPlatform(platOverride)
-    const plat = platOverride ?? platform
+    const plat: 'fb' | 'tiktok' = platOverride ?? (platform === 'tiktok' ? 'tiktok' : 'fb')
     // FB: bỏ số/đơn vị khỏi tên SP dài (TikTok search theo tên SP nên giữ nguyên).
     const query = plat === 'fb' ? cleanQuery(raw) : raw
     setViewPageId(null); setViewPageName(null)   // tìm từ khóa = thoát chế độ xem advertiser
@@ -348,6 +356,40 @@ export default function SpyAds() {
         }
       }
     } catch (e) { setError((e as Error).message) } finally { setLoading(false) }
+  }
+
+  // 🔴 GOOGLE bước 1 — tìm advertiser theo từ khóa (RẺ ~1cr). Nếu gõ domain thì mở ads thẳng.
+  const searchGoogle = async () => {
+    const raw = q.trim()
+    if (!raw) { setError('Nhập tên đối thủ / domain (vd: nexta, shopee.com.my)'); return }
+    setViewPageId(null); setViewPageName(null); setAds(null); setCursor(null); setHasMore(false)
+    // domain-like (có dấu chấm, không khoảng trắng) → kéo ads thẳng theo domain
+    if (/^[^\s]+\.[^\s]+$/.test(raw)) { await openGoogleAdvertiser('', raw, raw); return }
+    setGBusy(true); setError(null); setGAdvertisers(null); setGView('list')
+    try {
+      const d = await fetch(`/api/fb-ads?source=google&op=advertisers&q=${encodeURIComponent(raw)}&region=MY`).then((r) => r.json())
+      if (d.error) { setError(d.error); return }
+      setGAdvertisers(Array.isArray(d.advertisers) ? d.advertisers : [])
+      setCredits(d.credits ?? credits)
+      if (!d.advertisers?.length) setError('Không thấy advertiser nào chạy ở MY — thử tên brand/đối thủ khác.')
+    } catch (e) { setError((e as Error).message) } finally { setGBusy(false) }
+  }
+
+  // 🔴 GOOGLE bước 2 — mở 1 advertiser → kéo creative (25 CREDIT). Nạp vào lưới `ads` sẵn có.
+  const openGoogleAdvertiser = async (advId: string, name: string, domain?: string) => {
+    if (!window.confirm(`Kéo toàn bộ ad của "${name}" từ Google?\nLần này tốn ~25 credit.`)) return
+    setGBusy(true); setError(null); setLoading(true)
+    try {
+      const p = advId ? `advertiserId=${encodeURIComponent(advId)}` : `domain=${encodeURIComponent(domain || '')}`
+      const d = await fetch(`/api/fb-ads?source=google&op=ads&${p}&region=MY`).then((r) => r.json())
+      if (d.error) { setError(d.error); return }
+      setAds(Array.isArray(d.ads) ? d.ads : [])
+      setViewPageName(d.advertiserName || name); setViewPageId(advId || null)
+      setGView('ads')
+      setCredits(d.credits ?? credits)
+      setCursor(null); setHasMore(false)   // Google 1-shot: KHÔNG auto load-more (tránh đốt 25cr/lần bấm)
+      if (!d.ads?.length) setError('Advertiser này không có creative public (một số ad phải đăng nhập Google mới xem được).')
+    } catch (e) { setError((e as Error).message) } finally { setGBusy(false); setLoading(false) }
   }
 
   // 🛰 RADAR — quét đối thủ MY KHÔNG cần từ khóa: sweep bộ seed COD → gộp → xếp winner.
@@ -570,8 +612,8 @@ export default function SpyAds() {
   const firstCountry = useRef(true)
   useEffect(() => {
     if (firstCountry.current) { firstCountry.current = false; return }
-    adCache.current = { fb: { ads: null, cursor: null, hasMore: false, q: '' }, tiktok: { ads: null, cursor: null, hasMore: false, q: '' } }
-    if (mode === 'ads' && q.trim()) void search()
+    adCache.current = { fb: { ads: null, cursor: null, hasMore: false, q: '' }, tiktok: { ads: null, cursor: null, hasMore: false, q: '' }, google: { ads: null, cursor: null, hasMore: false, q: '' } }
+    if (mode === 'ads' && q.trim() && platform !== 'google') void search()   // Google MY-only: không auto refetch theo nước
     else if (mode === 'channel' && chInput.trim()) void fetchChannel()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [country])
@@ -592,7 +634,7 @@ export default function SpyAds() {
       if (!d.ads?.length) setError('Advertiser này không có video ad đang chạy (đổi "Chỉ ad đang chạy" sang tất cả)')
     } catch (e) { setError((e as Error).message) } finally { setLoading(false) }
   }
-  const exitAdvertiser = () => { setViewPageId(null); setViewPageName(null); setAds(null); setError(null) }
+  const exitAdvertiser = () => { setViewPageId(null); setViewPageName(null); setAds(null); setError(null); if (platform === 'google') setGView('list') }
 
   // Phase 2b — nhận diện nền tảng trang đích (LadiPage/Shopify/Woo…).
   const detectCms = async (url: string) => {
@@ -1012,7 +1054,7 @@ CHỈ trả JSON.`
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-100"><Megaphone className="h-4 w-4 text-rose-600" /></div>
           <div>
             <h1 className="text-base font-bold text-slate-800">Spy Ads — Quảng cáo đối thủ</h1>
-            <p className="text-[11px] text-slate-400">{mode === 'channel' ? 'Dán tên kênh / link / ID → xem + tải TẤT CẢ video kênh (kể cả video dính giỏ TikTok Shop, PC xem được)' : (platform === 'fb' ? 'Video ads đang chạy trên Facebook Ad Library' : 'Top video ads TikTok (Creative Center)') + ' → tải về dựng lại cho FB ads'}</p>
+            <p className="text-[11px] text-slate-400">{mode === 'channel' ? 'Dán tên kênh / link / ID → xem + tải TẤT CẢ video kênh (kể cả video dính giỏ TikTok Shop, PC xem được)' : (platform === 'fb' ? 'Video ads đang chạy trên Facebook Ad Library' : platform === 'google' ? 'Google/YouTube Ads Transparency — soi kho ad đối thủ ở MY (25cr/advertiser)' : 'Top video ads TikTok (Creative Center)') + ' → tải về dựng lại cho FB ads'}</p>
           </div>
           {credits != null && <span className="ml-auto text-xs text-slate-400">credit: {credits}</span>}
         </div>
@@ -1088,15 +1130,17 @@ CHỈ trả JSON.`
                   className={`rounded-md px-3 py-1 text-xs font-semibold ${platform === 'fb' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>👍 Facebook</button>
                 <button onClick={() => switchPlatform('tiktok')}
                   className={`rounded-md px-3 py-1 text-xs font-semibold ${platform === 'tiktok' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>🎵 TikTok</button>
+                <button onClick={() => switchPlatform('google')} title="Google/YouTube Ads Transparency — soi kho ad đối thủ (25 credit/advertiser)"
+                  className={`rounded-md px-3 py-1 text-xs font-semibold ${platform === 'google' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>🔴 Google/YT</button>
               </div>
               <input
-                value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void search() }}
-                placeholder="từ khóa / ngách (vd: collagen, sakit lutut, kurus...)"
+                value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void (platform === 'google' ? searchGoogle() : search()) }}
+                placeholder={platform === 'google' ? 'tên đối thủ / domain (vd: nexta, brand.com.my)…' : 'từ khóa / ngách (vd: collagen, sakit lutut, kurus...)'}
                 className="min-w-[220px] flex-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm"
               />
-              <button onClick={() => void search()} disabled={loading}
+              <button onClick={() => void (platform === 'google' ? searchGoogle() : search())} disabled={loading || gBusy}
                 className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50">
-                <Search className="h-4 w-4" /> {loading ? 'Đang tìm…' : 'Tìm ad'}
+                <Search className="h-4 w-4" /> {(loading || gBusy) ? 'Đang tìm…' : (platform === 'google' ? 'Tìm advertiser' : 'Tìm ad')}
               </button>
               {platform === 'fb' && (
                 <>
@@ -1385,14 +1429,49 @@ CHỈ trả JSON.`
         )}
 
         {/* ── MODE TÌM AD ── */}
-        {mode === 'ads' && !ads && !loading && (
+        {/* 🔴 GOOGLE bước 1 — danh sách advertiser (rẻ). Bấm 1 advertiser mới kéo creative (25cr). */}
+        {mode === 'ads' && platform === 'google' && gView === 'list' && gAdvertisers && (
+          <>
+            <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
+              <span className="font-semibold">{gAdvertisers.length} advertiser</span> · bấm để kéo kho ad
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-700">⚠ 25 credit / advertiser</span>
+            </div>
+            {gAdvertisers.length === 0 ? (
+              <div className="py-8 text-center text-sm text-slate-400">Không có advertiser — thử tên đối thủ khác.</div>
+            ) : (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {gAdvertisers.map((adv) => (
+                  <button key={adv.id || adv.name} onClick={() => void openGoogleAdvertiser(adv.id, adv.name, adv.domain)} disabled={gBusy}
+                    className="flex items-center gap-3 rounded-xl border border-black/10 bg-white p-3 text-left hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-100 text-rose-600">🔴</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-slate-700">{adv.name}</div>
+                      {adv.domain && <div className="truncate text-[11px] text-slate-400">{adv.domain}</div>}
+                    </div>
+                    <span className="shrink-0 text-[11px] font-semibold text-rose-600">🎬 25cr</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        {mode === 'ads' && !ads && !loading && !(platform === 'google' && gAdvertisers) && (
           <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-black/10 text-center text-slate-400">
             <Megaphone className="h-8 w-8" />
-            <p className="text-sm">Nhập ngách/từ khóa + chọn nước → <b>Tìm ad</b>.</p>
-            <p className="text-xs">Ad <b>đang chạy + lâu + advertiser nhiều bản</b> = winner (đốt tiền lâu chứng tỏ có lời).</p>
+            {platform === 'google' ? (
+              <>
+                <p className="text-sm">Nhập <b>tên đối thủ / domain</b> → <b>Tìm advertiser</b> (rẻ ~1cr).</p>
+                <p className="text-xs">Chọn advertiser để kéo kho ad Google/YouTube (<b>25cr/advertiser</b>). Mạnh nhất khi soi 1 đối thủ đã biết.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm">Nhập ngách/từ khóa + chọn nước → <b>Tìm ad</b>.</p>
+                <p className="text-xs">Ad <b>đang chạy + lâu + advertiser nhiều bản</b> = winner (đốt tiền lâu chứng tỏ có lời).</p>
+              </>
+            )}
           </div>
         )}
-        {mode === 'ads' && loading && <div className="py-10 text-center text-sm text-slate-400">{platform === 'fb' ? 'Đang quét Facebook Ad Library…' : 'Đang quét TikTok Top Ads…'}</div>}
+        {mode === 'ads' && loading && <div className="py-10 text-center text-sm text-slate-400">{platform === 'fb' ? 'Đang quét Facebook Ad Library…' : platform === 'google' ? 'Đang kéo kho ad Google (25cr)…' : 'Đang quét TikTok Top Ads…'}</div>}
         {(mode === 'ads' || mode === 'radar') && ads && ads.length > 0 && (
           <>
             <div className="mb-2 text-xs font-semibold text-slate-500">
