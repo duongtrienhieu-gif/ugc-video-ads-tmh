@@ -1,9 +1,11 @@
 // ── 🛰 ĐIỀU HÀNH (Cockpit) — dashboard Quản trị TMH Group, owner-only ─────────
-// CHỈ CEO thấy (gate ở WarRoom). Nguồn = 3 TEAM T7 (APEX/TITAN/SUMMIT) — khớp Bảng của tôi.
-// P&L team = parseTeamFin (net thật của sheet) qua /api/inventory-board?cockpit=teams. Tỷ giá 6500
-// = tiền chủ thu thật: lãi = net(@5800) + RM×(tỷ giá − 5800). Products từ main load; daily riêng.
+// CHỈ CEO thấy (gate ở WarRoom). Dùng CHUNG engine actuals.ts với tab Bảng của tôi
+// → giá vốn THẬT (file KHO), hoàn Cách A THẬT (QLHB), số KHỚP Bảng của tôi + cache sẵn
+// (mở là hiện ngay). Tỷ giá 6500 = tiền chủ thu thật: lãi = lãi(@5800) + RM×(tỷ giá−5800).
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { DEFAULT_INPUTS, BOOK_RATE, type Inputs } from './model'
+import { fetchSpStats, readCachedSpStats, fetchMarketerSp, aggregate, type SpStat, type SpProfit } from '../actuals'
+import { SHIP, VH } from '../../inventory-board/profitCalc'
 import { loadBoardLinks } from '../../inventory-board/boardConfig'
 
 const C = {
@@ -16,21 +18,23 @@ const fmtPct = (n: number) => (n * 100).toFixed(1) + '%'
 const panelStyle: React.CSSProperties = { background: C.panel, border: `1px solid ${C.line}`, borderRadius: 14, padding: '16px 20px', marginBottom: 14, position: 'relative' }
 const eyebrowStyle: React.CSSProperties = { fontSize: 13, fontWeight: 700, letterSpacing: 0.3, color: C.gold }
 const SALARY_RATE = 6500
+const CACHE_KEY = 'cockpit_cache_v1'
 
-// 3 team T7 + tong + luongsale (KEY khớp board_config + mode cockpit trong api/inventory-board.ts)
-const TEAM_KEYS = [
-  { key: 'team_apex', name: 'APEX', label: 'Team APEX (Duy + Khánh)' },
-  { key: 'team_titan', name: 'TITAN', label: 'Team TITAN (Tuấn + Anh)' },
-  { key: 'team_summit', name: 'SUMMIT', label: 'Team SUMMIT (Hà + Phy)' },
-]
-// Link quản Ở APP KHO & NHẬP HÀNG (board_config chung, Supabase) → Cockpit chỉ ĐỌC, không có
-// panel nhập riêng. Fallback dưới chỉ dùng khi board_config chưa có (dự phòng, tự bám tháng qua Kho).
+// Fallback link (board_config app Kho là nguồn chính) — chỉ dùng cho daily/salary khi board_config trống.
 const FALLBACK: Record<string, string> = {
   team_apex: 'https://docs.google.com/spreadsheets/d/1BFGlk9lDGqjmpsiG4p813ExdDZL90tVLXqy7izoGKw8/edit',
   team_titan: 'https://docs.google.com/spreadsheets/d/1YEgGsUjiWYHCYv5bpxspoRMhDPe6sUhfRBDrcxrj--I/edit',
   team_summit: 'https://docs.google.com/spreadsheets/d/1A4Mz7aRWM9hYLE9ISqlIyAJoLKY8fjN_XiHtB7czLtQ/edit',
   tong: 'https://docs.google.com/spreadsheets/d/1ZOYU59Dyrwmm7w2Iw-BXAZFX_BL5XFsofFyqWQ2zShQ/edit',
   luongsale: 'https://docs.google.com/spreadsheets/d/1E5SDrQ78IwYzs4NCaJSU2G0slR2Dx8TMBagCS5eNkzk/edit',
+}
+const TEAM_KEYS = [{ key: 'team_apex' }, { key: 'team_titan' }, { key: 'team_summit' }]
+function pickLinks(s: Record<string, string>) {
+  const o: Record<string, string> = {}
+  for (const m of TEAM_KEYS) if (s[m.key]) o[m.key] = s[m.key]
+  if (s.tong) o.tong = s.tong
+  if (s.luongsale) o.luongsale = s.luongsale
+  return o
 }
 
 const FIXED_DEPTS: { ten: string; vnd: number }[] = [
@@ -59,19 +63,11 @@ function saleSalary1(s: SaleRaw) {
   const retBonus = s.returnPct < 0.07 ? Math.round((0.07 - s.returnPct) * 100) * 100 : 0
   const cung = s.workday > 0 ? (s.base / 26) * s.workday : s.base
   const net = cung + s.tele + com + retBonus - s.advance
-  return { cung, com, retBonus, net, pctCom, pctC2 }
+  return { cung, com, retBonus, net, pctC2 }
 }
 
-type Team = { name: string; dt: number; cpqc: number; net: number; dtSauHoan: number; hoanRate: number; rm: number; contact: number; c2: number }
-type Prod = { name: string; rmRevenue: number; cpqc: number; pctCpqc: number; pctHoan: number; c2: number }
 type Day = { date: string; rm: number; cpqc: number; contact: number; c2: number }
-
-function prodStatus(p: Prod): { tag: string; color: string } {
-  if (p.pctHoan > 0.45 || p.pctCpqc > 0.5) return { tag: 'Cắt', color: C.red }
-  if (p.pctHoan > 0.35 || p.pctCpqc > 0.4) return { tag: 'Sửa', color: C.amber }
-  if (p.pctHoan > 0 && p.pctHoan < 0.25 && p.pctCpqc < 0.35) return { tag: 'Scale', color: C.green }
-  return { tag: 'Giữ', color: C.muted2 }
-}
+type Cashflow = { pendingDS: number; returnDS: number; returnedDS: number; deliveryDS: number; paidDS: number }
 
 type Col<T> = { label: string; node: (r: T) => ReactNode; center?: boolean }
 function RespTable<T>({ cols, data, mobile }: { cols: Col<T>[]; data: T[]; mobile: boolean }) {
@@ -114,13 +110,7 @@ function RespTable<T>({ cols, data, mobile }: { cols: Col<T>[]; data: T[]; mobil
   )
 }
 
-function pickLinks(s: Record<string, string>) {
-  const o: Record<string, string> = {}
-  for (const m of TEAM_KEYS) if (s[m.key]) o[m.key] = s[m.key]
-  if (s.tong) o.tong = s.tong
-  if (s.luongsale) o.luongsale = s.luongsale
-  return o
-}
+const denColor = (d: string) => (d === 'Cắt' ? C.red : d === 'Sửa' ? C.amber : d === 'Scale' ? C.green : C.muted2)
 
 export default function Cockpit() {
   const [inp, setInp] = useState<Inputs>(DEFAULT_INPUTS)
@@ -129,89 +119,114 @@ export default function Cockpit() {
   const [isMobile, setIsMobile] = useState(false)
   useEffect(() => { const f = () => setIsMobile(window.innerWidth < 700); f(); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) }, [])
 
-  const [teams, setTeams] = useState<Team[]>([])
-  const [products, setProducts] = useState<Prod[]>([])
+  const [stats, setStats] = useState<Record<string, SpStat>>({})
+  const [profit, setProfit] = useState<SpProfit[]>([])
+  const [hoanByTeam, setHoanByTeam] = useState<Record<string, number>>({})
+  const [marketerSp, setMarketerSp] = useState<Record<string, string[]>>({})
   const [saleSalary, setSaleSalary] = useState<SaleRaw[]>([])
   const [daily, setDaily] = useState<{ company: Day[]; marketers: Record<string, Day[]> }>({ company: [], marketers: {} })
+  const [cashflow, setCashflow] = useState<Cashflow | null>(null)
   const [rangeMode, setRangeMode] = useState<'thang' | '7' | 'homqua' | 'homtruoc' | 'custom'>('7')
   const [cFrom, setCFrom] = useState(''); const [cTo, setCTo] = useState('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'live' | 'error'>('idle')
+  const [stale, setStale] = useState(false)
   const [lastUpdate, setLastUpdate] = useState('')
 
   const POST = (body: unknown) => fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store' }).then((r) => r.json())
 
-  // all = link đầy đủ từ board_config (app Kho quản) + fallback. Không có nhập tay ở Cockpit.
-  async function loadAll(all: Record<string, string>) {
-    setStatus('loading')
-    const teamLinks = pickLinks(all) // team_apex/titan/summit + tong + luongsale
-    try {
-      const [t, day, sal, main] = await Promise.all([
-        POST({ cockpit: 'teams', links: teamLinks }),
-        POST({ cockpit: 'daily', links: teamLinks }),
-        POST({ cockpit: 'salary', links: teamLinks }),
-        POST({ links: all }), // main load → products T7 (parseProducts đã verify)
-      ])
-      if (t?.ok) { setTeams(t.teams || []); setStatus('live'); setLastUpdate(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })) }
-      else setStatus('error')
-      if (day?.ok) setDaily({ company: day.company || [], marketers: day.marketers || {} })
-      if (sal?.ok) setSaleSalary(sal.sales || [])
-      const prods: Prod[] = main?.products || []
-      try {
-        const q = await fetch('/api/qlhb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link: all.qlhb || '' }), cache: 'no-store' }).then((r) => r.json())
-        const hoanMap: Record<string, number> = q?.hoanMap || {}
-        prods.forEach((p) => { const h = hoanMap[p.name.trim().toUpperCase()]; if (h != null) p.pctHoan = h })
-      } catch { /* giữ hoàn file */ }
-      setProducts(prods)
-    } catch { setStatus('error') }
-  }
-
   async function reload() {
-    const shared = (await loadBoardLinks()) ?? {}
-    const all: Record<string, string> = { ...FALLBACK, ...shared } // board_config đè fallback
-    void loadAll(all)
+    // 1) HIỆN NGAY từ cache (dùng chung cache Bảng của tôi + cache riêng daily/salary/cashflow)
+    const cached = readCachedSpStats()
+    if (cached) { setStats(cached.stats); setProfit(cached.profit); setHoanByTeam(cached.hoanByTeam ?? {}); setStale(true) }
+    try { const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); if (c) { setDaily(c.daily ?? { company: [], marketers: {} }); setSaleSalary(c.saleSalary ?? []); setCashflow(c.cashflow ?? null) } } catch { /* ignore */ }
+    setStatus('loading')
+    // 2) Số THẬT per-SP + team→SP (engine chung, giá vốn thật)
+    try {
+      const [sp, ms] = await Promise.all([fetchSpStats(), fetchMarketerSp()])
+      setStats(sp.stats); setProfit(sp.profit); setHoanByTeam(sp.hoanByTeam ?? {}); setStale(sp.stale)
+      setMarketerSp(ms.marketerSp)
+      setStatus('live'); setLastUpdate(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }))
+    } catch { setStatus('error') }
+    // 3) Phụ (daily chart + lương sale + dòng tiền) — từ board_config
+    try {
+      const all: Record<string, string> = { ...FALLBACK, ...((await loadBoardLinks()) ?? {}) }
+      const links = pickLinks(all)
+      const [day, sal, ql] = await Promise.all([
+        POST({ cockpit: 'daily', links }),
+        POST({ cockpit: 'salary', links }),
+        fetch('/api/qlhb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link: all.qlhb || '' }), cache: 'no-store' }).then((r) => r.json()),
+      ])
+      const nextDaily = day?.ok ? { company: day.company || [], marketers: day.marketers || {} } : daily
+      const nextSal = sal?.ok ? (sal.sales || []) : saleSalary
+      const nextCash = ql?.cashflow ?? cashflow
+      setDaily(nextDaily); setSaleSalary(nextSal); setCashflow(nextCash)
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ daily: nextDaily, saleSalary: nextSal, cashflow: nextCash })) } catch { /* quota */ }
+    } catch { /* giữ cache phụ */ }
   }
 
   useEffect(() => { void reload() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [])
 
-  // ── COMPUTE ──────────────────────────────────────────────────────────────────
-  // Lãi thật theo tỷ giá: net (sheet @5800) + RM × (tỷ giá − 5800). Chi phí VNĐ cố định không đổi.
-  const uplift = (rm: number) => rm * (inp.tyGia - BOOK_RATE)
+  // ── COMPUTE (engine chung) ───────────────────────────────────────────────────
+  const teams = useMemo(() => {
+    const names = Object.keys(marketerSp)
+    return names.map((name) => {
+      const agg = aggregate(marketerSp[name] ?? [], stats)
+      const th = hoanByTeam[name.toUpperCase()]
+      const hoan = th != null ? th : agg.hoan
+      const rm = agg.dt / BOOK_RATE
+      const lai5800 = agg.lai
+      return { name, rm, dtVnd: agg.dt, lai5800, cpqc: agg.cpqc, hoan, aov: agg.aov, chot: agg.chot, c2: rm > 0 && agg.aov > 0 ? agg.dt / agg.aov : 0, contact: 0 }
+    }).filter((t) => t.dtVnd > 0).sort((a, b) => b.dtVnd - a.dtVnd)
+  }, [marketerSp, stats, hoanByTeam])
+
   const rows = useMemo(() => teams.map((m) => {
     const dtGuiVnd = m.rm * inp.tyGia
-    const loiNhuan = m.net + uplift(m.rm)
-    return { name: m.name, dtGuiVnd, pctCpqc: m.cpqc, hoanRate: m.hoanRate, loiNhuan, tySuat: dtGuiVnd > 0 ? loiNhuan / dtGuiVnd : 0, cpqcVnd: m.cpqc * m.dt }
+    const loiNhuan = m.lai5800 + m.rm * (inp.tyGia - BOOK_RATE)
+    return { name: m.name, dtGuiVnd, pctCpqc: m.cpqc, hoanRate: m.hoan, loiNhuan, tySuat: dtGuiVnd > 0 ? loiNhuan / dtGuiVnd : 0 }
   }).sort((a, b) => b.loiNhuan - a.loiNhuan), [teams, inp.tyGia])
 
   const co = useMemo(() => {
-    const dt = rows.reduce((s, r) => s + r.dtGuiVnd, 0)
-    const ln = rows.reduce((s, r) => s + r.loiNhuan, 0)
-    const cpqcVnd = rows.reduce((s, r) => s + r.cpqcVnd, 0)
-    const dtFile = teams.reduce((s, m) => s + m.dt, 0)
-    const hoanFile = teams.reduce((s, m) => s + (m.dt - m.dtSauHoan), 0)
-    return { dt, ln, pctCpqc: dt > 0 ? cpqcVnd / (teams.reduce((s, m) => s + m.dt, 0) || 1) : 0, pctHoan: dtFile > 0 ? hoanFile / dtFile : 0, tySuat: dt > 0 ? ln / dt : 0, dtFile }
-  }, [rows, teams])
+    const rmAll = teams.reduce((s, m) => s + m.rm, 0)
+    const dt = rmAll * inp.tyGia
+    const lai5800 = teams.reduce((s, m) => s + m.lai5800, 0)
+    const ln = lai5800 + rmAll * (inp.tyGia - BOOK_RATE)
+    const cpqcVnd = teams.reduce((s, m) => s + m.cpqc * m.dtVnd, 0)
+    const dt5800 = rmAll * BOOK_RATE
+    const hoanVnd = teams.reduce((s, m) => s + m.hoan * m.dtVnd, 0)
+    const pctHoan = dt5800 > 0 ? hoanVnd / dt5800 : 0
+    const pctCpqc = dt5800 > 0 ? cpqcVnd / dt5800 : 0
+    // vốn% company = 1 − lãi% − ads% − ship − vh − hoàn% (suy từ lãi thật engine)
+    const laiPct5800 = dt5800 > 0 ? lai5800 / dt5800 : 0
+    const vonPct = Math.max(0, 1 - laiPct5800 - pctCpqc - SHIP - VH - pctHoan)
+    return { dt, ln, pctCpqc, pctHoan, vonPct, tySuat: dt > 0 ? ln / dt : 0, rmAll }
+  }, [teams, inp.tyGia])
 
-  const saleRows = useMemo(() => teams.map((m) => ({ name: m.name, c2: m.c2, closeRate: m.contact > 0 ? m.c2 / m.contact : 0, aov: m.c2 > 0 ? (m.rm * inp.tyGia) / m.c2 : 0 })).sort((a, b) => b.c2 - a.c2), [teams, inp.tyGia])
-  const saleCo = useMemo(() => { const ct = teams.reduce((s, m) => s + m.contact, 0); const c2 = teams.reduce((s, m) => s + m.c2, 0); const rev = teams.reduce((s, m) => s + m.rm * inp.tyGia, 0); return { c2, closeRate: ct > 0 ? c2 / ct : 0, aov: c2 > 0 ? rev / c2 : 0 } }, [teams, inp.tyGia])
+  const prodRows = useMemo(() => profit.map((p) => {
+    const st = stats[p.name.trim().toUpperCase()]
+    return { name: p.name, dt: (st?.dt ?? 0) * (inp.tyGia / BOOK_RATE), pctCpqc: p.adsPct, pctHoan: p.hoanPct, laiPct: p.laiPct, den: p.den, chot: st?.chot ?? 0 }
+  }).filter((p) => p.dt > 0).sort((a, b) => b.dt - a.dt), [profit, stats, inp.tyGia])
+
+  const saleRows = useMemo(() => teams.map((m) => ({ name: m.name, c2: m.c2, closeRate: m.chot, aov: m.aov * (inp.tyGia / BOOK_RATE) })).sort((a, b) => b.c2 - a.c2), [teams, inp.tyGia])
+  const saleCo = useMemo(() => { const c2 = teams.reduce((s, m) => s + m.c2, 0); const rev = teams.reduce((s, m) => s + m.rm * inp.tyGia, 0); const closeRates = teams.filter((m) => m.chot > 0); const cr = closeRates.length ? closeRates.reduce((s, m) => s + m.chot * m.c2, 0) / (closeRates.reduce((s, m) => s + m.c2, 0) || 1) : 0; return { c2, closeRate: cr, aov: c2 > 0 ? rev / c2 : 0 } }, [teams, inp.tyGia])
 
   const abc = useMemo(() => {
-    const sorted = [...products].sort((a, b) => b.rmRevenue - a.rmRevenue)
-    const total = sorted.reduce((s, p) => s + p.rmRevenue, 0) || 1
+    const sorted = [...prodRows].sort((a, b) => b.dt - a.dt)
+    const total = sorted.reduce((s, p) => s + p.dt, 0) || 1
     let cum = 0
-    return sorted.map((p) => { cum += p.rmRevenue; const c = cum / total; return { name: p.name, grp: c <= 0.8 ? 'A' : c <= 0.95 ? 'B' : 'C' } })
-  }, [products])
+    return sorted.map((p) => { cum += p.dt; const c = cum / total; return { name: p.name, grp: c <= 0.8 ? 'A' : c <= 0.95 ? 'B' : 'C' } })
+  }, [prodRows])
 
   const actions = useMemo(() => {
     const a: { icon: string; color: string; title: string; reason: string; score: number }[] = []
-    products.forEach((p) => { if (p.pctHoan > 0.45 || p.pctCpqc > 0.55) a.push({ icon: '✕', color: C.red, title: `Cắt ${p.name}`, reason: `hoàn ${fmtPct(p.pctHoan)}, ads ${fmtPct(p.pctCpqc)} — lỗ kép`, score: 100 + p.rmRevenue / 1e4 }) })
+    prodRows.forEach((p) => { if (p.pctHoan > 0.45 || p.pctCpqc > 0.55) a.push({ icon: '✕', color: C.red, title: `Cắt ${p.name}`, reason: `hoàn ${fmtPct(p.pctHoan)}, ads ${fmtPct(p.pctCpqc)} — lỗ kép`, score: 100 + p.dt / 1e6 }) })
     rows.forEach((r) => {
       if (r.loiNhuan < 0) a.push({ icon: '!', color: C.red, title: `Team ${r.name} đang lỗ`, reason: `lỗ ${fmtMoney(r.loiNhuan)} — soi lại gấp`, score: 120 })
       else if (r.pctCpqc > 0.45) a.push({ icon: '▼', color: C.amber, title: `Ghìm ads team ${r.name}`, reason: `đốt ${fmtPct(r.pctCpqc)} doanh thu — sát ngưỡng lỗ`, score: 90 + r.pctCpqc * 100 })
     })
-    const scale = products.filter((p) => p.pctHoan > 0 && p.pctHoan < 0.25 && p.pctCpqc < 0.38).sort((x, y) => y.rmRevenue - x.rmRevenue)[0]
-    if (scale) a.push({ icon: '▲', color: C.green, title: `Đẩy mạnh ${scale.name}`, reason: `hoàn thấp ${fmtPct(scale.pctHoan)}, ads ${fmtPct(scale.pctCpqc)} — còn dư địa scale`, score: 80 + scale.rmRevenue / 1e4 })
+    const scale = prodRows.filter((p) => p.den === 'Scale').sort((x, y) => y.dt - x.dt)[0]
+    if (scale) a.push({ icon: '▲', color: C.green, title: `Đẩy mạnh ${scale.name}`, reason: `hoàn thấp ${fmtPct(scale.pctHoan)}, ads ${fmtPct(scale.pctCpqc)} — còn dư địa scale`, score: 80 + scale.dt / 1e6 })
     return a.sort((x, y) => y.score - x.score).slice(0, 4)
-  }, [rows, products])
+  }, [rows, prodRows])
 
   const alerts = useMemo(() => {
     const a: { level: 'red' | 'amber'; text: string }[] = []
@@ -254,28 +269,30 @@ export default function Cockpit() {
     else if (rangeMode === 'custom' && cFrom && cTo) sel = days.map((d) => d.date).filter((d) => toISO(d) >= cFrom && toISO(d) <= cTo)
     else sel = days.slice(-7).map((d) => d.date)
     const selSet = new Set(sel)
-    const tg = inp.tyGia, BOOK = BOOK_RATE
-    // Vốn ước theo tỷ lệ vốn/RM company (suy từ net: net = DT − hoàn − vốn − ads − CPVC − CPVH).
-    const totRm = teams.reduce((s, m) => s + m.rm, 0)
-    const totNet = teams.reduce((s, m) => s + m.net, 0)
-    const totCpqc = teams.reduce((s, m) => s + m.cpqc * m.dt, 0)
-    const totHoan = teams.reduce((s, m) => s + (m.dt - m.dtSauHoan), 0)
-    // vốn company ≈ DT@5800 − hoàn − ads − CPVC − CPVH − net
-    const dt5800 = totRm * BOOK
-    const vonCty = Math.max(0, dt5800 - totHoan - totCpqc - inp.cpvcPct * dt5800 - inp.cpvhPct * dt5800 - totNet)
-    const cogsPerRm = totRm > 0 ? vonCty / totRm : 0
-    const hoanRate = co.pctHoan
-    const calc = (rm: number, cpqc: number) => { const dt = rm * tg, hoan = dt * hoanRate, von = cogsPerRm * rm * tg / BOOK; const cpvc = inp.cpvcPct * rm * BOOK, cpvh = inp.cpvhPct * rm * BOOK; return { dt, hoan, von, cpqc, cpvc, cpvh, lai: dt - hoan - von - cpqc - cpvc - cpvh } }
+    const tg = inp.tyGia, hoanRate = co.pctHoan, vonPct = co.vonPct
+    const teamHoan: Record<string, number> = {}; teams.forEach((t) => { teamHoan[t.name] = t.hoan })
+    const calc = (rm: number, cpqc: number, hr: number) => { const dt = rm * tg, hoan = dt * hr, von = vonPct * dt; const cpvc = inp.cpvcPct * rm * BOOK_RATE, cpvh = inp.cpvhPct * rm * BOOK_RATE; return { dt, hoan, von, cpqc, cpvc, cpvh, lai: dt - hoan - von - cpqc - cpvc - cpvh } }
     const selDays = days.filter((d) => selSet.has(d.date))
     const adsPendingDates = selDays.filter((d) => d.rm > 0 && d.cpqc === 0).map((d) => d.date.slice(0, 5))
-    const series = selDays.map((d) => { const x = calc(d.rm, d.cpqc); return { date: d.date.slice(0, 5), dt: x.dt, lai: x.lai, adsPending: d.rm > 0 && d.cpqc === 0 } })
-    const kpi = selDays.reduce((a, d) => { const x = calc(d.rm, d.cpqc); return { dt: a.dt + x.dt, hoan: a.hoan + x.hoan, von: a.von + x.von, cpqc: a.cpqc + x.cpqc, cpvc: a.cpvc + x.cpvc, cpvh: a.cpvh + x.cpvh, lai: a.lai + x.lai, c2: a.c2 + d.c2 } }, { dt: 0, hoan: 0, von: 0, cpqc: 0, cpvc: 0, cpvh: 0, lai: 0, c2: 0 })
+    const series = selDays.map((d) => { const x = calc(d.rm, d.cpqc, hoanRate); return { date: d.date.slice(0, 5), dt: x.dt, lai: x.lai, adsPending: d.rm > 0 && d.cpqc === 0 } })
+    const kpi = selDays.reduce((a, d) => { const x = calc(d.rm, d.cpqc, hoanRate); return { dt: a.dt + x.dt, hoan: a.hoan + x.hoan, von: a.von + x.von, cpqc: a.cpqc + x.cpqc, cpvc: a.cpvc + x.cpvc, cpvh: a.cpvh + x.cpvh, lai: a.lai + x.lai, c2: a.c2 + d.c2 } }, { dt: 0, hoan: 0, von: 0, cpqc: 0, cpvc: 0, cpvh: 0, lai: 0, c2: 0 })
     const byMkt = Object.entries(daily.marketers).map(([name, arr]) => {
-      const t = arr.filter((d) => selSet.has(d.date)).reduce((a, d) => { const x = calc(d.rm, d.cpqc); return { dt: a.dt + x.dt, cpqc: a.cpqc + x.cpqc, lai: a.lai + x.lai, c2: a.c2 + d.c2 } }, { dt: 0, cpqc: 0, lai: 0, c2: 0 })
+      const hr = teamHoan[name] ?? hoanRate
+      const t = arr.filter((d) => selSet.has(d.date)).reduce((a, d) => { const x = calc(d.rm, d.cpqc, hr); return { dt: a.dt + x.dt, hoan: a.hoan + x.hoan, von: a.von + x.von, cpqc: a.cpqc + x.cpqc, cpvc: a.cpvc + x.cpvc, cpvh: a.cpvh + x.cpvh, lai: a.lai + x.lai, c2: a.c2 + d.c2 } }, { dt: 0, hoan: 0, von: 0, cpqc: 0, cpvc: 0, cpvh: 0, lai: 0, c2: 0 })
       return { name, ...t }
     }).filter((x) => x.dt > 0).sort((a, b) => b.lai - a.lai)
     return { series, kpi, byMkt, nDays: sel.length, adsPendingDates }
   }, [daily, rangeMode, cFrom, cTo, teams, inp, co])
+
+  const cf = useMemo(() => {
+    if (!cashflow) return null
+    const tg = inp.tyGia
+    const choThu = (cashflow.pendingDS + cashflow.deliveryDS) * tg
+    const dangHoan = cashflow.returnDS * tg
+    const daThu = cashflow.paidDS * tg
+    const successRate = cashflow.paidDS + cashflow.returnedDS > 0 ? cashflow.paidDS / (cashflow.paidDS + cashflow.returnedDS) : 0
+    return { dangKet: choThu + dangHoan, choThu, dangHoan, daThu, successRate, duKienThu: choThu * successRate }
+  }, [cashflow, inp.tyGia])
 
   // ── COLS ─────────────────────────────────────────────────────────────────────
   const mktCols: Col<(typeof rows)[number]>[] = [
@@ -292,19 +309,23 @@ export default function Cockpit() {
     { label: 'TỶ LỆ CHỐT', node: (r) => <span style={{ color: r.closeRate >= 0.78 ? C.green : r.closeRate >= 0.7 ? C.muted2 : C.amber }}>{fmtPct(r.closeRate)}</span> },
     { label: 'AOV', node: (r) => <span style={{ color: C.gold }}>{fmtMoney(r.aov)}</span> },
   ]
-  const prodCols: Col<Prod>[] = [
+  const prodCols: Col<(typeof prodRows)[number]>[] = [
     { label: 'SẢN PHẨM', node: (p) => p.name },
-    { label: 'DOANH THU', node: (p) => <span style={{ color: C.gold }}>{fmtMoney(p.rmRevenue * inp.tyGia)}</span> },
+    { label: 'DOANH THU', node: (p) => <span style={{ color: C.gold }}>{fmtMoney(p.dt)}</span> },
     { label: '% CPQC', node: (p) => <span style={{ color: p.pctCpqc > 0.5 ? C.red : p.pctCpqc > 0.4 ? C.amber : C.muted2 }}>{fmtPct(p.pctCpqc)}</span> },
     { label: '% HOÀN', node: (p) => <span style={{ color: p.pctHoan > 0.45 ? C.red : p.pctHoan > 0.35 ? C.amber : C.muted2 }}>{fmtPct(p.pctHoan)}</span> },
-    { label: 'ĐƠN', node: (p) => <span style={{ color: C.muted2 }}>{Math.round(p.c2).toLocaleString('vi-VN')}</span> },
-    { label: 'ĐÁNH GIÁ', center: true, node: (p) => { const st = prodStatus(p); return <span style={{ color: st.color, border: `1px solid ${st.color}`, borderRadius: 20, padding: '2px 10px', fontSize: 11, whiteSpace: 'nowrap' }}>{st.tag}</span> } },
+    { label: 'LÃI %', node: (p) => <span style={{ color: p.laiPct < 0 ? C.red : C.green }}>{fmtPct(p.laiPct)}</span> },
+    { label: 'ĐÁNH GIÁ', center: true, node: (p) => <span style={{ color: denColor(p.den), border: `1px solid ${denColor(p.den)}`, borderRadius: 20, padding: '2px 10px', fontSize: 11, whiteSpace: 'nowrap' }}>{p.den}</span> },
   ]
-  type TimeRow = { name: string; dt: number; cpqc: number; c2: number; lai: number }
+  type TimeRow = { name: string; dt: number; hoan: number; von: number; cpqc: number; cpvc: number; cpvh: number; c2: number; lai: number }
   const timeCols: Col<TimeRow>[] = [
     { label: 'TEAM', node: (r) => r.name },
     { label: 'DOANH THU', node: (r) => <span style={{ color: C.gold }}>{fmtMoney(r.dt)}</span> },
+    { label: 'HOÀN', node: (r) => <span style={{ color: C.muted2 }}>{fmtMoney(r.hoan)}</span> },
+    { label: 'VỐN', node: (r) => <span style={{ color: C.muted2 }}>{fmtMoney(r.von)}</span> },
     { label: 'ADS', node: (r) => <span style={{ color: r.cpqc === 0 && r.dt > 0 ? C.amber : C.muted2 }}>{r.cpqc === 0 && r.dt > 0 ? '⚠ ' : ''}{fmtMoney(r.cpqc)}</span> },
+    { label: 'CPVC', node: (r) => <span style={{ color: C.muted2 }}>{fmtMoney(r.cpvc)}</span> },
+    { label: 'CPVH', node: (r) => <span style={{ color: C.muted2 }}>{fmtMoney(r.cpvh)}</span> },
     { label: 'CHỐT', node: (r) => <span style={{ color: C.muted2 }}>{Math.round(r.c2).toLocaleString('vi-VN')}</span> },
     { label: 'LÃI TẠM', node: (r) => <span style={{ color: r.lai < 0 ? C.red : C.green }}>{fmtMoney(r.lai)}</span> },
   ]
@@ -330,8 +351,8 @@ export default function Cockpit() {
         <div style={{ flex: 1, minWidth: 160 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: C.gold }}>🛰 Điều hành — Quản trị TMH Group</div>
           <div style={{ fontSize: 11, color: status === 'live' ? C.green : status === 'error' ? C.red : C.muted, marginTop: 3 }}>
-            {status === 'live' ? `● Số thật T7 (3 team) · cập nhật ${lastUpdate} · chỉ CEO thấy` : status === 'loading' ? '● Đang tải số liệu…' : status === 'error' ? '● Lỗi tải — bấm ⟳ Tải lại' : '● Đang tải…'}
-            <span style={{ color: C.muted }}> · link quản ở app <b style={{ color: C.muted2 }}>Kho &amp; Nhập hàng</b></span>
+            {status === 'loading' ? '● Đang tải…' : status === 'error' ? '● Lỗi tải — bấm ⟳' : `● Số thật T7 (3 team)${stale ? ' · đang hiện số gần nhất' : lastUpdate ? ` · cập nhật ${lastUpdate}` : ''} · chỉ CEO thấy`}
+            <span style={{ color: C.muted }}> · link ở app <b style={{ color: C.muted2 }}>Kho</b></span>
           </div>
         </div>
         <label style={{ fontSize: 11, color: C.muted2 }}>Tỷ giá<br /><input type="number" step={100} value={inp.tyGia} onChange={(e) => set('tyGia', +e.target.value)} style={{ ...numInput, width: 90, marginTop: 4 }} /></label>
@@ -360,7 +381,7 @@ export default function Cockpit() {
               </div>
             ))}
           </div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Lãi = lợi nhuận thật sheet (@5.800) + phần tỷ giá chủ thu ({inp.tyGia.toLocaleString('vi-VN')} − 5.800)×RM. Chỉnh ô Tỷ giá để xem tiền thật về túi.</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Giá vốn/hoàn/lãi = số THẬT (khớp tab Bảng của tôi). Lãi @{inp.tyGia.toLocaleString('vi-VN')} = lãi thật (@5.800) + phần tỷ giá chủ thu (×RM).</div>
         </div>
 
         {rangeStats && (
@@ -415,8 +436,34 @@ export default function Cockpit() {
                 </div>
               )
             })()}
-            <div style={{ fontSize: 11, color: C.muted, margin: '8px 0 12px' }}>Cột vàng = doanh thu/ngày · số trên = lãi tạm tính. Vốn ước theo tỷ lệ vốn/doanh thu suy từ lãi thật của sheet; ads ngày sát hôm nay có thể chưa nhập đủ.</div>
+            <div style={{ fontSize: 11, color: C.muted, margin: '8px 0 12px' }}>Cột vàng = doanh thu/ngày · số trên = lãi tạm tính. Vốn theo tỷ lệ vốn thật của tháng; ads ngày sát hôm nay có thể chưa nhập đủ.</div>
             {rangeStats.byMkt.length > 0 && <RespTable cols={timeCols} data={rangeStats.byMkt} mobile={isMobile} />}
+          </div>
+        )}
+
+        {cf && (
+          <div style={panelStyle}>
+            <div style={{ ...eyebrowStyle, marginBottom: 10 }}>◷ TIỀN ĐANG KẸT NGOÀI ĐƯỜNG</div>
+            <div style={{ fontSize: isMobile ? 22 : 26, fontWeight: 600, color: C.gold }}>{fmtMoney(cf.dangKet)}</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>tiền COD đã gửi nhưng chưa thu / đang trôi về — CHƯA phải lãi</div>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit,minmax(180px,1fr))', gap: 10 }}>
+              <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ fontSize: 10, letterSpacing: 1.5, color: C.amber, marginBottom: 6 }}>🟡 ĐANG GIAO · CHỜ THU</div>
+                <div style={{ fontSize: 19, fontWeight: 600 }}>{fmtMoney(cf.choThu)}</div>
+                <div style={{ fontSize: 11, color: C.green, marginTop: 3 }}>dự kiến thu ~{fmtMoney(cf.duKienThu)}</div>
+              </div>
+              <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ fontSize: 10, letterSpacing: 1.5, color: C.red, marginBottom: 6 }}>🔴 ĐANG HOÀN VỀ</div>
+                <div style={{ fontSize: 19, fontWeight: 600 }}>{fmtMoney(cf.dangHoan)}</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>nguy cơ mất doanh thu</div>
+              </div>
+              <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ fontSize: 10, letterSpacing: 1.5, color: C.green, marginBottom: 6 }}>🟢 ĐÃ THU (PAID)</div>
+                <div style={{ fontSize: 19, fontWeight: 600 }}>{fmtMoney(cf.daThu)}</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>tiền đã về thật</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: C.muted2, marginTop: 12, lineHeight: 1.5 }}>Tỷ lệ thu thành công ~{fmtPct(cf.successRate)} → trong tiền đang giao dự kiến về thêm <b style={{ color: C.green }}>{fmtMoney(cf.duKienThu)}</b>. Đừng tính phần đang kẹt vào lãi tới khi nó về.</div>
           </div>
         )}
 
@@ -457,7 +504,7 @@ export default function Cockpit() {
         <div style={panelStyle}>
           <div style={{ ...eyebrowStyle, marginBottom: 10 }}>◆ KẾT QUẢ THEO TEAM</div>
           {rows.length === 0 ? <div style={{ fontSize: 13, color: C.muted }}>Đang tải số team… (bấm ⟳ Tải lại nếu lâu)</div> : <RespTable cols={mktCols} data={rows} mobile={isMobile} />}
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Số khớp tab 🎯 Bảng của tôi · lợi nhuận = net thật của sheet + phần tỷ giá {inp.tyGia.toLocaleString('vi-VN')}.</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Số KHỚP tab 🎯 Bảng của tôi (cùng engine · giá vốn thật · hoàn Cách A).</div>
         </div>
 
         {saleRows.length > 0 && (
@@ -479,11 +526,11 @@ export default function Cockpit() {
           </div>
         )}
 
-        {products.length > 0 && (
+        {prodRows.length > 0 && (
           <div style={panelStyle}>
-            <div style={{ ...eyebrowStyle, marginBottom: 10 }}>■ THEO SẢN PHẨM · {products.length} SP</div>
-            <RespTable cols={prodCols} data={[...products].sort((a, b) => b.rmRevenue - a.rmRevenue)} mobile={isMobile} />
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>🟢 Scale (hoàn thấp + ads rẻ) · 🟡 Giữ · 🟠 Sửa · 🔴 Cắt (hoàn &gt;45% / ads &gt;50%). Lãi thật từng SP xem tab 🧮 Máy tính giá / Lãi thật ở app Kho.</div>
+            <div style={{ ...eyebrowStyle, marginBottom: 10 }}>■ THEO SẢN PHẨM · {prodRows.length} SP</div>
+            <RespTable cols={prodCols} data={prodRows} mobile={isMobile} />
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>🟢 Scale · 🟡 Giữ · 🟠 Sửa · 🔴 Cắt. Lãi % = lãi thật/SP (giá vốn từ KHO). Chi tiết ở app Kho tab Lãi thật.</div>
           </div>
         )}
 
@@ -513,7 +560,7 @@ export default function Cockpit() {
         <div style={panelStyle}>
           <div style={{ ...eyebrowStyle, marginBottom: 12 }}>💰 LƯƠNG TỔNG (Sale + bộ phận cố định)</div>
           <div style={{ background: 'rgba(245,196,81,0.06)', border: '1px solid #3a3414', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12.5, color: C.muted2, lineHeight: 1.6 }}>
-            Lương <b style={{ color: C.gold }}>3 team MKT</b> tính theo cơ chế lũy tiến net-profit → xem ở tab <b style={{ color: C.text }}>💰 Lương</b> (bảng này chưa gộp MKT vì file team để công thức, số thật ở tab Lương).
+            Lương <b style={{ color: C.gold }}>3 team MKT</b> tính theo cơ chế lũy tiến net-profit → xem ở tab <b style={{ color: C.text }}>💰 Lương</b> (bảng này gồm Sale + bộ phận cố định).
           </div>
           {luong.rows.length > 0 ? (<>
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 12 }}>

@@ -371,31 +371,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ ok: Object.keys(marketerSp).length > 0, marketerSp, teamFin })
   }
 
-  // ── Nhánh COCKPIT (Quản trị owner-only): teams / daily / salary — nguồn T7 (3 team) ──
+  // ── Nhánh COCKPIT (Quản trị owner-only): daily / salary — nguồn T7 (3 team) ──
+  // P&L từng team KHÔNG đọc ở đây (file team dòng tổng có LỢI NHUẬN/DTsauhoàn = 0) — Cockpit
+  // dùng chung engine actuals.ts (giá vốn thật từ KHO, hoàn Cách A từ QLHB). Đây chỉ lo daily + lương.
   const cockpitMode = req.body && (req.body as { cockpit?: string }).cockpit
   if (cockpitMode) {
     const teamId = (f: { key: string; id: string }) => { const v = bodyLinks[f.key]; return v ? extractId(v) : f.id }
     const tongId = bodyLinks.tong ? extractId(bodyLinks.tong) : COCKPIT_TONG
-
-    if (cockpitMode === 'teams') {
-      // P&L từng team = dòng TỔNG "BÁO CÁO SẢN PHẨM" qua parseTeamFin (đã verify: E/J/Q/S).
-      const fins = await Promise.all(COCKPIT_TEAMS.map(async (f) => {
-        try { return { name: f.name, fin: parseTeamFin(await fetchCsv(teamId(f), 'BÁO CÁO SẢN PHẨM')) } }
-        catch { return { name: f.name, fin: null } }
-      }))
-      // contact/c2/rm từng team từ MAR_TH (1ZOYU): col0=TÊN team, col2=RM, col8=contact, col9=c2.
-      const marTh: Record<string, { rm: number; contact: number; c2: number }> = {}
-      try {
-        const rows = await fetchCsv(tongId, 'MAR_TH')
-        for (const r of rows) { const nm = String(r[0] ?? '').trim().toUpperCase(); if (nm === 'APEX' || nm === 'TITAN' || nm === 'SUMMIT') marTh[nm] = { rm: viNum(r[2]), contact: viNum(r[8]), c2: viNum(r[9]) } }
-      } catch { /* contact/c2 tùy chọn */ }
-      const teams = fins.filter((x) => x.fin).map((x) => {
-        const f = x.fin as NonNullable<typeof x.fin>
-        const mt = marTh[x.name.toUpperCase()] || { rm: f.dt / 5800, contact: 0, c2: 0 }
-        return { name: x.name, dt: f.dt, cpqc: f.cpqc, net: f.net, dtSauHoan: f.dtSauHoan, hoanRate: f.dt > 0 ? Math.max(0, (f.dt - f.dtSauHoan) / f.dt) : 0, rm: mt.rm || f.dt / 5800, contact: mt.contact, c2: mt.c2 }
-      })
-      return res.status(200).json({ ok: teams.length > 0, teams })
-    }
 
     if (cockpitMode === 'daily') {
       // MAR_NGÀY (công ty) + BÁO CÁO NGÀY (từng team): date=0 · rm=1 · cpqc=3 · contact=7 · c2=8 (đã verify T7).
