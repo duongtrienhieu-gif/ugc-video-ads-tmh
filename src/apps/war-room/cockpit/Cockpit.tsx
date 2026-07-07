@@ -3,7 +3,10 @@
 // → giá vốn THẬT (file KHO), hoàn Cách A THẬT (QLHB), số KHỚP Bảng của tôi + cache sẵn
 // (mở là hiện ngay). Tỷ giá 6500 = tiền chủ thu thật: lãi = lãi(@5800) + RM×(tỷ giá−5800).
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { DEFAULT_INPUTS, BOOK_RATE, type Inputs } from './model'
+import { BOOK_RATE, type Inputs } from './model'
+
+// Mặc định: tỷ giá 6500 (chủ thu thật) · CPVC 9% = phí ship thật (khớp SHIP engine) · CPVH 8%.
+const COCKPIT_INPUTS: Inputs = { tyGia: 6500, cpvcPct: 0.09, cpvhPct: 0.08 }
 import { fetchSpStats, readCachedSpStats, fetchMarketerSp, aggregate, type SpStat, type SpProfit } from '../actuals'
 import { SHIP, VH } from '../../inventory-board/profitCalc'
 import { loadBoardLinks } from '../../inventory-board/boardConfig'
@@ -113,7 +116,7 @@ function RespTable<T>({ cols, data, mobile }: { cols: Col<T>[]; data: T[]; mobil
 const denColor = (d: string) => (d === 'Cắt' ? C.red : d === 'Sửa' ? C.amber : d === 'Scale' ? C.green : C.muted2)
 
 export default function Cockpit() {
-  const [inp, setInp] = useState<Inputs>(DEFAULT_INPUTS)
+  const [inp, setInp] = useState<Inputs>(COCKPIT_INPUTS)
   const set = (k: keyof Inputs, v: number) => setInp((s) => ({ ...s, [k]: v }))
   const [tab, setTab] = useState<'tong' | 'mkt' | 'luong'>('tong')
   const [isMobile, setIsMobile] = useState(false)
@@ -167,39 +170,46 @@ export default function Cockpit() {
   useEffect(() => { void reload() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [])
 
   // ── COMPUTE (engine chung) ───────────────────────────────────────────────────
+  // Tách từng thành phần THẬT ở giá sổ (5800) từ engine → recompute LIVE ở knob bất kỳ.
+  // lai5800 = dt5800 − hoàn − vốn − ads − ship − vh → suy ra VỐN NET (đã trừ hoàn về kho).
   const teams = useMemo(() => {
-    const names = Object.keys(marketerSp)
-    return names.map((name) => {
+    return Object.keys(marketerSp).map((name) => {
       const agg = aggregate(marketerSp[name] ?? [], stats)
+      const dt5800 = agg.dt
+      const rm = dt5800 / BOOK_RATE
+      const adsVnd = agg.cpqc * dt5800                                   // ads = VNĐ cố định
+      const cogsNet = Math.max(0, dt5800 * (1 - agg.hoan - agg.cpqc - SHIP - VH) - agg.lai)
+      const vonFrac = dt5800 > 0 ? cogsNet / dt5800 : 0                  // vốn net / doanh thu
       const th = hoanByTeam[name.toUpperCase()]
-      const hoan = th != null ? th : agg.hoan
-      const rm = agg.dt / BOOK_RATE
-      const lai5800 = agg.lai
-      return { name, rm, dtVnd: agg.dt, lai5800, cpqc: agg.cpqc, hoan, aov: agg.aov, chot: agg.chot, c2: rm > 0 && agg.aov > 0 ? agg.dt / agg.aov : 0, contact: 0 }
-    }).filter((t) => t.dtVnd > 0).sort((a, b) => b.dtVnd - a.dtVnd)
+      return { name, rm, dt5800, adsVnd, vonFrac, hoanFrac: agg.hoan, hoanDisplay: th != null ? th : agg.hoan, cpqcFrac: agg.cpqc, aov: agg.aov, chot: agg.chot, c2: agg.aov > 0 ? dt5800 / agg.aov : 0 }
+    }).filter((t) => t.dt5800 > 0).sort((a, b) => b.dt5800 - a.dt5800)
   }, [marketerSp, stats, hoanByTeam])
 
-  const rows = useMemo(() => teams.map((m) => {
-    const dtGuiVnd = m.rm * inp.tyGia
-    const loiNhuan = m.lai5800 + m.rm * (inp.tyGia - BOOK_RATE)
-    return { name: m.name, dtGuiVnd, pctCpqc: m.cpqc, hoanRate: m.hoan, loiNhuan, tySuat: dtGuiVnd > 0 ? loiNhuan / dtGuiVnd : 0 }
-  }).sort((a, b) => b.loiNhuan - a.loiNhuan), [teams, inp.tyGia])
+  // P&L LIVE: DT/hoàn/vốn theo tỷ giá; ads = VNĐ cố định; CPVC/CPVH = knob × RM × 5800.
+  const rows = useMemo(() => teams.map((t) => {
+    const DT = t.rm * inp.tyGia
+    const von = t.vonFrac * DT, cpvc = inp.cpvcPct * t.rm * BOOK_RATE, cpvh = inp.cpvhPct * t.rm * BOOK_RATE
+    const loiNhuan = DT - t.hoanFrac * DT - von - t.adsVnd - cpvc - cpvh
+    return { name: t.name, dtGuiVnd: DT, pctCpqc: t.cpqcFrac, hoanRate: t.hoanDisplay, loiNhuan, tySuat: DT > 0 ? loiNhuan / DT : 0 }
+  }).sort((a, b) => b.loiNhuan - a.loiNhuan), [teams, inp])
 
   const co = useMemo(() => {
-    const rmAll = teams.reduce((s, m) => s + m.rm, 0)
-    const dt = rmAll * inp.tyGia
-    const lai5800 = teams.reduce((s, m) => s + m.lai5800, 0)
-    const ln = lai5800 + rmAll * (inp.tyGia - BOOK_RATE)
-    const cpqcVnd = teams.reduce((s, m) => s + m.cpqc * m.dtVnd, 0)
-    const dt5800 = rmAll * BOOK_RATE
-    const hoanVnd = teams.reduce((s, m) => s + m.hoan * m.dtVnd, 0)
-    const pctHoan = dt5800 > 0 ? hoanVnd / dt5800 : 0
-    const pctCpqc = dt5800 > 0 ? cpqcVnd / dt5800 : 0
-    // vốn% company = 1 − lãi% − ads% − ship − vh − hoàn% (suy từ lãi thật engine)
-    const laiPct5800 = dt5800 > 0 ? lai5800 / dt5800 : 0
-    const vonPct = Math.max(0, 1 - laiPct5800 - pctCpqc - SHIP - VH - pctHoan)
-    return { dt, ln, pctCpqc, pctHoan, vonPct, tySuat: dt > 0 ? ln / dt : 0, rmAll }
-  }, [teams, inp.tyGia])
+    let dt = 0, ln = 0, adsV = 0, dt5800 = 0, cogsNetSum = 0, hoanDispVnd = 0, hoanFracVnd = 0
+    for (const t of teams) {
+      const DT = t.rm * inp.tyGia, base = t.rm * BOOK_RATE
+      const cpvc = inp.cpvcPct * base, cpvh = inp.cpvhPct * base
+      dt += DT; dt5800 += base; adsV += t.adsVnd; cogsNetSum += t.vonFrac * base
+      hoanDispVnd += t.hoanDisplay * base; hoanFracVnd += t.hoanFrac * base
+      ln += DT - t.hoanFrac * DT - t.vonFrac * DT - t.adsVnd - cpvc - cpvh
+    }
+    return {
+      dt, ln, tySuat: dt > 0 ? ln / dt : 0,
+      pctCpqc: dt5800 > 0 ? adsV / dt5800 : 0,
+      pctHoan: dt5800 > 0 ? hoanDispVnd / dt5800 : 0,          // hiển thị hoàn theo team (khớp Bảng của tôi)
+      vonFracCo: dt5800 > 0 ? cogsNetSum / dt5800 : 0,
+      hoanFracCo: dt5800 > 0 ? hoanFracVnd / dt5800 : 0,
+    }
+  }, [teams, inp])
 
   const prodRows = useMemo(() => profit.map((p) => {
     const st = stats[p.name.trim().toUpperCase()]
@@ -269,16 +279,17 @@ export default function Cockpit() {
     else if (rangeMode === 'custom' && cFrom && cTo) sel = days.map((d) => d.date).filter((d) => toISO(d) >= cFrom && toISO(d) <= cTo)
     else sel = days.slice(-7).map((d) => d.date)
     const selSet = new Set(sel)
-    const tg = inp.tyGia, hoanRate = co.pctHoan, vonPct = co.vonPct
-    const teamHoan: Record<string, number> = {}; teams.forEach((t) => { teamHoan[t.name] = t.hoan })
-    const calc = (rm: number, cpqc: number, hr: number) => { const dt = rm * tg, hoan = dt * hr, von = vonPct * dt; const cpvc = inp.cpvcPct * rm * BOOK_RATE, cpvh = inp.cpvhPct * rm * BOOK_RATE; return { dt, hoan, von, cpqc, cpvc, cpvh, lai: dt - hoan - von - cpqc - cpvc - cpvh } }
+    const tg = inp.tyGia
+    // CÙNG công thức bảng Marketing: vốn = vonFrac×DT, hoàn = hoanFrac×DT, ads = số ngày thực.
+    const tMap: Record<string, { vonFrac: number; hoanFrac: number }> = {}; teams.forEach((t) => { tMap[t.name] = { vonFrac: t.vonFrac, hoanFrac: t.hoanFrac } })
+    const calc = (rm: number, cpqc: number, vonFrac: number, hoanFrac: number) => { const dt = rm * tg, hoan = hoanFrac * dt, von = vonFrac * dt; const cpvc = inp.cpvcPct * rm * BOOK_RATE, cpvh = inp.cpvhPct * rm * BOOK_RATE; return { dt, hoan, von, cpqc, cpvc, cpvh, lai: dt - hoan - von - cpqc - cpvc - cpvh } }
     const selDays = days.filter((d) => selSet.has(d.date))
     const adsPendingDates = selDays.filter((d) => d.rm > 0 && d.cpqc === 0).map((d) => d.date.slice(0, 5))
-    const series = selDays.map((d) => { const x = calc(d.rm, d.cpqc, hoanRate); return { date: d.date.slice(0, 5), dt: x.dt, lai: x.lai, adsPending: d.rm > 0 && d.cpqc === 0 } })
-    const kpi = selDays.reduce((a, d) => { const x = calc(d.rm, d.cpqc, hoanRate); return { dt: a.dt + x.dt, hoan: a.hoan + x.hoan, von: a.von + x.von, cpqc: a.cpqc + x.cpqc, cpvc: a.cpvc + x.cpvc, cpvh: a.cpvh + x.cpvh, lai: a.lai + x.lai, c2: a.c2 + d.c2 } }, { dt: 0, hoan: 0, von: 0, cpqc: 0, cpvc: 0, cpvh: 0, lai: 0, c2: 0 })
+    const series = selDays.map((d) => { const x = calc(d.rm, d.cpqc, co.vonFracCo, co.hoanFracCo); return { date: d.date.slice(0, 5), dt: x.dt, lai: x.lai, adsPending: d.rm > 0 && d.cpqc === 0 } })
+    const kpi = selDays.reduce((a, d) => { const x = calc(d.rm, d.cpqc, co.vonFracCo, co.hoanFracCo); return { dt: a.dt + x.dt, hoan: a.hoan + x.hoan, von: a.von + x.von, cpqc: a.cpqc + x.cpqc, cpvc: a.cpvc + x.cpvc, cpvh: a.cpvh + x.cpvh, lai: a.lai + x.lai, c2: a.c2 + d.c2 } }, { dt: 0, hoan: 0, von: 0, cpqc: 0, cpvc: 0, cpvh: 0, lai: 0, c2: 0 })
     const byMkt = Object.entries(daily.marketers).map(([name, arr]) => {
-      const hr = teamHoan[name] ?? hoanRate
-      const t = arr.filter((d) => selSet.has(d.date)).reduce((a, d) => { const x = calc(d.rm, d.cpqc, hr); return { dt: a.dt + x.dt, hoan: a.hoan + x.hoan, von: a.von + x.von, cpqc: a.cpqc + x.cpqc, cpvc: a.cpvc + x.cpvc, cpvh: a.cpvh + x.cpvh, lai: a.lai + x.lai, c2: a.c2 + d.c2 } }, { dt: 0, hoan: 0, von: 0, cpqc: 0, cpvc: 0, cpvh: 0, lai: 0, c2: 0 })
+      const tm = tMap[name] ?? { vonFrac: co.vonFracCo, hoanFrac: co.hoanFracCo }
+      const t = arr.filter((d) => selSet.has(d.date)).reduce((a, d) => { const x = calc(d.rm, d.cpqc, tm.vonFrac, tm.hoanFrac); return { dt: a.dt + x.dt, hoan: a.hoan + x.hoan, von: a.von + x.von, cpqc: a.cpqc + x.cpqc, cpvc: a.cpvc + x.cpvc, cpvh: a.cpvh + x.cpvh, lai: a.lai + x.lai, c2: a.c2 + d.c2 } }, { dt: 0, hoan: 0, von: 0, cpqc: 0, cpvc: 0, cpvh: 0, lai: 0, c2: 0 })
       return { name, ...t }
     }).filter((x) => x.dt > 0).sort((a, b) => b.lai - a.lai)
     return { series, kpi, byMkt, nDays: sel.length, adsPendingDates }
