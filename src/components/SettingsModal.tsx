@@ -15,7 +15,7 @@ interface SettingsModalProps {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type SectionId = 'kie' | 'gemini' | 'eleven' | 'fal' | 'shotstack' | 'youtube'
+type SectionId = 'kie' | 'gemini' | 'eleven' | 'fal' | 'wavespeed' | 'shotstack' | 'youtube'
 
 interface ServiceConfig {
   id: SectionId
@@ -77,6 +77,18 @@ const SERVICES: ServiceConfig[] = [
     keyHint: '~$0.005/s · Video-to-video lip-sync giữ nguyên cảnh gốc',
     placeholder: 'fal-...',
     getKeyUrl: 'https://fal.ai/dashboard/keys',
+    getKeyLabel: 'Lấy key →',
+  },
+  {
+    id: 'wavespeed',
+    label: 'WaveSpeed AI',
+    sublabel: 'Lip-sync ảnh + giọng (InfiniteTalk) — cảnh nói Hybrid',
+    color: 'sky',
+    borderColor: 'border-sky-200',
+    bgColor: 'bg-sky-50',
+    keyHint: '~$0.015/s (InfiniteTalk-Fast) · thay KIE khi KIE lipsync nghẽn',
+    placeholder: 'wsk_live_...',
+    getKeyUrl: 'https://wavespeed.ai/dashboard',
     getKeyLabel: 'Lấy key →',
   },
   {
@@ -144,9 +156,9 @@ const BTN_CLASS: Record<string, string> = {
 
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const {
-    kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, youtubeApiKey,
+    kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, wavespeedApiKey, shotstackApiKey, youtubeApiKey,
     kieCredits, theme,
-    setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setFalApiKey, setShotstackApiKey, setYoutubeApiKey,
+    setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setFalApiKey, setWavespeedApiKey, setShotstackApiKey, setYoutubeApiKey,
     setKieCredits, setTheme,
   } = useSettingsStore()
   const addToast = useAppStore((s) => s.addToast)
@@ -157,11 +169,12 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     gemini: geminiApiKey,
     eleven: elevenLabsApiKey,
     fal: falApiKey,
+    wavespeed: wavespeedApiKey,
     shotstack: shotstackApiKey,
     youtube: youtubeApiKey,
   })
   const [shows, setShows] = useState<Record<SectionId, boolean>>({
-    kie: false, gemini: false, eleven: false, fal: false, shotstack: false, youtube: false,
+    kie: false, gemini: false, eleven: false, fal: false, wavespeed: false, shotstack: false, youtube: false,
   })
   const [openSection, setOpenSection] = useState<SectionId | null>(null)
   const [saved, setSaved] = useState(false)
@@ -173,12 +186,12 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
 
   useEffect(() => {
     if (open) {
-      setDrafts({ kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey, fal: falApiKey, shotstack: shotstackApiKey, youtube: youtubeApiKey })
+      setDrafts({ kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey, fal: falApiKey, wavespeed: wavespeedApiKey, shotstack: shotstackApiKey, youtube: youtubeApiKey })
       setSaved(false)
       setTestResults({})
       setOpenSection(null)
     }
-  }, [open, kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, youtubeApiKey])
+  }, [open, kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, wavespeedApiKey, shotstackApiKey, youtubeApiKey])
 
   if (!open) return null
 
@@ -192,7 +205,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const isSaved = (id: SectionId): boolean => {
     const map: Record<SectionId, string> = {
       kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey,
-      fal: falApiKey, shotstack: shotstackApiKey, youtube: youtubeApiKey,
+      fal: falApiKey, wavespeed: wavespeedApiKey, shotstack: shotstackApiKey, youtube: youtubeApiKey,
     }
     return map[id].length > 0
   }
@@ -226,6 +239,16 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           setTestResults((r) => ({ ...r, fal: { ok: false, message: 'API key không hợp lệ hoặc không có quyền truy cập' } }))
         } else {
           setTestResults((r) => ({ ...r, fal: { ok: true, message: 'Kết nối thành công — API key hợp lệ' } }))
+        }
+      } else if (id === 'wavespeed') {
+        // Probe không tốn credit: gọi result 1 taskId rác → 401/403 = key sai; khác = key OK.
+        const res = await fetch('https://api.wavespeed.ai/api/v3/predictions/00000000000000000000000000000000/result', {
+          headers: { Authorization: `Bearer ${key}` },
+        })
+        if (res.status === 401 || res.status === 403) {
+          setTestResults((r) => ({ ...r, wavespeed: { ok: false, message: 'API key không hợp lệ' } }))
+        } else {
+          setTestResults((r) => ({ ...r, wavespeed: { ok: true, message: 'Kết nối thành công — WaveSpeed sẵn sàng' } }))
         }
       } else if (id === 'youtube') {
         const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=test&key=${encodeURIComponent(key)}`)
@@ -264,6 +287,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       setGeminiApiKey(drafts.gemini.trim())
       setElevenLabsApiKey(drafts.eleven.trim())
       setFalApiKey(drafts.fal.trim())
+      setWavespeedApiKey(drafts.wavespeed.trim())
       setShotstackApiKey(drafts.shotstack.trim())
       setYoutubeApiKey(drafts.youtube.trim())
     } catch (err) {
@@ -334,7 +358,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           <div>
             <h2 className="text-base font-bold text-gray-900">Cài đặt</h2>
             <p className="mt-0.5 text-[11px] text-gray-400">
-              {[kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, youtubeApiKey].filter(Boolean).length}/6 dịch vụ đã kết nối
+              {[kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, wavespeedApiKey, shotstackApiKey, youtubeApiKey].filter(Boolean).length}/7 dịch vụ đã kết nối
             </p>
           </div>
           <button

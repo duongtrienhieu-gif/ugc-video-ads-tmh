@@ -94,6 +94,7 @@ interface SettingsState {
   geminiApiKey: string
   elevenLabsApiKey: string
   falApiKey: string
+  wavespeedApiKey: string
   shotstackApiKey: string
   youtubeApiKey: string
   kieCredits: number | null
@@ -114,6 +115,7 @@ interface SettingsState {
   setGeminiApiKey: (key: string) => void
   setElevenLabsApiKey: (key: string) => void
   setFalApiKey: (key: string) => void
+  setWavespeedApiKey: (key: string) => void
   setShotstackApiKey: (key: string) => void
   setYoutubeApiKey: (key: string) => void
   setKieCredits: (credits: number | null) => void
@@ -129,6 +131,8 @@ interface SettingsState {
   hasElevenLabsKey: () => boolean
   getFalApiKey: () => string
   hasFalKey: () => boolean
+  getWavespeedApiKey: () => string
+  hasWavespeedKey: () => boolean
   getShotstackApiKey: () => string
   hasShotstackKey: () => boolean
   getYoutubeApiKey: () => string
@@ -140,6 +144,7 @@ interface StoredSettings {
   geminiApiKey: string
   elevenLabsApiKey: string
   falApiKey: string
+  wavespeedApiKey: string
   shotstackApiKey: string
   youtubeApiKey: string
   kieImageFallbackMode: boolean
@@ -158,6 +163,7 @@ function loadFromStorage(): StoredSettings {
         geminiApiKey:     parsed.geminiApiKey     ?? '',
         elevenLabsApiKey: parsed.elevenLabsApiKey ?? '',
         falApiKey:        parsed.falApiKey        ?? '',
+        wavespeedApiKey:  parsed.wavespeedApiKey  ?? '',
         shotstackApiKey:  parsed.shotstackApiKey  ?? '',
         youtubeApiKey:    parsed.youtubeApiKey    ?? '',
         kieImageFallbackMode: parsed.kieImageFallbackMode ?? false,
@@ -184,7 +190,7 @@ function loadFromStorage(): StoredSettings {
     }
   } catch { /* silent */ }
   // Z30 — first-time users land on v3 (creator-first), not the legacy v1.
-  return { kieApiKey: '', geminiApiKey: '', elevenLabsApiKey: '', falApiKey: '', shotstackApiKey: '', youtubeApiKey: '', kieImageFallbackMode: false, imageModel: 'nano', pipelineVersion: 'v3', theme: 'light' }
+  return { kieApiKey: '', geminiApiKey: '', elevenLabsApiKey: '', falApiKey: '', wavespeedApiKey: '', shotstackApiKey: '', youtubeApiKey: '', kieImageFallbackMode: false, imageModel: 'nano', pipelineVersion: 'v3', theme: 'light' }
 }
 
 function saveToStorage(s: StoredSettings) {
@@ -326,6 +332,7 @@ async function hydrateFromCloud(setStore: (patch: Partial<StoredSettings>) => vo
       geminiApiKey:     cloud.geminiApiKey     ?? '',
       elevenLabsApiKey: cloud.elevenLabsApiKey ?? '',
       falApiKey:        cloud.falApiKey        ?? '',
+      wavespeedApiKey:  cloud.wavespeedApiKey  ?? '',
       shotstackApiKey:  cloud.shotstackApiKey  ?? '',
       youtubeApiKey:    cloud.youtubeApiKey    ?? '',
       kieImageFallbackMode: cloud.kieImageFallbackMode ?? false,
@@ -362,6 +369,7 @@ function getStored(get: () => SettingsState): StoredSettings {
     geminiApiKey:     s.geminiApiKey,
     elevenLabsApiKey: s.elevenLabsApiKey,
     falApiKey:        s.falApiKey,
+    wavespeedApiKey:  s.wavespeedApiKey,
     shotstackApiKey:  s.shotstackApiKey,
     youtubeApiKey:    s.youtubeApiKey,
     kieImageFallbackMode: s.kieImageFallbackMode,
@@ -393,6 +401,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setFalApiKey: (key) => {
     set({ falApiKey: key })
     saveToStorage({ ...getStored(get), falApiKey: key })
+  },
+
+  setWavespeedApiKey: (key) => {
+    set({ wavespeedApiKey: key })
+    saveToStorage({ ...getStored(get), wavespeedApiKey: key })
   },
 
   setShotstackApiKey: (key) => {
@@ -461,6 +474,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   hasFalKey: () => get().falApiKey.length > 0,
 
+  getWavespeedApiKey: () => {
+    const key = get().wavespeedApiKey
+    if (!key) throw new Error('Vui lòng nhập WaveSpeed API key trong Cài đặt')
+    return key
+  },
+
+  hasWavespeedKey: () => get().wavespeedApiKey.length > 0,
+
   getShotstackApiKey: () => {
     const key = get().shotstackApiKey
     if (!key) throw new Error('Vui lòng nhập Shotstack API key trong Cài đặt')
@@ -504,6 +525,7 @@ if (typeof window !== 'undefined') {
           geminiApiKey:     parsed.geminiApiKey     ?? curr.geminiApiKey,
           elevenLabsApiKey: parsed.elevenLabsApiKey ?? curr.elevenLabsApiKey,
           falApiKey:        parsed.falApiKey        ?? curr.falApiKey,
+          wavespeedApiKey:  parsed.wavespeedApiKey  ?? curr.wavespeedApiKey,
           shotstackApiKey:  parsed.shotstackApiKey  ?? curr.shotstackApiKey,
           youtubeApiKey:    parsed.youtubeApiKey    ?? curr.youtubeApiKey,
           kieImageFallbackMode: parsed.kieImageFallbackMode ?? curr.kieImageFallbackMode,
