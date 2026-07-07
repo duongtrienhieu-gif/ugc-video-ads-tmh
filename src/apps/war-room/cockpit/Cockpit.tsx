@@ -23,20 +23,15 @@ const TEAM_KEYS = [
   { key: 'team_titan', name: 'TITAN', label: 'Team TITAN (Tuấn + Anh)' },
   { key: 'team_summit', name: 'SUMMIT', label: 'Team SUMMIT (Hà + Phy)' },
 ]
-const SOURCE_DEFS: { key: string; label: string }[] = [
-  ...TEAM_KEYS.map((m) => ({ key: m.key, label: m.label })),
-  { key: 'tong', label: 'File TỔNG các TEAM (MAR_TH · MAR_NGÀY · SẢN PHẨM_TH)' },
-  { key: 'luongsale', label: 'File LƯƠNG SALE (sheet Salary table)' },
-  { key: 'qlhb', label: 'File QLHB (hoàn Cách A theo SP)' },
-]
-const DEFAULT_SOURCES: Record<string, string> = {
+// Link quản Ở APP KHO & NHẬP HÀNG (board_config chung, Supabase) → Cockpit chỉ ĐỌC, không có
+// panel nhập riêng. Fallback dưới chỉ dùng khi board_config chưa có (dự phòng, tự bám tháng qua Kho).
+const FALLBACK: Record<string, string> = {
   team_apex: 'https://docs.google.com/spreadsheets/d/1BFGlk9lDGqjmpsiG4p813ExdDZL90tVLXqy7izoGKw8/edit',
   team_titan: 'https://docs.google.com/spreadsheets/d/1YEgGsUjiWYHCYv5bpxspoRMhDPe6sUhfRBDrcxrj--I/edit',
   team_summit: 'https://docs.google.com/spreadsheets/d/1A4Mz7aRWM9hYLE9ISqlIyAJoLKY8fjN_XiHtB7czLtQ/edit',
   tong: 'https://docs.google.com/spreadsheets/d/1ZOYU59Dyrwmm7w2Iw-BXAZFX_BL5XFsofFyqWQ2zShQ/edit',
   luongsale: 'https://docs.google.com/spreadsheets/d/1E5SDrQ78IwYzs4NCaJSU2G0slR2Dx8TMBagCS5eNkzk/edit',
 }
-const STORAGE_KEY = 'cockpit_sources_v2'
 
 const FIXED_DEPTS: { ten: string; vnd: number }[] = [
   { ten: 'Vận hành — Ngọc An', vnd: 14_000_000 },
@@ -140,34 +135,29 @@ export default function Cockpit() {
   const [daily, setDaily] = useState<{ company: Day[]; marketers: Record<string, Day[]> }>({ company: [], marketers: {} })
   const [rangeMode, setRangeMode] = useState<'thang' | '7' | 'homqua' | 'homtruoc' | 'custom'>('7')
   const [cFrom, setCFrom] = useState(''); const [cTo, setCTo] = useState('')
-  const [sources, setSources] = useState<Record<string, string>>(() => {
-    try { const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return { ...DEFAULT_SOURCES, ...s } } catch { return { ...DEFAULT_SOURCES } }
-  })
-  const [showCfg, setShowCfg] = useState(false)
-  const [saved, setSaved] = useState(false)
   const [status, setStatus] = useState<'idle' | 'loading' | 'live' | 'error'>('idle')
   const [lastUpdate, setLastUpdate] = useState('')
 
   const POST = (body: unknown) => fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store' }).then((r) => r.json())
 
-  async function loadAll(s: Record<string, string>, boardLinks: Record<string, string>) {
+  // all = link đầy đủ từ board_config (app Kho quản) + fallback. Không có nhập tay ở Cockpit.
+  async function loadAll(all: Record<string, string>) {
     setStatus('loading')
-    const links = pickLinks(s) // team_apex/titan/summit + tong + luongsale
+    const teamLinks = pickLinks(all) // team_apex/titan/summit + tong + luongsale
     try {
       const [t, day, sal, main] = await Promise.all([
-        POST({ cockpit: 'teams', links }),
-        POST({ cockpit: 'daily', links }),
-        POST({ cockpit: 'salary', links }),
-        POST({ links: boardLinks }), // main load → products T7 (parseProducts đã verify)
+        POST({ cockpit: 'teams', links: teamLinks }),
+        POST({ cockpit: 'daily', links: teamLinks }),
+        POST({ cockpit: 'salary', links: teamLinks }),
+        POST({ links: all }), // main load → products T7 (parseProducts đã verify)
       ])
       if (t?.ok) { setTeams(t.teams || []); setStatus('live'); setLastUpdate(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })) }
       else setStatus('error')
       if (day?.ok) setDaily({ company: day.company || [], marketers: day.marketers || {} })
       if (sal?.ok) setSaleSalary(sal.sales || [])
       const prods: Prod[] = main?.products || []
-      // hoàn Cách A theo SP từ QLHB (đè cột %hoàn hay trống ở SẢN PHẨM_TH)
       try {
-        const q = await fetch('/api/qlhb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link: s.qlhb || boardLinks.qlhb || '' }), cache: 'no-store' }).then((r) => r.json())
+        const q = await fetch('/api/qlhb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link: all.qlhb || '' }), cache: 'no-store' }).then((r) => r.json())
         const hoanMap: Record<string, number> = q?.hoanMap || {}
         prods.forEach((p) => { const h = hoanMap[p.name.trim().toUpperCase()]; if (h != null) p.pctHoan = h })
       } catch { /* giữ hoàn file */ }
@@ -175,27 +165,13 @@ export default function Cockpit() {
     } catch { setStatus('error') }
   }
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      const shared = (await loadBoardLinks()) ?? {}
-      if (cancelled) return
-      // Ưu tiên link owner đã lưu tay > board_config (chung, tự bám tháng) > default cứng.
-      const merged: Record<string, string> = { ...DEFAULT_SOURCES }
-      for (const k of ['team_apex', 'team_titan', 'team_summit', 'tong', 'qlhb', 'luongsale']) if (shared[k]) merged[k] = shared[k]
-      try { const local = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); Object.assign(merged, local) } catch { /* ignore */ }
-      setSources(merged)
-      void loadAll(merged, shared)
-    })()
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  function saveSources() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sources))
-    setSaved(true); setTimeout(() => setSaved(false), 2000)
-    void loadAll(sources, sources)
+  async function reload() {
+    const shared = (await loadBoardLinks()) ?? {}
+    const all: Record<string, string> = { ...FALLBACK, ...shared } // board_config đè fallback
+    void loadAll(all)
   }
+
+  useEffect(() => { void reload() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [])
 
   // ── COMPUTE ──────────────────────────────────────────────────────────────────
   // Lãi thật theo tỷ giá: net (sheet @5800) + RM × (tỷ giá − 5800). Chi phí VNĐ cố định không đổi.
@@ -355,31 +331,14 @@ export default function Cockpit() {
           <div style={{ fontSize: 15, fontWeight: 700, color: C.gold }}>🛰 Điều hành — Quản trị TMH Group</div>
           <div style={{ fontSize: 11, color: status === 'live' ? C.green : status === 'error' ? C.red : C.muted, marginTop: 3 }}>
             {status === 'live' ? `● Số thật T7 (3 team) · cập nhật ${lastUpdate} · chỉ CEO thấy` : status === 'loading' ? '● Đang tải số liệu…' : status === 'error' ? '● Lỗi tải — bấm ⟳ Tải lại' : '● Đang tải…'}
+            <span style={{ color: C.muted }}> · link quản ở app <b style={{ color: C.muted2 }}>Kho &amp; Nhập hàng</b></span>
           </div>
         </div>
         <label style={{ fontSize: 11, color: C.muted2 }}>Tỷ giá<br /><input type="number" step={100} value={inp.tyGia} onChange={(e) => set('tyGia', +e.target.value)} style={{ ...numInput, width: 90, marginTop: 4 }} /></label>
         <label style={{ fontSize: 11, color: C.muted2 }}>CPVC %<br /><input type="number" step={0.5} value={+(inp.cpvcPct * 100).toFixed(1)} onChange={(e) => set('cpvcPct', +e.target.value / 100)} style={{ ...numInput, width: 80, marginTop: 4 }} /></label>
         <label style={{ fontSize: 11, color: C.muted2 }}>CPVH %<br /><input type="number" step={0.5} value={+(inp.cpvhPct * 100).toFixed(1)} onChange={(e) => set('cpvhPct', +e.target.value / 100)} style={{ ...numInput, width: 80, marginTop: 4 }} /></label>
-        <button onClick={() => void loadAll(sources, sources)} disabled={status === 'loading'} style={{ background: 'transparent', color: C.muted2, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer' }}>⟳ Tải lại</button>
-        <button onClick={() => setShowCfg((v) => !v)} style={{ background: 'transparent', color: C.gold, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer' }}>⚙ Link {showCfg ? '▲' : '▼'}</button>
+        <button onClick={() => void reload()} disabled={status === 'loading'} style={{ background: 'transparent', color: C.muted2, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer' }}>⟳ Tải lại</button>
       </div>
-
-      {showCfg && (
-        <div style={panelStyle}>
-          <div style={{ ...eyebrowStyle, marginBottom: 4 }}>⚙ CẤU HÌNH NGUỒN DỮ LIỆU (tháng mới dán vào đây)</div>
-          <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Dán link Google Sheet đã công khai. Link team/tong/qlhb tự lấy từ cấu hình chung (board_config) — dán ở đây để đè riêng máy này.</div>
-          {SOURCE_DEFS.map((d) => (
-            <div key={d.key} style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, color: C.gold, marginBottom: 5 }}>{d.label}</div>
-              <input value={sources[d.key] || ''} onChange={(e) => setSources((s) => ({ ...s, [d.key]: e.target.value }))} placeholder="https://docs.google.com/spreadsheets/d/..." style={{ width: '100%', ...numInput, fontSize: 13 }} />
-            </div>
-          ))}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
-            <button onClick={saveSources} style={{ background: C.gold, color: '#1a1405', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Lưu &amp; tải lại</button>
-            {saved && <span style={{ color: C.green, fontSize: 13 }}>✓ Đã lưu</span>}
-          </div>
-        </div>
-      )}
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         {([['tong', '🏠 Tổng quan'], ['mkt', '📣 Marketing'], ['luong', '💰 Tổng lương']] as const).map(([k, lbl]) => (

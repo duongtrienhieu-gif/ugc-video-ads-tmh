@@ -40,6 +40,7 @@ const SOURCE_DEFS: { key: string; label: string }[] = [
   { key: 'team_apex', label: 'File TEAM APEX (Duy + Khánh — sheet BÁO CÁO SẢN PHẨM)' },
   { key: 'team_titan', label: 'File TEAM TITAN (Tuấn + Anh — sheet BÁO CÁO SẢN PHẨM)' },
   { key: 'team_summit', label: 'File TEAM SUMMIT (Hà + Phy — sheet BÁO CÁO SẢN PHẨM)' },
+  { key: 'luongsale', label: 'File LƯƠNG SALE (sheet Salary table — cho Cockpit Điều hành)' },
 ]
 // Default = link THÁNG 7/2026. Chỉ là dự phòng — link chính lấy từ board_config (Supabase),
 // chủ dán tháng mới là cả công ty nhảy tháng. Đổi tháng: dán ở ⚙ Cấu hình → Lưu.
@@ -54,6 +55,7 @@ const DEFAULT_SOURCES: Record<string, string> = {
   team_apex: 'https://docs.google.com/spreadsheets/d/1BFGlk9lDGqjmpsiG4p813ExdDZL90tVLXqy7izoGKw8/edit',
   team_titan: 'https://docs.google.com/spreadsheets/d/1YEgGsUjiWYHCYv5bpxspoRMhDPe6sUhfRBDrcxrj--I/edit',
   team_summit: 'https://docs.google.com/spreadsheets/d/1A4Mz7aRWM9hYLE9ISqlIyAJoLKY8fjN_XiHtB7czLtQ/edit',
+  luongsale: 'https://docs.google.com/spreadsheets/d/1E5SDrQ78IwYzs4NCaJSU2G0slR2Dx8TMBagCS5eNkzk/edit',
 }
 const STORAGE_KEY = 'inv_board_sources'
 const GOOD_KEY = 'inv_board_lastgood' // cache "số tốt gần nhất" để load lỗi vẫn hiện đủ số
