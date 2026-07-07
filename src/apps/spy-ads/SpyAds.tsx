@@ -1162,19 +1162,25 @@ CHỈ trả JSON.`
               <p className="-mt-1 text-[11px] font-medium text-amber-600">⚠️ Từ khóa hơi dài — FB khớp theo copy tiếng Malay. Gõ <b>2-3 từ ngách</b> (vd "sakit lutut", "krim mata") sẽ ra nhiều ad hơn tên SP đầy đủ.</p>
             )}
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-medium text-slate-400">Ngách gợi ý:</span>
-              <button onClick={() => setChipsOpen((v) => !v)}
-                className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-600 lg:hidden">
-                Gợi ý {chipsOpen ? '▴' : '▾'}
-              </button>
-              <div className={`${chipsOpen ? 'contents' : 'hidden'} lg:contents`}>
-                {COD_CHIPS.map((c) => (
-                  <button key={c} onClick={() => void (platform === 'google' ? searchGoogle(c) : search(c))} disabled={loading || gBusy}
-                    className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50">
-                    {c}
+              {platform === 'google' ? (
+                <span className="text-[11px] font-medium text-amber-600">💡 Google tra theo <b>tên brand/đối thủ</b> (vd JointLief, Nexta Media) hoặc domain — KHÔNG phải ngách. Gõ tên vào ô trên.</span>
+              ) : (
+                <>
+                  <span className="text-[11px] font-medium text-slate-400">Ngách gợi ý:</span>
+                  <button onClick={() => setChipsOpen((v) => !v)}
+                    className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-600 lg:hidden">
+                    Gợi ý {chipsOpen ? '▴' : '▾'}
                   </button>
-                ))}
-              </div>
+                  <div className={`${chipsOpen ? 'contents' : 'hidden'} lg:contents`}>
+                    {COD_CHIPS.map((c) => (
+                      <button key={c} onClick={() => void search(c)} disabled={loading}
+                        className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50">
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
               <div className="ml-auto flex items-center gap-2">
                 {ads && ads.length > 0 && (
                   <>
