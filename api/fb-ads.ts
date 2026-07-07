@@ -83,7 +83,7 @@ function deepFind(obj: unknown, test: (s: string) => boolean, depth = 0): string
   if (typeof obj === 'object') { for (const k in obj as Record<string, unknown>) { const r = deepFind((obj as Record<string, unknown>)[k], test, depth + 1); if (r) return r } return '' }
   return ''
 }
-const isVideoUrl = (s: string) => /^https?:\/\//i.test(s) && /\.mp4|googlevideo|videoplayback|\.m3u8|\/video[_/]|tpc\.googlesyndication.*video/i.test(s)
+const isVideoUrl = (s: string) => /^https?:\/\//i.test(s) && /\.mp4|googlevideo|videoplayback|\.m3u8|youtube\.com\/(watch|embed|shorts)|youtu\.be\/|\/video[_/]|tpc\.googlesyndication.*video/i.test(s)
 const isImageUrl = (s: string) => /^https?:\/\//i.test(s) && /\.(jpe?g|png|webp|gif)(\?|$)|googleusercontent|tpc\.googlesyndication|ggpht/i.test(s)
 function toMs(v: unknown): number {
   if (v == null) return 0
