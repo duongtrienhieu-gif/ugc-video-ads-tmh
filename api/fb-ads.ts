@@ -145,44 +145,48 @@ async function handleGoogle(req: VercelRequest, res: VercelResponse, key: string
     const now = Date.now()
     const ads = arr
       .map((a, i) => {
-        const vars = Array.isArray(a.variations) ? (a.variations as Record<string, unknown>[]) : []
-        const v = (vars[0] || (a.variation as Record<string, unknown>) || {}) as Record<string, unknown>
-        // Video: thử field rõ trước, không có thì DÒ ĐỆ QUY cả object (schema Google hay lồng/đổi tên).
-        const videoUrl = firstStr(a.videoUrl, a.video_url, a.video, v.videoUrl, v.video_url, v.video) || deepFind(a, isVideoUrl)
-        const cover = firstStr(v.imageUrl, v.image_url, a.imageUrl, a.image_url, a.thumbnail) || deepFind(a, isImageUrl)
+        // Google video ad = video YOUTUBE (không có mp4 CDN). Data nằm trong variations[].
+        const varsAll = Array.isArray(a.variations) ? (a.variations as Record<string, unknown>[]) : []
+        const pickVar = (k: string) => { for (const vv of varsAll) { const s = firstStr(vv[k]); if (s) return s } return '' }
+        const videoId = pickVar('videoId')
+        // videoUrl chỉ set khi CÓ mp4 trực tiếp (hiếm); YouTube thì để trống → frontend nhúng theo youtubeId.
+        const directVideo = firstStr(a.videoUrl, a.video_url) || deepFind(a, (s) => isVideoUrl(s) && !/youtube\.com|youtu\.be/i.test(s))
+        const cover = (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '') || pickVar('image') || deepFind(a, isImageUrl)
         const firstMs = toMs(a.firstShown ?? a.first_shown)
         const lastMs = toMs(a.lastShown ?? a.last_shown)
-        const daysRunning = firstMs && lastMs ? Math.max(0, Math.floor((lastMs - firstMs) / 86400000))
-          : (firstMs ? Math.max(0, Math.floor((now - firstMs) / 86400000)) : 0)
+        const daysRunning = firstMs && lastMs ? Math.max(0, Math.floor((lastMs - firstMs) / 86400000)) : 0
         const advId = firstStr(a.advertiserId, a.advertiser_id) || advertiserId
         const creativeId = firstStr(a.creativeId, a.creative_id, a.id) || `${advId}-${i}`
+        const headline = pickVar('headline'); const description = pickVar('description')
         return {
           id: creativeId,
           page: advName || 'advertiser',
           pageId: advId,
-          text: firstStr(v.headline, v.description, v.allText, a.text).slice(0, 300),
-          videoUrl,
+          text: `${headline}${headline && description ? ' — ' : ''}${description}`.slice(0, 300),
+          videoUrl: directVideo,
+          youtubeId: videoId || undefined,          // video YouTube → nhúng/tải theo id
           cover,
-          linkUrl: firstStr(v.destinationUrl, v.destination_url, a.destinationUrl),
-          country: region || regionRaw,   // ALL → 'ALL' để lưới không lọc nhầm theo nước
-          isActive: lastMs ? (now - lastMs) < 14 * 86400000 : true,   // Google không có cờ active → suy từ lastShown (≤14 ngày = còn sống)
+          linkUrl: pickVar('destinationUrl'),        // ladipage đích của đối thủ
+          country: region || regionRaw,              // ALL → 'ALL' để lưới không lọc nhầm theo nước
+          isActive: lastMs ? (now - lastMs) < 14 * 86400000 : true,   // Google không có cờ active → suy từ lastShown
           daysRunning,
           startTs: firstMs,
           advertiserAds: arr.length,
-          variations: vars.length,
+          variations: varsAll.length,
           format: firstStr(a.format),
-          libraryUrl: firstStr(a.adUrl, a.ad_url) || (advId && creativeId ? `https://adstransparency.google.com/advertiser/${advId}/creative/${creativeId}?region=${region}` : ''),
+          cta: pickVar('callToAction'),
+          libraryUrl: firstStr(a.url, a.adUrl) || (advId && creativeId ? `https://adstransparency.google.com/advertiser/${advId}/creative/${creativeId}?region=${region}` : ''),
         }
       })
-      .filter((a) => a.id)   // GIỮ MỌI ad (kể cả chưa dò ra video) → luôn hiện lưới; video dò sau nếu thiếu
-    const withVideo = ads.filter((a) => a.videoUrl).length
+      .filter((a) => a.id)   // GIỮ MỌI ad
+    const withVideo = ads.filter((a) => a.videoUrl || a.youtubeId).length
     const first = arr[0] as Record<string, unknown> | undefined
     return res.status(200).json({
       ads: ads.slice(0, 120), advertiserName: advName, cursor: null, hasMore: false,
       credits: (d.credits_remaining as number | undefined) ?? null, creditCost: 25,
       rawCount: arr.length, withVideo,
-      // debug schema (LUÔN kèm): keys + MỌI url + 1 ad thô → chỉ đúng field video/tải, KHÔNG tốn thêm credit.
-      debug: first ? JSON.stringify({ keys: Object.keys(first), urls: collectUrls(first).slice(0, 50), sample: JSON.stringify(first).slice(0, 2500) }) : undefined,
+      // debug schema (chỉ khi 0 video phát được): keys + MỌI url + 1 ad thô → chỉ đúng field.
+      debug: withVideo === 0 && first ? JSON.stringify({ keys: Object.keys(first), urls: collectUrls(first).slice(0, 50), sample: JSON.stringify(first).slice(0, 2500) }) : undefined,
     })
   } catch (e) {
     return res.status(500).json({ error: (e as Error).message })

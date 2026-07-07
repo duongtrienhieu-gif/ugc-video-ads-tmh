@@ -13,6 +13,7 @@ interface FbAd {
   id: string; page: string; pageId?: string; text: string; videoUrl: string; cover: string
   linkUrl: string; country: string; isActive: boolean; daysRunning: number
   startTs?: number   // mốc bắt đầu chạy (ms) — sort "Mới nhất" chuẩn hơn daysRunning
+  youtubeId?: string   // Google/YT ad = video YouTube → nhúng/tải theo id (không có mp4 CDN)
   advertiserAds: number; libraryUrl: string; likes?: number; ctr?: string
   variations?: number; cta?: string; platforms?: string[]; format?: string
   reach?: number; spend?: string; currency?: string; durationSec?: number
@@ -891,6 +892,8 @@ CHỈ trả JSON.`
   const selectMany = (list: FbAd[]) => setSelected((s) => { const n = new Set(s); list.forEach((a) => n.add(a.id)); return n })
   const dlName = (a: FbAd, i: number) => `${(a.page || 'ad').replace(/[^\w]+/g, '-').slice(0, 30)}-${i + 1}-${a.id}.mp4`
   const downloadOne = (a: FbAd, i = 0) => {
+    // Google/YT ad = video YouTube (không có mp4 CDN để proxy) → mở YouTube để xem/tải bằng công cụ ngoài.
+    if (!a.videoUrl && a.youtubeId) { window.open(`https://www.youtube.com/watch?v=${a.youtubeId}`, '_blank', 'noopener'); return }
     if (!a.videoUrl) return
     const href = `/api/dl-video?url=${encodeURIComponent(a.videoUrl)}&name=${encodeURIComponent(dlName(a, i))}`
     const el = document.createElement('a'); el.href = href; el.download = dlName(a, i)
@@ -1785,11 +1788,13 @@ CHỈ trả JSON.`
           <div className="relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white lg:flex-row" onClick={(e) => e.stopPropagation()}>
             <button onClick={closeAd} className="absolute right-2 top-2 z-10 rounded-full bg-black/50 p-1.5 text-white hover:bg-black/70"><X className="h-5 w-5" /></button>
             <div className="flex shrink-0 items-center justify-center bg-black lg:w-[44%]">
-              {playAd.videoUrl
-                ? <video src={playAd.videoUrl} controls autoPlay playsInline className="max-h-[40vh] w-full object-contain lg:max-h-[92vh]" />
-                : playAd.cover
-                  ? <img src={playAd.cover} alt="" className="max-h-[40vh] w-full object-contain lg:max-h-[92vh]" />
-                  : <div className="flex h-40 w-full items-center justify-center text-xs text-white/60">Ad ảnh — mở Ad Library để xem</div>}
+              {playAd.youtubeId
+                ? <iframe title="yt" src={`https://www.youtube.com/embed/${playAd.youtubeId}?autoplay=1&rel=0`} allow="autoplay; encrypted-media" allowFullScreen className="aspect-[9/16] max-h-[40vh] w-full lg:max-h-[92vh]" />
+                : playAd.videoUrl
+                  ? <video src={playAd.videoUrl} controls autoPlay playsInline className="max-h-[40vh] w-full object-contain lg:max-h-[92vh]" />
+                  : playAd.cover
+                    ? <img src={playAd.cover} alt="" className="max-h-[40vh] w-full object-contain lg:max-h-[92vh]" />
+                    : <div className="flex h-40 w-full items-center justify-center text-xs text-white/60">Ad ảnh — mở Ad Library để xem</div>}
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
               <p className="text-xs font-semibold text-slate-700">{playAd.page}</p>
@@ -1930,7 +1935,7 @@ CHỈ trả JSON.`
                   </button>
                 )}
                 <button onClick={() => downloadOne(playAd)} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100">
-                  <Download className="h-3.5 w-3.5" /> Tải video
+                  <Download className="h-3.5 w-3.5" /> {playAd.youtubeId ? '▶ Mở YouTube' : 'Tải video'}
                 </button>
                 {playAd.libraryUrl && (
                   <a href={playAd.libraryUrl} target="_blank" rel="noopener noreferrer" className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-black/10 bg-slate-50 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">
