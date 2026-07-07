@@ -75,6 +75,16 @@ function pickArr(d: Record<string, unknown>, keys: string[]): Record<string, unk
   return []
 }
 function firstStr(...xs: unknown[]): string { for (const x of xs) if (typeof x === 'string' && x) return x; return '' }
+// Dò đệ quy URL trong object (schema Google/SC hay lồng sâu + đổi tên field video).
+function deepFind(obj: unknown, test: (s: string) => boolean, depth = 0): string {
+  if (depth > 6 || obj == null) return ''
+  if (typeof obj === 'string') return test(obj) ? obj : ''
+  if (Array.isArray(obj)) { for (const x of obj) { const r = deepFind(x, test, depth + 1); if (r) return r } return '' }
+  if (typeof obj === 'object') { for (const k in obj as Record<string, unknown>) { const r = deepFind((obj as Record<string, unknown>)[k], test, depth + 1); if (r) return r } return '' }
+  return ''
+}
+const isVideoUrl = (s: string) => /^https?:\/\//i.test(s) && /\.mp4|googlevideo|videoplayback|\.m3u8|\/video[_/]|tpc\.googlesyndication.*video/i.test(s)
+const isImageUrl = (s: string) => /^https?:\/\//i.test(s) && /\.(jpe?g|png|webp|gif)(\?|$)|googleusercontent|tpc\.googlesyndication|ggpht/i.test(s)
 function toMs(v: unknown): number {
   if (v == null) return 0
   if (typeof v === 'number') return v > 1e12 ? v : v * 1000
@@ -129,8 +139,9 @@ async function handleGoogle(req: VercelRequest, res: VercelResponse, key: string
       .map((a, i) => {
         const vars = Array.isArray(a.variations) ? (a.variations as Record<string, unknown>[]) : []
         const v = (vars[0] || (a.variation as Record<string, unknown>) || {}) as Record<string, unknown>
-        const videoUrl = firstStr(a.videoUrl, a.video_url, a.video, v.videoUrl, v.video_url, v.video)
-        const cover = firstStr(v.imageUrl, v.image_url, a.imageUrl, a.image_url, a.thumbnail)
+        // Video: thử field rõ trước, không có thì DÒ ĐỆ QUY cả object (schema Google hay lồng/đổi tên).
+        const videoUrl = firstStr(a.videoUrl, a.video_url, a.video, v.videoUrl, v.video_url, v.video) || deepFind(a, isVideoUrl)
+        const cover = firstStr(v.imageUrl, v.image_url, a.imageUrl, a.image_url, a.thumbnail) || deepFind(a, isImageUrl)
         const firstMs = toMs(a.firstShown ?? a.first_shown)
         const lastMs = toMs(a.lastShown ?? a.last_shown)
         const daysRunning = firstMs && lastMs ? Math.max(0, Math.floor((lastMs - firstMs) / 86400000))
@@ -152,11 +163,18 @@ async function handleGoogle(req: VercelRequest, res: VercelResponse, key: string
           advertiserAds: arr.length,
           variations: vars.length,
           format: firstStr(a.format),
-          libraryUrl: advId && creativeId ? `https://adstransparency.google.com/advertiser/${advId}/creative/${creativeId}?region=${region}` : '',
+          libraryUrl: firstStr(a.adUrl, a.ad_url) || (advId && creativeId ? `https://adstransparency.google.com/advertiser/${advId}/creative/${creativeId}?region=${region}` : ''),
         }
       })
-      .filter((a) => a.id && (a.videoUrl || a.cover))   // giữ ad có video HOẶC ảnh (bỏ ad text trần)
-    return res.status(200).json({ ads: ads.slice(0, 80), advertiserName: advName, cursor: null, hasMore: false, credits: (d.credits_remaining as number | undefined) ?? null, creditCost: 25 })
+      .filter((a) => a.id)   // GIỮ MỌI ad (kể cả chưa dò ra video) → luôn hiện lưới; video dò sau nếu thiếu
+    const withVideo = ads.filter((a) => a.videoUrl).length
+    return res.status(200).json({
+      ads: ads.slice(0, 120), advertiserName: advName, cursor: null, hasMore: false,
+      credits: (d.credits_remaining as number | undefined) ?? null, creditCost: 25,
+      rawCount: arr.length, withVideo,
+      // debug schema: nếu dò không ra video, gửi kèm 1 ad thô để chỉnh field cho đúng (không tốn thêm credit).
+      sample: withVideo === 0 && arr.length ? JSON.stringify(arr[0]).slice(0, 1800) : undefined,
+    })
   } catch (e) {
     return res.status(500).json({ error: (e as Error).message })
   }

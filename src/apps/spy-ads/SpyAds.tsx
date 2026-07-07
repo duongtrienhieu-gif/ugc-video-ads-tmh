@@ -214,6 +214,7 @@ export default function SpyAds() {
   const [gBusy, setGBusy] = useState(false)
   const [gRadarBusy, setGRadarBusy] = useState(false)          // 🛰 quét advertiser MY (sweep seed → gom tên)
   const [gRadarDone, setGRadarDone] = useState(0)
+  const [gDebug, setGDebug] = useState<string | null>(null)    // ad thô khi chưa dò ra video → copy gửi fix schema
   // 📺 Video theo kênh — dán tên kênh/link/id → tải TẤT CẢ video kênh (kể cả video dính giỏ TikTok Shop).
   const [chInput, setChInput] = useState('')
   const [chSort, setChSort] = useState<'latest' | 'popular'>('latest') // latest = khớp thứ tự tiktok.com
@@ -365,7 +366,7 @@ export default function SpyAds() {
     const raw = (term ?? q).trim()
     if (!raw) { setError('Nhập tên đối thủ / domain (vd: nexta, shopee.com.my)'); return }
     if (term != null) setQ(term)
-    setViewPageId(null); setViewPageName(null); setAds(null); setCursor(null); setHasMore(false)
+    setViewPageId(null); setViewPageName(null); setAds(null); setCursor(null); setHasMore(false); setGDebug(null)
     // domain-like (có dấu chấm, không khoảng trắng) → kéo ads thẳng theo domain
     if (/^[^\s]+\.[^\s]+$/.test(raw)) { await openGoogleAdvertiser('', raw, raw); return }
     setGBusy(true); setError(null); setGAdvertisers(null); setGView('list')
@@ -386,12 +387,20 @@ export default function SpyAds() {
       const p = advId ? `advertiserId=${encodeURIComponent(advId)}` : `domain=${encodeURIComponent(domain || '')}`
       const d = await fetch(`/api/fb-ads?source=google&op=ads&${p}&region=${country}`).then((r) => r.json())
       if (d.error) { setError(d.error); return }
-      setAds(Array.isArray(d.ads) ? d.ads : [])
+      const list: FbAd[] = Array.isArray(d.ads) ? d.ads : []
+      setAds(list)
       setViewPageName(d.advertiserName || name); setViewPageId(advId || null)
       setGView('ads')
       setCredits(d.credits ?? credits)
       setCursor(null); setHasMore(false)   // Google 1-shot: KHÔNG auto load-more (tránh đốt 25cr/lần bấm)
-      if (!d.ads?.length) setError('Advertiser này không có creative public (một số ad phải đăng nhập Google mới xem được).')
+      setGDebug(d.sample || null)           // schema thô để chỉnh field khi chưa dò ra video
+      if (!list.length) {
+        setError(Number(d.rawCount) === 0
+          ? `Advertiser này 0 ad ở "${country}". Thử đổi nước sang 🌏 (Mọi vị trí) rồi mở lại.`
+          : 'Advertiser này không có creative public (một số ad phải đăng nhập Google mới xem được).')
+      } else if (Number(d.withVideo) === 0) {
+        setError(`Kéo được ${list.length} ad nhưng CHƯA dò ra link video — schema Google. Copy ô debug bên dưới gửi Hiếu để fix.`)
+      }
     } catch (e) { setError((e as Error).message) } finally { setGBusy(false); setLoading(false) }
   }
 
@@ -1513,6 +1522,14 @@ CHỈ trả JSON.`
           </div>
         )}
         {mode === 'ads' && loading && <div className="py-10 text-center text-sm text-slate-400">{platform === 'fb' ? 'Đang quét Facebook Ad Library…' : platform === 'google' ? 'Đang kéo kho ad Google (25cr)…' : 'Đang quét TikTok Top Ads…'}</div>}
+        {mode === 'ads' && platform === 'google' && gDebug && (
+          <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs">
+            <div className="mb-1 font-semibold text-amber-700">🔧 Chưa dò ra link video của Google — copy đoạn dưới gửi Hiếu để fix đúng field:</div>
+            <textarea readOnly value={gDebug} onClick={(e) => e.currentTarget.select()} className="h-24 w-full rounded border border-amber-200 bg-white p-2 font-mono text-[10px] text-slate-600" />
+            <button onClick={() => { void navigator.clipboard.writeText(gDebug); addToast('Đã copy debug schema', 'success') }}
+              className="mt-1 rounded bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-700">📋 Copy gửi Hiếu</button>
+          </div>
+        )}
         {(mode === 'ads' || mode === 'radar') && ads && ads.length > 0 && (
           <>
             <div className="mb-2 text-xs font-semibold text-slate-500">
