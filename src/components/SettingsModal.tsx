@@ -91,30 +91,8 @@ const SERVICES: ServiceConfig[] = [
     getKeyUrl: 'https://wavespeed.ai/dashboard',
     getKeyLabel: 'Lấy key →',
   },
-  {
-    id: 'shotstack',
-    label: 'Shotstack',
-    sublabel: 'Ghép video · Overlay avatar · Auto assembly',
-    color: 'orange',
-    borderColor: 'border-orange-200',
-    bgColor: 'bg-orange-50',
-    keyHint: '$29/mo · 200 renders · Dùng cho UGC Video Builder',
-    placeholder: 'your_api_key...',
-    getKeyUrl: 'https://dashboard.shotstack.io/register',
-    getKeyLabel: 'Đăng ký →',
-  },
-  {
-    id: 'youtube',
-    label: 'YouTube Data API',
-    sublabel: 'Tìm Source Video · YT Search',
-    color: 'sky',
-    borderColor: 'border-sky-200',
-    bgColor: 'bg-sky-50',
-    keyHint: 'Miễn phí · 10,000 units/ngày (~100 search) · Cần bật YouTube Data API v3 trong Google Cloud Console',
-    placeholder: 'AIza...',
-    getKeyUrl: 'https://console.cloud.google.com/apis/library/youtube.googleapis.com',
-    getKeyLabel: 'Lấy key →',
-  },
+  // Shotstack + YouTube ẩn khỏi Cài đặt (ít dùng). Field vẫn giữ trong store để VideoBuilder
+  // (còn đọc shotstackApiKey) không lỗi. Muốn bật lại: thêm entry vào SERVICES.
 ]
 
 // ── Color maps ─────────────────────────────────────────────────────────────────
@@ -358,7 +336,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           <div>
             <h2 className="text-base font-bold text-gray-900">Cài đặt</h2>
             <p className="mt-0.5 text-[11px] text-gray-400">
-              {[kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, wavespeedApiKey, shotstackApiKey, youtubeApiKey].filter(Boolean).length}/7 dịch vụ đã kết nối
+              {[kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, wavespeedApiKey].filter(Boolean).length}/5 dịch vụ đã kết nối
             </p>
           </div>
           <button
