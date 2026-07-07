@@ -212,6 +212,8 @@ export default function SpyAds() {
   const [gAdvertisers, setGAdvertisers] = useState<{ id: string; name: string; domain?: string }[] | null>(null)
   const [gView, setGView] = useState<'list' | 'ads'>('list')   // list = danh sách advertiser · ads = creative của 1 advertiser
   const [gBusy, setGBusy] = useState(false)
+  const [gRadarBusy, setGRadarBusy] = useState(false)          // 🛰 quét advertiser MY (sweep seed → gom tên)
+  const [gRadarDone, setGRadarDone] = useState(0)
   // 📺 Video theo kênh — dán tên kênh/link/id → tải TẤT CẢ video kênh (kể cả video dính giỏ TikTok Shop).
   const [chInput, setChInput] = useState('')
   const [chSort, setChSort] = useState<'latest' | 'popular'>('latest') // latest = khớp thứ tự tiktok.com
@@ -391,6 +393,29 @@ export default function SpyAds() {
       setCursor(null); setHasMore(false)   // Google 1-shot: KHÔNG auto load-more (tránh đốt 25cr/lần bấm)
       if (!d.ads?.length) setError('Advertiser này không có creative public (một số ad phải đăng nhập Google mới xem được).')
     } catch (e) { setError((e as Error).message) } finally { setGBusy(false); setLoading(false) }
+  }
+
+  // 🛰 GOOGLE RADAR — KHÔNG cần biết tên đối thủ: sweep bộ seed ngách qua "tìm advertiser"
+  // (region theo dropdown) → gom TÊN advertiser trả về → người chọn ai để kéo ad (25cr).
+  // Rẻ: mỗi seed ~1cr (chỉ advertiser search, chưa kéo creative). Best-effort: Google khớp
+  // theo TÊN advertiser nên seller tên generic có thể lọt lưới — Google MY vốn mỏng cho COD.
+  const runGoogleRadar = async () => {
+    const seeds = RADAR_SEEDS
+    if (!window.confirm(`Quét ${seeds.length} ngách để dò tên advertiser (${country})?\nTốn ~${seeds.length} credit (chỉ dò tên, chưa kéo video).`)) return
+    setGRadarBusy(true); setError(null); setGAdvertisers(null); setGView('list'); setGRadarDone(0)
+    const seen = new Map<string, { id: string; name: string; domain?: string }>()
+    try {
+      await poolRun(seeds, 4, async (seed) => {
+        try {
+          const d = await fetch(`/api/fb-ads?source=google&op=advertisers&q=${encodeURIComponent(seed)}&region=${country}`).then((r) => r.json())
+          if (Array.isArray(d.advertisers)) for (const a of d.advertisers) { if (a?.id && !seen.has(a.id)) seen.set(a.id, a) }
+          if (d?.credits != null) setCredits(d.credits)
+        } catch { /* 1 seed lỗi → bỏ qua */ }
+        setGRadarDone((n) => n + 1)
+      })
+      setGAdvertisers([...seen.values()])
+      if (!seen.size) setError(`Quét 0 advertiser (${country}). Google Transparency rất mỏng cho COD MY — đa số seller MY chỉ chạy FB/TikTok. Thử đổi nước 🌏 hoặc dùng FB/TikTok để discovery.`)
+    } catch (e) { setError((e as Error).message) } finally { setGRadarBusy(false) }
   }
 
   // 🛰 RADAR — quét đối thủ MY KHÔNG cần từ khóa: sweep bộ seed COD → gộp → xếp winner.
@@ -1439,9 +1464,13 @@ CHỈ trả JSON.`
         {/* 🔴 GOOGLE bước 1 — danh sách advertiser (rẻ). Bấm 1 advertiser mới kéo creative (25cr). */}
         {mode === 'ads' && platform === 'google' && gView === 'list' && gAdvertisers && (
           <>
-            <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
               <span className="font-semibold">{gAdvertisers.length} advertiser</span> · bấm để kéo kho ad
               <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-700">⚠ 25 credit / advertiser</span>
+              <button onClick={() => void runGoogleRadar()} disabled={gRadarBusy}
+                className="ml-auto rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50">
+                🛰 {gRadarBusy ? `Đang dò… ${gRadarDone}/${RADAR_SEEDS.length}` : 'Quét lại advertiser'}
+              </button>
             </div>
             {gAdvertisers.length === 0 ? (
               <div className="py-8 text-center text-sm text-slate-400">Không có advertiser — thử tên đối thủ khác.</div>
@@ -1469,6 +1498,11 @@ CHỈ trả JSON.`
               <>
                 <p className="text-sm">Nhập <b>tên đối thủ / domain</b> → <b>Tìm advertiser</b> (rẻ ~1cr).</p>
                 <p className="text-xs">Chọn advertiser để kéo kho ad Google/YouTube (<b>25cr/advertiser</b>). Mạnh nhất khi soi 1 đối thủ đã biết.</p>
+                <p className="text-[11px] text-slate-400">— hoặc KHÔNG biết tên đối thủ? —</p>
+                <button onClick={() => void runGoogleRadar()} disabled={gRadarBusy}
+                  className="mt-1 rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">
+                  🛰 {gRadarBusy ? `Đang dò… ${gRadarDone}/${RADAR_SEEDS.length}` : `Quét advertiser ${country} (dò tên, ~${RADAR_SEEDS.length}cr)`}
+                </button>
               </>
             ) : (
               <>
