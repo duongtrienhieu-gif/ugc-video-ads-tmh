@@ -635,16 +635,48 @@ export default function SpyAds() {
 
   // 📺 Video theo kênh: dán tên kênh/link/id → /api/research-videos?mode=profile → TẤT CẢ video kênh.
   // Map về FbAd để tái dùng modal xem + tải + tải hàng loạt. Video CDN mp4 → PC phát được dù dính giỏ.
-  interface ChVid { id: string; desc: string; author: string; handle: string; views: number; likes: number; cover: string; downloadUrl: string; url: string; durationSec: number; hasCart?: boolean; productUrl?: string }
+  interface ChVid { id: string; desc: string; author: string; handle: string; views: number; likes: number; cover: string; downloadUrl: string; url: string; durationSec: number; hasCart?: boolean; productUrl?: string; youtubeId?: string }
   const toFbAd = (v: ChVid, handle: string): FbAd => ({
     id: v.id, page: v.author || (v.handle ? '@' + v.handle : handle ? '@' + handle : '(kênh)'), pageId: '',
     text: v.desc || '', videoUrl: v.downloadUrl, cover: v.cover, linkUrl: '', country,
     isActive: false, daysRunning: 0, advertiserAds: 0, libraryUrl: v.url || '',
-    likes: v.likes, views: v.views, durationSec: v.durationSec, hasCart: v.hasCart, productUrl: v.productUrl,
+    likes: v.likes, views: v.views, durationSec: v.durationSec, hasCart: v.hasCart, productUrl: v.productUrl, youtubeId: v.youtubeId,
   })
+  // Nhận diện kênh YOUTUBE (link youtube.com/@... /channel/UC... /c/... /user/...).
+  const parseYouTube = (input: string): { handle?: string; channelId?: string } | null => {
+    const s = input.trim()
+    if (!/youtube\.com|youtu\.be/i.test(s)) return null
+    const ch = s.match(/\/channel\/(UC[\w-]+)/i); if (ch) return { channelId: ch[1] }
+    const at = s.match(/\/@([\w.\-]+)/); if (at) return { handle: at[1] }
+    const cu = s.match(/\/(?:c|user)\/([\w.\-]+)/i); if (cu) return { handle: cu[1] }
+    return { handle: s.replace(/^https?:\/\/(www\.)?youtube\.com\//i, '').split(/[/?]/)[0].replace(/^@/, '') }
+  }
   const fetchChannel = async (more = false) => {
+    // 🔴 KÊNH YOUTUBE — spy toàn bộ ad video đối thủ trên 1 kênh YouTube (sort mới/phổ biến).
+    const yt = parseYouTube(chInput)
+    if (yt) {
+      if (more) { if (!chCursor || chMoreLoading) return; setChMoreLoading(true) }
+      else { setChLoading(true); setChErr(null); setChVids(null); setChCursor(null); setChHasMore(false); setSelected(new Set()); setChTitle(yt.handle ? '@' + yt.handle : yt.channelId || 'kênh YouTube') }
+      try {
+        let u = `/api/research-videos?mode=ytchannel&sort_by=${chSort}`
+        if (yt.handle) u += `&handle=${encodeURIComponent(yt.handle)}`
+        if (yt.channelId) u += `&channel_id=${encodeURIComponent(yt.channelId)}`
+        if (more && chCursor) u += `&cursor=${encodeURIComponent(chCursor)}`
+        const d = await fetch(u).then((r) => r.json())
+        if (d.error) { setChErr(d.error); return }
+        const vids: ChVid[] = Array.isArray(d.videos) ? d.videos : []
+        const mapped = vids.map((v) => toFbAd(v, yt.handle || ''))
+        if (mapped[0]?.page && !more) setChTitle(mapped[0].page)
+        setChVids((prev) => (more ? [...(prev || []), ...mapped] : mapped))
+        setChCursor(d.cursor != null ? String(d.cursor) : null)
+        setChHasMore(!!d.hasMore && d.cursor != null)
+        setCredits(d.credits ?? credits)
+        if (!more && !mapped.length) setChErr(d.note || 'Kênh YouTube không có video — kiểm tra link kênh')
+      } catch (e) { setChErr((e as Error).message) } finally { setChLoading(false); setChMoreLoading(false) }
+      return
+    }
     const { handle, userId } = parseHandle(chInput)
-    if (!handle && !userId) { setChErr('Dán tên kênh / link TikTok / ID kênh'); return }
+    if (!handle && !userId) { setChErr('Dán tên kênh / link TikTok / YouTube / ID kênh'); return }
     if (more) { if (!chCursor || chMoreLoading) return; setChMoreLoading(true) }
     else { setChLoading(true); setChErr(null); setChVids(null); setChCursor(null); setChHasMore(false); setSelected(new Set()); setChTitle(handle ? '@' + handle : userId) }
     try {
@@ -1156,7 +1188,7 @@ CHỈ trả JSON.`
             <div className="flex flex-wrap items-center gap-2">
               <input
                 value={chInput} onChange={(e) => setChInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void fetchChannel() }}
-                placeholder="tên kênh (@user) · link TikTok (tiktok.com/@user) · ID kênh → xem tất cả video"
+                placeholder="link TikTok (tiktok.com/@user) hoặc YouTube (youtube.com/@kênh) → xem TẤT CẢ video ad"
                 className="min-w-[260px] flex-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm"
               />
               <div className="inline-flex items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5">
@@ -1459,8 +1491,8 @@ CHỈ trả JSON.`
             {!chVids && !chLoading && (
               <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-black/10 text-center text-slate-400">
                 <Radio className="h-8 w-8" />
-                <p className="text-sm">Dán <b>tên kênh / link TikTok / ID</b> → <b>Xem video kênh</b>.</p>
-                <p className="text-xs">Hiện <b>tất cả video</b> của kênh — kể cả video gắn giỏ TikTok Shop (PC xem được). Bấm để phát, tải lẻ hoặc tải hàng loạt.</p>
+                <p className="text-sm">Dán <b>link kênh TikTok</b> (tiktok.com/@user) hoặc <b>kênh YouTube</b> (youtube.com/@kênh) → <b>Xem video kênh</b>.</p>
+                <p className="text-xs">Hiện <b>TẤT CẢ video</b> của kênh, sort <b>Phổ biến</b> để lộ winner (view cao). TikTok tải mp4 trực tiếp; 🔴 YouTube xem/tải qua YouTube. Đây là cách spy trọn kho ad video 1 đối thủ.</p>
               </div>
             )}
             {chLoading && <div className="py-10 text-center text-sm text-slate-400">Đang tải video của kênh…</div>}

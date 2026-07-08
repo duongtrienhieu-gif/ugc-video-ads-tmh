@@ -175,6 +175,65 @@ async function handleProfile(req: VercelRequest, res: VercelResponse, key: strin
   }
 }
 
+// ── mode=ytchannel — TẤT CẢ video của 1 KÊNH YOUTUBE (spy ad video đối thủ Google/YT) ─
+// /api/research-videos?mode=ytchannel&handle=@x  hoặc &channel_id=UC...  &sort_by=latest|popular
+// SC /v1/youtube/channel-videos — trả metadata + link YouTube (KHÔNG có mp4; tải bằng tool ngoài).
+function ytFirstStr(...xs: unknown[]): string { for (const x of xs) if (typeof x === 'string' && x) return x; return '' }
+function ytPickArr(d: Record<string, unknown>): Record<string, unknown>[] {
+  for (const k of ['videos', 'items', 'results', 'data', 'contents']) if (Array.isArray(d[k])) return d[k] as Record<string, unknown>[]
+  for (const k in d) { const v = d[k]; if (Array.isArray(v) && v.length && typeof v[0] === 'object') return v as Record<string, unknown>[] }
+  return []
+}
+function ytViews(v: Record<string, unknown>): number {
+  const n = Number(v.viewCountInt ?? v.viewCount ?? v.views ?? v.viewCountNumber)
+  if (Number.isFinite(n) && n > 0) return n
+  const t = ytFirstStr(v.viewCountText, v.viewsText, v.viewCount).replace(/,/g, '.').toUpperCase()
+  const m = t.match(/([\d.]+)\s*([KMBN]?)/)
+  if (!m) return 0
+  const base = parseFloat(m[1]) || 0
+  const mul = m[2] === 'M' ? 1e6 : m[2] === 'B' ? 1e9 : (m[2] === 'K' || m[2] === 'N') ? 1e3 : 1   // N (locale VN) = nghìn
+  return Math.round(base * mul)
+}
+async function handleYtChannel(req: VercelRequest, res: VercelResponse, key: string) {
+  const handle = (typeof req.query.handle === 'string' ? req.query.handle : '').trim().replace(/^@/, '')
+  const channelId = (typeof req.query.channel_id === 'string' ? req.query.channel_id : '').trim()
+  const sort = req.query.sort_by === 'popular' ? 'popular' : 'latest'
+  const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : ''
+  const debug = req.query.debug === '1'
+  if (!handle && !channelId) return res.status(400).json({ error: 'Cần handle (@kênh) hoặc channel_id YouTube' })
+  try {
+    const p = new URLSearchParams({ sort })
+    if (channelId) p.set('channelId', channelId); else p.set('handle', '@' + handle)
+    if (cursor) p.set('continuationToken', cursor)
+    const r = await fetch(`https://api.scrapecreators.com/v1/youtube/channel-videos?${p.toString()}`, { headers: { 'x-api-key': key } })
+    if (!r.ok) { const b = await r.text().catch(() => ''); return res.status(502).json({ error: `YouTube channel lỗi ${r.status}: ${b.slice(0, 160)}` }) }
+    const d = (await r.json()) as Record<string, unknown>
+    const arr = ytPickArr(d)
+    const chName = ytFirstStr(d.channelName, d.name, d.title, (arr[0] as Record<string, unknown> | undefined)?.channelName)
+    const videos = arr.map((v) => {
+      const vid = ytFirstStr(v.videoId, v.id)
+      const dur = ytFirstStr(v.lengthText, v.durationText, v.duration)
+      const durSec = /^\d+$/.test(dur) ? Number(dur) : dur.split(':').reduce((a, s) => a * 60 + (Number(s) || 0), 0)
+      return {
+        id: vid || ytFirstStr(v.url), youtubeId: vid || undefined,
+        desc: ytFirstStr(v.title, v.name), author: chName || (handle ? '@' + handle : ''), handle,
+        views: ytViews(v), likes: 0,
+        cover: ytFirstStr(v.thumbnail, v.thumbnailUrl) || (vid ? `https://i.ytimg.com/vi/${vid}/hqdefault.jpg` : ''),
+        downloadUrl: '', url: ytFirstStr(v.url) || (vid ? `https://www.youtube.com/watch?v=${vid}` : ''),
+        durationSec: durSec || 0,
+      }
+    }).filter((v) => v.youtubeId || v.url)
+    const cont = ytFirstStr(d.continuationToken, d.continuation, d.cursor, d.nextCursor)
+    return res.status(200).json({
+      videos, cursor: cont || null, hasMore: !!cont, credits: (d.credits_remaining as number | undefined) ?? null,
+      note: videos.length ? undefined : 'Kênh YouTube không có video — kiểm tra @handle / link kênh',
+      ...(debug ? { debugRaw: JSON.stringify(arr[0] ?? d).slice(0, 1500), keys: Object.keys(d) } : {}),
+    })
+  } catch (e) {
+    return res.status(500).json({ error: (e as Error).message })
+  }
+}
+
 // ── mode=video — 1 video theo LINK (kể cả video dính giỏ tiktok.com ẩn trên PC) ─
 // /api/research-videos?mode=video&url=<link video tiktok>
 async function handleVideo(req: VercelRequest, res: VercelResponse, key: string) {
@@ -205,6 +264,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Nhánh mới: video của 1 KÊNH creator (thay Radar SP win) + 1 video theo link.
   if (req.query.mode === 'profile') return handleProfile(req, res, key)
+  if (req.query.mode === 'ytchannel') return handleYtChannel(req, res, key)   // kênh YouTube (spy ad video đối thủ)
   if (req.query.mode === 'video') return handleVideo(req, res, key)
 
   const marketRaw = typeof req.query.market === 'string' ? req.query.market.toUpperCase() : 'MY'
