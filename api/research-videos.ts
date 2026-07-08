@@ -234,6 +234,50 @@ async function handleYtChannel(req: VercelRequest, res: VercelResponse, key: str
   }
 }
 
+// ── mode=ytsearch — SEARCH YouTube theo ngách → ra video ad COD (discovery không cần biết kênh) ─
+// /api/research-videos?mode=ytsearch&q=<ngách tiếng Mã>  → SC /v1/youtube/search
+function ytMapVideo(v: Record<string, unknown>, chFallback = ''): { id: string; youtubeId?: string; desc: string; author: string; handle: string; views: number; likes: number; cover: string; downloadUrl: string; url: string; durationSec: number } {
+  const vid = ytFirstStr(v.videoId, v.id)
+  const dur = ytFirstStr(v.lengthText, v.durationText, v.duration)
+  const durSec = /^\d+$/.test(dur) ? Number(dur) : dur.split(':').reduce((a, s) => a * 60 + (Number(s) || 0), 0)
+  const ch = (v.channel as Record<string, unknown>) || {}
+  return {
+    id: vid || ytFirstStr(v.url), youtubeId: vid || undefined,
+    desc: ytFirstStr(v.title, v.name), author: ytFirstStr(v.channelName, v.author, ch.name, ch.title) || chFallback, handle: ytFirstStr(ch.handle, v.channelHandle),
+    views: ytViews(v), likes: 0,
+    cover: ytFirstStr(v.thumbnail, v.thumbnailUrl) || (vid ? `https://i.ytimg.com/vi/${vid}/hqdefault.jpg` : ''),
+    downloadUrl: '', url: ytFirstStr(v.url) || (vid ? `https://www.youtube.com/watch?v=${vid}` : ''),
+    durationSec: durSec || 0,
+  }
+}
+async function handleYtSearch(req: VercelRequest, res: VercelResponse, key: string) {
+  const q = (typeof req.query.q === 'string' ? req.query.q : '').trim()
+  if (!q) return res.status(400).json({ error: 'Cần q (ngách/từ khóa tiếng Mã)' })
+  const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : ''
+  const debug = req.query.debug === '1'
+  try {
+    const p = new URLSearchParams({ query: q, includeExtras: 'true' })
+    if (cursor) p.set('continuationToken', cursor)
+    const r = await fetch(`https://api.scrapecreators.com/v1/youtube/search?${p.toString()}`, { headers: { 'x-api-key': key } })
+    if (!r.ok) { const b = await r.text().catch(() => ''); return res.status(502).json({ error: `YouTube search lỗi ${r.status}: ${b.slice(0, 160)}` }) }
+    const d = (await r.json()) as Record<string, unknown>
+    const arr = ytPickArr(d)
+    const videos = arr
+      .map((v) => ytMapVideo(v))
+      .filter((v) => v.youtubeId)                       // chỉ giữ VIDEO (bỏ channel/playlist trong kết quả search)
+      .filter((v) => v.durationSec === 0 || v.durationSec <= 300)   // ad COD thường < 5 phút
+      .sort((a, b) => (b.views || 0) - (a.views || 0))  // view cao = winner nổi lên
+    const cont = ytFirstStr(d.continuationToken, d.continuation, d.cursor, d.nextCursor)
+    return res.status(200).json({
+      videos, cursor: cont || null, hasMore: !!cont, credits: (d.credits_remaining as number | undefined) ?? null,
+      note: videos.length ? undefined : 'Không ra video — thử ngách tiếng Mã khác (kalis air, minyak urut…)',
+      ...(debug ? { debugRaw: JSON.stringify(arr[0] ?? d).slice(0, 1500), keys: Object.keys(d) } : {}),
+    })
+  } catch (e) {
+    return res.status(500).json({ error: (e as Error).message })
+  }
+}
+
 // ── mode=video — 1 video theo LINK (kể cả video dính giỏ tiktok.com ẩn trên PC) ─
 // /api/research-videos?mode=video&url=<link video tiktok>
 async function handleVideo(req: VercelRequest, res: VercelResponse, key: string) {
@@ -265,6 +309,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Nhánh mới: video của 1 KÊNH creator (thay Radar SP win) + 1 video theo link.
   if (req.query.mode === 'profile') return handleProfile(req, res, key)
   if (req.query.mode === 'ytchannel') return handleYtChannel(req, res, key)   // kênh YouTube (spy ad video đối thủ)
+  if (req.query.mode === 'ytsearch') return handleYtSearch(req, res, key)      // SEARCH YouTube theo ngách → ra video ad (discovery không cần biết kênh)
   if (req.query.mode === 'video') return handleVideo(req, res, key)
 
   const marketRaw = typeof req.query.market === 'string' ? req.query.market.toUpperCase() : 'MY'

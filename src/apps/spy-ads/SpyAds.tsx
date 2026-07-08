@@ -212,6 +212,7 @@ export default function SpyAds() {
   // tìm advertiser (rẻ ~1cr) → bấm advertiser mới kéo creative (25cr/advertiser).
   const [gAdvertisers, setGAdvertisers] = useState<{ id: string; name: string; domain?: string }[] | null>(null)
   const [gView, setGView] = useState<'list' | 'ads'>('list')   // list = danh sách advertiser · ads = creative của 1 advertiser
+  const [gMode, setGMode] = useState<'video' | 'advertiser'>('video')   // video = SEARCH YouTube theo ngách (discovery) · advertiser = tra theo tên brand
   const [gBusy, setGBusy] = useState(false)
   const [gRadarBusy, setGRadarBusy] = useState(false)          // 🛰 quét advertiser MY (sweep seed → gom tên)
   const [gRadarDone, setGRadarDone] = useState(0)
@@ -369,6 +370,22 @@ export default function SpyAds() {
   // 🔴 GOOGLE bước 1 — tìm advertiser theo từ khóa (RẺ ~1cr). Nếu gõ domain thì mở ads thẳng.
   const searchGoogle = async (term?: string) => {
     const raw = (term ?? q).trim()
+    // 🎬 Chế độ VIDEO NGÁCH — search THẲNG YouTube → ra video ad COD (không cần biết đối thủ).
+    if (gMode === 'video') {
+      if (!raw) { setError('Nhập ngách tiếng Mã (vd: kalis air, minyak urut, korset)'); return }
+      if (term != null) setQ(raw)
+      setLoading(true); setGBusy(true); setError(null); setAds(null); setGAdvertisers(null); setGView('ads')
+      setViewPageId(null); setViewPageName(null); setCursor(null); setHasMore(false); setGDebug(null); setSelected(new Set())
+      try {
+        const d = await fetch(`/api/research-videos?mode=ytsearch&q=${encodeURIComponent(raw)}`).then((r) => r.json())
+        if (d.error) { setError(d.error); return }
+        const vids: ChVid[] = Array.isArray(d.videos) ? d.videos : []
+        setAds(vids.map((v) => toFbAd(v, '')))
+        setCredits(d.credits ?? credits)
+        if (!vids.length) setError(d.note || 'Không ra video YouTube — thử ngách tiếng Mã khác.')
+      } catch (e) { setError((e as Error).message) } finally { setLoading(false); setGBusy(false) }
+      return
+    }
     if (!raw) { setError('Nhập tên đối thủ / domain (vd: nexta, shopee.com.my)'); return }
     if (term != null) setQ(term)
     setViewPageId(null); setViewPageName(null); setAds(null); setCursor(null); setHasMore(false); setGDebug(null)
@@ -1237,17 +1254,25 @@ CHỈ trả JSON.`
                   className={`rounded-md px-3 py-1 text-xs font-semibold ${platform === 'fb' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>👍 Facebook</button>
                 <button onClick={() => switchPlatform('tiktok')}
                   className={`rounded-md px-3 py-1 text-xs font-semibold ${platform === 'tiktok' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>🎵 TikTok</button>
-                <button onClick={() => switchPlatform('google')} title="Google/YouTube Ads Transparency — soi kho ad đối thủ (25 credit/advertiser)"
+                <button onClick={() => switchPlatform('google')} title="Google/YouTube — tìm video ad YouTube theo ngách, hoặc soi kho 1 advertiser"
                   className={`rounded-md px-3 py-1 text-xs font-semibold ${platform === 'google' ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}>🔴 Google/YT</button>
               </div>
+              {platform === 'google' && (
+                <div className="inline-flex items-center gap-0.5 rounded-lg border border-red-200 bg-white p-0.5">
+                  <button onClick={() => setGMode('video')} title="Search YouTube theo ngách → ra video ad (không cần biết đối thủ) — RẺ"
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${gMode === 'video' ? 'bg-red-100 text-red-700' : 'text-slate-500'}`}>🎬 Video ngách</button>
+                  <button onClick={() => setGMode('advertiser')} title="Tra theo TÊN brand/đối thủ → xem kho ad + ladipage (25cr)"
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${gMode === 'advertiser' ? 'bg-red-100 text-red-700' : 'text-slate-500'}`}>🏢 Tên brand</button>
+                </div>
+              )}
               <input
                 value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void (platform === 'google' ? searchGoogle() : search()) }}
-                placeholder={platform === 'google' ? 'tên đối thủ / domain (vd: nexta, brand.com.my)…' : 'từ khóa / ngách (vd: collagen, sakit lutut, kurus...)'}
+                placeholder={platform === 'google' ? (gMode === 'video' ? 'ngách tiếng Mã → ra video ad YouTube (vd: kalis air, minyak urut, korset)…' : 'tên đối thủ / domain (vd: nexta, brand.com.my)…') : 'từ khóa / ngách (vd: collagen, sakit lutut, kurus...)'}
                 className="min-w-[220px] flex-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm"
               />
               <button onClick={() => void (platform === 'google' ? searchGoogle() : search())} disabled={loading || gBusy}
                 className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50">
-                <Search className="h-4 w-4" /> {(loading || gBusy) ? 'Đang tìm…' : (platform === 'google' ? 'Tìm advertiser' : 'Tìm ad')}
+                <Search className="h-4 w-4" /> {(loading || gBusy) ? 'Đang tìm…' : (platform === 'google' ? (gMode === 'video' ? 'Tìm video YouTube' : 'Tìm advertiser') : 'Tìm ad')}
               </button>
               {platform === 'fb' && (
                 <>
@@ -1268,8 +1293,8 @@ CHỈ trả JSON.`
               <p className="-mt-1 text-[11px] font-medium text-amber-600">⚠️ Từ khóa hơi dài — FB khớp theo copy tiếng Malay. Gõ <b>2-3 từ ngách</b> (vd "sakit lutut", "krim mata") sẽ ra nhiều ad hơn tên SP đầy đủ.</p>
             )}
             <div className="flex flex-wrap items-center gap-1.5">
-              {platform === 'google' ? (
-                <span className="text-[11px] font-medium text-amber-600">💡 Google tra theo <b>tên brand/đối thủ</b> (vd JointLief, Nexta Media) hoặc domain — KHÔNG phải ngách. Gõ tên vào ô trên.</span>
+              {platform === 'google' && gMode === 'advertiser' ? (
+                <span className="text-[11px] font-medium text-amber-600">💡 Chế độ "Tên brand" tra theo <b>tên đối thủ</b> (JointLief, Nexta) hoặc domain — KHÔNG phải ngách. Muốn gõ ngách để ra video → chuyển <b>🎬 Video ngách</b>.</span>
               ) : (
                 <>
                   <span className="text-[11px] font-medium text-slate-400">Ngách gợi ý:</span>
@@ -1279,7 +1304,7 @@ CHỈ trả JSON.`
                   </button>
                   <div className={`${chipsOpen ? 'contents' : 'hidden'} lg:contents`}>
                     {COD_CHIPS.map((c) => (
-                      <button key={c} onClick={() => void search(c)} disabled={loading}
+                      <button key={c} onClick={() => void (platform === 'google' ? searchGoogle(c) : search(c))} disabled={loading || gBusy}
                         className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50">
                         {c}
                       </button>
@@ -1587,11 +1612,15 @@ CHỈ trả JSON.`
         {mode === 'ads' && !ads && !loading && !(platform === 'google' && gAdvertisers) && (
           <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-black/10 text-center text-slate-400">
             <Megaphone className="h-8 w-8" />
-            {platform === 'google' ? (
+            {platform === 'google' && gMode === 'video' ? (
               <>
-                <p className="text-sm">Nhập <b>tên đối thủ / domain</b> → <b>Tìm advertiser</b> (rẻ ~1cr).</p>
-                <p className="text-xs">Chọn advertiser để kéo kho ad Google/YouTube (<b>25cr/advertiser</b>). Mạnh nhất khi soi 1 đối thủ đã biết.</p>
-                <p className="text-[11px] text-slate-400">— hoặc KHÔNG biết tên đối thủ? —</p>
+                <p className="text-sm">🎬 Gõ <b>ngách tiếng Mã</b> (vd <b>kalis air, minyak urut, korset</b>) → ra thẳng <b>video ad YouTube</b> COD MY.</p>
+                <p className="text-xs">KHÔNG cần biết đối thủ. View cao = winner nổi lên đầu. Rẻ (~1cr/lần). Bấm chip ngách bên trên hoặc gõ tay.</p>
+              </>
+            ) : platform === 'google' ? (
+              <>
+                <p className="text-sm">🏢 Nhập <b>tên đối thủ / domain</b> → <b>Tìm advertiser</b> (rẻ ~1cr) → kho ad + ladipage (25cr).</p>
+                <p className="text-[11px] text-slate-400">— chưa biết tên? Chuyển <b>🎬 Video ngách</b> để gõ ngách ra video, hoặc quét: —</p>
                 <button onClick={() => void runGoogleRadar()} disabled={gRadarBusy}
                   className="mt-1 rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">
                   🛰 {gRadarBusy ? `Đang dò… ${gRadarDone}/${RADAR_SEEDS.length}` : `Quét advertiser ${country} (dò tên, ~${RADAR_SEEDS.length}cr)`}
@@ -1605,7 +1634,7 @@ CHỈ trả JSON.`
             )}
           </div>
         )}
-        {mode === 'ads' && loading && <div className="py-10 text-center text-sm text-slate-400">{platform === 'fb' ? 'Đang quét Facebook Ad Library…' : platform === 'google' ? 'Đang kéo kho ad Google (25cr)…' : 'Đang quét TikTok Top Ads…'}</div>}
+        {mode === 'ads' && loading && <div className="py-10 text-center text-sm text-slate-400">{platform === 'fb' ? 'Đang quét Facebook Ad Library…' : platform === 'google' ? (gMode === 'video' ? 'Đang search video YouTube…' : 'Đang kéo kho ad Google (25cr)…') : 'Đang quét TikTok Top Ads…'}</div>}
         {mode === 'ads' && platform === 'google' && gDebug && (
           <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs">
             <div className="mb-1 font-semibold text-amber-700">🔧 Video Google không phát/tải được? Copy đoạn dưới gửi Hiếu để chỉnh đúng field:</div>
