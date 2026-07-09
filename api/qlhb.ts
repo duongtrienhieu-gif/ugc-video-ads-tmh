@@ -57,18 +57,20 @@ function locateCols(ws: XLSX.WorkSheet): DsCols {
     const labels = LETTERS.map((c) => cellL(c, hr))
     if (labels.some((l) => l.includes('pending')) && labels.some((l) => l.includes('total') || l.includes('tổng'))) { headerRow = hr; break }
   }
-  if (headerRow < 0) return { pend: 'H', ret: 'J', rted: 'L', tong: 'R', deliv: 'N', paid: 'P', headerRow: 4 } // fallback kiểu TMH
+  if (headerRow < 0) return { pend: 'G', ret: 'I', rted: 'K', deliv: 'M', paid: 'O', tong: 'Q', headerRow: 1 } // fallback = layout mới (Cancel D-E · Pending F-G · … · Total P-Q)
   const dsAfter = (match: (l: string) => boolean): string | undefined => {
     for (let i = 0; i < LETTERS.length - 1; i++) { if (match(cellL(LETTERS[i], headerRow))) return LETTERS[i + 1] }
     return undefined
   }
+  // KHỚP CHỨA-CHỮ (không khớp cứng) → đọc được cả "Pending" lẫn "Pending SL SP". Bỏ ô % (rate).
+  const has = (l: string, w: string) => l.includes(w) && !l.startsWith('%')
   return {
-    pend: dsAfter((l) => l === 'pending'),
-    ret: dsAfter((l) => l === 'return'),
-    rted: dsAfter((l) => l === 'returned'),
-    deliv: dsAfter((l) => l === 'delivery'),
-    paid: dsAfter((l) => l === 'paid'),
-    tong: dsAfter((l) => l === 'total' || l === 'tổng' || l.includes('tổng') || l.includes('total')),
+    pend: dsAfter((l) => has(l, 'pending')),
+    ret: dsAfter((l) => has(l, 'return') && !l.includes('returned')), // "return" ⊂ "returned" → loại
+    rted: dsAfter((l) => has(l, 'returned')),
+    deliv: dsAfter((l) => has(l, 'delivery')),
+    paid: dsAfter((l) => has(l, 'paid')),
+    tong: dsAfter((l) => has(l, 'total') || l.includes('tổng')),
     headerRow,
   }
 }
@@ -78,8 +80,8 @@ const SKIP_NAME = new Set(['', 'brand', 'product', 'province', 'tổng', 'total'
 // mature = resolved/total ≥ 0.5 (≥ nửa DS đã có kết quả giao/hoàn). Đầu tháng đơn còn đang giao →
 // chưa chín → hoàn≈0 KHÔNG đáng tin → caller ưu tiên hoàn tháng trước cho mã chưa chín.
 const MATURE_RATIO = 0.5
-function buildHoanMap(ws: XLSX.WorkSheet): { rate: Record<string, number>; mature: Set<string> } {
-  const C = locateCols(ws)
+function buildHoanMap(ws: XLSX.WorkSheet, cols?: DsCols): { rate: Record<string, number>; mature: Set<string> } {
+  const C = cols ?? locateCols(ws)
   const g = (col: string | undefined, r: number) => (col ? num(ws[`${col}${r}`]?.v) : 0)
   const rate: Record<string, number> = {}
   const mature = new Set<string>()
@@ -95,8 +97,8 @@ function buildHoanMap(ws: XLSX.WorkSheet): { rate: Record<string, number>; matur
   return { rate, mature }
 }
 // QLHB "Tỉ lệ sản phẩm" → tiền theo trạng thái đơn (cộng DS toàn bộ SP)
-function parseCashflow(ws: XLSX.WorkSheet) {
-  const C = locateCols(ws)
+function parseCashflow(ws: XLSX.WorkSheet, cols?: DsCols) {
+  const C = cols ?? locateCols(ws)
   const g = (col: string | undefined, r: number) => (col ? num(ws[`${col}${r}`]?.v) : 0)
   let pendingDS = 0, returnDS = 0, returnedDS = 0, deliveryDS = 0, paidDS = 0, blanks = 0
   for (let r = C.headerRow + 1; r <= 1100; r++) {
@@ -138,7 +140,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const tinh = wb.Sheets['Tỉ lệ tỉnh']
     const mkt = wb.Sheets['Tỉ lệ MKT']
     if (!sp) throw new Error('Không thấy sheet Tỉ lệ sản phẩm')
-    const live = buildHoanMap(sp)
+    // Dò cột 1 LẦN từ sheet Sản phẩm (có header đầy đủ) → tái dùng cho sheet MKT (thiếu header,
+    // cùng template) + dòng tiền. Sheet Tỉnh có header riêng nên tự dò.
+    const spCols = locateCols(sp)
+    const live = buildHoanMap(sp, spCols)
     const cached = await cacheRead()
     const cachedHoan = (cached?.hoanMap as Record<string, number> | undefined) ?? {}
 
@@ -157,7 +162,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── HOÀN THEO TEAM/MKT (sheet "Tỉ lệ MKT") — cho War Room hiện hoàn team CHUẨN,
     // không phải suy từ product. Cùng cơ chế độ-chín + cache như hoàn sản phẩm.
-    const liveTeam = mkt ? buildHoanMap(mkt) : { rate: {}, mature: new Set<string>() }
+    const liveTeam = mkt ? buildHoanMap(mkt, spCols) : { rate: {}, mature: new Set<string>() }
     const cachedTeam = (cached?.hoanByTeam as Record<string, number> | undefined) ?? {}
     const hoanByTeam: Record<string, number> = {}
     const hoanByTeamEst: Record<string, boolean> = {}
@@ -168,7 +173,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (const n of liveTeam.mature) teamBaseline[n] = liveTeam.rate[n]
 
     // Dòng tiền / bom tỉnh = THÁNG HIỆN TẠI; rỗng hẳn (đầu tháng) thì lấy cache để khỏi trống.
-    const liveCash = parseCashflow(sp)
+    const liveCash = parseCashflow(sp, spCols)
     const liveProv = tinh ? parseProvinces(tinh) : []
     const cashEmpty = liveCash.pendingDS + liveCash.deliveryDS + liveCash.paidDS + liveCash.returnDS + liveCash.returnedDS === 0
     const cashflow = cashEmpty && cached?.cashflow ? cached.cashflow : liveCash
