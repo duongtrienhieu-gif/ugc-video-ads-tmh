@@ -3,7 +3,7 @@ import { Plus, Trash2, Save, Tag } from 'lucide-react'
 import { useBankStore } from '../../../stores/bankStore'
 import { useAppStore } from '../../../stores/appStore'
 import { useChatBotStore } from '../store'
-import type { Market, ObjectionItem, SalesConfig } from '../types'
+import type { CodPolicy, Market, ObjectionItem, PricingTier, ProductVariant, SalesConfig } from '../types'
 import { MARKET_LABELS } from '../labels'
 import MediaMapEditor from './MediaMapEditor'
 
@@ -19,6 +19,9 @@ function emptyConfig(productId: string, title: string): SalesConfig {
     chatPrice: '',
     chatPromo: '',
     discountFloor: '',
+    pricingTiers: [],
+    variants: [],
+    codPolicy: {},
     mediaMap: [],
     objectionBank: [],
     playbookNote: '',
@@ -63,6 +66,24 @@ export default function ConfigPanel({ productId, onSaved }: { productId: string;
     update({ goldenExamples: examples.map((e, idx) => (idx === i ? v : e)) })
   const removeExample = (i: number) =>
     update({ goldenExamples: examples.filter((_, idx) => idx !== i) })
+
+  // ── Bảng giá combo ──
+  const tiers = draft.pricingTiers ?? []
+  const addTier = () => update({ pricingTiers: [...tiers, { id: crypto.randomUUID(), qty: 2, price: '', label: '' }] })
+  const updateTier = (id: string, patch: Partial<PricingTier>) =>
+    update({ pricingTiers: tiers.map((t) => (t.id === id ? { ...t, ...patch } : t)) })
+  const removeTier = (id: string) => update({ pricingTiers: tiers.filter((t) => t.id !== id) })
+
+  // ── Biến thể ──
+  const variants = draft.variants ?? []
+  const addVariant = () => update({ variants: [...variants, { id: crypto.randomUUID(), name: '', options: '' }] })
+  const updateVariant = (id: string, patch: Partial<ProductVariant>) =>
+    update({ variants: variants.map((v) => (v.id === id ? { ...v, ...patch } : v)) })
+  const removeVariant = (id: string) => update({ variants: variants.filter((v) => v.id !== id) })
+
+  // ── Chính sách COD ──
+  const policy = draft.codPolicy ?? {}
+  const updatePolicy = (patch: Partial<CodPolicy>) => update({ codPolicy: { ...policy, ...patch } })
 
   const handleSave = () => {
     if (!draft.chatPrice.trim()) {
@@ -137,6 +158,94 @@ export default function ConfigPanel({ productId, onSaved }: { productId: string;
           className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-emerald-400"
         />
       </Field>
+
+      {/* Bảng giá combo */}
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <label className="text-xs font-semibold text-gray-700">
+            Bảng giá combo <span className="font-normal text-gray-400">(không bắt buộc · bot upsell + tính tổng đơn)</span>
+          </label>
+          <button onClick={addTier} className="flex items-center gap-1 rounded-lg bg-black/5 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-black/10">
+            <Plus className="h-3.5 w-3.5" /> Thêm mức
+          </button>
+        </div>
+        <p className="mb-2 text-[11px] text-gray-400">
+          Vd: mua 2 = RM159, mua 3 = RM219. Bot gợi ý "lấy 2 lợi hơn" + tính tổng đơn theo bảng này.
+        </p>
+        <div className="space-y-2">
+          {tiers.map((t) => (
+            <div key={t.id} className="flex items-center gap-2 rounded-lg border border-black/8 p-2">
+              <span className="text-[11px] text-gray-400">mua</span>
+              <input
+                type="number" min={1} value={t.qty}
+                onChange={(e) => updateTier(t.id, { qty: Math.max(1, Number(e.target.value) || 1) })}
+                className="w-14 rounded-md border border-black/10 px-2 py-1 text-xs outline-none focus:border-emerald-400"
+              />
+              <input
+                value={t.price}
+                onChange={(e) => updateTier(t.id, { price: e.target.value })}
+                placeholder={draft.market === 'MY' ? 'giá (RM159)' : 'giá (499k)'}
+                className="w-28 rounded-md border border-black/10 px-2 py-1 text-xs outline-none focus:border-emerald-400"
+              />
+              <input
+                value={t.label ?? ''}
+                onChange={(e) => updateTier(t.id, { label: e.target.value })}
+                placeholder="tên combo (tuỳ chọn)"
+                className="min-w-0 flex-1 rounded-md border border-black/10 px-2 py-1 text-xs outline-none focus:border-emerald-400"
+              />
+              <button onClick={() => removeTier(t.id)} className="shrink-0 rounded-md p-1.5 text-gray-400 hover:bg-red-500/10 hover:text-red-500">
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Biến thể */}
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <label className="text-xs font-semibold text-gray-700">
+            Biến thể <span className="font-normal text-gray-400">(không bắt buộc · size/màu…)</span>
+          </label>
+          <button onClick={addVariant} className="flex items-center gap-1 rounded-lg bg-black/5 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-black/10">
+            <Plus className="h-3.5 w-3.5" /> Thêm
+          </button>
+        </div>
+        <div className="space-y-2">
+          {variants.map((v) => (
+            <div key={v.id} className="flex items-center gap-2 rounded-lg border border-black/8 p-2">
+              <input
+                value={v.name}
+                onChange={(e) => updateVariant(v.id, { name: e.target.value })}
+                placeholder="loại (Size)"
+                className="w-28 rounded-md border border-black/10 px-2 py-1 text-xs outline-none focus:border-emerald-400"
+              />
+              <input
+                value={v.options}
+                onChange={(e) => updateVariant(v.id, { options: e.target.value })}
+                placeholder="option, phẩy (S, M, L)"
+                className="min-w-0 flex-1 rounded-md border border-black/10 px-2 py-1 text-xs outline-none focus:border-emerald-400"
+              />
+              <button onClick={() => removeVariant(v.id)} className="shrink-0 rounded-md p-1.5 text-gray-400 hover:bg-red-500/10 hover:text-red-500">
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Chính sách COD */}
+      <div className="rounded-xl border border-black/8 p-3">
+        <label className="mb-2 block text-xs font-semibold text-gray-700">
+          Chính sách COD & giao hàng <span className="font-normal text-gray-400">(bot trả đúng cái này, cấm bịa)</span>
+        </label>
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+          <PolicyField label="Phí ship" value={policy.shippingFee} placeholder="freeship / RM10" onChange={(v) => updatePolicy({ shippingFee: v })} />
+          <PolicyField label="Thời gian giao" value={policy.deliveryTime} placeholder="2-4 ngày" onChange={(v) => updatePolicy({ deliveryTime: v })} />
+          <PolicyField label="Khu vực COD" value={policy.coverage} placeholder="toàn Malaysia" onChange={(v) => updatePolicy({ coverage: v })} />
+          <PolicyField label="Đổi trả / bảo hành" value={policy.returnPolicy} placeholder="đổi 7 ngày / BH 1 năm" onChange={(v) => updatePolicy({ returnPolicy: v })} />
+        </div>
+      </div>
 
       {/* Media map */}
       <div className="rounded-xl border border-black/8 p-3">
@@ -248,6 +357,20 @@ function Field({ label, required, children }: { label: string; required?: boolea
         {label} {required && <span className="text-red-400">*</span>}
       </label>
       {children}
+    </div>
+  )
+}
+
+function PolicyField({ label, value, placeholder, onChange }: { label: string; value?: string; placeholder: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="mb-1 block text-[11px] font-medium text-gray-500">{label}</label>
+      <input
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-md border border-black/10 px-2 py-1.5 text-xs outline-none focus:border-emerald-400"
+      />
     </div>
   )
 }

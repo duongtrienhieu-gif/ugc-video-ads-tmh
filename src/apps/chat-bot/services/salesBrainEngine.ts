@@ -10,7 +10,7 @@
 import type { Product } from '../../../stores/types'
 import { directGeminiText } from '../../../utils/gemini'
 import { STAGE_ORDER } from '../labels'
-import type { ActionPacket, BotMessage, ChatTurn, MediaSlot, SalesConfig, Stage } from '../types'
+import type { ActionPacket, BotMessage, CapturedOrder, ChatTurn, MediaSlot, SalesConfig, Stage } from '../types'
 import { compilePrompt } from './compilePrompt'
 
 const ACTION_SCHEMA: Record<string, unknown> = {
@@ -41,6 +41,25 @@ const ACTION_SCHEMA: Record<string, unknown> = {
       },
     },
     handover: { type: 'boolean' },
+    handoverReason: { type: 'string' },
+    order: {
+      type: 'object',
+      properties: {
+        customerName: { type: 'string' },
+        phone: { type: 'string' },
+        address: { type: 'string' },
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { name: { type: 'string' }, qty: { type: 'number' } },
+          },
+        },
+        total: { type: 'string' },
+        note: { type: 'string' },
+      },
+    },
+    orderComplete: { type: 'boolean' },
     followupAfterMinutes: { type: 'number' },
     followupNote: { type: 'string' },
     sessionSummary: { type: 'string' },
@@ -55,9 +74,33 @@ interface RawPacket {
   intent?: string
   captured?: Array<{ key?: string; value?: string }>
   handover?: boolean
+  handoverReason?: string
+  order?: {
+    customerName?: string; phone?: string; address?: string
+    items?: Array<{ name?: string; qty?: number }>
+    total?: string; note?: string
+  }
+  orderComplete?: boolean
   followupAfterMinutes?: number
   followupNote?: string
   sessionSummary?: string
+}
+
+/** Gom order từ model → CapturedOrder sạch (bỏ field rỗng, ép qty number). */
+function normalizeOrder(o: RawPacket['order']): CapturedOrder | undefined {
+  if (!o) return undefined
+  const items = (o.items ?? [])
+    .map((it) => ({ name: it.name?.trim() || undefined, qty: typeof it.qty === 'number' ? it.qty : undefined }))
+    .filter((it) => it.name || typeof it.qty === 'number')
+  const order: CapturedOrder = {
+    customerName: o.customerName?.trim() || undefined,
+    phone: o.phone?.trim() || undefined,
+    address: o.address?.trim() || undefined,
+    items: items.length ? items : undefined,
+    total: o.total?.trim() || undefined,
+    note: o.note?.trim() || undefined,
+  }
+  return Object.values(order).some((v) => v !== undefined) ? order : undefined
 }
 
 // Hạ chữ HOA đầu câu/đầu tin cho văn phong chat thật (Flash hay tự viết hoa lại).
@@ -117,6 +160,9 @@ function normalize(raw: RawPacket, mediaIndex: Map<string, MediaSlot>): ActionPa
     intent: raw.intent ?? 'unknown',
     captured,
     handover: raw.handover ?? false,
+    handoverReason: raw.handoverReason?.trim() || undefined,
+    order: normalizeOrder(raw.order),
+    orderComplete: raw.orderComplete ?? false,
     suggestedFollowup:
       typeof raw.followupAfterMinutes === 'number'
         ? { afterMinutes: raw.followupAfterMinutes, note: raw.followupNote ?? '' }

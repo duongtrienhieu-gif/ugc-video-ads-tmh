@@ -55,6 +55,30 @@ export interface ObjectionItem {
   guidance: string   // hướng gỡ (user viết VN)
 }
 
+/** Bậc combo: mua số lượng X → giá Y (để bot upsell "lấy 2 lợi hơn" + chốt đúng). */
+export interface PricingTier {
+  id: string
+  qty: number        // số lượng (1, 2, 3…)
+  price: string      // giá cho mức này (kèm đơn vị, vd "RM159")
+  label?: string     // tên combo tuỳ chọn (vd "Combo tiết kiệm")
+}
+
+/** Biến thể sản phẩm (size/màu…) — bot xác nhận đúng khi chốt đơn. */
+export interface ProductVariant {
+  id: string
+  name: string       // vd "Size" / "Màu"
+  options: string    // vd "S, M, L" (free-text, phẩy)
+}
+
+/** Chính sách COD/giao hàng — FACT CỨNG bot cấm bịa (câu hỏi logistics rất nhiều). */
+export interface CodPolicy {
+  shippingFee?: string    // "freeship" / "RM10"
+  deliveryTime?: string   // "2-4 ngày làm việc"
+  coverage?: string       // "toàn Malaysia" / "West Malaysia"
+  returnPolicy?: string   // "đổi trả 7 ngày / bảo hành 1 năm"
+  note?: string           // ghi chú COD thêm
+}
+
 /** Cấu hình bán-qua-chat cho 1 sản phẩm. Fact sản phẩm (tên, lợi ích, ảnh) đọc từ
  *  product bank theo productId; ở đây chỉ nhập phần RIÊNG cho kênh chat. */
 export interface SalesConfig {
@@ -72,6 +96,11 @@ export interface SalesConfig {
   chatPromo?: string         // ưu đãi khi chat, vd "freeship + tặng ốp"
   discountFloor: string      // TRẦN giảm giá cứng — AI không vượt
 
+  // ── Combo / biến thể / chính sách (fact cứng, feed vào đơn) ──
+  pricingTiers?: PricingTier[]   // bảng combo qty→giá (rỗng → chỉ dùng chatPrice)
+  variants?: ProductVariant[]    // biến thể size/màu
+  codPolicy?: CodPolicy          // ship/giao/đổi-trả/khu vực
+
   // ── Bán hàng ──
   mediaMap: MediaSlot[]
   objectionBank: ObjectionItem[]
@@ -88,13 +117,35 @@ export interface BotMessage {
   assetRef?: string       // khi type=image/video
 }
 
+/** 1 món trong đơn (biến thể + số lượng). */
+export interface OrderItem {
+  name?: string   // tên/biến thể/combo (vd "size L", "combo mua 2")
+  qty?: number
+}
+
+/** Đơn có CẤU TRÚC — để xuất Google Sheet + báo team chuẩn (không bóc dict lỏng). */
+export interface CapturedOrder {
+  customerName?: string
+  phone?: string
+  address?: string
+  items?: OrderItem[]
+  total?: string   // tổng tiền (kèm đơn vị)
+  note?: string    // ghi chú (yêu cầu riêng/khung giờ giao…)
+}
+
 export interface ActionPacket {
   messages: BotMessage[]
   awaitCustomer: boolean              // true = gửi xong DỪNG, chờ khách rep
   nextStage: Stage
   intent: string                      // vd 'ask_price' | 'objection_price' | 'ready_to_buy'
-  captured: Record<string, string>    // SĐT/địa chỉ/màu... bot moi được
+  captured: Record<string, string>    // SĐT/địa chỉ/màu... bot moi được (thô, xuyên phiên)
   handover: boolean                   // true = chuyển cho người
+  /** Lý do handover (chê giá/khiếu nại/đơn to/ngoài phạm vi…) — để route đúng agent. */
+  handoverReason?: string
+  /** Đơn có cấu trúc — CHỈ điền khi đã gom đủ (tên+sđt+địa chỉ+món). */
+  order?: CapturedOrder
+  /** true = đơn ĐÃ xác nhận đủ → trigger xuất Sheet + báo team. */
+  orderComplete?: boolean
   suggestedFollowup?: { afterMinutes: number; note: string }
   /** Tóm tắt phiên (cập nhật mỗi lượt): khách là ai, đã hỏi/lo gì, chốt tới đâu —
    *  để nhớ xuyên cả chat dài dù lịch sử thô bị cắt. */

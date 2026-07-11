@@ -71,11 +71,33 @@ export function compilePrompt(args: {
 
   // ── Sales Config (riêng kênh chat) ──
   const sales = [
-    line('Giá chat', config.chatPrice),
+    line('Giá chat (1 sản phẩm)', config.chatPrice),
     line('Khuyến mãi chat', config.chatPromo),
     line('Trần giảm giá (KHÔNG bán dưới mức này)', config.discountFloor),
     line('Ghi chú giọng/playbook', config.playbookNote),
   ].filter(Boolean).join('\n')
+
+  // ── Combo / biến thể / chính sách COD (fact cứng) ──
+  const combos = (config.pricingTiers ?? [])
+    .filter((t) => t.qty && t.price.trim())
+    .map((t) => `- mua ${t.qty}${t.label?.trim() ? ` (${t.label.trim()})` : ''}: ${t.price.trim()}`)
+    .join('\n')
+
+  const variants = (config.variants ?? [])
+    .filter((v) => v.name.trim() && v.options.trim())
+    .map((v) => `- ${v.name.trim()}: ${v.options.trim()}`)
+    .join('\n')
+
+  const cp = config.codPolicy
+  const policy = cp
+    ? [
+        line('Phí ship', cp.shippingFee),
+        line('Thời gian giao', cp.deliveryTime),
+        line('Khu vực COD', cp.coverage),
+        line('Đổi trả / bảo hành', cp.returnPolicy),
+        line('Ghi chú COD', cp.note),
+      ].filter(Boolean).join('\n')
+    : ''
 
   const objections = config.objectionBank
     .filter((o) => o.trigger.trim() || o.guidance.trim())
@@ -116,6 +138,9 @@ export function compilePrompt(args: {
     '',
     '=== GIÁ & BÁN (kênh chat) ===',
     sales || '(chưa cấu hình giá)',
+    combos ? `\n=== BẢNG GIÁ COMBO (upsell "lấy nhiều lợi hơn" + tính TỔNG đơn theo đây) ===\n${combos}` : '',
+    variants ? `\n=== BIẾN THỂ (bắt buộc xác nhận đúng khi chốt đơn) ===\n${variants}` : '',
+    policy ? `\n=== CHÍNH SÁCH COD & GIAO HÀNG (fact CỨNG — trả đúng cái này, CẤM bịa; thiếu → handover) ===\n${policy}` : '',
     objections ? `\n=== XỬ LÝ TỪ CHỐI ĐẶC THÙ ===\n${objections}` : '',
     examples ? `\n=== HỘI THOẠI MẪU (bắt chước giọng này) ===\n${examples}` : '',
     mediaLines.length ? `\n=== DANH SÁCH MEDIA (gửi bằng id, vd assetRef="m1") ===\n${mediaLines.join('\n')}` : '\n(Chưa gắn media — chỉ trả lời text)',

@@ -24,6 +24,29 @@ export default function DebugSidebar({
           <Row label="Intent" value={packet.intent} />
           <Row label="Chờ khách rep" value={packet.awaitCustomer ? 'Có' : 'Không'} />
           <Row label="Nhường người" value={packet.handover ? '🔔 CÓ' : 'Không'} highlight={packet.handover} />
+          {packet.handover && packet.handoverReason && (
+            <Row label="Lý do nhường" value={packet.handoverReason} highlight />
+          )}
+          {packet.order && (
+            <div>
+              <div className="mb-1 flex items-center gap-1.5 font-semibold text-gray-500">
+                Đơn hàng
+                {packet.orderComplete && (
+                  <span className="rounded bg-emerald-600 px-1 py-0.5 text-[9px] font-bold text-white">ĐÃ CHỐT</span>
+                )}
+              </div>
+              <div className={`space-y-0.5 rounded px-1.5 py-1 ${packet.orderComplete ? 'bg-emerald-500/15 text-emerald-800' : 'bg-amber-500/10 text-amber-700'}`}>
+                {packet.order.customerName && <div>👤 {packet.order.customerName}</div>}
+                {packet.order.phone && <div>📞 {packet.order.phone}</div>}
+                {packet.order.address && <div className="break-words">📍 {packet.order.address}</div>}
+                {packet.order.items?.map((it, i) => (
+                  <div key={i}>🛒 {it.name}{it.qty ? ` ×${it.qty}` : ''}</div>
+                ))}
+                {packet.order.total && <div className="font-semibold">💰 {packet.order.total}</div>}
+                {packet.order.note && <div className="italic">📝 {packet.order.note}</div>}
+              </div>
+            </div>
+          )}
           {packet.suggestedFollowup && (
             <Row label="Gợi ý nhắc lại" value={`sau ${packet.suggestedFollowup.afterMinutes}' · ${packet.suggestedFollowup.note}`} />
           )}
