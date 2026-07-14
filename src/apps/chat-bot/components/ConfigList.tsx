@@ -61,7 +61,11 @@ export default function ConfigList({ onPick }: { onPick: (productId: string) => 
                     <div className="truncate text-sm font-semibold text-gray-900">{name}</div>
                     <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
                       <span className="rounded bg-black/[0.05] px-1.5 py-0.5">{MARKET_LABELS[c.market]}</span>
-                      {c.chatPrice && <span>· {c.chatPrice}</span>}
+                      {(() => {
+                        const first = (c.pricingTiers ?? []).find((t) => t.price.trim())
+                        const shown = first ? first.price.trim() : c.chatPrice
+                        return shown ? <span>· {shown}</span> : null
+                      })()}
                       <span>· {c.mediaMap.length} ảnh</span>
                     </div>
                   </div>

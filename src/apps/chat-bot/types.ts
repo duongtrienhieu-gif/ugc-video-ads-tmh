@@ -58,7 +58,8 @@ export interface ObjectionItem {
 /** Bậc combo: mua số lượng X → giá Y (để bot upsell "lấy 2 lợi hơn" + chốt đúng). */
 export interface PricingTier {
   id: string
-  qty: number        // số lượng (1, 2, 3…)
+  qty: number        // số lượng MUA (1, 2, 3…) — qty=1 freeQty=0 = giá lẻ
+  freeQty?: number   // số lượng TẶNG kèm (0/undefined = không tặng) — vd mua 1 tặng 1, mua 2 tặng 3
   price: string      // giá cho mức này (kèm đơn vị, vd "RM159")
   label?: string     // tên combo tuỳ chọn (vd "Combo tiết kiệm")
 }
@@ -91,13 +92,13 @@ export interface SalesConfig {
   productId: string
   market: Market
 
-  // ── Giá CHAT (riêng, KHÁC giá Ladipage trong product bank `offer`) ──
-  chatPrice: string          // user gõ tự do, vd "RM89" / "299k"
-  chatPromo?: string         // ưu đãi khi chat, vd "freeship + tặng ốp"
-  discountFloor: string      // TRẦN giảm giá cứng — AI không vượt
+  // ── Giá CHAT — LEGACY (config cũ). Config mới dùng pricingTiers làm nguồn giá DUY NHẤT. ──
+  chatPrice: string          // legacy — để '' ở config mới
+  chatPromo?: string         // legacy — ưu đãi giờ viết vào label của tier
+  discountFloor: string      // legacy — bot mới CẤM bán ngoài BẢNG GIÁ nên không cần trần riêng
 
-  // ── Combo / biến thể / chính sách (fact cứng, feed vào đơn) ──
-  pricingTiers?: PricingTier[]   // bảng combo qty→giá (rỗng → chỉ dùng chatPrice)
+  // ── Bảng giá + biến thể + chính sách (fact cứng, feed vào đơn) ──
+  pricingTiers?: PricingTier[]   // BẢNG GIÁ (bắt buộc ≥1 mức) — mua X tặng Y = giá Z, gồm cả giá lẻ
   variants?: ProductVariant[]    // biến thể size/màu
   codPolicy?: CodPolicy          // ship/giao/đổi-trả/khu vực
 

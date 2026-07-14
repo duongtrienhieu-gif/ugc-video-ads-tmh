@@ -67,9 +67,9 @@ export default function ConfigPanel({ productId, onSaved }: { productId: string;
   const removeExample = (i: number) =>
     update({ goldenExamples: examples.filter((_, idx) => idx !== i) })
 
-  // ── Bảng giá combo ──
+  // ── Bảng giá (nguồn giá DUY NHẤT của bot) ──
   const tiers = draft.pricingTiers ?? []
-  const addTier = () => update({ pricingTiers: [...tiers, { id: crypto.randomUUID(), qty: 2, price: '', label: '' }] })
+  const addTier = () => update({ pricingTiers: [...tiers, { id: crypto.randomUUID(), qty: tiers.length === 0 ? 1 : 2, freeQty: 0, price: '', label: '' }] })
   const updateTier = (id: string, patch: Partial<PricingTier>) =>
     update({ pricingTiers: tiers.map((t) => (t.id === id ? { ...t, ...patch } : t)) })
   const removeTier = (id: string) => update({ pricingTiers: tiers.filter((t) => t.id !== id) })
@@ -86,8 +86,8 @@ export default function ConfigPanel({ productId, onSaved }: { productId: string;
   const updatePolicy = (patch: Partial<CodPolicy>) => update({ codPolicy: { ...policy, ...patch } })
 
   const handleSave = () => {
-    if (!draft.chatPrice.trim()) {
-      addToast('Cần nhập Giá chat trước khi lưu', 'error')
+    if (!(draft.pricingTiers ?? []).some((t) => t.price.trim())) {
+      addToast('Cần ít nhất 1 mức trong Bảng giá (kể cả giá lẻ) trước khi lưu', 'error')
       return
     }
     setSaving(true)
@@ -130,67 +130,46 @@ export default function ConfigPanel({ productId, onSaved }: { productId: string;
         </select>
       </Field>
 
-      {/* Giá chat + trần giảm */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Giá chat (riêng, KHÁC giá Ladipage)" required>
-          <input
-            value={draft.chatPrice}
-            onChange={(e) => update({ chatPrice: e.target.value })}
-            placeholder={draft.market === 'MY' ? 'vd: RM89' : 'vd: 299k'}
-            className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-emerald-400"
-          />
-        </Field>
-        <Field label="Trần giảm giá (AI không vượt)" required>
-          <input
-            value={draft.discountFloor}
-            onChange={(e) => update({ discountFloor: e.target.value })}
-            placeholder={draft.market === 'MY' ? 'vd: RM69' : 'vd: 249k'}
-            className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-emerald-400"
-          />
-        </Field>
-      </div>
-
-      <Field label="Khuyến mãi khi chat (tuỳ chọn)">
-        <input
-          value={draft.chatPromo ?? ''}
-          onChange={(e) => update({ chatPromo: e.target.value })}
-          placeholder="vd: freeship + tặng quà khi chốt hôm nay"
-          className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-emerald-400"
-        />
-      </Field>
-
-      {/* Bảng giá combo */}
+      {/* Bảng giá — nguồn giá DUY NHẤT của bot */}
       <div>
         <div className="mb-1 flex items-center justify-between">
           <label className="text-xs font-semibold text-gray-700">
-            Bảng giá combo <span className="font-normal text-gray-400">(không bắt buộc · bot upsell + tính tổng đơn)</span>
+            💰 Bảng giá <span className="text-red-400">*</span>{' '}
+            <span className="font-normal text-gray-400">(nguồn giá duy nhất — bot bán ĐÚNG bảng này, không tự giảm)</span>
           </label>
           <button onClick={addTier} className="flex items-center gap-1 rounded-lg bg-black/5 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-black/10">
             <Plus className="h-3.5 w-3.5" /> Thêm mức
           </button>
         </div>
         <p className="mb-2 text-[11px] text-gray-400">
-          Vd: mua 2 = RM159, mua 3 = RM219. Bot gợi ý "lấy 2 lợi hơn" + tính tổng đơn theo bảng này.
+          Mỗi dòng 1 gói: mua X tặng Y = giá. Vd: mua 1 tặng 0 = RM49 (giá lẻ) · mua 1 tặng 1 = RM69 · mua 2 tặng 1 = RM99. Bot upsell gói lợi nhất + tính tổng đơn theo bảng.
         </p>
         <div className="space-y-2">
           {tiers.map((t) => (
-            <div key={t.id} className="flex items-center gap-2 rounded-lg border border-black/8 p-2">
+            <div key={t.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-black/8 p-2">
               <span className="text-[11px] text-gray-400">mua</span>
               <input
                 type="number" min={1} value={t.qty}
                 onChange={(e) => updateTier(t.id, { qty: Math.max(1, Number(e.target.value) || 1) })}
                 className="w-14 rounded-md border border-black/10 px-2 py-1 text-xs outline-none focus:border-emerald-400"
               />
+              <span className="text-[11px] text-gray-400">tặng</span>
+              <input
+                type="number" min={0} value={t.freeQty ?? 0}
+                onChange={(e) => updateTier(t.id, { freeQty: Math.max(0, Number(e.target.value) || 0) })}
+                className="w-14 rounded-md border border-black/10 px-2 py-1 text-xs outline-none focus:border-emerald-400"
+              />
+              <span className="text-[11px] text-gray-400">=</span>
               <input
                 value={t.price}
                 onChange={(e) => updateTier(t.id, { price: e.target.value })}
-                placeholder={draft.market === 'MY' ? 'giá (RM159)' : 'giá (499k)'}
+                placeholder={draft.market === 'MY' ? 'giá (RM49)' : 'giá (299k)'}
                 className="w-28 rounded-md border border-black/10 px-2 py-1 text-xs outline-none focus:border-emerald-400"
               />
               <input
                 value={t.label ?? ''}
                 onChange={(e) => updateTier(t.id, { label: e.target.value })}
-                placeholder="tên combo (tuỳ chọn)"
+                placeholder="ghi chú gói (freeship, tặng quà… tuỳ chọn)"
                 className="min-w-0 flex-1 rounded-md border border-black/10 px-2 py-1 text-xs outline-none focus:border-emerald-400"
               />
               <button onClick={() => removeTier(t.id)} className="shrink-0 rounded-md p-1.5 text-gray-400 hover:bg-red-500/10 hover:text-red-500">
@@ -198,6 +177,11 @@ export default function ConfigPanel({ productId, onSaved }: { productId: string;
               </button>
             </div>
           ))}
+          {tiers.length === 0 && (
+            <button onClick={addTier} className="w-full rounded-lg border border-dashed border-black/15 py-3 text-xs text-gray-400 hover:border-emerald-400 hover:text-emerald-500">
+              + Thêm mức giá đầu tiên (vd: mua 1 tặng 1 = RM49)
+            </button>
+          )}
         </div>
       </div>
 
