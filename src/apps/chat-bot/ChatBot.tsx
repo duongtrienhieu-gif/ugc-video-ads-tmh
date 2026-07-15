@@ -7,9 +7,10 @@ import ConfigPanel from './components/ConfigPanel'
 import ConfigList from './components/ConfigList'
 import Simulator from './components/Simulator'
 import AdminPanel from './components/AdminPanel'
+import HandbookPanel from './components/HandbookPanel'
 import SegmentTabs from '../../components/shell/SegmentTabs'
 
-type Tab = 'config' | 'simulator' | 'admin'
+type Tab = 'config' | 'simulator' | 'handbook' | 'admin'
 
 /** Owner (quản trị tổng) — thấy tab 👑 xem/tắt config của MỌI nhân viên. */
 const OWNER_EMAILS = ['duongtrienhieu@gmail.com']
@@ -55,6 +56,7 @@ export default function ChatBot() {
             options={[
               { value: 'config', label: '⚙ Cấu hình' },
               { value: 'simulator', label: '▶ Mô phỏng' },
+              { value: 'handbook', label: '📖 Sổ tay' },
               ...(isOwner ? [{ value: 'admin' as Tab, label: '👑 Quản trị' }] : []),
             ]}
           />
@@ -63,7 +65,11 @@ export default function ChatBot() {
 
       {/* Body */}
       <div className="min-h-0 flex-1">
-        {tab === 'admin' && isOwner ? (
+        {tab === 'handbook' ? (
+          <div className="h-full overflow-y-auto">
+            <HandbookPanel />
+          </div>
+        ) : tab === 'admin' && isOwner ? (
           <div className="h-full overflow-y-auto">
             <AdminPanel />
           </div>
