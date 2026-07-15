@@ -2,12 +2,17 @@ import { useEffect, useState } from 'react'
 import { MessageCircle, ChevronLeft } from 'lucide-react'
 import { useChatBotStore } from './store'
 import { useBankStore } from '../../stores/bankStore'
+import { supabase } from '../../lib/supabase'
 import ConfigPanel from './components/ConfigPanel'
 import ConfigList from './components/ConfigList'
 import Simulator from './components/Simulator'
+import AdminPanel from './components/AdminPanel'
 import SegmentTabs from '../../components/shell/SegmentTabs'
 
-type Tab = 'config' | 'simulator'
+type Tab = 'config' | 'simulator' | 'admin'
+
+/** Owner (quản trị tổng) — thấy tab 👑 xem/tắt config của MỌI nhân viên. */
+const OWNER_EMAILS = ['duongtrienhieu@gmail.com']
 
 // CHAT BOT — bộ não bán hàng cho chatbot rep tin nhắn (WhatsApp MY / Pancake VN).
 // productId đang chọn lưu trong store (persist) → F5 không mất chỗ.
@@ -22,6 +27,14 @@ export default function ChatBot() {
   useEffect(() => {
     void hydrate()
   }, [hydrate])
+
+  // Owner check — chỉ owner thấy tab Quản trị.
+  const [isOwner, setIsOwner] = useState(false)
+  useEffect(() => {
+    void supabase.auth.getUser().then(({ data }) => {
+      setIsOwner(OWNER_EMAILS.includes(data.user?.email ?? ''))
+    })
+  }, [])
 
   return (
     <div className="flex h-full flex-col bg-app-base">
@@ -42,6 +55,7 @@ export default function ChatBot() {
             options={[
               { value: 'config', label: '⚙ Cấu hình' },
               { value: 'simulator', label: '▶ Mô phỏng' },
+              ...(isOwner ? [{ value: 'admin' as Tab, label: '👑 Quản trị' }] : []),
             ]}
           />
         </div>
@@ -49,7 +63,11 @@ export default function ChatBot() {
 
       {/* Body */}
       <div className="min-h-0 flex-1">
-        {tab === 'config' ? (
+        {tab === 'admin' && isOwner ? (
+          <div className="h-full overflow-y-auto">
+            <AdminPanel />
+          </div>
+        ) : tab === 'config' ? (
           !productId ? (
             <div className="h-full overflow-y-auto">
               <ConfigList onPick={setProductId} />

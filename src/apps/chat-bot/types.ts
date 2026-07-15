@@ -95,6 +95,8 @@ export interface SalesConfig {
   // ── Định tuyến đa-SP (bot 1 số phục vụ nhiều SP) ──
   routeCode?: string   // MÃ ngắn DUY NHẤT (vd "APRICOT") — khách nhắn "pasal APRICOT" → bot nạp config này
   team?: string        // Team phụ trách (vd "SUMMIT") — để giao đúng nhóm ở Chatwoot + báo cáo
+  /** Owner tắt config (panel Quản trị) → bot BỎ QUA (không route, không làm mặc định). */
+  disabled?: boolean
 
   // ── Giá CHAT — LEGACY (config cũ). Config mới dùng pricingTiers làm nguồn giá DUY NHẤT. ──
   chatPrice: string          // legacy — để '' ở config mới
