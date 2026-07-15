@@ -92,6 +92,10 @@ export interface SalesConfig {
   productId: string
   market: Market
 
+  // ── Định tuyến đa-SP (bot 1 số phục vụ nhiều SP) ──
+  routeCode?: string   // MÃ ngắn DUY NHẤT (vd "APRICOT") — khách nhắn "pasal APRICOT" → bot nạp config này
+  team?: string        // Team phụ trách (vd "SUMMIT") — để giao đúng nhóm ở Chatwoot + báo cáo
+
   // ── Giá CHAT — LEGACY (config cũ). Config mới dùng pricingTiers làm nguồn giá DUY NHẤT. ──
   chatPrice: string          // legacy — để '' ở config mới
   chatPromo?: string         // legacy — ưu đãi giờ viết vào label của tier

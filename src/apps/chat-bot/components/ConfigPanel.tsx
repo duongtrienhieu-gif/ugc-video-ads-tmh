@@ -130,6 +130,26 @@ export default function ConfigPanel({ productId, onSaved }: { productId: string;
         </select>
       </Field>
 
+      {/* Định tuyến đa-SP: 1 số WhatsApp phục vụ nhiều SP */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Mã định tuyến (khách nhắn 'pasal MÃ' → bot nạp SP này)">
+          <input
+            value={draft.routeCode ?? ''}
+            onChange={(e) => update({ routeCode: e.target.value.trim().toUpperCase() })}
+            placeholder="vd: APRICOT — VIẾT HOA, không dấu, không trùng SP khác"
+            className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm uppercase outline-none focus:border-emerald-400"
+          />
+        </Field>
+        <Field label="Team phụ trách">
+          <input
+            value={draft.team ?? ''}
+            onChange={(e) => update({ team: e.target.value.trim().toUpperCase() })}
+            placeholder="vd: SUMMIT / APEX / TITAN"
+            className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm uppercase outline-none focus:border-emerald-400"
+          />
+        </Field>
+      </div>
+
       {/* Bảng giá — nguồn giá DUY NHẤT của bot */}
       <div>
         <div className="mb-1 flex items-center justify-between">
