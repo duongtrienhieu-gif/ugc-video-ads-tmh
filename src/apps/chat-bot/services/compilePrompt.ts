@@ -40,6 +40,49 @@ function line(label: string, value?: string): string {
   return v ? `- ${label}: ${v}` : ''
 }
 
+interface PricingTierLite { qty?: number; freeQty?: number; price?: string; label?: string }
+/** Bóc số tiền từ chuỗi tự do ("RM 65", "RM1,299", "89k") → number|null. */
+function parsePrice(s: string): number | null {
+  const m = (s || '').replace(/,/g, '').match(/(\d+(?:\.\d+)?)/)
+  return m ? parseFloat(m[1]) : null
+}
+/** Tính SẴN đơn giá/hộp, % rẻ, tiết kiệm RM, chênh cận biên — bot KHỎI tự tính
+ *  (Gemini chia sai giá là mất khách). Neo "gói nhỏ nhất" (KHÔNG giả định giá lẻ:
+ *  gói nhỏ nhất của SP có thể đã là 1+1). Làm tròn RM nguyên khi nói với khách. */
+interface TierCalc { qty: number; freeQty: number; units: number; price: number; label?: string }
+function analyzePricing(tiers: PricingTierLite[]): string {
+  const calc: TierCalc[] = []
+  for (const t of tiers) {
+    const price = parsePrice(t.price ?? '')
+    const units = (t.qty ?? 0) + (t.freeQty ?? 0)
+    if (price && units > 0) calc.push({ qty: t.qty ?? 0, freeQty: t.freeQty ?? 0, units, price, label: t.label?.trim() || undefined })
+  }
+  calc.sort((a, b) => a.units - b.units)
+  if (calc.length === 0) return ''
+  const base = calc[0]!
+  const basePer = base.price / base.units
+  let best: TierCalc = base
+  const lines = calc.map((t, i) => {
+    if (t.units > best.units) best = t
+    const per = t.price / t.units
+    const name = `mua ${t.qty}${t.freeQty ? ` tặng ${t.freeQty}` : ''}${t.label ? ` (${t.label})` : ''}`
+    const bits = [`nhận ${t.units} hộp, ~RM${Math.round(per)}/hộp`]
+    if (i > 0) {
+      const savePct = Math.round((1 - per / basePer) * 100)
+      const saveRm = Math.round(t.units * basePer - t.price)
+      if (savePct >= 3) bits.push(`rẻ hơn ~${savePct}% mỗi hộp`)
+      if (saveRm >= 1) bits.push(`tiết kiệm ~RM${saveRm} so mua lẻ cùng số hộp`)
+      const prev = calc[i - 1]!
+      const dP = Math.round(t.price - prev.price)
+      const dU = t.units - prev.units
+      if (dU > 0 && dP >= 0) bits.push(`chỉ +RM${dP} so gói trước mà thêm ${dU} hộp`)
+    }
+    return `- ${name}: ${t.price} → ${bits.join(' · ')}`
+  })
+  const bestSaveRm = Math.round(best.units * basePer - best.price)
+  return `${lines.join('\n')}\n➡ GÓI LỢI NHẤT = ${best.qty}${best.freeQty ? `+${best.freeQty}` : ''} (${best.units} hộp): rẻ nhất ~RM${Math.round(best.price / best.units)}/hộp${bestSaveRm >= 1 ? `, tiết kiệm ~RM${bestSaveRm}` : ''} — vừa ĐỦ LIỆU TRÌNH vừa lời nhất.`
+}
+
 export function compilePrompt(args: {
   config: SalesConfig
   product: Product | undefined
@@ -94,6 +137,7 @@ export function compilePrompt(args: {
 
   // ── BẢNG GIÁ = nguồn giá DUY NHẤT (mua X tặng Y = giá). Config cũ chưa có bảng
   //    → fallback bộ field legacy (chatPrice/chatPromo/discountFloor) để không vỡ. ──
+  const comboMath = analyzePricing(config.pricingTiers ?? [])
   const combos = (config.pricingTiers ?? [])
     .filter((t) => t.qty && t.price.trim())
     .map((t) => {
@@ -170,6 +214,7 @@ export function compilePrompt(args: {
     combos
       ? `=== BẢNG GIÁ (nguồn giá DUY NHẤT — bán ĐÚNG bảng, CẤM tự giảm/CẤM giá ngoài bảng; upsell gói lợi nhất + tính TỔNG đơn theo đây) ===\n${combos}${sales ? `\n${sales}` : ''}`
       : `=== GIÁ & BÁN (kênh chat) ===\n${sales || '(chưa cấu hình giá)'}`,
+    comboMath ? `\n=== PHÂN TÍCH GÓI (SỐ ĐÃ TÍNH SẴN — nói ĐÚNG số này, TUYỆT ĐỐI KHÔNG tự tính lại; dùng để upsell combo=liệu trình+tiết kiệm RM tạo FOMO chốt) ===\n${comboMath}` : '',
     variants ? `\n=== BIẾN THỂ (bắt buộc xác nhận đúng khi chốt đơn) ===\n${variants}` : '',
     policy ? `\n=== CHÍNH SÁCH COD & GIAO HÀNG (fact CỨNG — trả đúng cái này, CẤM bịa; thiếu → handover) ===\n${policy}` : '',
     objections ? `\n=== XỬ LÝ TỪ CHỐI ĐẶC THÙ ===\n${objections}` : '',
