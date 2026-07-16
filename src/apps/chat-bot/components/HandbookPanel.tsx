@@ -219,16 +219,17 @@ export default function HandbookPanel() {
         <Check id="b2-3"><b>Team</b>: SUMMIT / APEX / TITAN (team của bạn).</Check>
         <Check id="b2-4"><b>Bảng giá</b>: mỗi dòng 1 gói "mua X tặng Y = giá". Bot CHỈ bán đúng bảng này.</Check>
         <Check id="b2-5"><b>Chính sách COD</b>: phí ship, mấy ngày giao, khu vực, đổi trả. Bot CẤM bịa — thiếu là bot phải gọi người.</Check>
-        <Check id="b2-6"><b>Gắn ảnh</b> theo vai (proof/feedback/cơ chế/khuyến mãi) + viết caption TẢ THẬT từng ảnh.</Check>
+        <Check id="b2-6"><b>Gắn ảnh</b>: bấm ✨ để AI tự gán VAI + viết caption, rồi RÀ LẠI theo format 2 vế: <i>"tả ảnh — GỬI KHI: tình huống"</i>. Caption là thứ quyết định bot rút ảnh đúng lúc.</Check>
         <Check id="b2-7">Điền <b>Xử lý từ chối</b> cho 2-3 câu chê hay gặp nhất.</Check>
         <Ex title="Bảng giá chuẩn (APRICOT)">
           <p>mua <b>1</b> tặng <b>0</b> = <b>RM39</b> (giá lẻ)</p>
           <p>mua <b>1</b> tặng <b>1</b> = <b>RM59</b> — ghi chú: <i>freeship</i></p>
           <p>mua <b>2</b> tặng <b>2</b> = <b>RM99</b> — ghi chú: <i>gói lợi nhất, freeship</i></p>
         </Ex>
-        <Ex title="Caption ảnh — SAI vs ĐÚNG">
+        <Ex title="Caption ảnh — SAI vs ĐÚNG (format 2 vế)">
           <p>❌ <i>"ảnh 1", "feedback"</i> → bot không biết lúc nào nên gửi</p>
-          <p>✅ <i>"Feedback khách Melaka dùng 2 tuần, hết nghẹt mũi ban đêm"</i> → khách chê "tak percaya" là bot rút đúng ảnh này</p>
+          <p>✅ <i>"Feedback khách Melaka dùng 2 tuần hết nghẹt mũi ban đêm — GỬI KHI: khách do dự/nghi ngờ/im lặng"</i></p>
+          <p>✅ <i>"Sơ đồ cơ chế xịt làm sạch khoang mũi — GỬI KHI: giải thích vì sao hết nghẹt"</i></p>
         </Ex>
         <Warn>Mã định tuyến VIẾT HOA, không dấu, KHÔNG TRÙNG với SP khác. Trùng mã = 2 bot đá nhau, mất đơn cả 2 đứa.</Warn>
       </Section>

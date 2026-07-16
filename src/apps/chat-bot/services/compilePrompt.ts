@@ -8,8 +8,23 @@
 
 import type { Product } from '../../../stores/types'
 import type { ChatTurn, MediaRole, MediaSlot, SalesConfig } from '../types'
-import { ROLE_LABELS, STAGE_LABELS } from '../labels'
+import { ROLE_LABELS } from '../labels'
 import { buildSystemPrompt } from './playbook'
+
+/** Gợi ý DÙNG KHI NÀO cho từng VAI ảnh (thay trục "giai đoạn" cứng đã bỏ —
+ *  1 ảnh dùng được nhiều thời điểm; bot quyết theo vai + caption + ngữ cảnh). */
+const ROLE_USAGE_HINTS: Partial<Record<MediaRole, string>> = {
+  hook: 'giật chú ý — hợp mở màn',
+  pain: 'đồng cảm khi khách kể triệu chứng/vấn đề — mở màn/đào bệnh',
+  feature: 'tính năng/thành phần — trao giá trị',
+  mechanism: 'giải thích VÌ SAO hiệu quả — tư vấn sâu + phủ vai 3 lượt đầu',
+  usage: 'cách dùng — sau chốt hoặc khách hỏi cách dùng',
+  compare: 'so sánh/before-after — khách chê đắt/chưa tin',
+  proof: 'review khách thật — khách do dự/im + follow-up + phủ vai 3 lượt đầu',
+  authority: 'báo chí/chuyên gia/chứng nhận — gỡ nghi "scam/hàng giả" + phủ vai uy tín',
+  promo: 'khuyến mãi/gói — lúc chốt/upsell',
+  unboxing: 'mở hộp/dùng thử — tăng cảm giác hàng thật',
+}
 
 export const MAX_HISTORY_TURNS = 14
 
@@ -48,13 +63,14 @@ export function compilePrompt(args: {
     refToId.set(slot.assetRef, id)
     const desc = slot.caption?.trim() ? slot.caption.trim() : `(${slot.mediaType})`
     const arr = byRole.get(slot.role) ?? []
-    arr.push(`  ${id} [${STAGE_LABELS[slot.stage]}]: ${desc}`)
+    arr.push(`  ${id}: ${desc}`)
     byRole.set(slot.role, arr)
   })
   const mediaLines: string[] = []
   for (const [role, lines] of byRole) {
-    const cluster = lines.length > 1 ? ' — CÙNG LOẠI, có thể gửi CỤM 2-4 ảnh một lần' : ''
-    mediaLines.push(`• ${ROLE_LABELS[role]}${cluster}:`)
+    const hint = ROLE_USAGE_HINTS[role]
+    const cluster = lines.length > 1 ? ' · CÙNG LOẠI, có thể gửi CỤM 2-4 ảnh một lần' : ''
+    mediaLines.push(`• ${ROLE_LABELS[role]}${hint ? ` (${hint})` : ''}${cluster}:`)
     mediaLines.push(...lines)
   }
 

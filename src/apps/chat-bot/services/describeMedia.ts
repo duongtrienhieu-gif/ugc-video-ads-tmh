@@ -22,10 +22,16 @@ const SCHEMA: Record<string, unknown> = {
 
 const PROMPT = `Đây là 1 ảnh dùng để bán hàng/quảng cáo. Phân loại + MÔ TẢ để 1 chatbot bán hàng biết ảnh THỂ HIỆN GÌ và KHI NÀO nên gửi.
 Trả JSON { role, caption }:
-- role: chọn 1 ĐÚNG nội dung ảnh:
-  hook (giật tít/thu hút) · pain (vấn đề/nỗi đau) · feature (tính năng/thành phần) · mechanism (cơ chế hoạt động) · usage (hướng dẫn dùng) · compare (so sánh/before-after) · proof (review/chat khách) · authority (báo chí/chuyên gia/chứng nhận) · promo (khuyến mãi/giá) · unboxing (mở hộp/dùng thử) · other.
-- caption: TIẾNG VIỆT, ≤20 từ. MÔ TẢ ảnh thể hiện gì + tình huống nên gửi. KHÔNG chép nguyên câu chữ/headline in trên ảnh. KHÔNG bịa thông tin không có trong ảnh.
-  Ví dụ tốt: "ảnh khách đau gối khi leo cầu thang — gửi khi khách than đau lúc lên xuống cầu thang"; "review 5 sao khách lớn tuổi — gửi khi khách do dự/nghi ngờ".`
+- role: chọn 1 ĐÚNG nội dung ảnh (nhìn kỹ, đừng đoán bừa 'feature'):
+  hook (giật tít/thu hút) · pain (vấn đề/nỗi đau/triệu chứng) · feature (tính năng/thành phần) · mechanism (cơ chế hoạt động/vì sao hiệu quả) · usage (hướng dẫn dùng) · compare (so sánh/before-after) · proof (review/feedback/chat khách thật) · authority (báo chí/bác sĩ/chuyên gia/chứng nhận KKM) · promo (khuyến mãi/combo/giá) · unboxing (mở hộp/dùng thử) · other.
+- caption: TIẾNG VIỆT, ≤25 từ, BẮT BUỘC đúng format 2 vế:
+  "<tả CỤ THỂ ảnh thể hiện gì> — GỬI KHI: <tình huống chat cụ thể>"
+  Vế 1 tả thật chi tiết đắt giá nhất trong ảnh (triệu chứng gì, khách kiểu nào, số liệu gì). Vế 2 là tình huống khách nhắn để bot biết lúc rút ảnh.
+  KHÔNG chép nguyên câu chữ/headline in trên ảnh. KHÔNG bịa thông tin không có trong ảnh.
+  Ví dụ tốt:
+  "khách nữ lớn tuổi đau gối khi leo cầu thang — GỬI KHI: khách than đau lúc lên xuống cầu thang/ngồi xổm"
+  "review 5 sao kèm ảnh chat WhatsApp khách dùng 2 tuần — GỬI KHI: khách do dự, nghi ngờ, hoặc im lặng"
+  "sơ đồ cơ chế xịt làm sạch khoang mũi giảm viêm — GỬI KHI: giải thích vì sao hết nghẹt/khách hỏi có hiệu quả không"`
 
 async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {

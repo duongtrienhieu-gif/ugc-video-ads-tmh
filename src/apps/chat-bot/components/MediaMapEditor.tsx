@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import { Plus, Trash2, Sparkles, Loader2 } from 'lucide-react'
-import type { MediaSlot, MediaRole, Stage } from '../types'
-import { ROLE_DEFAULT_STAGE, ROLE_LABELS, ROLE_ORDER, STAGE_LABELS, STAGE_ORDER } from '../labels'
+import type { MediaSlot, MediaRole } from '../types'
+import { ROLE_DEFAULT_STAGE, ROLE_LABELS, ROLE_ORDER } from '../labels'
 import { describeMediaRef } from '../services/describeMedia'
 import MediaThumb from './MediaThumb'
 import MediaPickerModal, { type PickedMedia } from './MediaPickerModal'
 
-// Quản lý mediaMap: gắn ảnh/video + GÁN NHÃN (role) + bậc gửi (stage) + caption.
+// Quản lý mediaMap: gắn ảnh/video + GÁN VAI (role) + caption "GỬI KHI: tình huống".
 // Khi thêm ảnh → Gemini Vision tự đọc ảnh điền role + caption (1 lần, không tốn chi
-// phí chat). User sửa được. Lúc chat AI đọc nhãn+caption (text) để chọn gửi đúng bậc.
+// phí chat). User sửa được. Bot chọn ảnh theo VAI + CAPTION (trục "giai đoạn" đã bỏ
+// khỏi UI — 1 ảnh dùng được nhiều thời điểm, gán cứng 1 bậc chỉ trói tay bot;
+// field stage vẫn set ngầm để config cũ không vỡ).
 export default function MediaMapEditor({
   productId, value, onChange,
 }: {
@@ -124,16 +126,6 @@ export default function MediaMapEditor({
                         <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                       ))}
                     </select>
-                    <select
-                      value={slot.stage}
-                      onChange={(e) => updateSlot(slot.id, { stage: e.target.value as Stage })}
-                      className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2 py-1 text-xs outline-none focus:border-emerald-400"
-                      title="Bậc nên gửi"
-                    >
-                      {STAGE_ORDER.map((s) => (
-                        <option key={s} value={s}>{STAGE_LABELS[s]}</option>
-                      ))}
-                    </select>
                     {slot.mediaType === 'image' && (
                       <button
                         onClick={() => void reDescribe(slot)}
@@ -155,7 +147,7 @@ export default function MediaMapEditor({
                   <input
                     value={slot.caption ?? ''}
                     onChange={(e) => updateSlot(slot.id, { caption: e.target.value })}
-                    placeholder={busy ? 'AI đang đọc ảnh…' : 'Mô tả ngắn (VN) — để AI biết khi nào gửi…'}
+                    placeholder={busy ? 'AI đang đọc ảnh…' : 'Tả ảnh — GỬI KHI: tình huống (vd: review khách đau gối — GỬI KHI: khách do dự)'}
                     className="w-full rounded-md border border-black/10 px-2 py-1 text-xs outline-none focus:border-emerald-400"
                   />
                 </div>
