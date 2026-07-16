@@ -270,7 +270,8 @@ function parseGiftMaster(wb: XLSX.WorkBook): GiftMaster[] {
     const name = String(ws[`A${r}`]?.v ?? '').trim()
     if (!name) { if (++blanks > 8) break; continue }
     blanks = 0
-    if (name.startsWith('SHEET') || name === 'Sản phẩm') continue
+    // Bỏ dòng tiêu đề + dòng "💰 TỔNG VỐN KẸT TOÀN KHO" (nếu lấy → thành SP ma + đếm trùng tổng)
+    if (name.startsWith('SHEET') || name === 'Sản phẩm' || name.toUpperCase().includes('TỔNG')) continue
     items.push({ name, vaiTro: String(ws[`B${r}`]?.v ?? '').trim(), ngach: String(ws[`C${r}`]?.v ?? '').trim(), ton: num(ws[`D${r}`]?.v), vonSp: num(ws[`E${r}`]?.v) })
   }
   return items

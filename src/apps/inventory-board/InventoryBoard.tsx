@@ -12,6 +12,7 @@ import { computeProfit } from './profitCalc'
 import { computeVerdicts, hoanMatureDaysLeft, isComboName } from './verdict'
 import type { VerdictRow, VGroup } from './verdict'
 import GiftCombo from './GiftCombo'
+import type { GiftMaster } from './giftPlan'
 import RewardTab from './RewardTab'
 import { useAppStore } from '../../stores/appStore'
 import { loadBoardLinks, saveBoardLinks } from './boardConfig'
@@ -356,6 +357,27 @@ export default function InventoryBoard() {
     return { vonNhap, eDong }
   }, [restock, invRows])
 
+  // ── BẢNG TỒN KHO (file KẾ HOẠCH KINH DOANH, sheet "3. THỰC TRẠNG TỒN") ──────
+  // Tái dùng nhánh giftOnly sẵn có (tab Ghép Quà cũng đọc sheet này). Vốn kẹt = tồn × vốn/sp
+  // (khớp cột VỐN KẸT của sheet). KHÔNG lấy cột Vai trò. Tải lười: chỉ khi mở tab Kho.
+  const [tonMaster, setTonMaster] = useState<GiftMaster[]>([])
+  const [tonLoading, setTonLoading] = useState(false)
+  useEffect(() => {
+    if (tab !== 'kho' || tonMaster.length || tonLoading || !sources.giftplan) return
+    setTonLoading(true)
+    fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ giftOnly: true, links: { giftplan: sources.giftplan } }), cache: 'no-store' })
+      .then((r) => r.json())
+      .then((j) => setTonMaster(j.giftMaster || []))
+      .catch(() => { /* giữ trống, hiện thông báo */ })
+      .finally(() => setTonLoading(false))
+  }, [tab, sources.giftplan, tonMaster.length, tonLoading])
+
+  const tonRows = useMemo(
+    () => tonMaster.map((m) => ({ name: m.name, ngach: m.ngach, ton: m.ton, vonSp: m.vonSp, vonKet: m.ton * m.vonSp })).sort((a, b) => b.vonKet - a.vonKet),
+    [tonMaster],
+  )
+  const tonTotal = useMemo(() => ({ ton: tonRows.reduce((s, r) => s + r.ton, 0), vonKet: tonRows.reduce((s, r) => s + r.vonKet, 0) }), [tonRows])
+
   // ── BẢNG ĐIỀU PHỐI: 1 verdict/mã (lãi thật × tồn × trend), gom theo việc cần làm ──
   const verdicts = useMemo(
     () => computeVerdicts(products, inv, velocity, velDaily, priceVnd, incoming, backorder),
@@ -525,6 +547,14 @@ export default function InventoryBoard() {
       } },
   ]
 
+  const tonCols: Col<(typeof tonRows)[number]>[] = [
+    { label: 'SẢN PHẨM', node: (r) => r.name },
+    { label: 'NGÁCH', node: (r) => <span style={{ color: C.muted2 }}>{r.ngach || '—'}</span> },
+    { label: 'TỒN', node: (r) => <span style={{ color: r.ton === 0 ? C.muted : C.text }}>{Math.round(r.ton).toLocaleString('vi-VN')}</span> },
+    { label: 'VỐN / SP', node: (r) => <span style={{ color: C.muted2 }}>{r.vonSp > 0 ? fmtMoney(r.vonSp) : '—'}</span> },
+    { label: 'VỐN KẸT', node: (r) => <span style={{ color: r.vonKet >= 50_000_000 ? C.red : r.vonKet >= 20_000_000 ? C.amber : r.vonKet > 0 ? C.gold : C.muted }}>{r.vonKet > 0 ? fmtMoney(r.vonKet) : '—'}</span> },
+  ]
+
   return (
     <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: 'inherit' }}>
       <div style={{ width: '100%', maxWidth: 1280, margin: '0 auto', padding: isMobile ? '16px 12px 50px' : '24px 24px 60px' }}>
@@ -675,6 +705,32 @@ export default function InventoryBoard() {
             <div style={{ height: 10 }} />
             <RespTable cols={provCols} data={provinces} mobile={isMobile} />
             <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>Tỉnh hoàn cao = khách hay bom hàng. 🔴 &gt;45%: nên chặn COD hoặc bắt đặt cọc · 🟠 &gt;35%: bắt cọc/đổi shipper · cắt hoàn từ gốc thay vì đốt thêm ads.</div>
+          </div>
+        )}
+
+        {/* BẢNG TỒN KHO — thực trạng tồn + vốn kẹt (file KẾ HOẠCH KINH DOANH, sheet 3) */}
+        {view === 'ceo' && (
+          <div style={panelStyle}>
+            <div style={eyebrowStyle}>📦 BẢNG TỒN KHO{tonRows.length ? ` · ${tonRows.length} mã` : ''} — vốn kẹt = tồn × vốn/sp</div>
+            <div style={{ fontSize: 12, color: C.muted, margin: '6px 0 12px' }}>Nguồn: file KẾ HOẠCH KINH DOANH (sheet 3. THỰC TRẠNG TỒN). Xếp theo <b style={{ color: C.muted2 }}>vốn kẹt giảm dần</b> — mã trên cùng đang chôn nhiều tiền nhất.</div>
+            {tonLoading && !tonRows.length ? (
+              <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: '8px 0' }}>● Đang tải bảng tồn...</div>
+            ) : !tonRows.length ? (
+              <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: '8px 0' }}>Chưa có dữ liệu tồn — kiểm tra link <b style={{ color: C.muted2 }}>File KẾ HOẠCH QUÀ</b> ở ⚙ Cấu hình link.</div>
+            ) : (<>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit,minmax(170px,1fr))', gap: 10, marginBottom: 12 }}>
+                <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 10, letterSpacing: 1.5, color: C.muted, marginBottom: 6 }}>TỔNG TỒN (CÁI)</div>
+                  <div style={{ fontSize: 20, fontWeight: 600 }}>{Math.round(tonTotal.ton).toLocaleString('vi-VN')}</div>
+                </div>
+                <div style={{ background: C.panel2, border: '1px solid #3a3414', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 10, letterSpacing: 1.5, color: C.muted, marginBottom: 6 }}>TỔNG VỐN KẸT TOÀN KHO</div>
+                  <div style={{ fontSize: 20, fontWeight: 600, color: C.gold }}>{fmtMoney(tonTotal.vonKet)}</div>
+                </div>
+              </div>
+              <RespTable cols={tonCols} data={tonRows} mobile={isMobile} />
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>🔴 vốn kẹt ≥50tr · 🟠 ≥20tr — ưu tiên xả/ghép quà mấy mã này để rút tiền về. Mã tồn 0 = đã hết hàng.</div>
+            </>)}
           </div>
         )}
 
