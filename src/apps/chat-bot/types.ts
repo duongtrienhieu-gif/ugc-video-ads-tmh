@@ -157,6 +157,8 @@ export interface ActionPacket {
   /** Tóm tắt phiên (cập nhật mỗi lượt): khách là ai, đã hỏi/lo gì, chốt tới đâu —
    *  để nhớ xuyên cả chat dài dù lịch sử thô bị cắt. */
   sessionSummary?: string
+  /** Bản dịch VN của TIN KHÁCH vừa gửi — cho operator đọc trong inbox (không gửi khách). */
+  customerVi?: string
 }
 
 // ── Simulator ────────────────────────────────────────────────────────────────

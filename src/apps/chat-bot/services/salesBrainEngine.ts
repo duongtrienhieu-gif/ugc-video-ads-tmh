@@ -63,6 +63,7 @@ const ACTION_SCHEMA: Record<string, unknown> = {
     followupAfterMinutes: { type: 'number' },
     followupNote: { type: 'string' },
     sessionSummary: { type: 'string' },
+    customerVi: { type: 'string' },
   },
   required: ['messages', 'awaitCustomer', 'nextStage', 'intent', 'handover'],
 }
@@ -81,6 +82,7 @@ interface RawPacket {
     total?: string; note?: string
   }
   orderComplete?: boolean
+  customerVi?: string
   followupAfterMinutes?: number
   followupNote?: string
   sessionSummary?: string
@@ -168,6 +170,7 @@ function normalize(raw: RawPacket, mediaIndex: Map<string, MediaSlot>): ActionPa
         ? { afterMinutes: raw.followupAfterMinutes, note: raw.followupNote ?? '' }
         : undefined,
     sessionSummary: raw.sessionSummary?.trim() || undefined,
+    customerVi: raw.customerVi?.trim() || undefined,
   }
 }
 
