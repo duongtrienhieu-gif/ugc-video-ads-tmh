@@ -203,7 +203,7 @@ export default function HandbookPanel() {
 
       {/* ── B1 ── */}
       <Section n="1" title="Tạo Sản phẩm trong Ngân hàng SP">
-        <Check id="b1-1">Vào <b>Ngân hàng Sản phẩm</b> → Thêm SP: tên, mô tả, <b>lợi ích</b>, <b>pain points</b>, cách dùng.</Check>
+        <Check id="b1-1">Vào <b>Ngân hàng Sản phẩm</b> → Thêm SP: tên, mô tả, <b>lợi ích</b>, <b>pain points</b>, cách dùng. <b>Tên SP phải gồm CẢ TÊN THƯƠNG HIỆU</b> (vd "Oralhoe Teeth Powder" chứ không chỉ "Teeth Powder") — khách hay nhắn tên brand, bot dò theo tên để nhận SP.</Check>
         <Check id="b1-2">Upload <b>ảnh sản phẩm</b> (ảnh thật, rõ).</Check>
         <p>Bot lấy chữ ở đây để tư vấn → <b>viết như đang nói với khách</b>, càng cụ thể bot càng thuyết phục.</p>
         <Ex title="Viết lợi ích — SAI vs ĐÚNG">
