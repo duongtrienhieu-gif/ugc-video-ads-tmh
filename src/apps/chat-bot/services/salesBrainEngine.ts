@@ -195,7 +195,7 @@ export async function runSalesBrain(input: SalesBrainInput): Promise<ActionPacke
     responseMimeType: 'application/json',
     responseSchema: ACTION_SCHEMA,
     temperature: 0.7,
-    maxOutputTokens: 1024,
+    maxOutputTokens: 2048, // ngách tư vấn sâu: 2-4 tin + captions + gloss VN — 1024 bị bóp cụt
     thinkingBudget: 0, // tắt thinking: tiết kiệm token + tránh JSON bị cắt cụt
   })
 
