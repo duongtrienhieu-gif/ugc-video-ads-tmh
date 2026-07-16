@@ -364,6 +364,7 @@ export default function InventoryBoard() {
   // Vốn kẹt = tồn × vốn/sp. KHÔNG lấy cột Vai trò. Tải lười ngách: chỉ khi mở tab Kho.
   const [tonMaster, setTonMaster] = useState<GiftMaster[]>([])
   const [tonLoading, setTonLoading] = useState(false)
+  const [tonOpen, setTonOpen] = useState(false) // thu gọn: header hiện sẵn tổng vốn kẹt, bấm mới mở bảng
   useEffect(() => {
     if (tab !== 'kho' || tonMaster.length || tonLoading || !sources.giftplan) return
     setTonLoading(true)
@@ -643,6 +644,26 @@ export default function InventoryBoard() {
           <div style={{ ...panelStyle, textAlign: 'center', color: C.muted, fontSize: 14 }}>● Đang tải dữ liệu kho từ Google Sheet...</div>
         )}
 
+        {/* BẢNG TỒN KHO — tồn + vốn kẹt (LIVE từ file KHO). Thu gọn để không đẩy Điều phối xuống. */}
+        {view === 'ceo' && (
+          <div style={panelStyle}>
+            <button onClick={() => setTonOpen((v) => !v)} style={{ width: '100%', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', textAlign: 'left' }}>
+              <span style={eyebrowStyle}>📦 BẢNG TỒN KHO{tonRows.length ? ` · ${tonRows.length} mã` : ''}</span>
+              {tonRows.length > 0 && (
+                <span style={{ fontSize: 12.5, color: C.muted2 }}>tồn <b style={{ color: C.text }}>{Math.round(tonTotal.ton).toLocaleString('vi-VN')}</b> · vốn kẹt <b style={{ color: C.gold }}>{fmtMoney(tonTotal.vonKet)}</b></span>
+              )}
+              <span style={{ marginLeft: 'auto', fontSize: 12.5, color: C.gold }}>{tonOpen ? 'Thu gọn ▲' : 'Mở bảng ▼'}</span>
+            </button>
+            {tonOpen && (!tonRows.length ? (
+              <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: '10px 0 2px' }}>{status === 'loading' ? '● Đang tải tồn kho...' : 'Chưa có dữ liệu tồn — kiểm tra link File KHO ở ⚙ Cấu hình link.'}</div>
+            ) : (<>
+              <div style={{ fontSize: 12, color: C.muted, margin: '10px 0 12px' }}>Tồn &amp; giá vốn lấy <b style={{ color: C.muted2 }}>LIVE từ file KHO</b> (không lấy file kế hoạch — sheet đó là ảnh chụp cũ). Ngách mượn từ file kế hoạch. Xếp theo <b style={{ color: C.muted2 }}>vốn kẹt giảm dần</b>.</div>
+              <RespTable cols={tonCols} data={tonRows} mobile={isMobile} />
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>🔴 vốn kẹt ≥50tr · 🟠 ≥20tr — ưu tiên xả/ghép quà mấy mã này để rút tiền về. Mã tồn 0 = đã hết hàng.</div>
+            </>))}
+          </div>
+        )}
+
         {/* BẢNG ĐIỀU PHỐI NHẬP HÀNG — 1 verdict/mã, gom theo việc (view CHỦ) */}
         {view === 'ceo' && verdicts.length > 0 && (
           <div style={panelStyle}>
@@ -712,30 +733,6 @@ export default function InventoryBoard() {
             <div style={{ height: 10 }} />
             <RespTable cols={provCols} data={provinces} mobile={isMobile} />
             <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>Tỉnh hoàn cao = khách hay bom hàng. 🔴 &gt;45%: nên chặn COD hoặc bắt đặt cọc · 🟠 &gt;35%: bắt cọc/đổi shipper · cắt hoàn từ gốc thay vì đốt thêm ads.</div>
-          </div>
-        )}
-
-        {/* BẢNG TỒN KHO — thực trạng tồn + vốn kẹt (file KẾ HOẠCH KINH DOANH, sheet 3) */}
-        {view === 'ceo' && (
-          <div style={panelStyle}>
-            <div style={eyebrowStyle}>📦 BẢNG TỒN KHO{tonRows.length ? ` · ${tonRows.length} mã` : ''} — vốn kẹt = tồn × vốn/sp</div>
-            <div style={{ fontSize: 12, color: C.muted, margin: '6px 0 12px' }}>Tồn &amp; giá vốn lấy <b style={{ color: C.muted2 }}>LIVE từ file KHO</b> (không lấy từ file kế hoạch — sheet đó là ảnh chụp cũ). Ngách mượn từ file kế hoạch. Xếp theo <b style={{ color: C.muted2 }}>vốn kẹt giảm dần</b> — mã trên cùng đang chôn nhiều tiền nhất.</div>
-            {!tonRows.length ? (
-              <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: '8px 0' }}>{status === 'loading' ? '● Đang tải tồn kho...' : 'Chưa có dữ liệu tồn — kiểm tra link File KHO ở ⚙ Cấu hình link.'}</div>
-            ) : (<>
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit,minmax(170px,1fr))', gap: 10, marginBottom: 12 }}>
-                <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 10, letterSpacing: 1.5, color: C.muted, marginBottom: 6 }}>TỔNG TỒN (CÁI)</div>
-                  <div style={{ fontSize: 20, fontWeight: 600 }}>{Math.round(tonTotal.ton).toLocaleString('vi-VN')}</div>
-                </div>
-                <div style={{ background: C.panel2, border: '1px solid #3a3414', borderRadius: 10, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 10, letterSpacing: 1.5, color: C.muted, marginBottom: 6 }}>TỔNG VỐN KẸT TOÀN KHO</div>
-                  <div style={{ fontSize: 20, fontWeight: 600, color: C.gold }}>{fmtMoney(tonTotal.vonKet)}</div>
-                </div>
-              </div>
-              <RespTable cols={tonCols} data={tonRows} mobile={isMobile} />
-              <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>🔴 vốn kẹt ≥50tr · 🟠 ≥20tr — ưu tiên xả/ghép quà mấy mã này để rút tiền về. Mã tồn 0 = đã hết hàng.</div>
-            </>)}
           </div>
         )}
 
