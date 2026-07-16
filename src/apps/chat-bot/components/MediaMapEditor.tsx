@@ -20,6 +20,7 @@ export default function MediaMapEditor({
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [describing, setDescribing] = useState<Set<string>>(new Set())
+  const [dupNotice, setDupNotice] = useState('')
 
   const markDescribing = (ids: string[], on: boolean) =>
     setDescribing((prev) => {
@@ -47,7 +48,13 @@ export default function MediaMapEditor({
   }
 
   function addPicked(items: PickedMedia[]) {
-    const newSlots: MediaSlot[] = items.map((it) => ({
+    // CHẶN ẢNH TRÙNG: cùng 1 ảnh gắn 2 slot → bot gửi lặp cho khách (luật chống-lặp bị mù).
+    const existing = new Set(value.map((s) => s.assetRef))
+    const fresh = items.filter((it) => !existing.has(it.assetRef))
+    const skipped = items.length - fresh.length
+    setDupNotice(skipped > 0 ? `⚠️ Bỏ ${skipped} ảnh đã gắn trong kho (tránh bot gửi trùng).` : '')
+    if (fresh.length === 0) return
+    const newSlots: MediaSlot[] = fresh.map((it) => ({
       id: crypto.randomUUID(),
       assetRef: it.assetRef,
       mediaType: it.mediaType,
@@ -92,6 +99,7 @@ export default function MediaMapEditor({
       <p className="mb-2 flex items-center gap-1 text-[11px] text-gray-400">
         <Sparkles className="h-3 w-3" /> Thêm ảnh xong AI tự đọc & điền vai trò + mô tả (sửa lại được).
       </p>
+      {dupNotice && <p className="mb-2 rounded-md bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-700">{dupNotice}</p>}
 
       {value.length === 0 ? (
         <div className="rounded-xl border border-dashed border-black/15 py-8 text-center text-xs text-gray-400">

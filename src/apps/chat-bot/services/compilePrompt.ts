@@ -57,8 +57,15 @@ export function compilePrompt(args: {
   const mediaIndex = new Map<string, MediaSlot>()
   const byRole = new Map<MediaRole, string[]>()
   const refToId = new Map<string, string>() // assetRef thật → id ngắn (để đánh dấu ảnh đã gửi)
-  config.mediaMap.forEach((slot, i) => {
-    const id = `m${i + 1}`
+  // KHỬ ẢNH SINH ĐÔI: config bẩn hay có cùng 1 ảnh gắn 2+ slot → 2 id khác nhau.
+  // Hệ quả kép: bot gửi "m9" nhưng map đánh-dấu-đã-gửi trỏ id sau ("m17") → lịch sử
+  // ghi sai id, luật chống-lặp bị mù → khách nhận ảnh trùng. Chỉ giữ slot ĐẦU mỗi assetRef.
+  const seenRefs = new Set<string>()
+  let mNo = 0
+  config.mediaMap.forEach((slot) => {
+    if (seenRefs.has(slot.assetRef)) return
+    seenRefs.add(slot.assetRef)
+    const id = `m${++mNo}`
     mediaIndex.set(id, slot)
     refToId.set(slot.assetRef, id)
     const desc = slot.caption?.trim() ? slot.caption.trim() : `(${slot.mediaType})`
