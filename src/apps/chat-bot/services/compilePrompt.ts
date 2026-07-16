@@ -98,8 +98,16 @@ export function compilePrompt(args: {
 
   // ── Media: gán id ngắn + GOM THEO LOẠI (để bot biết cụm cùng loại có thể gửi chung) ──
   const mediaIndex = new Map<string, MediaSlot>()
-  const byRole = new Map<MediaRole, string[]>()
+  const byRole = new Map<MediaRole, { lines: string[]; total: number; sent: number }>()
   const refToId = new Map<string, string>() // assetRef thật → id ngắn (để đánh dấu ảnh đã gửi)
+  // Ảnh ĐÃ GỬI (bóc từ lịch sử) — đánh dấu THẲNG vào danh sách + đếm tồn kho từng vai,
+  // để bot thấy ngay còn bao nhiêu đạn mà bung CỤM, khỏi tự dò lịch sử (hay dò sót).
+  const sentRefs = new Set(
+    history
+      .flatMap((t) => t.packet?.messages ?? [])
+      .map((m) => m.assetRef)
+      .filter((x): x is string => !!x),
+  )
   // KHỬ ẢNH SINH ĐÔI: config bẩn hay có cùng 1 ảnh gắn 2+ slot → 2 id khác nhau.
   // Hệ quả kép: bot gửi "m9" nhưng map đánh-dấu-đã-gửi trỏ id sau ("m17") → lịch sử
   // ghi sai id, luật chống-lặp bị mù → khách nhận ảnh trùng. Chỉ giữ slot ĐẦU mỗi assetRef.
@@ -111,17 +119,20 @@ export function compilePrompt(args: {
     const id = `m${++mNo}`
     mediaIndex.set(id, slot)
     refToId.set(slot.assetRef, id)
+    const sent = sentRefs.has(slot.assetRef)
     const desc = slot.caption?.trim() ? slot.caption.trim() : `(${slot.mediaType})`
-    const arr = byRole.get(slot.role) ?? []
-    arr.push(`  ${id}: ${desc}`)
-    byRole.set(slot.role, arr)
+    const g = byRole.get(slot.role) ?? { lines: [], total: 0, sent: 0 }
+    g.lines.push(`  ${id}: ${desc}${sent ? ' [ĐÃ GỬI]' : ''}`)
+    g.total++
+    if (sent) g.sent++
+    byRole.set(slot.role, g)
   })
   const mediaLines: string[] = []
-  for (const [role, lines] of byRole) {
+  for (const [role, g] of byRole) {
     const hint = ROLE_USAGE_HINTS[role]
-    const cluster = lines.length > 1 ? ' · CÙNG LOẠI, có thể gửi CỤM 2-4 ảnh một lần' : ''
-    mediaLines.push(`• ${ROLE_LABELS[role]}${hint ? ` (${hint})` : ''}${cluster}:`)
-    mediaLines.push(...lines)
+    const remain = g.total - g.sent
+    mediaLines.push(`• ${ROLE_LABELS[role]}${hint ? ` (${hint})` : ''} — còn ${remain}/${g.total} CHƯA GỬI:`)
+    mediaLines.push(...g.lines)
   }
 
   // ── Fact sản phẩm (từ bank) ──
