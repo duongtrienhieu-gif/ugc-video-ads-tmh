@@ -117,12 +117,17 @@ export default function MediaPickerModal({
   }
 
   async function onUploadFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+    // CHỌN NHIỀU FILE 1 LƯỢT (Ctrl/Shift-click) — upload tuần tự rồi trả cả cụm.
+    const files = Array.from(e.target.files ?? [])
+    if (files.length === 0) return
     setUploading(true)
     try {
-      const ref = await saveAsset(file, file.type)
-      onPick([{ assetRef: ref, mediaType: file.type.startsWith('video') ? 'video' : 'image' }])
+      const picked: PickedMedia[] = []
+      for (const file of files) {
+        const ref = await saveAsset(file, file.type)
+        picked.push({ assetRef: ref, mediaType: file.type.startsWith('video') ? 'video' : 'image' })
+      }
+      onPick(picked)
       onClose()
     } catch (err) {
       addToast(`Tải lên thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error')
@@ -222,7 +227,7 @@ export default function MediaPickerModal({
               <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-black/15 py-10 text-gray-500 transition-colors hover:border-emerald-400 hover:text-emerald-600">
                 {uploading ? <Loader2 className="h-6 w-6 animate-spin" /> : <Upload className="h-6 w-6" />}
                 <span className="text-sm font-semibold">{uploading ? 'Đang tải lên…' : 'Chọn ảnh/video từ máy'}</span>
-                <input type="file" accept="image/*,video/*" className="hidden" onChange={onUploadFile} disabled={uploading} />
+                <input type="file" accept="image/*,video/*" multiple className="hidden" onChange={onUploadFile} disabled={uploading} />
               </label>
 
               <div>

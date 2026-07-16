@@ -39,17 +39,54 @@ export default function ConfigPanel({ productId, onSaved }: { productId: string;
 
   const [draft, setDraft] = useState<SalesConfig | null>(null)
   const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
+  const [draftNotice, setDraftNotice] = useState(false)
 
-  // Nạp config đã lưu của sản phẩm, hoặc khởi tạo mới khi đổi sản phẩm.
+  // BẢN NHÁP CHỐNG MẤT DỮ LIỆU: mọi chỉnh sửa tự lưu localStorage → chuyển tab
+  // (Mô phỏng/Sổ tay) hay F5 đều KHÔNG mất; chỉ "Lưu cấu hình" mới đẩy lên cloud.
+  const draftKey = `chat-bot-draft-${productId}`
+
+  // Nạp: ưu tiên BẢN NHÁP chưa lưu (nếu có + cùng config) → rồi mới tới bản đã lưu.
   useEffect(() => {
     const existing = getByProductId(productId)
-    setDraft(existing ?? emptyConfig(productId, product?.productName ?? ''))
+    let restored: SalesConfig | null = null
+    try {
+      const raw = localStorage.getItem(draftKey)
+      if (raw) restored = JSON.parse(raw) as SalesConfig
+    } catch { restored = null }
+    if (restored && (!existing || restored.id === existing.id)) {
+      setDraft(restored)
+      setDirty(true)
+      setDraftNotice(true)
+    } else {
+      setDraft(existing ?? emptyConfig(productId, product?.productName ?? ''))
+      setDirty(false)
+      setDraftNotice(false)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId])
 
+  // Tự lưu nháp mỗi khi có chỉnh sửa (chỉ khi dirty — mở xem không tạo nháp rác).
+  useEffect(() => {
+    if (!draft || !dirty) return
+    try { localStorage.setItem(draftKey, JSON.stringify(draft)) } catch { /* đầy quota → thôi */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, dirty])
+
   if (!draft) return null
 
-  const update = (patch: Partial<SalesConfig>) => setDraft((d) => (d ? { ...d, ...patch } : d))
+  const update = (patch: Partial<SalesConfig>) => {
+    setDirty(true)
+    setDraft((d) => (d ? { ...d, ...patch } : d))
+  }
+
+  const discardDraft = () => {
+    try { localStorage.removeItem(draftKey) } catch { /* noop */ }
+    const existing = getByProductId(productId)
+    setDraft(existing ?? emptyConfig(productId, product?.productName ?? ''))
+    setDirty(false)
+    setDraftNotice(false)
+  }
 
   // ── Objection bank ──
   const addObjection = () =>
@@ -91,7 +128,11 @@ export default function ConfigPanel({ productId, onSaved }: { productId: string;
       return
     }
     setSaving(true)
-    upsert({ ...draft, title: product?.productName ?? draft.title })
+    // Giữ tên user đã tự đặt (nút sửa tên ở danh sách) — chỉ fallback tên SP khi trống.
+    upsert({ ...draft, title: draft.title?.trim() || product?.productName })
+    try { localStorage.removeItem(draftKey) } catch { /* noop */ }
+    setDirty(false)
+    setDraftNotice(false)
     addToast('Đã lưu — chuyển sang Mô phỏng để chat thử', 'success')
     setSaving(false)
     onSaved?.()
@@ -100,6 +141,21 @@ export default function ConfigPanel({ productId, onSaved }: { productId: string;
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 px-5 py-5">
+      {/* Bản nháp tự khôi phục sau khi chuyển tab / F5 */}
+      {draftNotice && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.07] px-3 py-2">
+          <span className="flex-1 text-xs font-medium text-amber-800">
+            📝 Đang mở <b>bản nháp chưa lưu</b> (tự khôi phục). Nhớ bấm <b>Lưu cấu hình</b> để bot dùng bản này.
+          </span>
+          <button
+            onClick={discardDraft}
+            className="shrink-0 rounded-md bg-black/5 px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-black/10"
+          >
+            Bỏ nháp, về bản đã lưu
+          </button>
+        </div>
+      )}
+
       {/* Fact sản phẩm (read-only) */}
       {product && (
         <details className="rounded-xl border border-black/8 bg-black/[0.02] p-3" open>
