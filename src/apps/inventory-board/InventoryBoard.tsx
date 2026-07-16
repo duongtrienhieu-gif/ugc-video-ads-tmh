@@ -357,9 +357,11 @@ export default function InventoryBoard() {
     return { vonNhap, eDong }
   }, [restock, invRows])
 
-  // ── BẢNG TỒN KHO (file KẾ HOẠCH KINH DOANH, sheet "3. THỰC TRẠNG TỒN") ──────
-  // Tái dùng nhánh giftOnly sẵn có (tab Ghép Quà cũng đọc sheet này). Vốn kẹt = tồn × vốn/sp
-  // (khớp cột VỐN KẸT của sheet). KHÔNG lấy cột Vai trò. Tải lười: chỉ khi mở tab Kho.
+  // ── BẢNG TỒN KHO ────────────────────────────────────────────────────────────
+  // TỒN + GIÁ VỐN lấy từ file KHO (inv — LIVE, đã tải sẵn ở load chính). KHÔNG lấy tồn từ file
+  // KẾ HOẠCH: sheet đó ghi "LIVE" nhưng thực là SNAPSHOT cũ (verify: 28/55 mã lệch, vd KIDNEY
+  // PATCH 10.783 vs 8.498 thật). File kế hoạch CHỈ dùng để mượn cột Ngách (nhãn, cũ vẫn đúng).
+  // Vốn kẹt = tồn × vốn/sp. KHÔNG lấy cột Vai trò. Tải lười ngách: chỉ khi mở tab Kho.
   const [tonMaster, setTonMaster] = useState<GiftMaster[]>([])
   const [tonLoading, setTonLoading] = useState(false)
   useEffect(() => {
@@ -372,10 +374,15 @@ export default function InventoryBoard() {
       .finally(() => setTonLoading(false))
   }, [tab, sources.giftplan, tonMaster.length, tonLoading])
 
-  const tonRows = useMemo(
-    () => tonMaster.map((m) => ({ name: m.name, ngach: m.ngach, ton: m.ton, vonSp: m.vonSp, vonKet: m.ton * m.vonSp })).sort((a, b) => b.vonKet - a.vonKet),
-    [tonMaster],
-  )
+  const tonRows = useMemo(() => {
+    const ngachOf = new Map(tonMaster.map((m) => [m.name.trim().toUpperCase(), m.ngach]))
+    return inv
+      .map((it) => {
+        const vonSp = it.giaVonVnd > 0 ? it.giaVonVnd : it.giaVonRM * TY_GIA
+        return { name: it.ten, ngach: ngachOf.get(it.ten.trim().toUpperCase()) ?? '', ton: it.ton, vonSp, vonKet: it.ton * vonSp }
+      })
+      .sort((a, b) => b.vonKet - a.vonKet)
+  }, [inv, tonMaster])
   const tonTotal = useMemo(() => ({ ton: tonRows.reduce((s, r) => s + r.ton, 0), vonKet: tonRows.reduce((s, r) => s + r.vonKet, 0) }), [tonRows])
 
   // ── BẢNG ĐIỀU PHỐI: 1 verdict/mã (lãi thật × tồn × trend), gom theo việc cần làm ──
@@ -712,11 +719,9 @@ export default function InventoryBoard() {
         {view === 'ceo' && (
           <div style={panelStyle}>
             <div style={eyebrowStyle}>📦 BẢNG TỒN KHO{tonRows.length ? ` · ${tonRows.length} mã` : ''} — vốn kẹt = tồn × vốn/sp</div>
-            <div style={{ fontSize: 12, color: C.muted, margin: '6px 0 12px' }}>Nguồn: file KẾ HOẠCH KINH DOANH (sheet 3. THỰC TRẠNG TỒN). Xếp theo <b style={{ color: C.muted2 }}>vốn kẹt giảm dần</b> — mã trên cùng đang chôn nhiều tiền nhất.</div>
-            {tonLoading && !tonRows.length ? (
-              <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: '8px 0' }}>● Đang tải bảng tồn...</div>
-            ) : !tonRows.length ? (
-              <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: '8px 0' }}>Chưa có dữ liệu tồn — kiểm tra link <b style={{ color: C.muted2 }}>File KẾ HOẠCH QUÀ</b> ở ⚙ Cấu hình link.</div>
+            <div style={{ fontSize: 12, color: C.muted, margin: '6px 0 12px' }}>Tồn &amp; giá vốn lấy <b style={{ color: C.muted2 }}>LIVE từ file KHO</b> (không lấy từ file kế hoạch — sheet đó là ảnh chụp cũ). Ngách mượn từ file kế hoạch. Xếp theo <b style={{ color: C.muted2 }}>vốn kẹt giảm dần</b> — mã trên cùng đang chôn nhiều tiền nhất.</div>
+            {!tonRows.length ? (
+              <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: '8px 0' }}>{status === 'loading' ? '● Đang tải tồn kho...' : 'Chưa có dữ liệu tồn — kiểm tra link File KHO ở ⚙ Cấu hình link.'}</div>
             ) : (<>
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit,minmax(170px,1fr))', gap: 10, marginBottom: 12 }}>
                 <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: '12px 14px' }}>
