@@ -123,11 +123,14 @@ export async function uploadFileToGemini(params: {
 // là lý do "dịch VN mỗi cảnh chết" (gloss fail âm thầm khi đó). Thay bằng 2
 // alias LIVE luôn tự trỏ model flash hiện hành → không bao giờ 404, đều hỗ trợ
 // schema + thinkingBudget:0.
+// 2026-07-17 CẢNH BÁO TIỀN: Google đã trỏ alias gemini-flash-latest →
+// gemini-3.5-flash (ĐẮT hơn 2.5 nhiều lần, verify live bằng modelVersion) và
+// gemini-flash-lite-latest → gemini-3.1-flash-lite. Alias -latest bị GỠ khỏi
+// mọi cascade — chỉ dùng model GHIM CỨNG giá rẻ. TUYỆT ĐỐI không thêm lại
+// -latest: mỗi lần 2.5-flash blip là tiền âm thầm cháy sang 3.5.
 const GEMINI_MODELS = [
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
-  'gemini-flash-latest',
-  'gemini-flash-lite-latest',
 ]
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -518,11 +521,10 @@ export function classifyGemini429(rawBody: string): {
 // V3.2.3 — LITE-FIRST chain (4x daily quota vs flash). Web grounding's task
 // is summarising search results into citations — flash-lite is plenty here.
 // 2026-07-01: gemini-2.0-flash* retired (404) → thay bằng alias -latest LIVE.
+// 2026-07-17: gỡ alias -latest (nay trỏ gemini-3.5-flash ĐẮT) — xem chú thích GEMINI_MODELS.
 const GROUNDING_MODELS = [
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
-  'gemini-flash-lite-latest',
-  'gemini-flash-latest',
 ]
 
 export async function searchWithGrounding(params: {

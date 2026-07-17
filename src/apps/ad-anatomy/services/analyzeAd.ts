@@ -55,8 +55,8 @@ function fmtMSS(totalSec: number): string {
 
 const GEMINI_UPLOAD_BASE = 'https://generativelanguage.googleapis.com/upload/v1beta'
 const GEMINI_API_BASE    = 'https://generativelanguage.googleapis.com/v1beta'
-// 2026-07-01: gemini-1.5-flash + preview-05-20 retired → alias -latest LIVE.
-const GEMINI_MODELS      = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-flash-lite-latest']
+// 2026-07-17: gỡ alias -latest (Google trỏ nó sang gemini-3.5-flash ĐẮT) — chỉ dùng model ghim cứng.
+const GEMINI_MODELS      = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']
 
 // ── System instruction ────────────────────────────────────────────────────────
 

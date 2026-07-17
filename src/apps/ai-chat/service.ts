@@ -93,8 +93,8 @@ const extractOpenAi = (j: unknown): string =>
 export async function geminiChatStream(apiKey: string, history: ChatMessage[], onDelta: (s: string) => void, userData = ''): Promise<string> {
   const contents = buildGeminiContents(history)
   const sys = userData ? `${GEMINI_SYS}\n\n${userData}` : GEMINI_SYS
-  // 2026-07-01: gemini-2.0-flash retired (404) → fallback alias -latest LIVE.
-  const models = ['gemini-2.5-flash', 'gemini-flash-latest']
+  // 2026-07-17: gỡ alias -latest (Google trỏ nó sang gemini-3.5-flash ĐẮT) — chỉ dùng model ghim cứng.
+  const models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']
   let lastErr = ''
   for (const model of models) {
     try {
