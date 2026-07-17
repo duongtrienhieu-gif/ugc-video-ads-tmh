@@ -4,6 +4,7 @@
 // giá vốn trừ hoàn = upsell×giá vốn×(1−hoàn); LN% = 100% − ads − vốn − ship − VH − hoàn.
 // Có nối data kho (chọn SP tự điền giá vốn + %hoàn) + mục Nâng cao (giá bán tối thiểu).
 import { useEffect, useMemo, useState } from 'react'
+import DailyPnl from './DailyPnl'
 import ProfitSim from './ProfitSim'
 import { type Prod, type InvItem } from './profitCalc'
 
@@ -163,6 +164,12 @@ export default function PriceCalc({ products, priceVnd, inv, velocity, saleStats
 
   return (
     <div>
+      {/* ░░ CỤM 0 — LÃI/LỖ NGÀY từ đơn WhatsApp thật (nền xanh lá nhẹ, dùng hằng ngày) ░░ */}
+      <div style={{ background: 'rgba(74,222,128,0.05)', border: '1px solid rgba(74,222,128,0.22)', borderRadius: 16, padding: '14px 14px 1px', marginBottom: 14 }}>
+        <div style={{ ...groupTagStyle, color: '#6ee7a0' }}>📊 Lãi/Lỗ ngày — số thật đơn WhatsApp</div>
+        <DailyPnl giaVonSp={giaVonSp} hoanPct={hoanPct} shipPct={shipPct} vanHanhPct={vanHanhPct} lnTargetPct={lnTargetPct} tyGia={tyGia} isMobile={isMobile} />
+      </div>
+
       {/* ░░ CỤM 1 — GIẢ LẬP (nền xanh nhẹ, đứng đầu) ░░ */}
       <div style={simGroupStyle}>
         <div style={{ ...groupTagStyle, color: '#7aa9ef' }}>🎛 Giả lập nhanh trên 1 SP</div>

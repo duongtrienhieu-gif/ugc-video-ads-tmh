@@ -350,6 +350,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  // ── Nhánh: ĐƠN WHATSAPP (bot chốt → Sheet) — nuôi khối Lãi/Lỗ NGÀY ở Máy tính giá ──
+  // Đọc 4 tab APEX/SUMMIT/TITAN/DATA qua gviz csv. Layout v4.6: A=Sản phẩm · B=Team ·
+  // C=Thời gian dd/MM/yyyy · H=Món+SL ("Beli X Free Y — RM..") · I=Tổng ("RM79") · K=Số WA.
+  // Dedupe: bot có thể bắn dòng [CẬP NHẬT ĐƠN] cho cùng 1 khách → giữ dòng CUỐI theo (ngày+SĐT WA).
+  if (req.body && (req.body as { waOrders?: boolean }).waOrders) {
+    const WA_ORDER_SHEET = '1MwR_4mGeEIOGKlQzN3N3bGSGrzUna0Z_lLMX4HOqYRU'
+    const sid = bodyLinks.wadon ? extractId(bodyLinks.wadon) : WA_ORDER_SHEET
+    const tabs = ['APEX', 'SUMMIT', 'TITAN', 'DATA']
+    const fetched = await Promise.allSettled(tabs.map((t) => fetchCsv(sid, t)))
+    interface WaOrder { team: string; product: string; date: string; totalRM: number; units: number | null; items: string }
+    const byKey = new Map<string, WaOrder>()
+    let seq = 0
+    tabs.forEach((tab, i) => {
+      const r = fetched[i]
+      if (r.status !== 'fulfilled') return
+      for (const row of r.value) {
+        const dm = String(row[2] ?? '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+        if (!dm) continue // header / dòng rác
+        const date = `${dm[3]}-${dm[2].padStart(2, '0')}-${dm[1].padStart(2, '0')}`
+        const totalM = String(row[8] ?? '').match(/\d+(?:\.\d{1,2})?/)
+        const totalRM = totalM ? parseFloat(totalM[0]) : 0
+        if (totalRM <= 0) continue
+        const items = String(row[7] ?? '').trim()
+        // Số HỘP giao: "(5 kotak)" ưu tiên → "Beli X Free/Percuma Y" = X+Y → nhân "xN" nếu có.
+        let units: number | null = null
+        const kot = items.match(/\((\d+)\s*kotak\)/i)
+        const bf = items.match(/beli\s*(\d+)\s*(?:free|percuma)\s*(\d+)/i)
+        if (kot) units = parseInt(kot[1])
+        else if (bf) units = parseInt(bf[1]) + parseInt(bf[2])
+        const xm = items.match(/\bx\s*(\d+)\b/i)
+        if (units != null && xm) units *= parseInt(xm[1])
+        const phone = String(row[10] ?? row[4] ?? '').replace(/\D/g, '')
+        const key = phone ? `${date}|${phone}` : `${date}|#${seq++}`
+        byKey.set(key, { team: String(row[1] ?? '').trim() || tab, product: String(row[0] ?? '').trim(), date, totalRM, units, items })
+      }
+    })
+    const orders = Array.from(byKey.values())
+    const errs = tabs.filter((_, i) => fetched[i].status === 'rejected')
+    res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=60')
+    return res.status(200).json({ ok: orders.length > 0, orders, errors: errs.length ? [`Không đọc được tab: ${errs.join(', ')}`] : [] })
+  }
+
   // ── Nhánh: SP đầy đủ theo marketer (đọc 5 file riêng) → token → [mã SP] cho 🪄 Tự gán ──
   if (req.body && (req.body as { marketerSp?: boolean }).marketerSp) {
     const teamId = (f: { linkKey: string; id: string }) => { const v = bodyLinks[f.linkKey]; return v ? extractId(v) : f.id }
