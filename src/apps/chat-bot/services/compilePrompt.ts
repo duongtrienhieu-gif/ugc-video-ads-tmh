@@ -93,8 +93,11 @@ export function compilePrompt(args: {
   knownInfo?: Record<string, string>
   /** Tóm tắt phiên ở lượt trước — nhớ tổng hợp khi chat dài. */
   priorSummary?: string
+  /** Số WhatsApp khách đang chat (waId, vd "60134903301") — mặc định LÀ SĐT nhận hàng
+   *  (12/12 đơn thực tế trùng), bot chỉ XÁC NHẬN thay vì bắt khách gõ lại. */
+  customerWaPhone?: string
 }): CompiledPrompt {
-  const { config, product, history, customerText, knownInfo, priorSummary } = args
+  const { config, product, history, customerText, knownInfo, priorSummary, customerWaPhone } = args
 
   // ── Media: gán id ngắn + GOM THEO LOẠI (để bot biết cụm cùng loại có thể gửi chung) ──
   const mediaIndex = new Map<string, MediaSlot>()
@@ -217,6 +220,16 @@ export function compilePrompt(args: {
     .map(([k, v]) => `- ${k}: ${v}`)
     .join('\n')
 
+  // SĐT nhận hàng = số WA khách đang chat (đỡ 1 vòng xin) — trừ số nước ngoài.
+  const waDigits = (customerWaPhone ?? '').replace(/\D/g, '')
+  const waIsMY = waDigits.startsWith('60') && waDigits.length >= 11
+  const waLocal = waIsMY ? `0${waDigits.slice(2)}` : waDigits
+  const waBlock = !waDigits
+    ? ''
+    : waIsMY
+      ? `\n=== SỐ WHATSAPP KHÁCH: ${waLocal} ===\nĐây MẶC ĐỊNH là SĐT nhận hàng — KHÔNG hỏi xin SĐT, và BẮT BUỘC NHẮC SỐ NÀY trong câu chốt để khách xác nhận (khách phải nhìn thấy hàng sẽ gửi về số nào — sai số là bom hàng): "saya hantar ke no WhatsApp ni ya (${waLocal}) — boleh bagi nama & alamat penuh?". Điền order.phone="${waLocal}". Khách bảo dùng số khác → dùng số khách đưa.`
+      : `\n=== SỐ WHATSAPP KHÁCH: ${waDigits} — ⚠️ SỐ NƯỚC NGOÀI, KHÔNG PHẢI MALAYSIA ===\nTUYỆT ĐỐI KHÔNG dùng số này làm SĐT nhận hàng. Khi chốt, câu XIN THÔNG TIN ĐẦU TIÊN phải là xin SỐ ĐIỆN THOẠI MALAYSIA nhận hàng ("boleh bagi no telefon Malaysia untuk penghantaran?") — chưa có số MY thì CHƯA hỏi địa chỉ, và KHÔNG được orderComplete.`
+
   const prompt = [
     priorSummary?.trim() ? `=== TÓM TẮT PHIÊN (nhớ tổng hợp — bám để trả lời nhất quán) ===\n${priorSummary.trim()}\n` : '',
     '=== KHO THÔNG TIN SẢN PHẨM (nguyên liệu để CHỌN LỌC + diễn lại, ĐỪNG đọc nguyên văn) ===',
@@ -234,6 +247,7 @@ export function compilePrompt(args: {
     knownLines ? `\n=== ĐÃ THU THẬP TỪ KHÁCH (đã có sẵn — TUYỆT ĐỐI KHÔNG hỏi lại) ===\n${knownLines}` : '',
     historyText ? `\n=== LỊCH SỬ CHAT ===\n${historyText}` : '',
     `\n=== TIN MỚI CỦA KHÁCH ===\n${customerText}`,
+    waBlock, // đặt CUỐI — sát điểm sinh chữ để luật nhắc-số không bị loãng giữa prompt dài
     '\nHãy trả về JSON gói hành động cho lượt này.',
   ].filter(Boolean).join('\n')
 

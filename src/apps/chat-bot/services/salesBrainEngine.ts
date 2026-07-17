@@ -184,6 +184,8 @@ export interface SalesBrainInput {
   knownInfo?: Record<string, string>
   /** Tóm tắt phiên ở lượt trước (running summary) — để nhớ tổng hợp khi chat dài. */
   priorSummary?: string
+  /** Số WhatsApp khách (waId) — não dùng làm SĐT nhận hàng mặc định, khỏi xin lại. */
+  customerWaPhone?: string
 }
 
 /** Chạy engine 1 lượt: tin khách → ActionPacket. ĐÚNG 1 call Gemini (re-call tối đa 1
