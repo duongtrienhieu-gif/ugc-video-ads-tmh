@@ -2,19 +2,22 @@
 // 📖 SỔ TAY VẬN HÀNH CHATBOT — cầm tay chỉ việc cho nhân viên, từ tạo SP
 // tới lúc ĐƠN TỰ CHẢY RA SHEET. Accordion từng bước + checklist tick được
 // (lưu localStorage) + BẢNG MÃ định tuyến dùng chung (nhúng sẵn 37 SP,
-// owner bấm "＋Thêm mã" → lưu Supabase kind='chat-bot-handbook' → mọi
-// nhân viên thấy bản mới nhất).
+// MỌI nhân viên bấm "＋Thêm mã" → lưu Supabase kind='chat-bot-handbook' →
+// ai cũng thấy bản mới nhất; SP mới win là marketer tự thêm mã, khỏi chờ owner).
 //
-// RLS cần 1 policy để MỌI nhân viên đọc được bảng mã chung (SQL Editor):
+// RLS cần 3 policy để MỌI nhân viên đọc + thêm mã vào bảng chung (SQL Editor):
 //   create policy "all_read_chatbot_handbook" on user_outputs
-//     for select to authenticated
-//     using (kind = 'chat-bot-handbook');
+//     for select to authenticated using (kind = 'chat-bot-handbook');
+//   create policy "all_update_chatbot_handbook" on user_outputs
+//     for update to authenticated using (kind = 'chat-bot-handbook')
+//     with check (kind = 'chat-bot-handbook');
+//   create policy "all_insert_chatbot_handbook" on user_outputs
+//     for insert to authenticated with check (kind = 'chat-bot-handbook');
 // ─────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, Plus } from 'lucide-react'
 import { supabase, requireUserId } from '../../../lib/supabase'
 
-const OWNER_EMAILS = ['duongtrienhieu@gmail.com']
 const WA_NUMBER = '+60 11-1885 8556'
 const WA_LINK = 'wa.me/601118858556'
 const CHATWOOT_URL = 'app.chatwoot.com'
@@ -122,7 +125,6 @@ function useChecks(): [Record<string, boolean>, (k: string) => void] {
 // ── Component chính ──────────────────────────────────────────────────────
 export default function HandbookPanel() {
   const [checks, toggleCheck] = useChecks()
-  const [isOwner, setIsOwner] = useState(false)
   const [extraCodes, setExtraCodes] = useState<CodeRow[]>([])
   const [handbookRowId, setHandbookRowId] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
@@ -130,7 +132,6 @@ export default function HandbookPanel() {
   const [msg, setMsg] = useState('')
 
   useEffect(() => {
-    void supabase.auth.getUser().then(({ data }) => setIsOwner(OWNER_EMAILS.includes(data.user?.email ?? '')))
     // Bảng mã bổ sung dùng chung (mọi user đọc được nhờ policy all_read_chatbot_handbook)
     void supabase
       .from('user_outputs')
@@ -305,11 +306,10 @@ export default function HandbookPanel() {
             <h3 className="text-sm font-bold text-gray-900">🔑 BẢNG MÃ ĐỊNH TUYẾN ({allCodes.length} SP)</h3>
             <p className="text-[11px] text-gray-400">Mỗi SP đúng 1 mã. Dùng trong config + tên camp + welcome message.</p>
           </div>
-          {isOwner && (
-            <button onClick={() => { setAdding(!adding); setMsg('') }} className="flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-500/20">
-              <Plus className="h-3.5 w-3.5" /> Thêm mã
-            </button>
-          )}
+          {/* Public cho MỌI nhân viên (yêu cầu chủ shop 17/7) — SP mới win là marketer tự thêm mã ngay, khỏi chờ owner */}
+          <button onClick={() => { setAdding(!adding); setMsg('') }} className="flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-500/20">
+            <Plus className="h-3.5 w-3.5" /> Thêm mã
+          </button>
         </div>
         {adding && (
           <div className="flex flex-wrap items-center gap-2 border-b border-black/5 bg-emerald-500/[0.04] px-4 py-2.5">
