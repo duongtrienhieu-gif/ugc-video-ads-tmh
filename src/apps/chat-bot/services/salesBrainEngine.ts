@@ -150,6 +150,24 @@ function normalize(raw: RawPacket, mediaIndex: Map<string, MediaSlot>): ActionPa
     }
   }).filter((m): m is BotMessage => m !== null)
 
+  // TRẦN BONG BÓNG CƠ KHÍ = 7 tin/lượt — model hay vượt trần prompt ở mở màn (10-11 tin
+  // làm khách ngộp cuộn mỏi tay). Gộp các tin TEXT liền kề (tin có ảnh giữ nguyên) tới khi đạt.
+  const MAX_BUBBLES = 7
+  while (messages.length > MAX_BUBBLES) {
+    let merged = false
+    for (let i = 0; i < messages.length - 1; i++) {
+      const a = messages[i], b = messages[i + 1]
+      if (a.type === 'text' && b.type === 'text') {
+        a.contentTarget = `${a.contentTarget ?? ''}\n\n${b.contentTarget ?? ''}`.trim()
+        a.contentVi = [a.contentVi, b.contentVi].filter(Boolean).join('\n\n') || undefined
+        messages.splice(i + 1, 1)
+        merged = true
+        break
+      }
+    }
+    if (!merged) break // toàn tin ảnh liền nhau — không ép được nữa
+  }
+
   const captured: Record<string, string> = {}
   for (const c of raw.captured ?? []) {
     if (c.key?.trim()) captured[c.key.trim()] = c.value ?? ''
