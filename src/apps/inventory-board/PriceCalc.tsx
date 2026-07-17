@@ -140,6 +140,15 @@ export default function PriceCalc({ products, priceVnd, inv, velocity, saleStats
     }
   }, [combos, tyGia, giaVonSp, chotPct, hoanPct, shipPct, vanHanhPct, lnTargetPct, cpaLead, soDon])
 
+  // Dropdown SP = file TỔNG (có %hoàn/%chốt) ∪ file KHO (full catalog — SP MỚI chưa có
+  // doanh thu tháng không nằm trong TỔNG, ví dụ TEETH POWDER mới chạy WhatsApp). SP chỉ có
+  // trong KHO thì pickProduct vẫn điền được giá vốn (inv/priceVnd), %hoàn/%chốt giữ nguyên.
+  const prodOptions = useMemo(() => {
+    const seen = new Set(products.map((p) => p.name.trim().toUpperCase()))
+    const extra = inv.filter((i) => i.ten.trim() && !seen.has(i.ten.trim().toUpperCase())).map((i) => i.ten).sort()
+    return [...products.map((p) => p.name), ...extra]
+  }, [products, inv])
+
   // số ĐÍCH thực tế của SP đang pick (AOV RM + upsell) — để dò combo cho khớp
   const realRef = useMemo(() => {
     if (!fromProd) return null
@@ -167,7 +176,7 @@ export default function PriceCalc({ products, priceVnd, inv, velocity, saleStats
       {/* ░░ CỤM 0 — LÃI/LỖ NGÀY từ đơn WhatsApp thật (nền xanh lá nhẹ, dùng hằng ngày) ░░ */}
       <div style={{ background: 'rgba(74,222,128,0.05)', border: '1px solid rgba(74,222,128,0.22)', borderRadius: 16, padding: '14px 14px 1px', marginBottom: 14 }}>
         <div style={{ ...groupTagStyle, color: '#6ee7a0' }}>📊 Lãi/Lỗ ngày — số thật đơn WhatsApp</div>
-        <DailyPnl giaVonSp={giaVonSp} hoanPct={hoanPct} shipPct={shipPct} vanHanhPct={vanHanhPct} lnTargetPct={lnTargetPct} tyGia={tyGia} isMobile={isMobile} />
+        <DailyPnl inv={inv} priceVnd={priceVnd} shipPct={shipPct} vanHanhPct={vanHanhPct} lnTargetPct={lnTargetPct} tyGia={tyGia} isMobile={isMobile} />
       </div>
 
       {/* ░░ CỤM 1 — GIẢ LẬP (nền xanh nhẹ, đứng đầu) ░░ */}
@@ -189,12 +198,12 @@ export default function PriceCalc({ products, priceVnd, inv, velocity, saleStats
               {channels.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
             </select>
           </label>
-          {products.length > 0 && (
+          {prodOptions.length > 0 && (
             <label style={{ fontSize: 12, color: C.muted2 }}>📦 Lấy từ SP trong kho
               <select value={fromProd} onChange={(e) => pickProduct(e.target.value)}
                 style={{ display: 'block', marginTop: 4, background: C.panel2, border: `1px solid ${C.line}`, color: C.text, borderRadius: 8, padding: '9px 11px', fontSize: 14, minWidth: 180 }}>
                 <option value="">— chọn để tự điền giá vốn + %hoàn —</option>
-                {products.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
+                {prodOptions.map((name) => <option key={name} value={name}>{name}</option>)}
               </select>
             </label>
           )}

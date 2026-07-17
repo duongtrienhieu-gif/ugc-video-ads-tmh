@@ -6,6 +6,7 @@
 // Lịch sử lưu board_cache(id='daily-pnl') dùng chung mọi máy (best-effort + localStorage).
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { type InvItem } from './profitCalc'
 
 const C = {
   panel: '#0c111c', panel2: '#0a0f19', line: '#1b2233', line2: '#161d2c',
@@ -44,8 +45,10 @@ async function saveHist(rows: PnlHistRow[]): Promise<boolean> {
   } catch { return false }
 }
 
-export default function DailyPnl({ giaVonSp, hoanPct, shipPct, vanHanhPct, lnTargetPct, tyGia, isMobile }: {
-  giaVonSp: number; hoanPct: number; shipPct: number; vanHanhPct: number; lnTargetPct: number; tyGia: number; isMobile: boolean
+const CFG_KEY = 'tmh_daily_pnl_cfg' // nhớ SP kho + giá vốn + %hoàn đã chọn — hôm sau mở là sẵn
+
+export default function DailyPnl({ inv, priceVnd, shipPct, vanHanhPct, lnTargetPct, tyGia, isMobile }: {
+  inv: InvItem[]; priceVnd: Record<string, number>; shipPct: number; vanHanhPct: number; lnTargetPct: number; tyGia: number; isMobile: boolean
 }) {
   const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
   const [orders, setOrders] = useState<WaOrder[]>([])
@@ -56,6 +59,30 @@ export default function DailyPnl({ giaVonSp, hoanPct, shipPct, vanHanhPct, lnTar
   const [spend, setSpend] = useState(0)
   const [hist, setHist] = useState<PnlHistRow[]>([])
   const [saveMsg, setSaveMsg] = useState('')
+
+  // Giá vốn + %hoàn CỦA RIÊNG khối này (không phụ thuộc Máy tính giá bên dưới):
+  // chọn SP kho → tự điền giá vốn từ file KHO (đủ full catalog, kể cả SP mới chưa lên báo cáo);
+  // %hoàn chỉnh tay ngay tại chỗ (mặc định 30% ước tính kênh WhatsApp).
+  const [khoPick, setKhoPick] = useState('')
+  const [giaVon, setGiaVon] = useState(0)
+  const [hoanPct, setHoanPct] = useState(0.30)
+  useEffect(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem(CFG_KEY) || 'null') as { khoPick?: string; giaVon?: number; hoanPct?: number } | null
+      if (s) { if (s.khoPick) setKhoPick(s.khoPick); if (s.giaVon && s.giaVon > 0) setGiaVon(s.giaVon); if (s.hoanPct && s.hoanPct > 0) setHoanPct(s.hoanPct) }
+    } catch { /* ignore */ }
+  }, [])
+  useEffect(() => {
+    try { localStorage.setItem(CFG_KEY, JSON.stringify({ khoPick, giaVon, hoanPct })) } catch { /* quota */ }
+  }, [khoPick, giaVon, hoanPct])
+  function pickKho(ten: string) {
+    setKhoPick(ten)
+    if (!ten) return
+    const key = ten.trim().toUpperCase()
+    const it = inv.find((x) => x.ten.trim().toUpperCase() === key)
+    const gv = (priceVnd[key] ?? 0) || it?.giaVonVnd || (it ? it.giaVonRM * tyGia : 0)
+    if (gv > 0) setGiaVon(Math.round(gv))
+  }
 
   async function fetchOrders() {
     setLoading(true); setErr('')
@@ -82,7 +109,7 @@ export default function DailyPnl({ giaVonSp, hoanPct, shipPct, vanHanhPct, lnTar
     const units = rows.reduce((s, o) => s + (o.units ?? FALLBACK_UNITS), 0)
     const dtVnd = rm * tyGia
     const adsPct = dtVnd > 0 ? spend / dtVnd : 0
-    const vonAfter = units * giaVonSp * (1 - hoanPct)
+    const vonAfter = units * giaVon * (1 - hoanPct)
     const vonPct = dtVnd > 0 ? vonAfter / dtVnd : 0
     const lnPct = soDon > 0 ? 1 - adsPct - vonPct - shipPct - vanHanhPct - hoanPct : 0
     const lnVnd = lnPct * dtVnd
@@ -95,7 +122,7 @@ export default function DailyPnl({ giaVonSp, hoanPct, shipPct, vanHanhPct, lnTar
     else if (adsPct > cpqcTarget + 1e-9) den = { t: 'Có lãi nhưng dưới mục tiêu — tối ưu ads', c: C.amber }
     else den = { t: 'Đạt mục tiêu ✓ — giữ / scale được', c: C.green }
     return { soDon, rm, units, unknown, dtVnd, adsPct, vonPct, lnPct, lnVnd, cpqcTarget, cpa, den }
-  }, [rows, spend, giaVonSp, hoanPct, shipPct, vanHanhPct, lnTargetPct, tyGia])
+  }, [rows, spend, giaVon, hoanPct, shipPct, vanHanhPct, lnTargetPct, tyGia])
 
   async function onSave() {
     const row: PnlHistRow = {
@@ -148,6 +175,25 @@ export default function DailyPnl({ giaVonSp, hoanPct, shipPct, vanHanhPct, lnTar
         </label>
       </div>
 
+      {/* giá vốn từ KHO + %hoàn chỉnh tay — của riêng khối này, app tự nhớ cho lần sau */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit,minmax(170px,1fr))', gap: 12, marginBottom: 12 }}>
+        <label style={{ fontSize: 12, color: C.muted2, gridColumn: isMobile ? '1 / -1' : undefined }}>📦 SP trong KHO (lấy giá vốn — đủ cả SP mới)
+          <select value={khoPick} onChange={(e) => pickKho(e.target.value)} style={{ ...cellInput, marginTop: 4 }}>
+            <option value="">— chọn để tự điền giá vốn từ file KHO —</option>
+            {[...inv].sort((a, b) => a.ten.localeCompare(b.ten)).map((it) => <option key={it.ten} value={it.ten}>{it.ten}</option>)}
+          </select>
+        </label>
+        <label style={{ fontSize: 12, color: C.muted2 }}>Giá vốn / 1 hộp (VNĐ)
+          <input type="number" value={giaVon || ''} step={1000} placeholder="chọn SP kho ↑" onChange={(e) => setGiaVon(+e.target.value || 0)}
+            style={{ ...cellInput, marginTop: 4, background: 'rgba(245,196,81,0.06)', border: '1px solid #3a3414' }} />
+        </label>
+        <label style={{ fontSize: 12, color: C.muted2 }}>Tỷ lệ HOÀN ước tính (%)
+          <input type="number" value={+(hoanPct * 100).toFixed(1)} step={1} onChange={(e) => setHoanPct((+e.target.value || 0) / 100)}
+            style={{ ...cellInput, marginTop: 4, background: 'rgba(245,196,81,0.06)', border: '1px solid #3a3414' }} />
+        </label>
+      </div>
+      {giaVon <= 0 && <div style={{ fontSize: 12, color: C.amber, marginBottom: 10 }}>⚠ Chưa có giá vốn — chọn SP trong KHO ở trên (hoặc gõ tay) thì lãi/lỗ mới đúng.</div>}
+
       {err && <div style={{ fontSize: 12, color: C.amber, marginBottom: 10 }}>⚠ {err}</div>}
 
       {/* số đọc từ Sheet */}
@@ -182,7 +228,7 @@ export default function DailyPnl({ giaVonSp, hoanPct, shipPct, vanHanhPct, lnTar
             <div style={{ fontSize: 10, letterSpacing: 1, color: C.muted, marginBottom: 5 }}>KẾT LUẬN NGÀY</div>
             <div style={{ fontSize: 15, fontWeight: 600, color: r.den.c }}>● {r.den.t}</div>
             <div style={{ fontSize: 11, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
-              Dùng giá vốn {fmtMoney(giaVonSp)}/hộp · hoàn {fmtPct(hoanPct)} · ship {fmtPct(shipPct)} · VH {fmtPct(vanHanhPct)} từ Máy tính giá bên dưới — chọn SP trong kho ở ① để tự điền đúng mã.
+              Đang tính: giá vốn {fmtMoney(giaVon)}/hộp{khoPick ? ` (${khoPick})` : ''} · hoàn {fmtPct(hoanPct)} · ship {fmtPct(shipPct)} · VH {fmtPct(vanHanhPct)} (ship/VH theo Máy tính giá bên dưới).
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
