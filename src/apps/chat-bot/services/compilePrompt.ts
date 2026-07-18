@@ -179,15 +179,16 @@ export function compilePrompt(args: {
     .join('\n')
 
   const cp = config.codPolicy
-  const policy = cp
-    ? [
-        line('Phí ship', cp.shippingFee),
-        line('Thời gian giao', cp.deliveryTime),
-        line('Khu vực COD', cp.coverage),
-        line('Đổi trả / bảo hành', cp.returnPolicy),
-        line('Ghi chú COD', cp.note),
-      ].filter(Boolean).join('\n')
-    : ''
+  // THỜI GIAN GIAO = LUẬT CỨNG HỆ THỐNG theo vùng (user chốt 18/7) — GHI ĐÈ mọi giá trị
+  // user điền trong config (cp.deliveryTime bị BỎ QUA có chủ đích, khỏi mỗi SP nói 1 kiểu).
+  const DELIVERY_HARD = 'Tây Malaysia (bán đảo — KL, Selangor, Johor, Penang, Perak…): 3-5 ngày · Đông Malaysia (Sabah / Sarawak / Labuan): 7-9 ngày. Xác định vùng theo BANG trong địa chỉ khách; chưa biết bang → nêu cả 2 khung.'
+  const policy = [
+    line('Phí ship', cp?.shippingFee),
+    line('Thời gian giao (MẶC ĐỊNH HỆ THỐNG — luôn dùng khung này)', DELIVERY_HARD),
+    line('Khu vực COD', cp?.coverage),
+    line('Đổi trả / bảo hành', cp?.returnPolicy),
+    line('Ghi chú COD', cp?.note),
+  ].filter(Boolean).join('\n')
 
   const objections = config.objectionBank
     .filter((o) => o.trigger.trim() || o.guidance.trim())
