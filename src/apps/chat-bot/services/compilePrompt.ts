@@ -146,6 +146,7 @@ export function compilePrompt(args: {
     line('USP', product?.usps),
     line('Pain points', product?.painPoints),
     line('Thành phần', product?.ingredients),
+    line('Đối tượng phù hợp', product?.targetMarket),
     line('Cách dùng', product?.usageGuide),
   ].filter(Boolean).join('\n')
 
