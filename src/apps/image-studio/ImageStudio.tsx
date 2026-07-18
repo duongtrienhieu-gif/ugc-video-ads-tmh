@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { Images, Zap } from 'lucide-react'
 import GiftStudio from '../gift-studio/GiftStudio'
+import PriceComboStudio from '../gift-studio/PriceComboStudio'
 import FormBgStudio from '../form-bg-studio/FormBgStudio'
 import RebrandStudio from '../rebrand-studio/RebrandStudio'
 import SegmentTabs from '../../components/shell/SegmentTabs'
@@ -18,13 +19,13 @@ import { GIFT_TOTAL_IMAGES } from '../gift-studio/types'
 import { FORM_BG_VARIANTS } from '../form-bg-studio/types'
 import { REBRAND_AI_IMAGES } from '../rebrand-studio/types'
 
-type Mode = 'gift' | 'form' | 'rebrand'
+type Mode = 'gift' | 'combo' | 'form' | 'rebrand'
 const MODE_KEY = 'image-studio-mode-v1'
 
 function loadMode(): Mode {
   try {
     const m = localStorage.getItem(MODE_KEY)
-    return m === 'form' || m === 'rebrand' ? m : 'gift'
+    return m === 'form' || m === 'rebrand' || m === 'combo' ? m : 'gift'
   } catch {
     return 'gift'
   }
@@ -38,7 +39,7 @@ export default function ImageStudio() {
     try { localStorage.setItem(MODE_KEY, m) } catch { /* ignore */ }
   }
 
-  const count = mode === 'gift' ? GIFT_TOTAL_IMAGES : mode === 'form' ? FORM_BG_VARIANTS : REBRAND_AI_IMAGES
+  const count = mode === 'gift' ? GIFT_TOTAL_IMAGES : mode === 'combo' ? 1 : mode === 'form' ? FORM_BG_VARIANTS : REBRAND_AI_IMAGES
   const credit = imageModelCredits('nano', count)   // nano là model duy nhất
 
   return (
@@ -55,6 +56,7 @@ export default function ImageStudio() {
           onChange={pick}
           options={[
             { value: 'gift', label: '🎁 Quà tặng' },
+            { value: 'combo', label: '📊 Combo giá' },
             { value: 'form', label: '🖼 Form Sale' },
             { value: 'rebrand', label: '🏷 Re-Brand' },
           ]}
@@ -68,7 +70,7 @@ export default function ImageStudio() {
       </div>
 
       <div className="min-h-0 flex-1">
-        {mode === 'gift' ? <GiftStudio embedded /> : mode === 'form' ? <FormBgStudio embedded /> : <RebrandStudio embedded />}
+        {mode === 'gift' ? <GiftStudio embedded /> : mode === 'combo' ? <PriceComboStudio /> : mode === 'form' ? <FormBgStudio embedded /> : <RebrandStudio embedded />}
       </div>
     </div>
   )

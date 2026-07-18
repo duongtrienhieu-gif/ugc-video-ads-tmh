@@ -24,6 +24,8 @@ export interface GenerateGiftImageParams {
   giftImageRef: string
   benefits: GiftBenefits
   lang: Market
+  /** Mode Combo giá: không có quà → bỏ qua ảnh quà, chỉ ref sản phẩm. */
+  noGift?: boolean
   onStatus?: (status: ImageStatus) => void
   signal?: AbortSignal
 }
@@ -55,25 +57,24 @@ async function resolveUrls(assetRefs: string[], max: number): Promise<string[]> 
 export async function generateGiftImage(
   params: GenerateGiftImageParams,
 ): Promise<GenerateGiftImageResult> {
-  const { kind, product, giftImageRef } = params
+  const { kind, product, giftImageRef, noGift } = params
 
-  // Refs sản phẩm: dùng productImages (asset refs), cắt còn 4 để chừa chỗ cho quà.
+  // noGift (Combo giá): chỉ ref SẢN PHẨM (tối đa 5). Có quà: SP (4) + quà (1).
   const productRefs = (product.productImages ?? []).filter((s) => !!s && s.trim() !== '')
-  const productUrls = await resolveUrls(productRefs, 4)
-  const giftUrls = await resolveUrls([giftImageRef], 1)
-
+  const productUrls = await resolveUrls(productRefs, noGift ? 5 : 4)
   if (productUrls.length === 0) {
     throw new Error('Sản phẩm chưa có ảnh tham chiếu hợp lệ — hãy chọn sản phẩm có ảnh.')
   }
-  if (giftUrls.length === 0) {
-    throw new Error('Không tải được ảnh quà — hãy tải lại ảnh quà.')
-  }
 
-  // Thứ tự ref theo kind (hero đứng trước), tổng tối đa 5.
-  const ordered = kind === 'info'
-    ? [...giftUrls, ...productUrls]
-    : [...productUrls, ...giftUrls]
-  const refUrls = ordered.slice(0, 5)
+  let refUrls: string[]
+  if (noGift) {
+    refUrls = productUrls.slice(0, 5)
+  } else {
+    const giftUrls = await resolveUrls([giftImageRef], 1)
+    if (giftUrls.length === 0) throw new Error('Không tải được ảnh quà — hãy tải lại ảnh quà.')
+    // Thứ tự ref theo kind (hero đứng trước), tổng tối đa 5.
+    refUrls = (kind === 'info' ? [...giftUrls, ...productUrls] : [...productUrls, ...giftUrls]).slice(0, 5)
+  }
 
   const prompt = buildGiftPrompt({
     kind,
@@ -83,6 +84,7 @@ export async function generateGiftImage(
     tiers: params.tiers,
     benefits: params.benefits,
     lang: params.lang,
+    noGift: params.noGift,
   })
 
   if (typeof console !== 'undefined') {

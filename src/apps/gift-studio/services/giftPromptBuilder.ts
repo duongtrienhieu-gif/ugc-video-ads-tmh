@@ -23,6 +23,8 @@ export interface BuildGiftPromptParams {
   tiers: GiftTier[]
   benefits: GiftBenefits
   lang: Market
+  /** Mode COMBO GIÁ: KHÔNG có quà tặng — mọi đơn vị là SP CHÍNH; mỗi tier có badge ship. */
+  noGift?: boolean
 }
 
 /** Tên SP dùng trong ảnh: ưu tiên localizedName đúng lang, fallback productName. */
@@ -89,7 +91,13 @@ export function buildGiftPrompt(params: BuildGiftPromptParams): string {
   const valueText = giftValueRM != null ? L.valueLabel(giftValueRM) : ''
   // Tên quà render trong ảnh = bản ĐÃ DỊCH sang ngôn ngữ đích (fallback tên thô).
   const giftLabel = (benefits.giftNameLocalized || giftName).trim()
-  const head = [identityBlock(product, lang), giftIdentityBlock(giftLabel), STYLE, textRenderRules(L.langName)]
+  // Mode Combo giá: bỏ khối nhận diện quà (không có SP thứ 2).
+  const head = [
+    identityBlock(product, lang),
+    params.noGift ? '' : giftIdentityBlock(giftLabel),
+    STYLE,
+    textRenderRules(L.langName),
+  ].filter(Boolean)
 
   // Tier rẻ nhất (primary) cho banner.
   const primary = tiers[0]
@@ -116,34 +124,45 @@ export function buildGiftPrompt(params: BuildGiftPromptParams): string {
   }
 
   if (kind === 'combo') {
+    const noGift = !!params.noGift
     const dealsList = tiers.map((t, i) => {
       const p = computeTierPricing(t, giftValueRM)
       const corner = TIER_CORNER_BADGES[i] || ''
       const color = TIER_COLORS[i] || TIER_COLORS[TIER_COLORS.length - 1]
-      const giftBlock = t.giftQty > 0
-        ? `FREE GIFT=${quote(`${t.giftQty}× ${giftLabel}`)} with tag ${quote(L.freeGiftBadge)}${p.giftTotalValue > 0 ? ` + value ${quote(L.valueLabel(p.giftTotalValue))}` : ''}`
-        : `NO bonus gift in this tier (do NOT show a gift here)`
+      // noGift → thay khối quà bằng badge SHIP; có quà → khối FREE GIFT như cũ.
+      const bonusBlock = noGift
+        ? (t.shippingNote?.trim() ? `shipping badge=${quote(t.shippingNote.trim())} (small pill, freeship=green / paid=orange)` : '')
+        : (t.giftQty > 0
+          ? `FREE GIFT=${quote(`${t.giftQty}× ${giftLabel}`)} with tag ${quote(L.freeGiftBadge)}${p.giftTotalValue > 0 ? ` + value ${quote(L.valueLabel(p.giftTotalValue))}` : ''}`
+          : `NO bonus gift in this tier (do NOT show a gift here)`)
+      const mockup = noGift
+        ? `product mockup=${p.totalMainUnits} unit(s) of the SAME main product (buy ${t.buyMainQty} + get ${t.freeMainQty} more, ALL identical to reference)`
+        : `product mockup=${p.totalMainUnits} unit(s) (buy ${t.buyMainQty} + free ${t.freeMainQty})`
       const parts = [
         `Tier ${i + 1}: package badge=${quote(L.packageBadge(i + 1))}`,
         `color theme=${color}${corner ? `, corner badge=${quote(corner)}` : ''}`,
         `main deal label=${quote(L.mainDealLabel(t.buyMainQty, t.freeMainQty))}`,
-        `product mockup=${p.totalMainUnits} unit(s) (buy ${t.buyMainQty} + free ${t.freeMainQty})`,
+        mockup,
         `sale price=${quote(`RM${t.price}`)}`,
         p.jimat > 0 ? `original price (strikethrough)=${quote(`RM${p.originalPrice}`)}` : '',
         p.jimat > 0 ? `savings=${quote(L.savingsLabel(p.jimat))}` : '',
-        giftBlock,
+        bonusBlock,
       ].filter(Boolean)
       return '  ' + parts.join(', ')
     }).join('\n')
 
+    const layout = noGift
+      ? `LAYOUT (COMBO VERTICAL): Bold title at top: ${quote(L.comboTitle)}. Then stack each tier as its own colored block. Each tier block contains: the package badge, the product mockup (N identical units of the SAME product = tier quantity, SHAPE LOCK to reference), the deal label, a price block (original price struck through → big highlighted sale price + savings burst), AND a small shipping badge. NO gift, NO second product — only the main product bundles. Color-code tiers distinctly; add the corner badges.`
+      : `LAYOUT (COMBO VERTICAL): Bold title at top: ${quote(L.comboTitle)}. Then stack each tier as its own colored block. Each tier block contains: the package badge, the product mockup (N units = tier quantity, SHAPE LOCK identical to reference), the deal label, a price block (original price struck through → big highlighted sale price + savings burst), AND the FREE GIFT shown as a bonus item with its "free gift" badge + value. Color-code tiers distinctly; add the corner badges. Make the FREE GIFT visually obvious in every tier.`
+
     return [
       `TASK: Design a TALL PORTRAIT (9:16) COMBO PRICING INFOGRAPHIC — a Malaysian COD offer poster stacking ALL tiers vertically. This must look like a polished, high-converting deal poster.`,
-      `LAYOUT (COMBO VERTICAL): Bold title at top: ${quote(L.comboTitle)}. Then stack each tier as its own colored block. Each tier block contains: the package badge, the product mockup (N units = tier quantity, SHAPE LOCK identical to reference), the deal label, a price block (original price struck through → big highlighted sale price + savings burst), AND the FREE GIFT shown as a bonus item with its "free gift" badge + value. Color-code tiers distinctly; add the corner badges. Make the FREE GIFT visually obvious in every tier.`,
+      layout,
       ...head,
       `MULTI-PRODUCT: all product units across tiers must match the SAME reference — identical label, shape, color; just scale the count per tier.`,
       salesCopyBlock(benefits, valueText),
       `FULL DEALS LIST (render ALL tiers below, each as a separate vertical block, data EXACTLY as given):\n${dealsList}`,
-      `STRICT: all tier prices, savings, deal labels and gift counts EXACTLY from the list above. Each tier distinct + readable. No invented numbers.`,
+      `STRICT: all tier prices, savings, deal labels${noGift ? ' and shipping notes' : ' and gift counts'} EXACTLY from the list above. Each tier distinct + readable. No invented numbers.`,
     ].join('\n\n')
   }
 

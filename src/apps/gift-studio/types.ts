@@ -50,6 +50,8 @@ export interface GiftTier {
   giftQty: number
   /** Giá bán của mốc này (RM). */
   price: number
+  /** Ghi chú ship của mốc (badge trong ảnh) — vd "FREESHIP" / "+RM6 Shipping". Chỉ mode Combo giá dùng. */
+  shippingNote?: string
 }
 
 export const MAX_GIFT_TIERS = 4
