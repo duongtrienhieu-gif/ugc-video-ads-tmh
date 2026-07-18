@@ -234,10 +234,10 @@ export function compilePrompt(args: {
 
   const prompt = [
     priorSummary?.trim() ? `=== TÓM TẮT PHIÊN (nhớ tổng hợp — bám để trả lời nhất quán) ===\n${priorSummary.trim()}\n` : '',
-    '=== KHO THÔNG TIN SẢN PHẨM (nguyên liệu để CHỌN LỌC + diễn lại, ĐỪNG đọc nguyên văn) ===',
+    '=== KHO THÔNG TIN SẢN PHẨM (nguyên liệu để CHỌN LỌC + diễn lại, ĐỪNG đọc nguyên văn — dữ liệu viết TIẾNG VIỆT, khi nói với khách PHẢI DỊCH TRỌN VẸN sang ngôn ngữ thị trường, TUYỆT ĐỐI KHÔNG để lọt dù chỉ 1 từ tiếng Việt vào contentTarget) ===',
     facts || '(không có dữ liệu sản phẩm)',
     config.consultBrief?.trim()
-      ? `\n=== 🧠 BẢN HIỂU SP (đã chưng cất — ƯU TIÊN dùng khi tư vấn cơ chế / trả câu hỏi thường gặp / lưu ý an toàn; diễn tự nhiên, đừng đọc nguyên văn) ===\n${config.consultBrief.trim()}`
+      ? `\n=== 🧠 BẢN HIỂU SP (đã chưng cất — ƯU TIÊN dùng khi tư vấn cơ chế / trả câu hỏi thường gặp / lưu ý an toàn; diễn tự nhiên, đừng đọc nguyên văn. VIẾT BẰNG TIẾNG VIỆT — contentTarget PHẢI dịch 100% sang ngôn ngữ thị trường, trộn lẫn từ tiếng Việt = LỖI NGHIÊM TRỌNG) ===\n${config.consultBrief.trim()}`
       : '',
     '',
     combos
