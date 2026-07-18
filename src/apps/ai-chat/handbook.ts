@@ -7,7 +7,7 @@ export const APP_HANDBOOK = `UGC Lab là bộ công cụ AI tạo quảng cáo U
 
 ### Trợ lý AI (chính là app này)
 - Mục đích: Chat AI nội bộ — hỏi đáp, viết/tóm tắt, đọc ảnh, đọc video, tạo ảnh, và hỏi cách dùng app UGC Lab.
-- Model: chọn Gemini (mặc định, rẻ) hoặc GPT (cần OpenAI API key riêng — KHÁC gói ChatGPT Go). GPT có 2 mức: mini (rẻ ~15×) / 4o (đỉnh).
+- Model: chọn Gemini (mặc định, rẻ) hoặc GPT-4o (cần OpenAI API key riêng — KHÁC gói ChatGPT Go).
 - Tính năng: gửi ảnh (cả 2 model đọc được), gửi video <15MB (CHỈ Gemini đọc, GPT không), nút "Tạo ảnh" (qua kie.ai, tốn credit), chữ chạy dần (streaming).
 - Lịch sử: lưu riêng theo email đăng nhập; Gemini và GPT là 2 luồng tách riêng; nút "Lịch sử" + "Trò chuyện mới".
 - Giới hạn: KHÁC "Chat Bot" (Chat Bot là bot bán hàng mô phỏng). Trợ lý AI chỉ tư vấn/giải thích, không tự thao tác hộ app khác và hiện chưa đọc số liệu thật trong Bank/Kho.

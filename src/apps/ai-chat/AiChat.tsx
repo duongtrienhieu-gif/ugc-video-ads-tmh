@@ -29,7 +29,7 @@ export default function AiChat() {
   const kieApiKey = useSettingsStore((s) => s.kieApiKey)
 
   const [model, setModel] = useState<'gemini' | 'gpt'>('gemini')
-  const [gptModel, setGptModel] = useState<GptModel>('gpt-4o-mini')   // mặc định mini (rẻ)
+  const gptModel: GptModel = 'gpt-4o'   // CHỈ dùng GPT-4o (đã bỏ mini để tránh nhân viên chọn nhầm bản kém)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [pending, setPending] = useState<Attachment[]>([])
@@ -215,13 +215,6 @@ export default function AiChat() {
             ))}
           </div>
           {model === 'gpt' && (
-            <div className="inline-flex rounded-lg border border-app-border bg-app-card p-0.5 text-[11px] font-bold" title="Chọn model GPT: mini rẻ hơn ~15× cho việc thường, 4o đỉnh hơn cho việc khó">
-              {([['gpt-4o-mini', 'mini · rẻ'], ['gpt-4o', '4o · đỉnh']] as const).map(([g, lbl]) => (
-                <button key={g} onClick={() => setGptModel(g)} className={`rounded-md px-2 py-1 ${gptModel === g ? 'ui-accent-soft' : 'text-app-muted hover:text-app-text'}`}>{lbl}</button>
-              ))}
-            </div>
-          )}
-          {model === 'gpt' && (
             <button onClick={() => setKeyModalOpen(true)}
               className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${openaiKey ? 'border-emerald-300 text-emerald-600' : 'border-amber-300 text-amber-600'}`}>
               <KeyRound className="h-3 w-3" /> {openaiKey ? 'OpenAI key' : 'Nhập key'}
@@ -301,7 +294,7 @@ export default function AiChat() {
             </button>
           </div>
           <p className="mt-1 px-1 text-[10px] text-app-faint">
-            {imageMode ? 'Tạo ảnh qua kie.ai (tốn credit).' : model === 'gpt' ? `GPT ${gptModel === 'gpt-4o-mini' ? '(mini · rẻ)' : '(4o · đỉnh)'} đọc ảnh, không video. Cần OpenAI API key (≠ gói ChatGPT Go).` : 'Gemini đọc ảnh + video ngắn (<15MB).'}
+            {imageMode ? 'Tạo ảnh qua kie.ai (tốn credit).' : model === 'gpt' ? 'GPT-4o đọc ảnh, không video. Cần OpenAI API key (≠ gói ChatGPT Go).' : 'Gemini đọc ảnh + video ngắn (<15MB).'}
           </p>
         </div>
       </div>
