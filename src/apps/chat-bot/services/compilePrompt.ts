@@ -235,6 +235,9 @@ export function compilePrompt(args: {
     priorSummary?.trim() ? `=== TÓM TẮT PHIÊN (nhớ tổng hợp — bám để trả lời nhất quán) ===\n${priorSummary.trim()}\n` : '',
     '=== KHO THÔNG TIN SẢN PHẨM (nguyên liệu để CHỌN LỌC + diễn lại, ĐỪNG đọc nguyên văn) ===',
     facts || '(không có dữ liệu sản phẩm)',
+    config.consultBrief?.trim()
+      ? `\n=== 🧠 BẢN HIỂU SP (đã chưng cất — ƯU TIÊN dùng khi tư vấn cơ chế / trả câu hỏi thường gặp / lưu ý an toàn; diễn tự nhiên, đừng đọc nguyên văn) ===\n${config.consultBrief.trim()}`
+      : '',
     '',
     combos
       ? `=== BẢNG GIÁ (nguồn giá DUY NHẤT — bán ĐÚNG bảng, CẤM tự giảm/CẤM giá ngoài bảng; upsell gói lợi nhất + tính TỔNG đơn theo đây) ===\n${combos}${sales ? `\n${sales}` : ''}`

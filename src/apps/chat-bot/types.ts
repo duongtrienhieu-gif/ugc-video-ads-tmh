@@ -98,6 +98,13 @@ export interface SalesConfig {
   /** Owner tắt config (panel Quản trị) → bot BỎ QUA (không route, không làm mặc định). */
   disabled?: boolean
 
+  /** 🧠 BẢN HIỂU SP — bot server TỰ chưng cất từ bank (dts-wa-bot src/brief.ts, automation):
+   *  cơ chế theo pain + hỏi-đáp ngách + lưu ý an toàn. Simulator dùng chung khi đã có.
+   *  Hash nguồn để bot tự nén lại khi bank/bảng giá đổi. App KHÔNG tự sinh — chỉ đọc. */
+  consultBrief?: string
+  consultBriefHash?: string
+  consultBriefAt?: number
+
   // ── Giá CHAT — LEGACY (config cũ). Config mới dùng pricingTiers làm nguồn giá DUY NHẤT. ──
   chatPrice: string          // legacy — để '' ở config mới
   chatPromo?: string         // legacy — ưu đãi giờ viết vào label của tier
