@@ -150,6 +150,19 @@ function normalize(raw: RawPacket, mediaIndex: Map<string, MediaSlot>): ActionPa
     }
   }).filter((m): m is BotMessage => m !== null)
 
+  // ANTI-ECHO CƠ KHÍ: model hay mở lượt bằng câu XÁC-NHẬN-LẠI câu hỏi khách
+  // ("oh, cik nak tahu harga lagi ya?") dù luật cấm đích danh — cắt CÂU ĐẦU của tin
+  // đầu tiên nếu khớp khuôn nhại (oh? + đại từ khách + nak/muốn + tahu/biết…);
+  // cả tin chỉ có câu nhại → bỏ luôn tin đó. Prompt là lớp mềm, đây là lớp cứng.
+  const ECHO_RE = /^\s*(?:(?:oh+|ồ+|ô+|ah|eh)[,!.\s]+)?(?:cik|encik|akak|abang|kak|bang|puan|tuan|you|chị|anh|bạn)\s+(?:nak|nk|mahu|muốn)\s+(?:tahu|tau|tanya|biết|hỏi)[^.!?\n]{0,90}(?:[.!?\n]+|$)\s*/i
+  const first = messages[0]
+  if (first && first.type === 'text' && first.contentTarget && ECHO_RE.test(first.contentTarget)) {
+    const stripped = first.contentTarget.replace(ECHO_RE, '').trim()
+    if (stripped) first.contentTarget = stripped
+    else messages.shift() // cả tin là câu nhại → vứt, tin sau mang nội dung thật
+    console.warn('[ANTI-ECHO] đã cắt câu xác-nhận-lại ở đầu lượt')
+  }
+
   // TRẦN BONG BÓNG CƠ KHÍ = 7 tin/lượt — model hay vượt trần prompt ở mở màn (10-11 tin
   // làm khách ngộp cuộn mỏi tay). Gộp các tin TEXT liền kề (tin có ảnh giữ nguyên) tới khi đạt.
   const MAX_BUBBLES = 7
