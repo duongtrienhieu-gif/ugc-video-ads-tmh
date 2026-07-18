@@ -2,8 +2,9 @@
 // Gemini: REST streamGenerateContent (SSE) từ client. Ảnh + video gửi INLINE base64
 //   (ảnh + video NGẮN < ~15MB). GPT: api.openai.com chat/completions stream (CORS OK),
 //   nhận ẢNH (vision), KHÔNG video; chọn gpt-4o (đỉnh) hoặc gpt-4o-mini (rẻ).
-// Tạo ảnh: kie.ai generateImage + pollImageUntilDone.
-import { generateImage, pollImageUntilDone, IMAGE_MODELS } from '../../utils/kieai'
+// Tạo/SỬA ảnh: kie.ai generateGpt4oImage (i2i thật — KHÓA sản phẩm bằng ảnh gốc).
+// (Trước dùng gpt-image-2-text-to-image → BỎ QUA ảnh gốc → ra ảnh tào lao.)
+import { generateGpt4oImage, type Gpt4oSize } from '../../utils/kieai'
 import { APP_HANDBOOK } from './handbook'
 
 export type GptModel = 'gpt-4o' | 'gpt-4o-mini'
@@ -133,9 +134,9 @@ export async function openaiChatStream(apiKey: string, model: GptModel, history:
   return readSSE(res, extractOpenAi, onDelta)
 }
 
-// ── Tạo ảnh (kie.ai) ──
-export async function genImage(kieApiKey: string, prompt: string, aspectRatio = '1:1'): Promise<string> {
-  const model = IMAGE_MODELS[0].id
-  const { taskId } = await generateImage({ apiKey: kieApiKey, model, prompt, resolution: '1K', aspectRatio })
-  return pollImageUntilDone({ apiKey: kieApiKey, taskId, timeoutMs: 3 * 60 * 1000 })
+// ── Tạo / SỬA ảnh (kie.ai — i2i) ──
+// refUrls = ảnh gốc CÔNG KHAI (URL) → gpt-4o-image dùng làm reference để GIỮ NGUYÊN sản phẩm.
+// Rỗng = tạo mới từ chữ. Có = sửa/ghép trên nền ảnh gốc (khóa sản phẩm).
+export async function genImage(kieApiKey: string, prompt: string, refUrls: string[] = [], size: Gpt4oSize = '1:1'): Promise<string> {
+  return generateGpt4oImage({ apiKey: kieApiKey, prompt, filesUrl: refUrls, size, timeoutMs: 3 * 60 * 1000 })
 }

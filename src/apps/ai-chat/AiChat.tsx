@@ -4,6 +4,7 @@ import { useAppStore } from '../../stores/appStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { geminiChatStream, openaiChatStream, genImage, type ChatMessage, type Attachment, type GptModel } from './service'
+import { saveFromDataUrl, getUrl } from '../../utils/assetStore'
 import { fetchSharedOpenAiKey, saveSharedOpenAiKey, fetchConvos, upsertConvo, deleteConvoCloud } from './cloud'
 import { loadMyDataBlock } from './myData'
 
@@ -107,6 +108,7 @@ export default function AiChat() {
   const switchModel = (mm: 'gemini' | 'gpt') => {
     if (mm === model) return
     setModel(mm)
+    if (mm === 'gpt') setImageMode(false)   // GPT không có nút Tạo ảnh → tắt luôn chế độ
     const latest = convos.find((c) => c.messages.length > 0 && convoModel(c) === mm)   // convos sắp xếp mới-nhất-trước
     if (latest) { setActiveId(latest.id); setMessages(latest.messages) }
     else { setActiveId(crypto.randomUUID()); setMessages([]) }
@@ -151,11 +153,20 @@ export default function AiChat() {
     const next = [...messages, userMsg]
     setMessages(next); setInput(''); setPending([]); setBusy(true)
 
-    // Tạo ảnh — one-shot (không stream).
+    // Tạo / SỬA ảnh — one-shot (không stream).
     if (imageMode) {
       try {
         if (!kieApiKey) throw new Error('Cần kie.ai API key trong Cài đặt để tạo ảnh')
-        const url = await genImage(kieApiKey, text || 'photo')
+        // Ảnh đính kèm → upload lấy URL công khai → làm reference i2i (KHÓA sản phẩm).
+        const refUrls: string[] = []
+        for (const a of userMsg.atts.filter((x) => x.kind === 'image')) {
+          try { const id = await saveFromDataUrl(a.dataUrl); const u = await getUrl(id); if (u) refUrls.push(u) } catch { /* bỏ ảnh lỗi */ }
+        }
+        // Có ảnh gốc → ép giữ nguyên sản phẩm; không có → tạo mới từ chữ.
+        const prompt = refUrls.length
+          ? `Chỉ chỉnh ảnh theo yêu cầu: ${text || 'ghép layout đẹp'}.\nBẮT BUỘC GIỮ NGUYÊN 100% sản phẩm ở ảnh đầu tiên (hình dạng, màu, bao bì, nhãn, chữ trên sản phẩm) — KHÔNG vẽ lại, KHÔNG thay bằng vật khác. Các ảnh sau chỉ là tham chiếu bố cục/combo/giá.`
+          : (text || 'photo')
+        const url = await genImage(kieApiKey, prompt, refUrls)
         setMessages((m) => [...m, { id: crypto.randomUUID(), role: 'assistant', text: '', atts: [], imageUrls: [url], model }])
       } catch (e) {
         setMessages((m) => [...m, { id: crypto.randomUUID(), role: 'assistant', text: '⚠️ ' + ((e as Error).message || 'Lỗi'), atts: [], imageUrls: [], model, error: true }])
@@ -284,17 +295,19 @@ export default function AiChat() {
               placeholder={imageMode ? 'Mô tả ảnh muốn tạo…' : 'Hỏi bất cứ điều gì…'}
               className="max-h-32 min-h-[36px] flex-1 resize-none bg-transparent px-1 py-2 text-sm text-app-text outline-none placeholder:text-app-faint"
             />
-            <button onClick={() => setImageMode((v) => !v)} title="Chế độ tạo ảnh"
-              className={`flex h-9 shrink-0 items-center gap-1 rounded-full px-2.5 text-[11px] font-bold transition-colors ${imageMode ? 'ui-accent-solid' : 'text-app-muted hover:bg-app-card-elevated'}`}>
-              <Sparkles className="h-3.5 w-3.5" /> Tạo ảnh
-            </button>
+            {model === 'gemini' && (
+              <button onClick={() => setImageMode((v) => !v)} title="Chế độ tạo / sửa ảnh (gửi kèm ảnh sản phẩm để sửa, khóa nguyên sản phẩm)"
+                className={`flex h-9 shrink-0 items-center gap-1 rounded-full px-2.5 text-[11px] font-bold transition-colors ${imageMode ? 'ui-accent-solid' : 'text-app-muted hover:bg-app-card-elevated'}`}>
+                <Sparkles className="h-3.5 w-3.5" /> Tạo / sửa ảnh
+              </button>
+            )}
             <button onClick={() => void send()} disabled={busy || (!input.trim() && pending.length === 0)}
               className="ui-accent-solid flex h-9 w-9 shrink-0 items-center justify-center rounded-full disabled:opacity-40">
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
           </div>
           <p className="mt-1 px-1 text-[10px] text-app-faint">
-            {imageMode ? 'Tạo ảnh qua kie.ai (tốn credit).' : model === 'gpt' ? 'GPT-4o đọc ảnh, không video. Cần OpenAI API key (≠ gói ChatGPT Go).' : 'Gemini đọc ảnh + video ngắn (<15MB).'}
+            {imageMode ? 'Tạo/sửa ảnh qua kie.ai (tốn credit) · gửi kèm ảnh sản phẩm để SỬA — giữ nguyên sản phẩm.' : model === 'gpt' ? 'GPT-4o đọc ảnh, không video. Cần OpenAI API key (≠ gói ChatGPT Go).' : 'Gemini đọc ảnh + video ngắn (<15MB).'}
           </p>
         </div>
       </div>
