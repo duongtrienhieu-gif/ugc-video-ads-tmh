@@ -717,9 +717,10 @@ export default function InventoryBoard() {
           <div style={{ ...panelStyle, textAlign: 'center', color: C.muted, fontSize: 14 }}>● Đang tải dữ liệu kho từ Google Sheet...</div>
         )}
 
-        {/* BẢNG TỒN KHO — tồn + vốn kẹt (LIVE từ file KHO). Thu gọn để không đẩy Điều phối xuống. */}
-        {view === 'ceo' && (
-          <div style={panelStyle}>
+        {/* BẢNG TỒN KHO — tồn + vốn kẹt (LIVE từ file KHO). Thu gọn để không đẩy Điều phối xuống.
+            DÙNG CHUNG: hiện ở CẢ view Chủ lẫn Nhân viên; ai cũng xem + gán team được
+            (gán lưu board_config → cả công ty thấy chung). */}
+        <div style={panelStyle}>
             <button onClick={() => setTonOpen((v) => !v)} style={{ width: '100%', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', textAlign: 'left' }}>
               <span style={eyebrowStyle}>📦 BẢNG TỒN KHO{tonRows.length ? ` · ${tonShown.length}${teamFilter !== 'ALL' ? `/${tonRows.length}` : ''} mã` : ''}</span>
               {tonRows.length > 0 && (
@@ -769,8 +770,7 @@ export default function InventoryBoard() {
               <RespTable cols={tonCols} data={tonShown} mobile={isMobile} />
               <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>🔴 vốn kẹt ≥50tr · 🟠 ≥20tr — ưu tiên xả/ghép quà mấy mã này để rút tiền về. Mã tồn 0 = đã hết hàng.</div>
             </>))}
-          </div>
-        )}
+        </div>
 
         {/* BẢNG ĐIỀU PHỐI NHẬP HÀNG — 1 verdict/mã, gom theo việc (view CHỦ) */}
         {view === 'ceo' && verdicts.length > 0 && (
