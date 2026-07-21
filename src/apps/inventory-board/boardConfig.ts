@@ -21,3 +21,27 @@ export async function saveBoardLinks(links: Record<string, string>, by?: string)
     return !error
   } catch { return false }
 }
+
+// ── GÁN TEAM PHỤ TRÁCH TỪNG MÃ SP (dùng chung cả công ty) ────────────────────
+// Dùng LẠI bảng board_config + cột links jsonb, chỉ khác id='sp_team' → KHÔNG cần
+// migration SQL. Map { "MÃ SP (UPPERCASE)": "APEX" | "TITAN" | "SUMMIT" }.
+// Đây là bản ĐÈ TAY; mã không có ở đây thì app tự suy team từ file team (marketerSp).
+const SP_TEAM_ID = 'sp_team'
+
+export async function loadSpTeam(): Promise<Record<string, string> | null> {
+  try {
+    const { data, error } = await supabase.from('board_config').select('links').eq('id', SP_TEAM_ID).maybeSingle()
+    if (error) return null
+    const m = (data?.links ?? null) as Record<string, string> | null
+    return m && typeof m === 'object' ? m : null
+  } catch { return null }
+}
+
+export async function saveSpTeam(map: Record<string, string>, by?: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('board_config').upsert({
+      id: SP_TEAM_ID, links: map, updated_by: by ?? null, updated_at: new Date().toISOString(),
+    })
+    return !error
+  } catch { return false }
+}

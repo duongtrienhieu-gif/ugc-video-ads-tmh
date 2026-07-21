@@ -15,7 +15,7 @@ import GiftCombo from './GiftCombo'
 import type { GiftMaster } from './giftPlan'
 import RewardTab from './RewardTab'
 import { useAppStore } from '../../stores/appStore'
-import { loadBoardLinks, saveBoardLinks } from './boardConfig'
+import { loadBoardLinks, saveBoardLinks, loadSpTeam, saveSpTeam } from './boardConfig'
 
 const TY_GIA = 5800
 const PACK_FACTOR = (name: string) => (name.trim().toUpperCase() === 'KNEE PAD' ? 2 : 1)
@@ -243,9 +243,9 @@ export default function InventoryBoard() {
   useEffect(() => { try { localStorage.setItem('inv_board_view', view) } catch { /* quota */ } }, [view])
   useEffect(() => { try { localStorage.setItem('inv_board_team', nvTeam) } catch { /* quota */ } }, [nvTeam])
   // Nạp map TEAM→[mã SP] (cùng endpoint, nhánh marketerSp) — lazy khi mở view nhân viên
-  // HOẶC tab Thưởng (cần map để gán winner cho team). Tải 1 lần, dùng chung.
+  // HOẶC tab Thưởng (gán winner) HOẶC tab Kho (cột Team ở bảng tồn). Tải 1 lần, dùng chung.
   useEffect(() => {
-    if ((view !== 'nv' && tab !== 'reward') || Object.keys(teamSp).length || !Object.keys(sources).length) return
+    if ((view !== 'nv' && tab !== 'reward' && tab !== 'kho') || Object.keys(teamSp).length || !Object.keys(sources).length) return
     setTeamLoading(true)
     fetch('/api/inventory-board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marketerSp: true, links: sources }), cache: 'no-store' })
       .then((r) => r.json()).then((j) => { if (j?.marketerSp) setTeamSp(j.marketerSp) }).catch(() => { /* để rỗng → hiện báo thiếu */ }).finally(() => setTeamLoading(false))
@@ -375,16 +375,65 @@ export default function InventoryBoard() {
       .finally(() => setTonLoading(false))
   }, [tab, sources.giftplan, tonMaster.length, tonLoading])
 
+  // TEAM phụ trách: ưu tiên bản ĐÈ TAY (board_config, dùng chung) → tự suy từ file team
+  // (marketerSp). MỖI MÃ CHỈ 1 TEAM (mã ở nhiều team → lấy team khớp đầu tiên) nên tổng
+  // vốn theo team KHÔNG bị đếm trùng.
+  const TEAMS = ['APEX', 'TITAN', 'SUMMIT'] as const
+  const [spTeam, setSpTeam] = useState<Record<string, string>>({})
+  const [teamFilter, setTeamFilter] = useState<string>('ALL')
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const shared = await loadSpTeam()
+      if (!alive) return
+      if (shared) { setSpTeam(shared); try { localStorage.setItem('inv_sp_team', JSON.stringify(shared)) } catch { /* quota */ } }
+      else { try { const c = JSON.parse(localStorage.getItem('inv_sp_team') || 'null'); if (c) setSpTeam(c) } catch { /* ignore */ } }
+    })()
+    return () => { alive = false }
+  }, [])
+
+  const autoTeamOf = useMemo(() => {
+    const m: Record<string, string> = {}
+    for (const t of TEAMS) for (const code of teamSp[t] ?? []) { const k = code.trim().toUpperCase(); if (!m[k]) m[k] = t }
+    return m
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamSp])
+
+  function setTeamFor(name: string, team: string) {
+    const k = name.trim().toUpperCase()
+    const next = { ...spTeam }
+    if (team) next[k] = team; else delete next[k]
+    setSpTeam(next)
+    try { localStorage.setItem('inv_sp_team', JSON.stringify(next)) } catch { /* quota */ }
+    void saveSpTeam(next) // dùng chung cả công ty
+  }
+
   const tonRows = useMemo(() => {
     const ngachOf = new Map(tonMaster.map((m) => [m.name.trim().toUpperCase(), m.ngach]))
     return inv
       .map((it) => {
+        const k = it.ten.trim().toUpperCase()
         const vonSp = it.giaVonVnd > 0 ? it.giaVonVnd : it.giaVonRM * TY_GIA
-        return { name: it.ten, ngach: ngachOf.get(it.ten.trim().toUpperCase()) ?? '', ton: it.ton, vonSp, vonKet: it.ton * vonSp }
+        return { name: it.ten, ngach: ngachOf.get(k) ?? '', team: spTeam[k] ?? autoTeamOf[k] ?? '', ton: it.ton, vonSp, vonKet: it.ton * vonSp }
       })
       .sort((a, b) => b.vonKet - a.vonKet)
-  }, [inv, tonMaster])
-  const tonTotal = useMemo(() => ({ ton: tonRows.reduce((s, r) => s + r.ton, 0), vonKet: tonRows.reduce((s, r) => s + r.vonKet, 0) }), [tonRows])
+  }, [inv, tonMaster, spTeam, autoTeamOf])
+
+  // Vốn kẹt theo TEAM — hiện LUÔN (không cần lọc), bấm để lọc nhanh.
+  const tonByTeam = useMemo(() => {
+    const keys = [...TEAMS, ''] as string[]
+    return keys.map((t) => {
+      const rows = tonRows.filter((r) => r.team === t)
+      return { team: t, count: rows.length, vonKet: rows.reduce((s, r) => s + r.vonKet, 0) }
+    }).filter((x) => x.count > 0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tonRows])
+
+  const tonShown = useMemo(
+    () => (teamFilter === 'ALL' ? tonRows : tonRows.filter((r) => r.team === (teamFilter === 'NONE' ? '' : teamFilter))),
+    [tonRows, teamFilter],
+  )
+  const tonTotal = useMemo(() => ({ ton: tonShown.reduce((s, r) => s + r.ton, 0), vonKet: tonShown.reduce((s, r) => s + r.vonKet, 0) }), [tonShown])
 
   // ── BẢNG ĐIỀU PHỐI: 1 verdict/mã (lãi thật × tồn × trend), gom theo việc cần làm ──
   const verdicts = useMemo(
@@ -557,6 +606,17 @@ export default function InventoryBoard() {
 
   const tonCols: Col<(typeof tonRows)[number]>[] = [
     { label: 'SẢN PHẨM', node: (r) => r.name },
+    { label: 'TEAM', node: (r) => (
+      <select
+        value={r.team}
+        onChange={(e) => setTeamFor(r.name, e.target.value)}
+        title="Gán team phụ trách (dùng chung cả công ty)"
+        style={{ background: C.panel2, border: `1px solid ${r.team ? C.line : '#4a4015'}`, color: r.team ? C.text : C.amber, borderRadius: 6, padding: '3px 6px', fontSize: 12 }}
+      >
+        <option value="">— chưa gán —</option>
+        {TEAMS.map((t) => <option key={t} value={t}>{t}</option>)}
+      </select>
+    ) },
     { label: 'NGÁCH', node: (r) => <span style={{ color: C.muted2 }}>{r.ngach || '—'}</span> },
     { label: 'TỒN', node: (r) => <span style={{ color: r.ton === 0 ? C.muted : C.text }}>{Math.round(r.ton).toLocaleString('vi-VN')}</span> },
     { label: 'VỐN / SP', node: (r) => <span style={{ color: C.muted2 }}>{r.vonSp > 0 ? fmtMoney(r.vonSp) : '—'}</span> },
@@ -648,17 +708,40 @@ export default function InventoryBoard() {
         {view === 'ceo' && (
           <div style={panelStyle}>
             <button onClick={() => setTonOpen((v) => !v)} style={{ width: '100%', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', textAlign: 'left' }}>
-              <span style={eyebrowStyle}>📦 BẢNG TỒN KHO{tonRows.length ? ` · ${tonRows.length} mã` : ''}</span>
+              <span style={eyebrowStyle}>📦 BẢNG TỒN KHO{tonRows.length ? ` · ${tonShown.length}${teamFilter !== 'ALL' ? `/${tonRows.length}` : ''} mã` : ''}</span>
               {tonRows.length > 0 && (
-                <span style={{ fontSize: 12.5, color: C.muted2 }}>tồn <b style={{ color: C.text }}>{Math.round(tonTotal.ton).toLocaleString('vi-VN')}</b> · vốn kẹt <b style={{ color: C.gold }}>{fmtMoney(tonTotal.vonKet)}</b></span>
+                <span style={{ fontSize: 12.5, color: C.muted2 }}>
+                  {teamFilter !== 'ALL' && <b style={{ color: C.gold }}>{teamFilter === 'NONE' ? 'CHƯA GÁN' : teamFilter} · </b>}
+                  tồn <b style={{ color: C.text }}>{Math.round(tonTotal.ton).toLocaleString('vi-VN')}</b> · vốn kẹt <b style={{ color: C.gold }}>{fmtMoney(tonTotal.vonKet)}</b>
+                </span>
               )}
               <span style={{ marginLeft: 'auto', fontSize: 12.5, color: C.gold }}>{tonOpen ? 'Thu gọn ▲' : 'Mở bảng ▼'}</span>
             </button>
             {tonOpen && (!tonRows.length ? (
               <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: '10px 0 2px' }}>{status === 'loading' ? '● Đang tải tồn kho...' : 'Chưa có dữ liệu tồn — kiểm tra link File KHO ở ⚙ Cấu hình link.'}</div>
             ) : (<>
-              <div style={{ fontSize: 12, color: C.muted, margin: '10px 0 12px' }}>Tồn &amp; giá vốn lấy <b style={{ color: C.muted2 }}>LIVE từ file KHO</b> (không lấy file kế hoạch — sheet đó là ảnh chụp cũ). Ngách mượn từ file kế hoạch. Xếp theo <b style={{ color: C.muted2 }}>vốn kẹt giảm dần</b>.</div>
-              <RespTable cols={tonCols} data={tonRows} mobile={isMobile} />
+              <div style={{ fontSize: 12, color: C.muted, margin: '10px 0 10px' }}>Tồn &amp; giá vốn lấy <b style={{ color: C.muted2 }}>LIVE từ file KHO</b>. Ngách mượn từ file kế hoạch. Team tự suy từ file team, <b style={{ color: C.muted2 }}>sửa tay được</b> (lưu dùng chung cả công ty). Xếp theo <b style={{ color: C.muted2 }}>vốn kẹt giảm dần</b>.</div>
+
+              {/* VỐN KẸT THEO TEAM — hiện luôn, bấm để lọc nhanh */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                {tonByTeam.map((t) => {
+                  const key = t.team || 'NONE'
+                  const on = teamFilter === key
+                  return (
+                    <button key={key} onClick={() => setTeamFilter(on ? 'ALL' : key)}
+                      style={{ background: on ? 'rgba(245,196,81,0.12)' : C.panel2, border: `1px solid ${on ? C.gold : C.line}`, borderRadius: 10, padding: '8px 12px', cursor: 'pointer', textAlign: 'left', minWidth: 140 }}>
+                      <div style={{ fontSize: 10, letterSpacing: 1, color: t.team ? C.gold : C.amber, marginBottom: 3 }}>{t.team || 'CHƯA GÁN'} · {t.count} mã</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{fmtMoney(t.vonKet)}</div>
+                    </button>
+                  )
+                })}
+                {teamFilter !== 'ALL' && (
+                  <button onClick={() => setTeamFilter('ALL')} style={{ background: 'transparent', border: `1px solid ${C.line}`, color: C.muted2, borderRadius: 10, padding: '8px 12px', fontSize: 12.5, cursor: 'pointer' }}>✕ Bỏ lọc</button>
+                )}
+              </div>
+              {teamFilter !== 'ALL' && <div style={{ fontSize: 11.5, color: C.gold, marginBottom: 8 }}>Đang lọc: <b>{teamFilter === 'NONE' ? 'CHƯA GÁN' : teamFilter}</b> · {tonShown.length} mã — 2 ô tổng bên trên đã tính theo bộ lọc.</div>}
+
+              <RespTable cols={tonCols} data={tonShown} mobile={isMobile} />
               <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>🔴 vốn kẹt ≥50tr · 🟠 ≥20tr — ưu tiên xả/ghép quà mấy mã này để rút tiền về. Mã tồn 0 = đã hết hàng.</div>
             </>))}
           </div>
