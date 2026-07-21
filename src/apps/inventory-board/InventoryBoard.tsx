@@ -61,6 +61,16 @@ const DEFAULT_SOURCES: Record<string, string> = {
 const STORAGE_KEY = 'inv_board_sources'
 const GOOD_KEY = 'inv_board_lastgood' // cache "số tốt gần nhất" để load lỗi vẫn hiện đủ số
 
+// Màu TEAM — 4 hệ màu TÁCH HẲN nhau (cyan · tím · xanh lá · cam) để liếc là phân biệt được.
+// Dùng CHUNG cho dropdown cột Team + dải vốn kẹt theo team.
+const TEAM_COLOR: Record<string, { fg: string; bg: string }> = {
+  APEX: { fg: '#38bdf8', bg: 'rgba(56,189,248,0.12)' },   // cyan
+  TITAN: { fg: '#c084fc', bg: 'rgba(192,132,252,0.12)' }, // tím
+  SUMMIT: { fg: '#4ade80', bg: 'rgba(74,222,128,0.12)' }, // xanh lá
+  '': { fg: '#fbbf24', bg: 'rgba(251,191,36,0.10)' },     // chưa gán — cam
+}
+const teamColor = (t: string) => TEAM_COLOR[t] ?? TEAM_COLOR['']
+
 // ── kiểu dữ liệu trả về từ endpoint ──────────────────────────────────────────
 interface Prod { name: string; rmRevenue: number; cpqc: number; pctCpqc: number; pctHoan: number; c2: number; pctChot: number; hoanEstimated?: boolean }
 interface InvItem { ten: string; ton: number; ban: number; giaVonRM: number; giaVonVnd: number }
@@ -606,17 +616,20 @@ export default function InventoryBoard() {
 
   const tonCols: Col<(typeof tonRows)[number]>[] = [
     { label: 'SẢN PHẨM', node: (r) => r.name },
-    { label: 'TEAM', node: (r) => (
-      <select
-        value={r.team}
-        onChange={(e) => setTeamFor(r.name, e.target.value)}
-        title="Gán team phụ trách (dùng chung cả công ty)"
-        style={{ background: C.panel2, border: `1px solid ${r.team ? C.line : '#4a4015'}`, color: r.team ? C.text : C.amber, borderRadius: 6, padding: '3px 6px', fontSize: 12 }}
-      >
-        <option value="">— chưa gán —</option>
-        {TEAMS.map((t) => <option key={t} value={t}>{t}</option>)}
-      </select>
-    ) },
+    { label: 'TEAM', node: (r) => {
+      const tc = teamColor(r.team)
+      return (
+        <select
+          value={r.team}
+          onChange={(e) => setTeamFor(r.name, e.target.value)}
+          title="Gán team phụ trách (dùng chung cả công ty)"
+          style={{ background: tc.bg, border: `1px solid ${tc.fg}`, color: tc.fg, borderRadius: 6, padding: '3px 6px', fontSize: 12, fontWeight: 700 }}
+        >
+          <option value="" style={{ background: C.panel2, color: TEAM_COLOR[''].fg }}>— chưa gán —</option>
+          {TEAMS.map((t) => <option key={t} value={t} style={{ background: C.panel2, color: TEAM_COLOR[t].fg }}>{t}</option>)}
+        </select>
+      )
+    } },
     { label: 'NGÁCH', node: (r) => <span style={{ color: C.muted2 }}>{r.ngach || '—'}</span> },
     { label: 'TỒN', node: (r) => <span style={{ color: r.ton === 0 ? C.muted : C.text }}>{Math.round(r.ton).toLocaleString('vi-VN')}</span> },
     { label: 'VỐN / SP', node: (r) => <span style={{ color: C.muted2 }}>{r.vonSp > 0 ? fmtMoney(r.vonSp) : '—'}</span> },
@@ -727,10 +740,11 @@ export default function InventoryBoard() {
                 {tonByTeam.map((t) => {
                   const key = t.team || 'NONE'
                   const on = teamFilter === key
+                  const tc = teamColor(t.team)
                   return (
                     <button key={key} onClick={() => setTeamFilter(on ? 'ALL' : key)}
-                      style={{ background: on ? 'rgba(245,196,81,0.12)' : C.panel2, border: `1px solid ${on ? C.gold : C.line}`, borderRadius: 10, padding: '8px 12px', cursor: 'pointer', textAlign: 'left', minWidth: 140 }}>
-                      <div style={{ fontSize: 10, letterSpacing: 1, color: t.team ? C.gold : C.amber, marginBottom: 3 }}>{t.team || 'CHƯA GÁN'} · {t.count} mã</div>
+                      style={{ background: on ? tc.bg : C.panel2, border: `1px solid ${on ? tc.fg : C.line}`, borderRadius: 10, padding: '8px 12px', cursor: 'pointer', textAlign: 'left', minWidth: 140, borderLeft: `4px solid ${tc.fg}` }}>
+                      <div style={{ fontSize: 10, letterSpacing: 1, color: tc.fg, fontWeight: 700, marginBottom: 3 }}>{t.team || 'CHƯA GÁN'} · {t.count} mã</div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{fmtMoney(t.vonKet)}</div>
                     </button>
                   )
