@@ -735,25 +735,36 @@ export default function InventoryBoard() {
             ) : (<>
               <div style={{ fontSize: 12, color: C.muted, margin: '10px 0 10px' }}>Tồn &amp; giá vốn lấy <b style={{ color: C.muted2 }}>LIVE từ file KHO</b>. Ngách mượn từ file kế hoạch. Team tự suy từ file team, <b style={{ color: C.muted2 }}>sửa tay được</b> (lưu dùng chung cả công ty). Xếp theo <b style={{ color: C.muted2 }}>vốn kẹt giảm dần</b>.</div>
 
-              {/* VỐN KẸT THEO TEAM — hiện luôn, bấm để lọc nhanh */}
+              {/* VỐN KẸT THEO TEAM — mỗi ô là 1 NÚT: bấm để bảng dưới chỉ hiện SP của team đó */}
+              <div style={{ fontSize: 11.5, color: C.muted2, marginBottom: 6 }}>👇 Bấm 1 team để bảng dưới <b style={{ color: C.text }}>chỉ hiện sản phẩm của team đó</b> (bấm lại để xem tất cả).</div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                <button onClick={() => setTeamFilter('ALL')}
+                  style={{ background: teamFilter === 'ALL' ? 'rgba(245,196,81,0.12)' : C.panel2, border: `1px solid ${teamFilter === 'ALL' ? C.gold : C.line}`, borderRadius: 10, padding: '8px 12px', cursor: 'pointer', textAlign: 'left', minWidth: 132 }}>
+                  <div style={{ fontSize: 10, letterSpacing: 1, color: C.gold, fontWeight: 700, marginBottom: 3 }}>TẤT CẢ · {tonRows.length} mã</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{fmtMoney(tonRows.reduce((s, r) => s + r.vonKet, 0))}</div>
+                  <div style={{ fontSize: 10, color: teamFilter === 'ALL' ? C.gold : C.muted, marginTop: 3 }}>{teamFilter === 'ALL' ? '✓ đang xem' : '▸ xem tất cả'}</div>
+                </button>
                 {tonByTeam.map((t) => {
                   const key = t.team || 'NONE'
                   const on = teamFilter === key
                   const tc = teamColor(t.team)
                   return (
                     <button key={key} onClick={() => setTeamFilter(on ? 'ALL' : key)}
-                      style={{ background: on ? tc.bg : C.panel2, border: `1px solid ${on ? tc.fg : C.line}`, borderRadius: 10, padding: '8px 12px', cursor: 'pointer', textAlign: 'left', minWidth: 140, borderLeft: `4px solid ${tc.fg}` }}>
+                      title={`Bấm để chỉ xem sản phẩm của ${t.team || 'nhóm chưa gán'}`}
+                      style={{ background: on ? tc.bg : C.panel2, border: `1px solid ${on ? tc.fg : C.line}`, borderRadius: 10, padding: '8px 12px', cursor: 'pointer', textAlign: 'left', minWidth: 132, borderLeft: `4px solid ${tc.fg}`, boxShadow: on ? `0 0 0 2px ${tc.bg}` : 'none' }}>
                       <div style={{ fontSize: 10, letterSpacing: 1, color: tc.fg, fontWeight: 700, marginBottom: 3 }}>{t.team || 'CHƯA GÁN'} · {t.count} mã</div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{fmtMoney(t.vonKet)}</div>
+                      <div style={{ fontSize: 10, color: on ? tc.fg : C.muted, marginTop: 3 }}>{on ? '✓ đang xem' : '▸ bấm xem'}</div>
                     </button>
                   )
                 })}
-                {teamFilter !== 'ALL' && (
-                  <button onClick={() => setTeamFilter('ALL')} style={{ background: 'transparent', border: `1px solid ${C.line}`, color: C.muted2, borderRadius: 10, padding: '8px 12px', fontSize: 12.5, cursor: 'pointer' }}>✕ Bỏ lọc</button>
-                )}
               </div>
-              {teamFilter !== 'ALL' && <div style={{ fontSize: 11.5, color: C.gold, marginBottom: 8 }}>Đang lọc: <b>{teamFilter === 'NONE' ? 'CHƯA GÁN' : teamFilter}</b> · {tonShown.length} mã — 2 ô tổng bên trên đã tính theo bộ lọc.</div>}
+              {teamFilter !== 'ALL' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: teamColor(teamFilter === 'NONE' ? '' : teamFilter).bg, border: `1px solid ${teamColor(teamFilter === 'NONE' ? '' : teamFilter).fg}`, borderRadius: 8, padding: '7px 11px', marginBottom: 8 }}>
+                  <span style={{ fontSize: 12.5, color: C.text }}>Đang xem team <b style={{ color: teamColor(teamFilter === 'NONE' ? '' : teamFilter).fg }}>{teamFilter === 'NONE' ? 'CHƯA GÁN' : teamFilter}</b> · <b>{tonShown.length}</b> mã — 2 ô tổng phía trên đã tính theo team này.</span>
+                  <button onClick={() => setTeamFilter('ALL')} style={{ marginLeft: 'auto', background: 'transparent', border: `1px solid ${C.line}`, color: C.muted2, borderRadius: 7, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>✕ Xem tất cả</button>
+                </div>
+              )}
 
               <RespTable cols={tonCols} data={tonShown} mobile={isMobile} />
               <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>🔴 vốn kẹt ≥50tr · 🟠 ≥20tr — ưu tiên xả/ghép quà mấy mã này để rút tiền về. Mã tồn 0 = đã hết hàng.</div>
