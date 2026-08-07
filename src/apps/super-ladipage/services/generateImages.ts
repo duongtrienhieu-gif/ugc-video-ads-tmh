@@ -19,6 +19,22 @@ import { generateImageGptImage1 } from '../providers/kieGptImage1'
 
 const WATCHDOG_TIMEOUT_MS = 180_000  // 180s per attempt
 
+// ── HOTFIX prompt cũ khi REGEN 1 ẢNH ─────────────────────────────────────────
+// Pack cũ lưu prompt STRING (không lưu concept) nên regen xài lại prompt cũ →
+// không ăn fix recipe. Hàm này nâng cấp TẠI CHỖ đúng ảnh người recipe-A dính bug
+// "nuốt chữ" (nhận diện qua VISUAL_MODE cũ) để user sửa CHỈ hero, khỏi tạo pack mới.
+// Idempotent (đã hardened thì bỏ qua) + CHỈ đụng recipe-A, không phá recipe khác.
+const OLD_UGC_SOCIAL_VM = 'VISUAL_MODE: authentic person, natural framing, ecommerce overlay badges'
+function hardenTextBake(prompt: string): string {
+  if (!prompt.includes(OLD_UGC_SOCIAL_VM) || prompt.includes('TEXT IS MANDATORY')) return prompt
+  let p = prompt.replace(
+    OLD_UGC_SOCIAL_VM,
+    'VISUAL_MODE: authentic person, natural pose, in a POLISHED ECOMMERCE AD CREATIVE with bold text headline + solid pill badges composited on top (NOT a plain candid snapshot)',
+  )
+  p = p.replace(/position=overlay-on-product/g, 'position=floating pill in an empty frame area (a corner/side gap), NOT on the small product')
+  return `${p}\n\nSTRICT — TEXT IS MANDATORY: this is a high-converting ECOMMERCE AD CREATIVE, NOT a plain candid photo. EVERY line in the TEXT block above MUST be rendered INTO the image, spelled EXACTLY (same language as the TEXT block), bold and clearly legible. Headline = LARGE and dominant across the TOP. Badges = solid pill floating in empty frame areas. Do NOT output a text-free photo.`
+}
+
 export interface BatchOptions {
   concurrency?: number
   signal?: AbortSignal
@@ -196,8 +212,10 @@ export async function regenerateSingleImage(
 
   const section = pack.sections[sectionIdx]
   if (!section) throw new Error(`Section index ${sectionIdx} không tồn tại`)
-  const prompt = section.imagePrompts[imageIdx]
-  if (!prompt) throw new Error(`Image index ${imageIdx} trong section ${sectionIdx} không tồn tại`)
+  const stored = section.imagePrompts[imageIdx]
+  if (!stored) throw new Error(`Image index ${imageIdx} trong section ${sectionIdx} không tồn tại`)
+  // Nâng cấp prompt cũ (ảnh người nuốt chữ) TẠI CHỖ để regen 1 ảnh ăn fix, khỏi tạo pack mới.
+  const prompt: ImagePrompt = { ...stored, prompt: hardenTextBake(stored.prompt) }
 
   await runSingle(
     { sIdx: sectionIdx, iIdx: imageIdx, prompt },
