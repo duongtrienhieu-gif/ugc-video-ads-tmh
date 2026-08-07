@@ -37,7 +37,11 @@ function formatTextBlock(t: TextBlock): string {
     t.style === 'glassmorphism-badge'  ? 'white solid-background rounded pill badge with drop-shadow, emoji prefix + bold text' :
     t.style === 'star-rating'          ? 'metric chip with star rating' :
                                           'clean readable sans-serif'
-  return `  - "${t.text}" — role=${t.role}, position=${t.position}, style=${styleHint}`
+  // "overlay-on-product" đè chữ lên SP bé xíu → model bỏ. Badge/pill đẩy ra VÙNG TRỐNG.
+  const pos = (t.role === 'badge' && /overlay-on-product/i.test(t.position))
+    ? 'floating pill in an empty frame area (a corner/side gap), NOT on the small product'
+    : t.position
+  return `  - "${t.text}" — role=${t.role}, position=${pos}, style=${styleHint}`
 }
 
 function formatDecor(d: DecorElement): string {
@@ -62,7 +66,7 @@ function langLabel(lang: 'ms' | 'vi' | 'en'): string {
 // (which already handles no-clutter, mobile-readable, hierarchy, typography).
 // ─────────────────────────────────────────────────────────────────────
 const VISUAL_MODE_REGISTRY = {
-  'ugc-social':            'authentic person, natural framing, ecommerce overlay badges',
+  'ugc-social':            'authentic person, natural pose, in a POLISHED ECOMMERCE AD CREATIVE with bold text headline + solid pill badges composited on top (NOT a plain candid snapshot)',
   'ugc-clean-photo':       'authentic candid photo, no overlays',
   'ecommerce-infographic': 'flat icons, scannable label grid',
   'product-showcase':      'product center, icon grid around',
@@ -203,8 +207,9 @@ function recipeA(input: RecipeInput): string {
   // Filter out price-role blocks from hero/discovery (price now lives in G recipes)
   const filteredBlocks = safeBlocks(concept).filter((b) => b.role !== 'price')
 
-  const textOverlay = filteredBlocks.length > 0
-    ? `TEXT (in ${langLabel(language)}, exact spelling):
+  const hasText = filteredBlocks.length > 0
+  const textOverlay = hasText
+    ? `TEXT TO BAKE INTO THE IMAGE (render EVERY line, ${langLabel(language)}, exact spelling):
 ${filteredBlocks.map(formatTextBlock).join('\n')}`
     : 'TEXT OVERLAY: none.'
 
@@ -213,19 +218,28 @@ ${filteredBlocks.map(formatTextBlock).join('\n')}`
 ${safeDecor(concept).map(formatDecor).join('\n')}`
     : 'DECORATIVE ELEMENTS: none.'
 
+  // ÉP render chữ — model gpt-image hay "nuốt" chữ trên ảnh người thật (chọn phong cách
+  // candid, bỏ overlay). Câu STRICT ở CUỐI prompt (model nặng phần đuôi) + đưa badge ra
+  // vùng trống (không nhét lên chai bé) để chữ chắc chắn hiện.
+  const strictText = hasText
+    ? `STRICT — TEXT IS MANDATORY: this is a high-converting ECOMMERCE AD CREATIVE, NOT a plain candid photo. EVERY line in the TEXT block above MUST be rendered INTO the image, spelled EXACTLY in ${langLabel(language)}, bold and clearly legible. Headline = LARGE and dominant across the TOP. Each badge = a solid-fill rounded pill FLOATING in an empty area of the frame (a corner / side gap), NOT cramped onto the small product. Do NOT output a text-free photo.`
+    : ''
+
   // Subject lock only when image has a person (most recipe A scenes have people)
   const subject = subjectLockBlock(identity, concept)
 
+  // Thứ tự: cảnh + khoá người/SP TRƯỚC, rồi TEXT + STRICT ở CUỐI để model không quên chữ.
   return [
     `SCENE: ${concept.conceptScene}.`,
     emotionConsistencyBlock(detectEmotionMode(concept)),
     subject,
     brandLockBlock(identity, concept.productInScene, 'full'),
     concept.productInScene ? sizeLockBlock('handheld-natural', concept) : '',
-    textOverlay,
-    decor,
     visualModeBlock('ugc-social'),
     technicalBlock(concept.aspectRatio),
+    textOverlay,
+    decor,
+    strictText,
   ].filter(Boolean).join('\n\n')
 }
 
