@@ -1,7 +1,7 @@
 // generateComboBenefits — Gemini vision đọc ẢNH SẢN PHẨM CHÍNH → copy bán hàng
 // cho poster COMBO GIÁ (không quà): hook mua-nhiều-rẻ + FOMO + nhấn giá trị deal.
 // Khác generateGiftBenefits: xoay quanh SẢN PHẨM + DEAL, KHÔNG có quà.
-// Trả về GiftBenefits (giftNameLocalized để rỗng — combo giá không dùng).
+// Trả về GiftBenefits (giftNamesLocalized để rỗng — combo giá không có quà).
 
 import { directGeminiVision } from '../../../utils/gemini'
 import { getUrl } from '../../../utils/assetStore'
@@ -97,7 +97,7 @@ export async function generateComboBenefits(params: GenerateComboBenefitsParams)
   return {
     wowHook: clean(parsed.wowHook) || headline,
     headline,
-    giftNameLocalized: '', // combo giá không có quà
+    giftNamesLocalized: [], // combo giá không có quà
     bullets,
     fomoLines: fomoLines.length ? fomoLines : [lang === 'ms' ? 'Stok terhad' : 'Số lượng có hạn'],
     valueLine: clean(parsed.valueLine),

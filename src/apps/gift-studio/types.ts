@@ -56,6 +56,23 @@ export interface GiftTier {
 
 export const MAX_GIFT_TIERS = 4
 
+/** 1 MÓN QUÀ trong bộ quà tặng kèm. Cho phép NHIỀU quà (tối đa MAX_GIFTS). */
+export interface GiftItem {
+  /** Tên quà (user nhập — có thể tiếng Việt, sẽ localize theo lang). */
+  name: string
+  /** Giá trị cảm nhận 1 món (RM). */
+  valueRM: number | null
+  /** asset:xxx ảnh quà. */
+  imageRef: string | null
+}
+/** gpt-4o-image tối đa 5 ref (SP + quà). Chốt 3 quà → SP còn ≥2 ref. */
+export const MAX_GIFTS = 3
+export function emptyGiftItem(): GiftItem { return { name: '', valueRM: null, imageRef: null } }
+/** Tổng trị giá BỘ quà (RM) = Σ giá trị từng món (bỏ món chưa nhập giá). */
+export function giftSetValue(gifts: GiftItem[]): number {
+  return gifts.reduce((s, g) => s + (g.valueRM ?? 0), 0)
+}
+
 /** Toán giá 1 tier (app tự tính — KHÔNG bắt user nhập giá gốc).
  *  - mainUnit = giá / số SP chính mua
  *  - giáGốc gạch = round(mainUnit × tổng SP chính) + giáTrịQuà × số quà
@@ -85,8 +102,8 @@ export interface GiftBenefits {
   wowHook: string
   /** 1 dòng headline ngắn cho món quà (định vị/tên hấp dẫn). */
   headline: string
-  /** Tên quà ĐÃ DỊCH sang ngôn ngữ đích (tên sạch, cho nhãn "N× tên quà"). */
-  giftNameLocalized: string
+  /** Tên TỪNG quà ĐÃ DỊCH sang ngôn ngữ đích (theo thứ tự gifts[] — cho nhãn "N× tên quà"). */
+  giftNamesLocalized: string[]
   /** 2-3 gạch đầu dòng công dụng ngắn. */
   bullets: string[]
   /** 1-2 dòng FOMO / khan hiếm / sợ bỏ lỡ. */
@@ -103,12 +120,8 @@ export interface GiftBenefits {
 export interface GiftDraft {
   /** Sản phẩm chính lấy từ bank. */
   productId: string | null
-  /** Tên quà (nguồn user nhập — có thể tiếng Việt, sẽ localize theo lang). */
-  giftName: string
-  /** Giá trị cảm nhận của 1 món quà, đơn vị RM (số nguyên, vd 49). */
-  giftValueRM: number | null
-  /** asset:xxx của ảnh quà user upload. */
-  giftImageRef: string | null
+  /** DANH SÁCH quà tặng kèm (1..MAX_GIFTS). Bộ quà DÙNG CHUNG cho mọi tier (mode A). */
+  gifts: GiftItem[]
   /** Ô dán offer thô (bất kỳ ngôn ngữ) — AI sẽ parse ra tiers. */
   offerText: string
   /** Các mốc tặng do AI parse từ offerText. Rỗng khi chưa parse. */
@@ -122,9 +135,7 @@ export interface GiftDraft {
 export function emptyGiftDraft(): GiftDraft {
   return {
     productId: null,
-    giftName: '',
-    giftValueRM: null,
-    giftImageRef: null,
+    gifts: [emptyGiftItem()],
     offerText: '',
     tiers: [],
     tiersSig: '',

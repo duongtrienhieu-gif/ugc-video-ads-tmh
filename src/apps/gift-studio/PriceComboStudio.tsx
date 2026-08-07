@@ -89,7 +89,7 @@ export default function PriceComboStudio() {
       const b = await ensureBenefits()
       const res = await generateGiftImage({
         apiKey: kieApiKey, kind: 'combo', product: selectedProduct!,
-        giftName: '', giftValueRM: null, tiers, giftImageRef: '', benefits: b, lang: draft.lang, noGift: true,
+        gifts: [], tiers, benefits: b, lang: draft.lang, noGift: true,
       })
       setAssetRef(res.assetRef); setStatus('completed')
     } catch (err) {

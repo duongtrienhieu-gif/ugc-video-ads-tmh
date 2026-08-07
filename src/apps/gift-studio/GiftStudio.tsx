@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react'
-import { Gift, Upload, RefreshCw, Sparkles, Download, X, AlertCircle, Wand2 } from 'lucide-react'
+import { Gift, Upload, RefreshCw, Sparkles, Download, X, AlertCircle, Wand2, Plus, Trash2 } from 'lucide-react'
 import { useGiftStudioStore } from './store'
 import { useBankStore } from '../../stores/bankStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -19,7 +19,9 @@ import { langDisplayName, giftLabels } from './labels'
 import {
   GIFT_IMAGE_KINDS,
   GIFT_TOTAL_CREDITS,
+  MAX_GIFTS,
   computeTierPricing,
+  giftSetValue,
   offerSig,
   type GiftImageKind,
   type GiftBenefits,
@@ -50,7 +52,7 @@ function AssetImg({ refId, alt }: { refId: string | undefined | null; alt: strin
 export default function GiftStudio({ embedded = false }: { embedded?: boolean }) {
   const {
     draft, images, benefits, isPreparing, isParsing,
-    setProductId, setGiftName, setGiftValueRM, setGiftImageRef, setLang,
+    setProductId, addGift, removeGift, updateGift, setLang,
     setOfferText, setTiers, setParsing,
     setBenefits, setPreparing, patchImage,
   } = useGiftStudioStore()
@@ -70,30 +72,37 @@ export default function GiftStudio({ embedded = false }: { embedded?: boolean })
   // Tiers còn "tươi" khi đã parse đúng ô dán + ngôn ngữ hiện tại.
   const tiersFresh = draft.tiers.length > 0 && draft.tiersSig === offerSig(draft.offerText, draft.lang)
 
+  // Quà HỢP LỆ = có tên + ảnh + giá trị. Bộ quà dùng chung mọi tier.
+  const validGifts = draft.gifts.filter((g) => g.name.trim() && g.imageRef && g.valueRM != null)
+  const setValue = giftSetValue(draft.gifts)
+
   const missing: string[] = []
   if (!geminiApiKey) missing.push('Gemini API key (Cài đặt)')
   if (!kieApiKey) missing.push('KIE API key (Cài đặt)')
   if (!draft.productId) missing.push('Chọn sản phẩm')
   else if (productImages.length === 0) missing.push('Sản phẩm cần có ít nhất 1 ảnh')
-  if (!draft.giftName.trim()) missing.push('Tên quà')
-  if (draft.giftValueRM == null) missing.push('Giá trị 1 món quà (RM)')
-  if (!draft.giftImageRef) missing.push('Ảnh quà')
+  if (validGifts.length === 0) missing.push('Cần ít nhất 1 quà đủ (tên + giá trị + ảnh)')
+  draft.gifts.forEach((g, i) => {
+    const has = g.name.trim() || g.imageRef || g.valueRM != null
+    if (has && !(g.name.trim() && g.imageRef && g.valueRM != null)) missing.push(`Quà ${i + 1}: thiếu ${[!g.name.trim() && 'tên', g.valueRM == null && 'giá trị', !g.imageRef && 'ảnh'].filter(Boolean).join(' + ')}`)
+  })
   if (!draft.offerText.trim()) missing.push('Dán nội dung offer (mốc tặng)')
   else if (!tiersFresh) missing.push('Bấm “Phân tích mốc” để AI đọc offer')
   const ready = missing.length === 0
 
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null)
+  async function handleUpload(i: number, e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = '' // cho phép upload lại cùng file
     if (!file) return
-    setUploading(true)
+    setUploading(true); setUploadingIdx(i)
     try {
       const ref = await saveAsset(file, file.type)
-      setGiftImageRef(ref)
+      updateGift(i, { imageRef: ref })
     } catch (err) {
       addToast(`Tải ảnh quà thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error')
     } finally {
-      setUploading(false)
+      setUploading(false); setUploadingIdx(null)
     }
   }
 
@@ -122,17 +131,11 @@ export default function GiftStudio({ embedded = false }: { embedded?: boolean })
 
   /** Đảm bảo có benefits đúng với input hiện tại (sinh nếu thiếu/stale). */
   async function ensureBenefits(): Promise<GiftBenefits> {
-    const wantSig = benefitsSig(draft.giftImageRef!, draft.giftName, draft.giftValueRM, draft.lang)
+    const wantSig = benefitsSig(draft.gifts, draft.lang)
     if (benefits && benefits.sig === wantSig) return benefits
     setPreparing(true)
     try {
-      const b = await generateGiftBenefits({
-        apiKey: geminiApiKey,
-        giftImageRef: draft.giftImageRef!,
-        giftName: draft.giftName,
-        giftValueRM: draft.giftValueRM,
-        lang: draft.lang,
-      })
+      const b = await generateGiftBenefits({ apiKey: geminiApiKey, gifts: draft.gifts, lang: draft.lang })
       setBenefits(b)
       return b
     } finally {
@@ -147,10 +150,8 @@ export default function GiftStudio({ embedded = false }: { embedded?: boolean })
         apiKey: kieApiKey,
         kind,
         product: selectedProduct!,
-        giftName: draft.giftName,
-        giftValueRM: draft.giftValueRM,
+        gifts: draft.gifts,
         tiers,
-        giftImageRef: draft.giftImageRef!,
         benefits: b,
         lang: draft.lang,
       })
@@ -268,63 +269,62 @@ export default function GiftStudio({ embedded = false }: { embedded?: boolean })
             )}
           </div>
 
-          {/* Quà */}
+          {/* Quà — DANH SÁCH (tối đa 3). Bộ quà dùng chung mọi mốc. */}
           <div className="space-y-3 rounded-xl border border-black/10 bg-white p-4">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-gray-700">Tên quà</label>
-              <input
-                type="text"
-                value={draft.giftName}
-                onChange={(e) => setGiftName(e.target.value)}
-                placeholder="VD: Túi đựng mỹ phẩm chống thấm"
-                className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm text-gray-800"
-              />
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-gray-700">Quà tặng kèm · {draft.gifts.length}/{MAX_GIFTS}</label>
+              {setValue > 0 && <span className="text-[11px] font-semibold text-rose-600">Tổng trị giá {L.valueLabel(setValue)}</span>}
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-gray-700">Giá trị 1 món quà (RM)</label>
-              <input
-                type="number"
-                min={0}
-                value={draft.giftValueRM ?? ''}
-                onChange={(e) => setGiftValueRM(e.target.value === '' ? null : Math.max(0, Math.round(Number(e.target.value))))}
-                placeholder="VD: 49"
-                className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm text-gray-800"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-gray-700">Ảnh quà</label>
-              {draft.giftImageRef ? (
-                <div className="relative h-32 w-full overflow-hidden rounded-lg border border-black/10 bg-gray-50">
-                  <AssetImg refId={draft.giftImageRef} alt="ảnh quà" />
-                  <button
-                    onClick={() => setGiftImageRef(null)}
-                    title="Xoá ảnh quà"
-                    className="absolute right-1.5 top-1.5 rounded-full bg-black/60 p-1 text-white hover:bg-black/80"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <label className="flex h-32 w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-black/20 bg-gray-50 text-gray-500 hover:bg-gray-100">
-                  {uploading ? (
-                    <RefreshCw className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <>
-                      <Upload className="h-5 w-5" />
-                      <span className="text-xs">Tải ảnh quà lên</span>
-                    </>
+            <p className="text-[10px] text-gray-400">Có thể tặng nhiều quà — tất cả mốc đều tặng cả bộ. Mỗi quà cần tên + giá trị + ảnh.</p>
+            {draft.gifts.map((g, i) => (
+              <div key={i} className="space-y-2 rounded-lg border border-black/10 bg-gray-50 p-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">Quà {i + 1}</span>
+                  <input
+                    type="text" value={g.name} onChange={(e) => updateGift(i, { name: e.target.value })}
+                    placeholder="Tên quà (VD: Snack táo gai)"
+                    className="flex-1 rounded-md border border-black/10 bg-white px-2 py-1.5 text-sm text-gray-800"
+                  />
+                  {draft.gifts.length > 1 && (
+                    <button onClick={() => removeGift(i)} title="Xoá quà này" className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
                   )}
-                  <input type="file" accept="image/*" onChange={handleUpload} className="hidden" disabled={uploading} />
-                </label>
-              )}
-            </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-gray-500">Giá trị (RM)</span>
+                  <input
+                    type="number" min={0} value={g.valueRM ?? ''} onChange={(e) => updateGift(i, { valueRM: e.target.value === '' ? null : Math.max(0, Math.round(Number(e.target.value))) })}
+                    placeholder="VD: 19"
+                    className="w-24 rounded-md border border-black/10 bg-white px-2 py-1.5 text-sm text-gray-800"
+                  />
+                  <div className="ml-auto">
+                    {g.imageRef ? (
+                      <div className="relative h-14 w-14 overflow-hidden rounded-md border border-black/10 bg-white">
+                        <AssetImg refId={g.imageRef} alt={`ảnh quà ${i + 1}`} />
+                        <button onClick={() => updateGift(i, { imageRef: null })} title="Xoá ảnh" className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white hover:bg-black/80"><X className="h-3 w-3" /></button>
+                      </div>
+                    ) : (
+                      <label className="flex h-14 w-14 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-md border border-dashed border-black/20 bg-white text-gray-400 hover:bg-gray-100">
+                        {uploading && uploadingIdx === i ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        <span className="text-[9px]">Ảnh</span>
+                        <input type="file" accept="image/*" onChange={(e) => handleUpload(i, e)} className="hidden" disabled={uploading} />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {draft.gifts.length < MAX_GIFTS && (
+              <button onClick={addGift} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-500 hover:bg-rose-50">
+                <Plus className="h-3.5 w-3.5" /> Thêm quà
+              </button>
+            )}
           </div>
 
           {/* Mốc tặng — dán offer, AI tự đọc */}
           <div className="rounded-xl border border-black/10 bg-white p-4">
             <label className="mb-1 block text-xs font-semibold text-gray-700">Mốc tặng (dán offer combo)</label>
             <p className="mb-2 text-[10px] text-gray-400">
-              Dán nguyên offer (bất kỳ ngôn ngữ). AI tự hiểu: mua mấy SP chính · tặng mấy SP chính · tặng mấy quà · giá. Freeship sẽ bỏ qua.
+              Dán nguyên offer (bất kỳ ngôn ngữ). AI tự hiểu: mua mấy SP chính · tặng mấy SP chính · <b>mốc có tặng quà hay không</b> · giá. <b>Nội dung quà lấy từ danh sách trên</b> — mốc có tặng thì tặng CẢ bộ quà. Freeship bỏ qua.
             </p>
             <textarea
               value={draft.offerText}
@@ -349,7 +349,8 @@ export default function GiftStudio({ embedded = false }: { embedded?: boolean })
                   {tiersFresh ? 'Mốc AI đã hiểu:' : '⚠ Ô dán đã đổi — bấm phân tích lại:'}
                 </div>
                 {draft.tiers.map((t, i) => {
-                  const p = computeTierPricing(t, draft.giftValueRM)
+                  const p = computeTierPricing(t, setValue)
+                  const giftNames = draft.gifts.map((g) => g.name.trim()).filter(Boolean).join(' + ') || 'bộ quà'
                   return (
                     <div key={i} className="rounded-md border border-black/10 bg-gray-50 px-2 py-1.5 text-[11px]">
                       <div className="flex items-center justify-between font-semibold text-gray-700">
@@ -359,7 +360,7 @@ export default function GiftStudio({ embedded = false }: { embedded?: boolean })
                       <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-gray-500">
                         {p.jimat > 0 && <span className="text-emerald-600">{L.savingsLabel(p.jimat)} (gốc RM{p.originalPrice})</span>}
                         {t.giftQty > 0
-                          ? <span>🎁 {t.giftQty}× {draft.giftName || 'quà'}{p.giftTotalValue > 0 ? ` · ${L.valueLabel(p.giftTotalValue)}` : ''}</span>
+                          ? <span>🎁 {t.giftQty}× [{giftNames}]{p.giftTotalValue > 0 ? ` · ${L.valueLabel(p.giftTotalValue)}` : ''}</span>
                           : <span className="text-gray-400">không tặng quà</span>}
                       </div>
                     </div>

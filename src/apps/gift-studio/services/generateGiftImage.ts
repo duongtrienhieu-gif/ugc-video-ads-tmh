@@ -11,17 +11,16 @@
 import { generateGpt4oImage, type ImageStatus, type Gpt4oSize } from '../../../utils/kieai'
 import { getUrl, saveAsset } from '../../../utils/assetStore'
 import type { Product } from '../../../stores/types'
-import type { Market, GiftBenefits, GiftImageKind, GiftTier } from '../types'
+import type { Market, GiftBenefits, GiftImageKind, GiftTier, GiftItem } from '../types'
 import { buildGiftPrompt } from './giftPromptBuilder'
 
 export interface GenerateGiftImageParams {
   apiKey: string
   kind: GiftImageKind
   product: Product
-  giftName: string
-  giftValueRM: number | null
+  /** DANH SÁCH quà (1..3). Rỗng khi noGift. */
+  gifts: GiftItem[]
   tiers: GiftTier[]
-  giftImageRef: string
   benefits: GiftBenefits
   lang: Market
   /** Mode Combo giá: không có quà → bỏ qua ảnh quà, chỉ ref sản phẩm. */
@@ -57,11 +56,13 @@ async function resolveUrls(assetRefs: string[], max: number): Promise<string[]> 
 export async function generateGiftImage(
   params: GenerateGiftImageParams,
 ): Promise<GenerateGiftImageResult> {
-  const { kind, product, giftImageRef, noGift } = params
+  const { kind, product, gifts, noGift } = params
 
-  // noGift (Combo giá): chỉ ref SẢN PHẨM (tối đa 5). Có quà: SP (4) + quà (1).
+  // gpt-4o-image TỐI ĐA 5 ref. Chia quota: noGift → SP full 5; có quà → ảnh quà giữ ĐỦ
+  // (mỗi quà 1 ref, thứ tự khớp gifts[]) + SP lấy phần còn lại (≥1). Quà 3 → SP 2.
   const productRefs = (product.productImages ?? []).filter((s) => !!s && s.trim() !== '')
-  const productUrls = await resolveUrls(productRefs, noGift ? 5 : 4)
+  const giftRefs = noGift ? [] : (gifts ?? []).map((g) => g.imageRef).filter((r): r is string => !!r && r.trim() !== '')
+  const productUrls = await resolveUrls(productRefs, noGift ? 5 : Math.max(1, 5 - giftRefs.length))
   if (productUrls.length === 0) {
     throw new Error('Sản phẩm chưa có ảnh tham chiếu hợp lệ — hãy chọn sản phẩm có ảnh.')
   }
@@ -70,7 +71,7 @@ export async function generateGiftImage(
   if (noGift) {
     refUrls = productUrls.slice(0, 5)
   } else {
-    const giftUrls = await resolveUrls([giftImageRef], 1)
+    const giftUrls = await resolveUrls(giftRefs, giftRefs.length)
     if (giftUrls.length === 0) throw new Error('Không tải được ảnh quà — hãy tải lại ảnh quà.')
     // Thứ tự ref theo kind (hero đứng trước), tổng tối đa 5.
     refUrls = (kind === 'info' ? [...giftUrls, ...productUrls] : [...productUrls, ...giftUrls]).slice(0, 5)
@@ -79,8 +80,7 @@ export async function generateGiftImage(
   const prompt = buildGiftPrompt({
     kind,
     product: params.product,
-    giftName: params.giftName,
-    giftValueRM: params.giftValueRM,
+    gifts: params.gifts,
     tiers: params.tiers,
     benefits: params.benefits,
     lang: params.lang,

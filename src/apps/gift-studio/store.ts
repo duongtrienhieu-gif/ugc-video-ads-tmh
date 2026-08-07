@@ -13,9 +13,12 @@ import {
   type GiftImageKind,
   type GiftBenefits,
   type GiftTier,
+  type GiftItem,
   emptyGiftDraft,
+  emptyGiftItem,
   offerSig,
   GIFT_IMAGE_KINDS,
+  MAX_GIFTS,
 } from './types'
 
 const CACHE_KEY = 'gift-studio-draft-v1'
@@ -37,6 +40,14 @@ function loadCache(): PersistShape {
       const parsed = JSON.parse(raw) as Partial<PersistShape>
       const base = emptyGiftDraft()
       const draft: GiftDraft = { ...base, ...(parsed.draft ?? {}) }
+      // Migration cache CŨ (1 quà: giftName/giftValueRM/giftImageRef) → gifts[].
+      const old = parsed.draft as unknown as { giftName?: string; giftValueRM?: number | null; giftImageRef?: string | null } | undefined
+      if (!Array.isArray(draft.gifts)) {
+        draft.gifts = (old?.giftName || old?.giftImageRef)
+          ? [{ name: old?.giftName ?? '', valueRM: old?.giftValueRM ?? null, imageRef: old?.giftImageRef ?? null }]
+          : [emptyGiftItem()]
+      }
+      if (draft.gifts.length === 0) draft.gifts = [emptyGiftItem()]
       // Migration: cache cũ (model tier khác) → reset tiers về rỗng, giữ các field khác.
       if (!Array.isArray(draft.tiers)) draft.tiers = []
       if (typeof draft.offerText !== 'string') draft.offerText = ''
@@ -64,9 +75,9 @@ interface GiftStudioState {
 
   // ── draft setters ──
   setProductId: (id: string | null) => void
-  setGiftName: (name: string) => void
-  setGiftValueRM: (rm: number | null) => void
-  setGiftImageRef: (ref: string | null) => void
+  addGift: () => void
+  removeGift: (i: number) => void
+  updateGift: (i: number, patch: Partial<GiftItem>) => void
   setLang: (lang: Market) => void
   setOfferText: (text: string) => void
   /** Lưu tiers AI parse + sig của (offerText, lang) hiện tại. */
@@ -101,9 +112,9 @@ export const useGiftStudioStore = create<GiftStudioState>((set, get) => {
     isParsing: false,
 
     setProductId: (id) => { set((s) => ({ draft: { ...s.draft, productId: id } })); save() },
-    setGiftName: (name) => { set((s) => ({ draft: { ...s.draft, giftName: name } })); save() },
-    setGiftValueRM: (rm) => { set((s) => ({ draft: { ...s.draft, giftValueRM: rm } })); save() },
-    setGiftImageRef: (ref) => { set((s) => ({ draft: { ...s.draft, giftImageRef: ref } })); save() },
+    addGift: () => { set((s) => (s.draft.gifts.length >= MAX_GIFTS ? s : { draft: { ...s.draft, gifts: [...s.draft.gifts, emptyGiftItem()] } })); save() },
+    removeGift: (i) => { set((s) => { const g = s.draft.gifts.filter((_, j) => j !== i); return { draft: { ...s.draft, gifts: g.length ? g : [emptyGiftItem()] } } }); save() },
+    updateGift: (i, patch) => { set((s) => ({ draft: { ...s.draft, gifts: s.draft.gifts.map((g, j) => (j === i ? { ...g, ...patch } : g)) } })); save() },
     setLang: (lang) => { set((s) => ({ draft: { ...s.draft, lang } })); save() },
     setOfferText: (text) => { set((s) => ({ draft: { ...s.draft, offerText: text } })); save() },
     setTiers: (tiers) => {
