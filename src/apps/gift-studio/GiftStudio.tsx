@@ -360,7 +360,7 @@ export default function GiftStudio({ embedded = false }: { embedded?: boolean })
                       <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-gray-500">
                         {p.jimat > 0 && <span className="text-emerald-600">{L.savingsLabel(p.jimat)} (gốc RM{p.originalPrice})</span>}
                         {t.giftQty > 0
-                          ? <span>🎁 {t.giftQty}× [{giftNames}]{p.giftTotalValue > 0 ? ` · ${L.valueLabel(p.giftTotalValue)}` : ''}</span>
+                          ? <span>🎁 [{giftNames}]{p.giftTotalValue > 0 ? ` · ${L.valueLabel(p.giftTotalValue)}` : ''}</span>
                           : <span className="text-gray-400">không tặng quà</span>}
                       </div>
                     </div>

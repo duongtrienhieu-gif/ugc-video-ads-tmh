@@ -4,7 +4,8 @@
 // 1 SNACK HAWTHORN" tách thành:
 //   - buyMainQty  : mua mấy SẢN PHẨM CHÍNH (KOTAK/box/hộp)
 //   - freeMainQty : tặng kèm mấy SẢN PHẨM CHÍNH (buy X free X)
-//   - giftQty     : tặng mấy món QUÀ kèm (SP khác, vd SNACK) — 0 nếu mốc không tặng
+//   - giftQty     : mốc này CÓ tặng bộ quà không? 1 = có, 0 = không (CỜ, không đếm số món —
+//                   bộ quà do user tự định nghĩa riêng; tránh nhân trùng trị giá)
 //   - price       : giá bán (số RM)
 //
 // BỎ shipping (thừa, không lên ảnh). Định danh món quà KHÔNG lấy ở đây —
@@ -44,7 +45,7 @@ const SYSTEM =
   `For each tier extract EXACTLY:\n` +
   `- buyMainQty: how many MAIN products the customer BUYS (the boxes/kotak/hộp/units being purchased).\n` +
   `- freeMainQty: how many MAIN products are given FREE (the "buy X free X" / "FREE N KOTAK" part). 0 if none.\n` +
-  `- giftQty: how many BONUS GIFT items (a DIFFERENT product, e.g. a snack/sample/accessory) are given. 0 if the tier gives no bonus gift.\n` +
+  `- giftQty: does this tier include the BONUS GIFT set? Output 1 if the tier gives ANY bonus gift(s), else 0. This is a YES/NO flag (0 or 1) — do NOT count how many gift items; the gift set itself is defined separately by the user.\n` +
   `- price: the PRODUCT selling price as a NUMBER only — take the FIRST RM amount on the line (the combo's product price), e.g. "RM89" -> 89.\n` +
   `RULES:\n` +
   `- CRITICAL: shipping is NOT part of the price. IGNORE shipping completely — whether it is free shipping / freeship OR a numeric fee like "+ RM10 Shipping". NEVER add a shipping amount into price. Examples: "RM49 + RM10 Shipping" -> price = 49 (NOT 59); "RM79 + FREESHIP" -> price = 79.\n` +

@@ -85,11 +85,13 @@ export interface TierPricing {
   jimat: number
 }
 
+// giftValueRM = TỔNG trị giá BỘ quà (đã gồm mọi món). Mode A: mỗi mốc tặng ĐÚNG 1 BỘ,
+// nên giftQty CHỈ là có/không (>0 = có tặng bộ) — KHÔNG nhân theo số món (tránh đếm trùng).
 export function computeTierPricing(tier: GiftTier, giftValueRM: number | null): TierPricing {
   const buy = Math.max(1, tier.buyMainQty)
   const totalMainUnits = tier.buyMainQty + tier.freeMainQty
   const mainUnit = tier.price / buy
-  const giftTotalValue = Math.round((giftValueRM ?? 0) * tier.giftQty)
+  const giftTotalValue = tier.giftQty > 0 ? Math.round(giftValueRM ?? 0) : 0
   const originalPrice = Math.round(mainUnit * totalMainUnits) + giftTotalValue
   const jimat = originalPrice - tier.price
   return { totalMainUnits, giftTotalValue, originalPrice, jimat }
