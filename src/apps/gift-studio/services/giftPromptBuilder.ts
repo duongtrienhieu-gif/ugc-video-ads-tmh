@@ -138,8 +138,8 @@ export function buildGiftPrompt(params: BuildGiftPromptParams): string {
       const p = computeTierPricing(t, setValue)
       const corner = TIER_CORNER_BADGES[i] || ''
       const color = TIER_COLORS[i] || TIER_COLORS[TIER_COLORS.length - 1]
-      // Bộ quà (mode A): mỗi mốc tặng ĐÚNG 1 BỘ (giftQty chỉ là có/không).
-      const setLabel = giftNames.join(' + ')
+      // Bộ quà (mode A dùng chung mọi mốc): mỗi mốc tặng cả bộ × số-bộ (giftQty).
+      const setLabel = giftNames.map((g) => (t.giftQty > 1 ? `${t.giftQty}× ${g}` : g)).join(' + ')
       const bonusBlock = noGift
         ? (t.shippingNote?.trim() ? `shipping badge=${quote(t.shippingNote.trim())} (small pill, freeship=green / paid=orange)` : '')
         : (t.giftQty > 0 && nGifts > 0

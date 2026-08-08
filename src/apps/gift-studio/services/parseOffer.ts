@@ -4,8 +4,8 @@
 // 1 SNACK HAWTHORN" tách thành:
 //   - buyMainQty  : mua mấy SẢN PHẨM CHÍNH (KOTAK/box/hộp)
 //   - freeMainQty : tặng kèm mấy SẢN PHẨM CHÍNH (buy X free X)
-//   - giftQty     : mốc này CÓ tặng bộ quà không? 1 = có, 0 = không (CỜ, không đếm số món —
-//                   bộ quà do user tự định nghĩa riêng; tránh nhân trùng trị giá)
+//   - giftQty     : mốc này tặng mấy BỘ quà (vd PERCUMA 1 = 1 bộ, PERCUMA 2 = 2 bộ) —
+//                   ĐẾM SỐ BỘ, KHÔNG đếm tổng số món; bộ quà do user định nghĩa riêng
 //   - price       : giá bán (số RM)
 //
 // BỎ shipping (thừa, không lên ảnh). Định danh món quà KHÔNG lấy ở đây —
@@ -45,7 +45,7 @@ const SYSTEM =
   `For each tier extract EXACTLY:\n` +
   `- buyMainQty: how many MAIN products the customer BUYS (the boxes/kotak/hộp/units being purchased).\n` +
   `- freeMainQty: how many MAIN products are given FREE (the "buy X free X" / "FREE N KOTAK" part). 0 if none.\n` +
-  `- giftQty: does this tier include the BONUS GIFT set? Output 1 if the tier gives ANY bonus gift(s), else 0. This is a YES/NO flag (0 or 1) — do NOT count how many gift items; the gift set itself is defined separately by the user.\n` +
+  `- giftQty: how many COMPLETE SETS of the bonus gift bundle this tier gives — NOT the total number of gift items. The gift SET (which items) is defined separately by the user; here you only output how many TIMES that whole set repeats. If each bonus item is listed with the SAME quantity N (e.g. "2 BERUS + 2 SPAN + 2 KEPING"), then giftQty = N (= 2 sets). "1 of each" = 1. A "buy X free X" tier usually gives the set X times, so giftQty typically = X. 0 if the tier gives no bonus gift.\n` +
   `- price: the PRODUCT selling price as a NUMBER only — take the FIRST RM amount on the line (the combo's product price), e.g. "RM89" -> 89.\n` +
   `RULES:\n` +
   `- CRITICAL: shipping is NOT part of the price. IGNORE shipping completely — whether it is free shipping / freeship OR a numeric fee like "+ RM10 Shipping". NEVER add a shipping amount into price. Examples: "RM49 + RM10 Shipping" -> price = 49 (NOT 59); "RM79 + FREESHIP" -> price = 79.\n` +
