@@ -11,6 +11,13 @@ import { loadMyDataBlock } from './myData'
 // Chỉ gắn DỮ LIỆU THẬT (doanh thu/mã SP…) khi câu hỏi liên quan — riêng tư + không lậm + đỡ token.
 const DATA_RE = /doanh thu|doanhthu|lãi|lợi nhuận|ho[àa]n|cpqc|ch[ốo]t|aov|\bđơn\b|của tôi|của mình|của em|mã sp|mã của|target|chỉ tiêu|kpi|ngân sách|bán được|số liệu|báo cáo|\bkho\b|tồn|team|nhân viên|sắp đứt|đứt hàng|nhập hàng|cần nhập|\btỉnh\b|\bbom\b|tốc độ bán|đang về/i
 
+// Tự nhận diện Ý ĐỊNH SỬA ẢNH: có ảnh đính kèm + động từ sửa ảnh + danh từ chỉ ảnh
+// → route thẳng sang tạo/sửa ảnh (nano-banana i2i), khỏi bắt user bật mode tay.
+// "đọc/phân tích ảnh này" KHÔNG khớp (không có động từ sửa) → vẫn đi chat vision.
+const IMG_EDIT_VERB = /xo[áa]|\bbỏ\b|\bremove\b|\berase\b|\bche\b|làm mờ|\bblur\b|ghép|chèn|\bđổi\b|\bthay\b|\btách\b|retouch|chỉnh sửa|\bsửa\b|xử lý ảnh|làm nét|làm đẹp|photoshop/i
+const IMG_EDIT_NOUN = /h[ìi]nh|[ảa]nh|t[ấa]m|\bphoto\b|\bimage\b|\bnền\b|phông|background|số điện thoại|\bsố\b|\bchữ\b|\blogo\b|watermark|sản phẩm|bao bì|nhãn/i
+const wantsImageEdit = (text: string, hasImage: boolean) => hasImage && IMG_EDIT_VERB.test(text) && IMG_EDIT_NOUN.test(text)
+
 // Lịch sử RIÊNG theo email: nhiều cuộc trò chuyện, tự lưu; mở "Trò chuyện mới" thì cuộc cũ vào lịch sử.
 interface Convo { id: string; title: string; messages: ChatMessage[]; updatedAt: number }
 const convosKey = (email: string) => `ai-chat:convos:${email}`
@@ -36,6 +43,7 @@ export default function AiChat() {
   const [pending, setPending] = useState<Attachment[]>([])
   const [imageMode, setImageMode] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [imgBusy, setImgBusy] = useState(false)   // đang tạo/sửa ảnh (kể cả khi auto-route, không bật mode)
   const [openaiKey, setOpenaiKey] = useState('')
   const [keyModalOpen, setKeyModalOpen] = useState(false)
   const [convos, setConvos] = useState<Convo[]>([])
@@ -108,7 +116,7 @@ export default function AiChat() {
   const switchModel = (mm: 'gemini' | 'gpt') => {
     if (mm === model) return
     setModel(mm)
-    if (mm === 'gpt') setImageMode(false)   // GPT không có nút Tạo ảnh → tắt luôn chế độ
+    // Tạo/sửa ảnh dùng kie.ai (độc lập model chat) → GIỮ imageMode qua cả 2 model.
     const latest = convos.find((c) => c.messages.length > 0 && convoModel(c) === mm)   // convos sắp xếp mới-nhất-trước
     if (latest) { setActiveId(latest.id); setMessages(latest.messages) }
     else { setActiveId(crypto.randomUUID()); setMessages([]) }
@@ -147,30 +155,34 @@ export default function AiChat() {
   const send = async () => {
     const text = input.trim()
     if (busy || (!text && pending.length === 0)) return
-    if (model === 'gpt' && !imageMode && !openaiKey) { setKeyModalOpen(true); return }
+    // Tự route sang sửa ảnh nếu: đính kèm ảnh + câu có ý sửa ảnh (dù chưa bật mode).
+    const hasImg = pending.some((a) => a.kind === 'image')
+    const doImage = imageMode || wantsImageEdit(text, hasImg)
+    if (model === 'gpt' && !doImage && !openaiKey) { setKeyModalOpen(true); return }
 
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', text, atts: pending, imageUrls: [], model }
     const next = [...messages, userMsg]
     setMessages(next); setInput(''); setPending([]); setBusy(true)
 
     // Tạo / SỬA ảnh — one-shot (không stream).
-    if (imageMode) {
+    if (doImage) {
+      setImgBusy(true)
       try {
-        if (!kieApiKey) throw new Error('Cần kie.ai API key trong Cài đặt để tạo ảnh')
+        if (!kieApiKey) throw new Error('Cần kie.ai API key trong Cài đặt để tạo/sửa ảnh')
         // Ảnh đính kèm → upload lấy URL công khai → làm reference i2i (KHÓA sản phẩm).
         const refUrls: string[] = []
         for (const a of userMsg.atts.filter((x) => x.kind === 'image')) {
           try { const id = await saveFromDataUrl(a.dataUrl); const u = await getUrl(id); if (u) refUrls.push(u) } catch { /* bỏ ảnh lỗi */ }
         }
-        // Có ảnh gốc → ép giữ nguyên sản phẩm; không có → tạo mới từ chữ.
+        // Có ảnh gốc → SỬA đúng yêu cầu, giữ nguyên phần còn lại; không có → tạo mới từ chữ.
         const prompt = refUrls.length
-          ? `Chỉ chỉnh ảnh theo yêu cầu: ${text || 'ghép layout đẹp'}.\nBẮT BUỘC GIỮ NGUYÊN 100% sản phẩm ở ảnh đầu tiên (hình dạng, màu, bao bì, nhãn, chữ trên sản phẩm) — KHÔNG vẽ lại, KHÔNG thay bằng vật khác. Các ảnh sau chỉ là tham chiếu bố cục/combo/giá.`
+          ? `Chỉnh sửa ảnh theo ĐÚNG yêu cầu: ${text || 'ghép layout đẹp'}.\nGIỮ NGUYÊN toàn bộ phần còn lại của ảnh (sản phẩm, bố cục, màu, bao bì, nhãn, chữ trên sản phẩm) — CHỈ thực hiện đúng thay đổi được yêu cầu (vd xoá/thêm/đổi phần được nêu), KHÔNG vẽ lại, KHÔNG thay bằng vật khác. Ảnh sau (nếu có) chỉ là tham chiếu bố cục/combo/giá.`
           : (text || 'photo')
         const url = await genImage(kieApiKey, prompt, refUrls)
         setMessages((m) => [...m, { id: crypto.randomUUID(), role: 'assistant', text: '', atts: [], imageUrls: [url], model }])
       } catch (e) {
         setMessages((m) => [...m, { id: crypto.randomUUID(), role: 'assistant', text: '⚠️ ' + ((e as Error).message || 'Lỗi'), atts: [], imageUrls: [], model, error: true }])
-      } finally { setBusy(false) }
+      } finally { setBusy(false); setImgBusy(false) }
       return
     }
 
@@ -259,9 +271,9 @@ export default function AiChat() {
         ) : (
           <div className="mx-auto flex max-w-3xl flex-col gap-3">
             {messages.map((m) => <MessageBubble key={m.id} m={m} />)}
-            {busy && imageMode && (
+            {imgBusy && (
               <div className="flex items-center gap-2 text-xs text-app-muted">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang tạo ảnh…
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang xử lý ảnh…
               </div>
             )}
           </div>
@@ -295,19 +307,17 @@ export default function AiChat() {
               placeholder={imageMode ? 'Mô tả ảnh muốn tạo…' : 'Hỏi bất cứ điều gì…'}
               className="max-h-32 min-h-[36px] flex-1 resize-none bg-transparent px-1 py-2 text-sm text-app-text outline-none placeholder:text-app-faint"
             />
-            {model === 'gemini' && (
-              <button onClick={() => setImageMode((v) => !v)} title="Chế độ tạo / sửa ảnh (gửi kèm ảnh sản phẩm để sửa, khóa nguyên sản phẩm)"
-                className={`flex h-9 shrink-0 items-center gap-1 rounded-full px-2.5 text-[11px] font-bold transition-colors ${imageMode ? 'ui-accent-solid' : 'text-app-muted hover:bg-app-card-elevated'}`}>
-                <Sparkles className="h-3.5 w-3.5" /> Tạo / sửa ảnh
-              </button>
-            )}
+            <button onClick={() => setImageMode((v) => !v)} title="Chế độ tạo / sửa ảnh (gửi kèm ảnh để sửa: xoá số, ghép combo, đổi nền… giữ nguyên sản phẩm). Gõ 'bỏ số điện thoại trong hình' kèm ảnh cũng tự sửa."
+              className={`flex h-9 shrink-0 items-center gap-1 rounded-full px-2.5 text-[11px] font-bold transition-colors ${imageMode ? 'ui-accent-solid' : 'text-app-muted hover:bg-app-card-elevated'}`}>
+              <Sparkles className="h-3.5 w-3.5" /> Tạo / sửa ảnh
+            </button>
             <button onClick={() => void send()} disabled={busy || (!input.trim() && pending.length === 0)}
               className="ui-accent-solid flex h-9 w-9 shrink-0 items-center justify-center rounded-full disabled:opacity-40">
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
           </div>
           <p className="mt-1 px-1 text-[10px] text-app-faint">
-            {imageMode ? 'Tạo/sửa ảnh qua kie.ai (tốn credit) · gửi kèm ảnh sản phẩm để SỬA — giữ nguyên sản phẩm.' : model === 'gpt' ? 'GPT-4o đọc ảnh, không video. Cần OpenAI API key (≠ gói ChatGPT Go).' : 'Gemini đọc ảnh + video ngắn (<15MB).'}
+            {imageMode ? 'Tạo/sửa ảnh qua kie.ai — nano-banana (tốn credit) · gửi kèm ảnh để SỬA (xoá số, ghép combo, đổi nền…) — giữ nguyên sản phẩm.' : model === 'gpt' ? 'GPT-4o đọc ảnh, không video. 💡 Gửi ảnh + gõ "xoá số điện thoại/ghép combo" là tự SỬA ảnh (nano-banana, cần kie.ai key).' : 'Gemini đọc ảnh + video ngắn (<15MB). 💡 Gửi ảnh + gõ "xoá số/đổi nền" là tự SỬA ảnh (cần kie.ai key).'}
           </p>
         </div>
       </div>
