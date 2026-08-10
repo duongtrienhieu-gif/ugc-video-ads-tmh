@@ -13,7 +13,8 @@ import { langDisplayName, freeGiftBadge } from '../labels'
 export interface BuildFormBgPromptParams {
   preset: FormBgPreset
   direction: ProductDirection
-  hasGift: boolean
+  /** Số món quà trong bộ (0 = không tặng). Nhiều món → "mâm quà" đầy ắp. */
+  giftCount: number
   lang: Market
   variantIndex: number
 }
@@ -37,10 +38,20 @@ function identityBlock(d: ProductDirection): string {
     `It must read as the SAME real product photographed, NOT an AI redraw. Do NOT add any extra/unbranded product not in the references.`
 }
 
-function giftBlock(hasGift: boolean, lang: Market): string {
-  return hasGift
-    ? `SEPARATE BONUS GIFT: the LAST reference image is a DIFFERENT bonus product. Reproduce it faithfully, kept VISUALLY DISTINCT from the main product — do NOT merge/blend the two products' shapes, colours, labels or text. Place a small glossy ${q(freeGiftBadge(lang))} badge near it.`
-    : ''
+/** Cụm từ mô tả quà (số ít / số nhiều) dùng trong header. */
+function giftPhrase(giftCount: number, lang: Market): string {
+  if (giftCount <= 0) return ''
+  return giftCount === 1
+    ? (lang === 'vi' ? 'món QUÀ TẶNG kèm' : 'the FREE BONUS GIFT')
+    : (lang === 'vi' ? `TRỌN BỘ ${giftCount} QUÀ TẶNG kèm` : `the FREE GIFT SET (all ${giftCount} bonus gifts)`)
+}
+
+function giftBlock(giftCount: number, lang: Market): string {
+  if (giftCount <= 0) return ''
+  if (giftCount === 1) {
+    return `SEPARATE BONUS GIFT: the LAST reference image is a DIFFERENT bonus product. Reproduce it faithfully, kept VISUALLY DISTINCT from the main product — do NOT merge/blend the two products' shapes, colours, labels or text. Place a small glossy ${q(freeGiftBadge(lang))} badge near it.`
+  }
+  return `SEPARATE BONUS GIFTS: the LAST ${giftCount} reference images are ${giftCount} DIFFERENT bonus gift products. Reproduce EACH faithfully and arrange them TOGETHER as one abundant FREE GIFT SET (a generous "mâm quà" cluster). Keep every gift VISUALLY DISTINCT from one another AND from the main product — do NOT merge/blend/duplicate any shapes, colours, labels or text; show all ${giftCount} as separate real items. Place ONE glossy ${q(freeGiftBadge(lang))} badge over the gift cluster.`
 }
 
 function paletteBlock(d: ProductDirection): string {
@@ -58,15 +69,16 @@ function variantBlock(i: number): string {
     : `COMPOSITION: a noticeably DIFFERENT arrangement from variation A — reposition the hero/badges/decor (variation B). Keep the same headline, style and palette; the urgency lines provided already differ between variants.`
 }
 
-function headerLayout(preset: FormBgPreset, d: ProductDirection, lang: Market, hasGift: boolean): string {
+function headerLayout(preset: FormBgPreset, d: ProductDirection, lang: Market, giftCount: number): string {
+  const gift = giftPhrase(giftCount, lang)
   if (preset === 'editorial') {
-    return `HEADER (top): premium HEALTH-MAGAZINE EDITORIAL look (trustworthy, not a loud flyer). A magazine masthead kicker ${q(lang === 'vi' ? 'SỐNG KHỎE · SỐ ĐẶC BIỆT' : 'SIHAT · EDISI KHAS')}, a big SERIF headline ${q(d.headline)}, sub-headline ${q(d.subhead)}, a clean studio shot of the product${hasGift ? ' plus the bonus gift' : ''}, and a circular expert seal ${q(expertSeal(lang))}.`
+    return `HEADER (top): premium HEALTH-MAGAZINE EDITORIAL look (trustworthy, not a loud flyer). A magazine masthead kicker ${q(lang === 'vi' ? 'SỐNG KHỎE · SỐ ĐẶC BIỆT' : 'SIHAT · EDISI KHAS')}, a big SERIF headline ${q(d.headline)}, sub-headline ${q(d.subhead)}, a clean studio shot of the product${gift ? ` plus ${gift}` : ''}, and a circular expert seal ${q(expertSeal(lang))}.`
   }
   if (preset === 'abundance') {
-    return `HEADER (top): warm generous BUNDLE / VALUE-STACK look. A colourful ribbon banner with headline ${q(d.headline)} + sub ${q(d.subhead)}, an abundant cluster of the PRODUCT (several units)${hasGift ? ' together with the FREE BONUS GIFT' : ''} and glossy badges; a scarcity badge ${q(d.scarcity)}.`
+    return `HEADER (top): warm generous BUNDLE / VALUE-STACK look. A colourful ribbon banner with headline ${q(d.headline)} + sub ${q(d.subhead)}, an abundant cluster of the PRODUCT (several units)${gift ? ` together with ${gift} shown as a full gift pile` : ''} and glossy badges; a scarcity badge ${q(d.scarcity)}.`
   }
   const [before, after] = beforeAfterWords(lang)
-  return `HEADER (top): BEFORE→AFTER TRANSFORMATION. A split scene — left half labelled ${q(before)} (dull, the problem) and right half labelled ${q(after)} (bright, the result) with a transformation arrow between, the PRODUCT${hasGift ? ' + bonus gift' : ''} as the bridge; a headline band ${q(d.headline)} and sub ${q(d.subhead)}.`
+  return `HEADER (top): BEFORE→AFTER TRANSFORMATION. A split scene — left half labelled ${q(before)} (dull, the problem) and right half labelled ${q(after)} (bright, the result) with a transformation arrow between, the PRODUCT${gift ? ` + ${gift}` : ''} as the bridge; a headline band ${q(d.headline)} and sub ${q(d.subhead)}.`
 }
 
 function footerLayout(preset: FormBgPreset, d: ProductDirection): string {
@@ -80,7 +92,7 @@ function footerLayout(preset: FormBgPreset, d: ProductDirection): string {
 }
 
 export function buildFormBgPrompt(params: BuildFormBgPromptParams): string {
-  const { preset, direction: d, hasGift, lang, variantIndex } = params
+  const { preset, direction: d, giftCount, lang, variantIndex } = params
   const langName = langDisplayName(lang)
   const bg = d.palette.bg
 
@@ -92,7 +104,7 @@ export function buildFormBgPrompt(params: BuildFormBgPromptParams): string {
 
   return [
     `TASK: Design ONE TALL PORTRAIT (2:3) order-form BACKGROUND, stacked top-to-bottom: (1) header banner, (2) an urgency FOMO band with a blank gap left in its centre, (3) a large blank solid-colour region, (4) footer. High-converting Malaysian COD marketing infographic. TWO regions are intentionally left blank for later overlays — draw absolutely nothing in them (no text, no boxes, no outlines).`,
-    headerLayout(preset, d, lang, hasGift),
+    headerLayout(preset, d, lang, giftCount),
     `FOMO BAND (directly below header): a bold urgency strip in the accent colour. Top label ${q(d.fomoTitle)}. ` +
       `Centred within the strip, leave a CLEAN BLANK GAP — about 75% of the strip width, centred, roughly 2.2:1 wide-to-tall — filled with the SAME flat accent colour and nothing else, so it reads as a smooth uninterrupted patch of colour. Keep clear vertical spacing above and below this gap. ` +
       `Inside this gap draw ABSOLUTELY NOTHING: no clock, no numbers, no digits, no timer, no cells, no boxes, no squares, no outlines, no borders, no frames, no labels, no caption, no placeholder marks, and no text of any kind (a real countdown widget is overlaid there later, so it must stay a bare patch of colour). ` +
@@ -100,7 +112,7 @@ export function buildFormBgPrompt(params: BuildFormBgPromptParams): string {
     `LOWER REGION (below the FOMO band): a LARGE area (~40% of the height) that is ONE FLAT SOLID ${bg} colour and totally blank — no card, no frame, no border, no outline, no fields, no buttons, no icons, no placeholder, no labels and no text of any kind. A single uniform colour block so it crops cleanly for a form overlay added later.`,
     footerLayout(preset, d),
     identityBlock(d),
-    giftBlock(hasGift, lang),
+    giftBlock(giftCount, lang),
     paletteBlock(d),
     textRules(langName),
     variantBlock(variantIndex),

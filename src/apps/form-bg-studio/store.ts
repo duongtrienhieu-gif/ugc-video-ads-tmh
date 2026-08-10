@@ -9,6 +9,7 @@ import {
   type ProductDirection,
   emptyFormBgDraft,
   FORM_BG_VARIANTS,
+  MAX_FORM_GIFTS,
 } from './types'
 
 const CACHE_KEY = 'form-bg-studio-draft-v1'
@@ -32,8 +33,14 @@ function loadCache(): PersistShape {
       const imgsOk = Array.isArray(parsed.images)
         && parsed.images.length === FORM_BG_VARIANTS
         && !parsed.images.some((im) => im != null && ('headerRef' in (im as object) || 'footerRef' in (im as object)))
+      // Migration: cache cũ dùng giftImageRef (1 ảnh) → bọc thành giftImageRefs[].
+      const rawDraft = (parsed.draft ?? {}) as Partial<FormBgDraft> & { giftImageRef?: string | null }
+      const draft: FormBgDraft = { ...emptyFormBgDraft(), ...rawDraft }
+      if (!Array.isArray(draft.giftImageRefs)) {
+        draft.giftImageRefs = rawDraft.giftImageRef ? [rawDraft.giftImageRef] : []
+      }
       return {
-        draft: { ...emptyFormBgDraft(), ...(parsed.draft ?? {}) },
+        draft,
         images: imgsOk ? (parsed.images as FormBgImage[]) : freshImages(),
         direction: parsed.direction ?? null,
       }
@@ -49,7 +56,7 @@ interface FormBgState {
   isAnalyzing: boolean
 
   setProductId: (id: string | null) => void
-  setGiftImageRef: (ref: string | null) => void
+  setGiftImageRefs: (refs: string[]) => void
   setPreset: (p: FormBgPreset) => void
   setLang: (lang: Market) => void
 
@@ -76,7 +83,7 @@ export const useFormBgStore = create<FormBgState>((set, get) => {
     isAnalyzing: false,
 
     setProductId: (id) => { set((s) => ({ draft: { ...s.draft, productId: id } })); save() },
-    setGiftImageRef: (ref) => { set((s) => ({ draft: { ...s.draft, giftImageRef: ref } })); save() },
+    setGiftImageRefs: (refs) => { set((s) => ({ draft: { ...s.draft, giftImageRefs: refs.slice(0, MAX_FORM_GIFTS) } })); save() },
     setPreset: (p) => { set((s) => ({ draft: { ...s.draft, preset: p } })); save() },
     setLang: (lang) => { set((s) => ({ draft: { ...s.draft, lang } })); save() },
 

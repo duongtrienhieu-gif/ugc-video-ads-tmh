@@ -1,6 +1,7 @@
 // generateFormBg — render 1 ẢNH NỀN form đầy đủ (header+FOMO+form trống+footer)
-// qua gpt-4o-image (i2i), size 2:3. Ref = ảnh SP (hero AI chọn lên đầu, ÍT ref
-// để bớt drift) + ảnh quà (nếu có, MỌI preset). Có RETRY lỗi mạng transient.
+// qua gpt-4o-image (i2i), size 2:3. Ref = ảnh SP (hero AI chọn lên đầu) + BỘ ảnh
+// quà (0..3, MỌI preset). gpt-4o-image tối đa 5 ref → SP = 5−số_quà (min 2), quà
+// lấy hết. Có RETRY lỗi mạng transient.
 
 import { generateGpt4oImage, type ImageStatus } from '../../../utils/kieai'
 import { getUrl, saveAsset } from '../../../utils/assetStore'
@@ -15,10 +16,12 @@ export interface GenerateFormBgParams {
   direction: ProductDirection
   preset: FormBgPreset
   lang: Market
-  giftImageRef: string | null
+  giftImageRefs: string[]
   onStatus?: (status: ImageStatus) => void
   signal?: AbortSignal
 }
+
+const MAX_REFS = 5   // gpt-4o-image tối đa 5 ảnh tham chiếu
 
 const TIMEOUT_MS = 5 * 60 * 1000
 
@@ -52,19 +55,22 @@ async function resolveUrls(refs: string[], max: number): Promise<string[]> {
 }
 
 export async function generateFormBg(params: GenerateFormBgParams): Promise<{ assetRef: string; prompt: string }> {
-  const { product, direction, preset, giftImageRef } = params
-  const hasGift = !!giftImageRef
+  const { product, direction, preset } = params
+  const giftRefs = (params.giftImageRefs ?? []).filter(Boolean)
+  const giftCount = Math.min(giftRefs.length, MAX_REFS - 2)   // chừa ≥2 ref cho SP
+  const hasGift = giftCount > 0
 
   const allImgs = (product.productImages ?? []).filter((s) => !!s && s.trim() !== '')
   const heroIdx = Math.max(0, Math.min(allImgs.length - 1, direction.heroImageIndex))
   const ordered = allImgs.length > 0 ? [allImgs[heroIdx], ...allImgs.filter((_, i) => i !== heroIdx)] : allImgs
-  // Ít ref + sạch = bớt drift. Có quà chỉ lấy 2 ảnh SP để khỏi lẫn 2 sản phẩm.
-  const productUrls = await resolveUrls(ordered, hasGift ? 2 : 3)
+  // SP giữ tối thiểu 2 ref, phần còn lại của quota 5 dành cho bộ quà (giữ identity SP).
+  const productQuota = hasGift ? Math.max(2, MAX_REFS - giftCount) : 3
+  const productUrls = await resolveUrls(ordered, productQuota)
   if (productUrls.length === 0) throw new Error('Sản phẩm chưa có ảnh tham chiếu hợp lệ.')
-  const giftUrls = hasGift ? await resolveUrls([giftImageRef as string], 1) : []
-  const refUrls = [...productUrls, ...giftUrls].slice(0, 4)
+  const giftUrls = hasGift ? await resolveUrls(giftRefs, giftCount) : []
+  const refUrls = [...productUrls, ...giftUrls].slice(0, MAX_REFS)
 
-  const prompt = buildFormBgPrompt({ preset, direction, hasGift, lang: params.lang, variantIndex: params.variantIndex })
+  const prompt = buildFormBgPrompt({ preset, direction, giftCount: giftUrls.length, lang: params.lang, variantIndex: params.variantIndex })
 
   if (typeof console !== 'undefined') {
     console.log(`[form-bg] ${preset} v${params.variantIndex} lang=${params.lang} promptLen=${prompt.length} refs=${refUrls.length}`)

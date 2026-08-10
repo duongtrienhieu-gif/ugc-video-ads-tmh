@@ -22,9 +22,8 @@ export interface AnalyzeProductParams {
   productName: string
   preset: FormBgPreset
   lang: Market
-  hasGift: boolean
   productId: string | null
-  giftImageRef: string | null
+  giftImageRefs: string[]      // 0..3 ảnh quà — gửi vào vision để teaser bám bộ quà thật
 }
 
 async function refToInline(assetRef: string): Promise<{ inlineData: { mimeType: string; data: string } } | null> {
@@ -77,21 +76,28 @@ const PRESET_BRIEF: Record<FormBgPreset, string> = {
     `Provide a short "testimonial" (1 sentence, with a believable Malay name + city).`,
   abundance:
     `Style = generous bundle / value-stack. Copy celebrates getting a lot for the price. ` +
-    `Provide a short "giftTeaser" line about the free bonus gift.`,
+    `Provide a short "giftTeaser" line about the free bonus gift(s) — if several gifts are shown, frame them as a whole gift SET / "mâm quà".`,
   transformation:
     `Style = before/after transformation. Copy promises a visible change in a timeframe (e.g. "14 hari").`,
 }
 
 export async function analyzeProduct(params: AnalyzeProductParams): Promise<ProductDirection> {
-  const { apiKey, productImageRefs, productName, preset, lang, hasGift } = params
+  const { apiKey, productImageRefs, productName, preset, lang } = params
+  const giftRefs = (params.giftImageRefs ?? []).filter(Boolean).slice(0, 3)
+  const hasGift = giftRefs.length > 0
   const langName = langDisplayName(lang)
   const refs = productImageRefs.slice(0, 4)
   const inlineParts = (await Promise.all(refs.map(refToInline))).filter(Boolean) as Array<{ inlineData: { mimeType: string; data: string } }>
   if (inlineParts.length === 0) throw new Error('Không tải được ảnh sản phẩm để phân tích.')
+  // Ảnh quà đi SAU ảnh SP — chỉ để mô tả bộ quà, KHÔNG tính vào heroImageIndex.
+  const giftParts = hasGift
+    ? (await Promise.all(giftRefs.map(refToInline))).filter(Boolean) as Array<{ inlineData: { mimeType: string; data: string } }>
+    : []
 
   const systemInstruction =
     `You are an expert Malaysian COD direct-response ART DIRECTOR + copywriter. You design the BACKGROUND ` +
-    `art-direction for an order-form landing page. You are given ${inlineParts.length} product photo(s), indexed 0..${inlineParts.length - 1}.\n` +
+    `art-direction for an order-form landing page. The FIRST ${inlineParts.length} photo(s), indexed 0..${inlineParts.length - 1}, are the MAIN PRODUCT` +
+    `${giftParts.length ? `; the FINAL ${giftParts.length} photo(s) after them are ${giftParts.length} separate FREE BONUS GIFT item(s) — NEVER pick a gift photo as heroImageIndex (hero is a MAIN PRODUCT photo only, index 0..${inlineParts.length - 1})` : ''}.\n` +
     `TASKS:\n` +
     `1) heroImageIndex: pick the SINGLE best photo for IDENTITY FIDELITY — a CLEAN studio packshot where the product + its label text are sharp, front-facing and clearly readable (avoid lifestyle/in-use shots, hands, or busy backgrounds). This image will be copied faithfully, so clarity of the packaging matters most.\n` +
     `2) palette: extract a harmonious colour scheme ANCHORED to the product's real colours/packaging. ` +
@@ -102,14 +108,14 @@ export async function analyzeProduct(params: AnalyzeProductParams): Promise<Prod
     `   - fomoTitle (<=4 words, a countdown/urgency label that sits ABOVE a countdown timer, e.g. deadline framing),\n` +
     `   - fomoLines: an array of 3-4 SHORT (<=10 words each) urgency lines, EACH a DIFFERENT mechanism — e.g. (1) deadline/price-revert "price goes back up when time ends", (2) quantity scarcity "limited stock / last sets", (3) EARLY-BUYER EXCLUSIVE "only for the first N buyers today", (4) loss-aversion/regret "don't miss out". Make them DISTINCT and freshly worded — do NOT repeat the same idea, do NOT copy common templates verbatim.\n` +
     `${PRESET_BRIEF[preset]}\n` +
-    `${hasGift ? 'A free BONUS GIFT is included — reference it where relevant.' : 'No bonus gift.'}\n` +
+    `${hasGift ? `${giftParts.length} free BONUS GIFT item(s) are included${giftParts.length > 1 ? ' (a whole gift SET)' : ''} — reference them where relevant.` : 'No bonus gift.'}\n` +
     `NO emojis. Do NOT invent specific prices or money amounts. Output ONLY the JSON.`
 
   const userText = `Product name (may be in another language): "${productName.trim()}". Analyse the photos and return the art-direction JSON.`
 
   const raw = await directGeminiVision({
     apiKey,
-    parts: [...inlineParts, { text: userText }],
+    parts: [...inlineParts, ...giftParts, { text: userText }],
     systemInstruction,
     responseMimeType: 'application/json',
     responseSchema: SCHEMA,
@@ -155,6 +161,6 @@ export async function analyzeProduct(params: AnalyzeProductParams): Promise<Prod
     giftTeaser: clean(p.giftTeaser) || undefined,
     lang,
     preset,
-    sig: directionSig({ productId: params.productId, preset, lang, giftImageRef: params.giftImageRef }),
+    sig: directionSig({ productId: params.productId, preset, lang, giftImageRefs: giftRefs }),
   }
 }

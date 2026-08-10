@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react'
-import { LayoutTemplate, Upload, RefreshCw, Sparkles, Download, X, AlertCircle, Check, Copy } from 'lucide-react'
+import { LayoutTemplate, RefreshCw, Sparkles, Download, X, AlertCircle, Check, Copy, Plus } from 'lucide-react'
 import { useFormBgStore } from './store'
 import { useBankStore } from '../../stores/bankStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -19,6 +19,7 @@ import {
   FORM_BG_PRESETS,
   FORM_BG_VARIANTS,
   FORM_BG_TOTAL_CREDITS,
+  MAX_FORM_GIFTS,
   directionSig,
   type FormBgPreset,
   type ProductDirection,
@@ -35,7 +36,7 @@ function AssetImg({ refId, alt }: { refId: string | undefined | null; alt: strin
 export default function FormBgStudio({ embedded = false }: { embedded?: boolean }) {
   const {
     draft, images, direction, isAnalyzing,
-    setProductId, setGiftImageRef, setPreset, setLang,
+    setProductId, setGiftImageRefs, setPreset, setLang,
     setDirection, setAnalyzing, patchImage,
   } = useFormBgStore()
 
@@ -59,22 +60,28 @@ export default function FormBgStudio({ embedded = false }: { embedded?: boolean 
   if (!kieApiKey) missing.push('KIE API key (Cài đặt)')
   if (!draft.productId) missing.push('Chọn sản phẩm')
   else if (productImages.length === 0) missing.push('Sản phẩm cần có ảnh tham chiếu')
-  if (needsGift && !draft.giftImageRef) missing.push('Preset “Mâm quà” cần tải ảnh quà')
+  if (needsGift && draft.giftImageRefs.length === 0) missing.push('Preset “Mâm quà” cần tải ít nhất 1 ảnh quà')
   const ready = missing.length === 0
+  const canAddGift = draft.giftImageRefs.length < MAX_FORM_GIFTS
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
+    if (!canAddGift) return
     setUploading(true)
     try {
       const ref = await saveAsset(file, file.type)
-      setGiftImageRef(ref)
+      setGiftImageRefs([...draft.giftImageRefs, ref])
     } catch (err) {
       addToast(`Tải ảnh quà thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error')
     } finally {
       setUploading(false)
     }
+  }
+
+  function removeGift(idx: number) {
+    setGiftImageRefs(draft.giftImageRefs.filter((_, i) => i !== idx))
   }
 
   async function ensureDirection(): Promise<ProductDirection> {
@@ -87,9 +94,8 @@ export default function FormBgStudio({ embedded = false }: { embedded?: boolean 
         productName: selectedProduct!.productName,
         preset: draft.preset,
         lang: draft.lang,
-        hasGift: needsGift && !!draft.giftImageRef,
+        giftImageRefs: draft.giftImageRefs,
         productId: draft.productId,
-        giftImageRef: draft.giftImageRef,
       })
       setDirection(d)
       return d
@@ -103,7 +109,7 @@ export default function FormBgStudio({ embedded = false }: { embedded?: boolean 
     try {
       const res = await generateFormBg({
         apiKey: kieApiKey, variantIndex: index, product: selectedProduct!, direction: d,
-        preset: draft.preset, lang: draft.lang, giftImageRef: draft.giftImageRef,
+        preset: draft.preset, lang: draft.lang, giftImageRefs: draft.giftImageRefs,
       })
       patchImage(index, { status: 'completed', assetRef: res.assetRef })
     } catch (err) {
@@ -244,24 +250,28 @@ export default function FormBgStudio({ embedded = false }: { embedded?: boolean 
             </div>
           </div>
 
-          {/* Ảnh quà (optional / required cho abundance) */}
+          {/* Bộ quà (0..MAX_FORM_GIFTS) — optional / required cho abundance */}
           <div className="rounded-xl border border-black/10 bg-white p-4">
             <label className="mb-1 block text-xs font-semibold text-gray-700">
-              Ảnh quà {needsGift ? <span className="text-rose-500">(bắt buộc cho preset này)</span> : <span className="text-gray-400">(không bắt buộc)</span>}
+              Bộ quà {needsGift ? <span className="text-rose-500">(bắt buộc cho preset này)</span> : <span className="text-gray-400">(không bắt buộc)</span>}
+              <span className="ml-1 font-normal text-gray-400">· tối đa {MAX_FORM_GIFTS} món, AI tự đọc ảnh</span>
             </label>
-            {draft.giftImageRef ? (
-              <div className="relative h-28 w-full overflow-hidden rounded-lg border border-black/10 bg-gray-50">
-                <AssetImg refId={draft.giftImageRef} alt="ảnh quà" />
-                <button onClick={() => setGiftImageRef(null)} title="Xoá ảnh quà" className="absolute right-1.5 top-1.5 rounded-full bg-black/60 p-1 text-white hover:bg-black/80">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ) : (
-              <label className="flex h-28 w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-black/20 bg-gray-50 text-gray-500 hover:bg-gray-100">
-                {uploading ? <RefreshCw className="h-5 w-5 animate-spin" /> : <><Upload className="h-5 w-5" /><span className="text-xs">Tải ảnh quà lên</span></>}
-                <input type="file" accept="image/*" onChange={handleUpload} className="hidden" disabled={uploading} />
-              </label>
-            )}
+            <div className="grid grid-cols-3 gap-2">
+              {draft.giftImageRefs.map((ref, idx) => (
+                <div key={ref} className="relative aspect-square w-full overflow-hidden rounded-lg border border-black/10 bg-gray-50">
+                  <AssetImg refId={ref} alt={`ảnh quà ${idx + 1}`} />
+                  <button onClick={() => removeGift(idx)} title="Xoá ảnh quà" className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white hover:bg-black/80">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+              {canAddGift && (
+                <label className="flex aspect-square w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-black/20 bg-gray-50 text-gray-500 hover:bg-gray-100">
+                  {uploading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4" /><span className="text-[10px]">Thêm quà</span></>}
+                  <input type="file" accept="image/*" onChange={handleUpload} className="hidden" disabled={uploading} />
+                </label>
+              )}
+            </div>
           </div>
 
           {!ready && (

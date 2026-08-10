@@ -38,6 +38,10 @@ export const FORM_BG_PRESETS: PresetMeta[] = [
 /** Xuất 2 biến thể mỗi lần (user chốt). */
 export const FORM_BG_VARIANTS = 2
 
+/** Bộ quà tối đa cho preset "Mâm quà" (bằng mode Quà tặng). gpt-4o-image tối đa
+ *  5 ref → SP giữ tối thiểu 2 ref, quà tối đa 3. Form Sale chỉ cần ẢNH quà. */
+export const MAX_FORM_GIFTS = 3
+
 export type FormBgStatus = 'idle' | 'generating' | 'completed' | 'failed'
 
 /** Mỗi biến thể = 1 ẢNH dọc 2:3 chứa: header + dải FOMO (có Ô TRỐNG cho đồng
@@ -86,20 +90,20 @@ export interface ProductDirection {
 
 export interface FormBgDraft {
   productId: string | null
-  /** asset:xxx ảnh quà — chỉ cần cho preset abundance. */
-  giftImageRef: string | null
+  /** DANH SÁCH asset:xxx ảnh quà (0..MAX_FORM_GIFTS). Cả bộ hiện cùng ảnh nền. */
+  giftImageRefs: string[]
   preset: FormBgPreset
   lang: Market
 }
 
 export function emptyFormBgDraft(): FormBgDraft {
-  return { productId: null, giftImageRef: null, preset: 'editorial', lang: 'ms' }
+  return { productId: null, giftImageRefs: [], preset: 'editorial', lang: 'ms' }
 }
 
 /** Sig phát hiện direction stale. */
-export function directionSig(d: { productId: string | null; preset: FormBgPreset; lang: Market; giftImageRef: string | null }): string {
-  // v2: đổi schema FOMO (fomoLine → fomoLines pool) → invalidate cache cũ.
-  return `v2|${d.productId ?? ''}|${d.preset}|${d.lang}|${d.giftImageRef ? 'g' : 'n'}`
+export function directionSig(d: { productId: string | null; preset: FormBgPreset; lang: Market; giftImageRefs: string[] }): string {
+  // v3: giftImageRef (1) → giftImageRefs[] (bộ) → invalidate cache cũ theo SỐ quà.
+  return `v3|${d.productId ?? ''}|${d.preset}|${d.lang}|g${d.giftImageRefs.length}`
 }
 
 /** Palette mặc định (fallback khi vision lỗi) theo preset. */
