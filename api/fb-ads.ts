@@ -5,7 +5,11 @@
 // Key SC_KEY server-side (cùng key TikTok). 1 credit/request.
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-const VALID_COUNTRY = new Set(['MY', 'ID', 'TH', 'VN', 'PH', 'SG', 'ALL'])
+// ⭐ 9/9/26 — thêm 'US'. Đo thật trước khi thêm: gửi country=US (và GB, XX) vào bản cũ thì
+// VALID_COUNTRY chối, dòng dưới rơi về 'MY' TRONG IM LẶNG, và ad trả về bị đóng dấu country:'MY'.
+// Kết quả: SPY REMIX hiện cờ Mỹ mà hàng là Malaysia — q="knee brace" ra 29 ad trùng 29/29 với lượt MY.
+// Đối chứng cho thấy tham số này lọc THẬT khi được nhận: MY 29 ad · PH 28 ad · chỉ trùng 23.
+const VALID_COUNTRY = new Set(['MY', 'ID', 'TH', 'VN', 'PH', 'SG', 'US', 'ALL'])
 // Chặn phim ngắn / ad cài app (mọi thị trường) — bắt theo tên page + nội dung + link đích.
 const SPAM_RE = /short\s?(tv|max|drama)|drama\s?box|reel\s?short|good\s?short|net\s?short|flex\s?tv|mobo\s?reels|quick\s?short|shortty|shorttv|play\.google\.com|apps\.apple\.com|playstore|w2a\.|web2app|fbweb/i
 
